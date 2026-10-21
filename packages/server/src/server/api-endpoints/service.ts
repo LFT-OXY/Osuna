@@ -6,31 +6,62 @@
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { randomBytes, randomUUID } from "node:crypto";
+import type { IncomingHttpHeaders } from "node:http";
 import { homedir } from "node:os";
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import type pino from "pino";
 import {
+  API_ENDPOINT_MODEL_SCOPES,
+  API_ENDPOINT_MODEL_TEST_METHODS,
   API_ENDPOINT_MODEL_TIERS,
   API_ENDPOINT_REQUEST_FORMATS,
   apiEndpointHasModelMapping,
+  type ApiEndpointModelScope,
   type ApiEndpoint,
   type ApiEndpointAgentIssue,
   type ApiEndpointAgentSettings,
   type ApiEndpointBaseUrl,
   type ApiEndpointConnection,
   type ApiEndpointCooldown,
+  type ApiEndpointError,
   type ApiEndpointFormatDetection,
+  type ApiEndpointModelDetection,
   type ApiEndpointHealthIssue,
   type ApiEndpointListResponse,
+  type ApiEndpointLongConversations,
   type ApiEndpointModel,
   type ApiEndpointModelMapping,
+  type ApiEndpointModelFacts,
+  type ApiEndpointModelSettings,
+  type ApiEndpointCooldownSettings,
   type ApiEndpointRef,
   type ApiEndpointRequestFormat,
   type ApiEndpointSwitchOffFile,
   type ApiEndpointSwitchOffPreview,
+  type ApiEndpointIconImage,
+  type ApiEndpointTemplate,
   type ApiEndpointTestConnectionResult,
+  type ApiEndpointVendorStatusResponse,
+  type ApiEndpointImportItem,
+  type ApiEndpointImportPick,
+  type ApiEndpointImportSource,
+  type ApiEndpointImportCandidate,
+  type ApiEndpointImportLinkPreview,
+  type ApiEndpointNameRef,
+  API_ENDPOINT_IMPORT_ACTIONS,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import {
+  API_ENDPOINT_TEMPLATES,
+  findTemplate,
+  listsNoModels,
+  modelFormatsAt,
+  planModelsOf,
+  servedFormats,
+  templateBaseUrl,
+  templateBaseUrls,
+  type TemplatePlace,
+} from "./templates.js";
 import { resolveAgentHookConfigPath } from "../../terminal/agent-hooks/agent-hook-installer.js";
 import { claudeAgentHookProvider } from "../../terminal/agent-hooks/claude/claude.js";
 import { codexAgentHookProvider } from "../../terminal/agent-hooks/codex/codex.js";
@@ -43,6 +74,7 @@ import type {
 import {
   findCodexCommand,
   normalizeOpenAICompatibleBaseUrl,
+  probeCodexVersion,
 } from "../agent/providers/codex-app-server-agent.js";
 import type { ProviderRuntimeSettings } from "../agent/provider-launch-config.js";
 import {
@@ -61,7 +93,7 @@ import {
   type ProbeGatewayAt,
 } from "./gateway-reach.js";
 import { createLoginShellEnvReader, type ReadLoginShellEnv } from "./login-shell-env.js";
-import { claudeHintEnv, markOneMillion, type ClaudeHintModel } from "./claude-model-hints.js";
+import { claudeHints, markOneMillion, type ClaudeHintModel } from "./claude-model-hints.js";
 import { claudeSpelled } from "./claude-spelling.js";
 import {
   applyClaudeApiEndpoint,
@@ -101,7 +133,7 @@ import {
   buildCodexModelCatalog,
   codexDefaultLevel,
   codexEndpointEntries,
-  type CodexModelEntry,
+  type CodexEndpointListing,
 } from "./codex-model-catalog.js";
 import {
   claudeClamp,
@@ -170,6 +202,8 @@ import {
 import {
   AGENT_REQUEST_FORMAT,
   agentTargetEndpoint,
+  defaultModelProvidersOf,
+  maskApiKey,
   bareDefaultModel,
   defaultModelChoices,
   findEndpoint,
@@ -189,6 +223,7 @@ import {
   API_ENDPOINT_PROVIDERS,
   ApiEndpointStore,
   ApiEndpointsFileUnparsableError,
+  endpointNameDisplayOf,
   type ApiEndpointProvider,
   type ApiEndpointState,
   type GatewayTokens,
@@ -228,15 +263,143 @@ const CLAUDE_START_THINKING = "high";
 /** 挑默认模型时从 CLI 配置与接管记录里读的那些。 */
 type CliPickInput = Omit<DefaultModelPickInput, "state" | "provider">;
 import { detectUpstreamFormats, pickProbeModel, probeUpstreamFormat } from "./upstream-detect.js";
-import { hostOf, mergeModelFacts, type ModelFacts } from "./model-facts.js";
+import { DETECT_EACH_DEFAULTS, detectEachModel, type DetectEachLimits } from "./detect-models.js";
+import {
+  cachedCodexVersion,
+  codexSignHeaders,
+  newestCodexVersion,
+  readCodexSystem,
+  SeenCodexVersion,
+} from "./cli-header-samples.js";
+import { InstalledCodexVersion } from "./codex-cli-version.js";
+import {
+  cliTestAddress,
+  cliTestRefusal,
+  cliTestsOffered,
+  CLI_SAMPLE_MISSING,
+  isCliTestClient,
+  needsCliSample,
+} from "./test-as.js";
+import {
+  MODEL_TEST_DEFAULTS,
+  runModelTests,
+  type ModelTestAttempt,
+  type ModelTestIdentity,
+  type ModelTestLimits,
+  type ModelTestPlan,
+  type ModelTestProgress,
+  type ModelTestsOutcome,
+} from "./model-tests.js";
+import { isClaudeModel } from "./gateway/routing.js";
+import {
+  hostOf,
+  mergeModelFacts,
+  type EndpointModelFacts,
+  type ModelFacts,
+} from "./model-facts.js";
 import { ModelsDevCatalog } from "./models-dev.js";
+import {
+  createPublicFetchSite,
+  fetchIconPicture,
+  sealedFetchSite,
+  findSiteIcon,
+  SiteIconError,
+  type FetchSite,
+  type SiteIconFailure,
+} from "./site-icon.js";
+import {
+  EndpointIcons,
+  iconMimeType,
+  isBuiltInIconName,
+  StoreIconError,
+  storedIconName,
+  type StoredIcon,
+  type StoreIconFailure,
+} from "./endpoint-icons.js";
 import { isErrnoException } from "../../utils/errno.js";
 import { REAL_PRICING_TIMERS, type UsagePricingTimers } from "../usage/pricing/service.js";
 import {
   fetchUpstreamModels,
   type ListedModel,
+  type UpstreamFailure,
   type UpstreamFailureCode,
 } from "./upstream-models.js";
+import {
+  keepFailedFormats,
+  mergeFormatLists,
+  type CatalogModel,
+  type FormatList,
+} from "./catalog-merge.js";
+import { CatalogRefreshSchedule, type CatalogRefreshOutcome } from "./catalog-refresh.js";
+import { VendorStatusPages, vendorOfBaseUrls, type VendorId } from "./vendor-status.js";
+import type { DataFileSystem } from "./last-good.js";
+import {
+  defaultImportSourcePaths,
+  readImportSources,
+  sameAccount,
+  settleImports,
+  type FoundEndpoint,
+  type HeldEndpoint,
+  type ImportReadContext,
+  type ImportSourcePaths,
+  type SettledEntry,
+} from "./import-apps.js";
+import {
+  cutImportLinkName,
+  importLinkNameWithSuffix,
+  ImportLinkRefusedError,
+  isKeyLike,
+  parseImportLink,
+  type ParsedImportLink,
+} from "./import-link.js";
+import {
+  askedDisabledBy,
+  disabledMessage,
+  endpointDisabledBy,
+  withoutDisabledModels,
+} from "./disabled-models.js";
+import { cleanDisabledModels } from "@getpaseo/protocol/api-endpoint/disabled-models";
+import { isPreselectedImport } from "@getpaseo/protocol/api-endpoint/import-offer";
+import {
+  isApiEndpointNameDisplay,
+  showsEndpointNames,
+  type ApiEndpointNameDisplay,
+} from "@getpaseo/protocol/api-endpoint/endpoint-names";
+import type { AutoPickRuleProblem } from "@getpaseo/protocol/api-endpoint/auto-pick-rules";
+import {
+  WORKING_WINDOW,
+  distinctModelLabels,
+  pinnedFormat,
+  resolveModelFacts,
+  upstreamModelName,
+} from "@getpaseo/protocol/api-endpoint/model-settings";
+import {
+  cleanRequestHeaders,
+  extraBodyProblem,
+  type ApiEndpointKeyHeader,
+  type ExtraBodyProblem,
+} from "@getpaseo/protocol/api-endpoint/request-extras";
+import {
+  API_ENDPOINT_COOLDOWN_MAX_DAYS,
+  API_ENDPOINT_COOLDOWN_MAX_MINUTES,
+  cooldownSettingsProblem,
+  type ApiEndpointCooldownField,
+} from "@getpaseo/protocol/api-endpoint/cooldown-settings";
+import {
+  closeUncheckedDispatchers,
+  liveUncheckedHostsOf,
+  releaseUncheckedHosts,
+  uncheckedHostsOf,
+} from "./insecure-tls.js";
+import { storedRequestExtras, type RequestExtras } from "./request-extras.js";
+import { endpointKnowsModel, settleModelSettings } from "./model-settings.js";
+import {
+  cleanAutoPickRules,
+  followsList,
+  keepValidMapping,
+  settleServedModels,
+  vendorServedModels,
+} from "./model-scope.js";
 
 export type ApiEndpointErrorCode =
   | "unsupported_provider"
@@ -251,11 +414,48 @@ export type ApiEndpointErrorCode =
   | "endpoints_unparsable"
   // 没有开着且已选模型的接口，总开关打不开。
   | "no_usable_model"
+  // 模型设置里的数不是正整数、档位不是这个模型的、显示名太长，或设的模型这家没有。
+  | "invalid_model_settings"
+  // 附加请求体字段没名字、是保留字段、同名写了两次（params.reason、field）。
+  | "invalid_extra_body"
+  // 从模板加的接口打开不校验证书（params.template）。
+  | "insecure_tls_template"
+  // 冷却设置的分钟数不是 0 到八天的整数（params.field、max）。
+  | "invalid_cooldown_settings"
+  // 导入时那一条已经不在它的软件里了（重新扫描）；替换给的不是名称撞上的那条（params.name）。
+  | "import_gone"
+  | "import_cannot_replace"
+  // 加某一条时写文件等出了错（params.reason 是 errno 或错误名）。
+  | "import_failed"
+  // 「忽略」没记上（params.reason：errno、endpoints_unparsable 或错误名）。
+  | "import_ignore_failed"
+  // 不安全或读不懂的导入链接（params.reason 见 protocol 的 API_ENDPOINT_IMPORT_LINK_REFUSALS，另有 field、template、region）。
+  | "import_link_refused"
+  // 给接口当图标的图片超过 1 MB，或不是认得的图片格式。
+  | StoreIconFailure
+  // 从网站取图标：地址不是网址、在本机或局域网、找不到图标。
+  | SiteIconFailure
   | UpstreamFailureCode;
 
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 15_000;
+// Claude Code /model 里已带接口名的行的说明（magpie 的 "via magpie"）。
+const VIA_OSUNA = "via Osuna";
 // Codex 的自定义 provider 地址要带上它，Claude Code 的不带。
 const CODEX_GATEWAY_SUFFIX = "/v1";
+// 保存后当场拉清单最多等这么久（照 magpie），过了就照常回保存的结果。
+const SAVE_LIST_TIMEOUT_MS = 8_000;
+// 导入链接给的图标图片最多等这么久，过了就用默认图标。
+const IMPORT_LINK_ICON_TIMEOUT_MS = 15_000;
+// 确认框打开时取到的导入链接图片，内存里最多留这么几张，等添加时存下。
+const MAX_KEPT_LINK_PICTURES = 8;
+
+/** 导入链接 icon= 的图片：取到、认得，还没存。 */
+interface ImportLinkPicture {
+  bytes: Buffer;
+  mimeType: string;
+}
+// 每天刷新时一家各格式加起来最多拉这么久。
+const DAILY_LIST_TIMEOUT_MS = 60_000;
 // 测试连接要等模型真正回一句话，比列出模型慢。
 const DEFAULT_CONNECTION_TEST_TIMEOUT_MS = 30_000;
 
@@ -279,15 +479,28 @@ export class ApiEndpointRequestError extends Error {
 }
 
 /**
+ * 请求带的请求头、附加请求体、key 放哪个头（会话层已把 keyHeader 换成 ApiEndpointKeyHeader）。
+ * 保存时各自整份替换（空的、both 清掉），省略保留原来的（复制时是原来那家的）；拉模型、测试、检测时给了就用它们，
+ * 不看 endpointId 那家存的（requestExtras）。
+ */
+export interface ApiEndpointRequestExtrasInput {
+  headers?: Record<string, string>;
+  extraBody?: Record<string, unknown>;
+  keyHeader?: ApiEndpointKeyHeader;
+  // 不校验证书：保存时 false 关掉；模板接口打开拒收（insecure_tls_template）。
+  insecureTls?: boolean;
+}
+
+/**
  * 新客户端带 baseUrls；老客户端带 baseUrl（按 provider 落进对应格式）与 defaultModelId。
  * 两种都没有就拒绝。
  */
-export interface ApiEndpointSaveInput {
+export interface ApiEndpointSaveInput extends ApiEndpointRequestExtrasInput {
   endpointId?: string;
   name: string;
   baseUrl?: string;
   baseUrls?: ApiEndpointBaseUrl[];
-  // undefined 或空白：更新时保留原 key。
+  // undefined 或空白：新建时不存 key，更新时保留原 key。
   apiKey?: string;
   models: ApiEndpointModel[];
   defaultModelId?: string;
@@ -296,6 +509,23 @@ export interface ApiEndpointSaveInput {
   manualModels?: ApiEndpointModel[];
   // undefined：保留这家原来的「自己能联网搜索」。
   searchesWeb?: boolean;
+  // 复制：新建时从这家起步，没给的字段与留空的 key 都取它的。不能和 endpointId 一起给。
+  copyOf?: string;
+  // undefined：保留这家原来的模板与区域或套餐。
+  templateId?: string;
+  region?: string;
+  // 「自定义」加的接口的图标：内置图标名或 store_icon 给的 `file:` 值；null 去掉，undefined 保留。
+  icon?: string | null;
+  // 添加窗口里保存前拉到的上游清单：记作这家的上游清单；undefined 保留原来的（复制时是原来那家的）。
+  catalog?: ApiEndpointModel[];
+  // 服务范围（会话层已用 validateModelScope 校验）；undefined 保留原来的，新建时为 picked。
+  modelScope?: ApiEndpointModelScope;
+  // 自动勾选规则，整份替换、空数组清掉；undefined 保留原来的。
+  autoPick?: string[];
+  // 模型设置，整份替换；undefined 保留原来的。
+  modelSettings?: ApiEndpointModelSettings;
+  // 冷却设置，整份替换、空对象清掉；undefined 保留原来的（复制时是原来那家的）。
+  cooldownSettings?: ApiEndpointCooldownSettings;
 }
 
 export interface ApiEndpointAgentSettingsInput {
@@ -332,18 +562,55 @@ export interface ApiEndpointStateInput {
 }
 
 // 拉取模型和测试连接都要的上游地址与 key。
-export interface ApiEndpointUpstreamInput {
-  // 编辑已保存的接口时带上；apiKey 留空就用它已保存的 key。
+export interface ApiEndpointUpstreamInput extends ApiEndpointRequestExtrasInput {
+  // 编辑已保存的接口时带上；apiKey 留空就用它已保存的 key，这家也没存 key 时不带认证头。
   endpointId?: string;
   baseUrl: string;
   apiKey?: string;
   // 新客户端按「地址 + 格式」请求；不带时按 provider 走 CLI 自己的格式。
   format?: string;
+  // 表单当前的模板与区域或套餐：给了就按它们，不看 endpointId 那家记下的。
+  templateId?: string;
+  region?: string;
+}
+
+export interface ApiEndpointFetchModelsInput extends ApiEndpointUpstreamInput {
+  // 添加窗口保存前拉的：只看不记，endpointId 只为借它的 key。
+  preview?: boolean;
+  // 这家的全部格式地址：给了就各拉一次再合并，baseUrl、format 不再起作用。
+  baseUrls?: { format: string; url: string }[];
 }
 
 export interface ApiEndpointTestConnectionInput extends ApiEndpointUpstreamInput {
   // 按格式测试时可省，daemon 自己挑。
   modelId?: string;
+  // 表单里的模型（已选的在前、拉到的清单在后）：给了就从它们里挑，不看 endpointId 那家的。
+  modelIds?: string[];
+}
+
+export interface ApiEndpointDetectInput extends ApiEndpointRequestExtrasInput {
+  endpointId?: string;
+  baseUrl: string;
+  apiKey?: string;
+  // 用户填的试用模型；没填时从 modelIds（表单里已选的）挑，也没有才向上游列。
+  modelId?: string;
+  modelIds?: string[];
+  // 逐个模型：modelIds 的前 30 个每个在每种格式上各问一次。
+  eachModel?: boolean;
+}
+
+/** 自动识别的结论：每种格式一条；逐个模型识别时另有逐个模型的，否则为 null。 */
+export interface ApiEndpointDetectOutcome {
+  results: ApiEndpointFormatDetection[];
+  models: ApiEndpointModelDetection[] | null;
+}
+
+export interface ApiEndpointTestModelsInput {
+  endpointId: string;
+  // 只测这一个（可以不在服务）；省略为这家所有在服务的模型。
+  modelId?: string;
+  // 测法；省略为 plain。
+  method?: string;
 }
 
 export interface ApiEndpointServiceOptions {
@@ -384,15 +651,43 @@ export interface ApiEndpointServiceOptions {
   hostProcesses?: HostProcesses;
   // daemon 的版本：Osuna 自己发出的请求（经代理问中转站、问托管地址是不是中转站）带 Osuna/<版本>。
   daemonVersion: string;
-  // 提供方当前生效的启动设置（含用户配的命令）；执行 codex 自己的命令、问 Codex 怎么登录时用它找 codex。
+  // 提供方当前生效的启动设置（含用户配的命令）；执行 codex 自己的命令、问 Codex 怎么登录、读本机 Codex 版本时用它找 codex。
   providerRuntimeSettings?: (provider: ApiEndpointProvider) => ProviderRuntimeSettings | undefined;
+  // 本机 Codex CLI 自报的版本（没有 Codex 样本时「按 Codex 的样子测」用，magpie codexCLIVersion）；缺省：有
+  // providerRuntimeSettings 时先读 npm 包、读不到才跑 `codex --version`，没有时不查。测试一律换成假的，绝不跑真的 codex。
+  readCodexCliVersion?: () => Promise<string | null>;
   upstreamTimeoutMs?: number;
   connectionTestTimeoutMs?: number;
-  // 价格表的自动更新开关：开着才下载 models.dev（另外还要 Claude Code 或 Codex 的总开关开着）；缺省不下载。
+  // 测试模型的并发与时限；缺省 4 个、单个 20 秒、整批 3 分钟（model-tests.ts），测试换成短的。
+  modelTests?: Partial<ModelTestLimits>;
+  // 逐个模型识别的并发与时限；缺省 8 个一起、单个 12 秒、整次 2 分钟（detect-models.ts），测试换成短的。
+  detectEach?: Partial<DetectEachLimits>;
+  // 测试模型与逐个模型识别的单个与整批计时器；测试换成手动到点的。
+  modelTestTimers?: UsagePricingTimers;
+  // 价格表的自动更新开关：开着才下载 models.dev（另外还要 Claude Code 或 Codex 的总开关开着），
+  // 也才每天给开着的接口重新拉清单；缺省都不做。
   isModelsDevAutoUpdate?: () => boolean;
   // 只给进程内 daemon 测试换掉 models.dev 的下载与检查定时器，生产不传。
   modelsDevFetch?: typeof globalThis.fetch;
   modelsDevTimers?: UsagePricingTimers;
+  // 「从网站取图标」取网址用的；缺省真的连公网 https 站点，测试 daemon 一律换成假的，关心它的用例换成本机假站点。
+  fetchSite?: FetchSite;
+  // daemon 自己发起的拉清单（新建或换 key 保存后当场、每天刷新）前，问这个地址能不能去；
+  // 缺省都能去，测试 daemon 只放行本机地址（不上网）。
+  reachesUnasked?: (baseUrl: string) => boolean;
+  // 每天刷新清单的检查定时器；测试换成手动到点的。
+  catalogRefreshTimers?: UsagePricingTimers;
+  // 厂商状态页的 summary.json 换成别的地址；测试 daemon 一律指到本机，关心它的用例指到本机假页面。
+  vendorStatusUrls?: Partial<Record<VendorId, string>>;
+  // 界面第一次看状态页时等候的计时器；测试换成手动到点的。
+  vendorStatusTimers?: UsagePricingTimers;
+  // 从别的软件导入时读的 CC Switch 目录、Alma 数据库与 OpenCode 的 auth.json；缺省按 magpie 的位置，
+  // 测试 daemon 一律指到临时目录。Claude Code、Codex 的配置跟着 env 与 homeDir 走。
+  // endpoints.json 等文件的读与改名；只给测试换成会失败的假文件系统（如导入写到一半出错）。
+  dataFileSystem?: DataFileSystem;
+  importSourcePaths?: Partial<
+    Pick<ImportSourcePaths, "ccSwitchDir" | "almaDatabase" | "openCodeAuth">
+  >;
   // 每隔一会儿看要重开谁的计时器；测试换成手动触发的。
   reopenHintsTimers?: UsagePricingTimers;
   // 问 Codex 自己是怎么登录的（ADR 0010）；测试换成固定答案。缺省：有 providerRuntimeSettings 时
@@ -417,7 +712,18 @@ export type ApiEndpointServiceOverrides = Pick<
   | "isModelsDevAutoUpdate"
   | "modelsDevFetch"
   | "modelsDevTimers"
+  | "fetchSite"
+  | "reachesUnasked"
+  | "catalogRefreshTimers"
+  | "vendorStatusUrls"
+  | "vendorStatusTimers"
+  | "importSourcePaths"
+  | "dataFileSystem"
+  | "modelTests"
+  | "detectEach"
+  | "modelTestTimers"
   | "readCodexSignIn"
+  | "readCodexCliVersion"
   // 只给进程内 daemon 测试换时钟：接口服务与中转站记请求的时刻共用它。
   | "now"
   | "readCliUse"
@@ -436,6 +742,24 @@ function defaultCodexSignInReader(
     runtimeSettings: options.providerRuntimeSettings("codex"),
     logger: options.logger,
   });
+}
+
+export type VendorStatusResult = Omit<
+  ApiEndpointVendorStatusResponse["payload"],
+  "requestId" | "error"
+>;
+
+// 发现提示一分钟内只真读一次别的软件的文件（magpie discoverLocalProviders 的 60000）。
+const DISCOVERY_READ_INTERVAL_MS = 60_000;
+
+// 已忽略的记录最多留这么多条，多了丢最早的。
+const MAX_IGNORED_IMPORTS = 500;
+const IMPORT_FINGERPRINT = /^[0-9a-f]{64}$/;
+
+// 发现提示存着的上次结果：只有指纹与来源软件，不留 key 原文。
+interface DiscoveryRead {
+  at: number;
+  candidates: ApiEndpointImportCandidate[];
 }
 
 /** 线上 `code` 是字符串；daemon 这一侧只会发这几种。 */
@@ -537,6 +861,10 @@ export type ApiEndpointListResult = Required<
     | "gatewayUnavailable"
     | "agentIssues"
     | "reopenHints"
+    | "longConversations"
+    | "disabledModels"
+    | "endpointNameDisplay"
+    | "endpointNamesUnreached"
   >
 >;
 
@@ -588,14 +916,36 @@ export class ApiEndpointService {
   private readonly proxyEnv: ProxyEnv;
   private readonly upstreamTimeoutMs: number;
   private readonly connectionTestTimeoutMs: number;
+  private readonly modelTestLimits: ModelTestLimits;
+  private readonly detectEachLimits: DetectEachLimits;
+  private readonly modelTestTimers: UsagePricingTimers;
   private readonly beforeConfigRecheck: ((filePath: string) => void) | undefined;
   private readonly cooldowns: EndpointCooldowns;
   private readonly retiredModels: RetiredModels;
   private readonly sightings: GatewaySightings;
+  private readonly readCodexCliVersion: (() => Promise<string | null>) | null;
+  // 经中转站来过的 Codex 里最新的版本（只在内存里）；中转站经 noteCliVersion 告诉它。
+  private readonly codexSeenVersion = new SeenCodexVersion();
+  // 本机 Codex CLI 的版本隔一阵才重新问一次（magpie codexVersionCache 的 10 分钟）。
+  private codexCliVersionCache: { at: number; version: string | null } | null = null;
   private readonly readCliUse: ReadCliUse;
   // daemon（和它里面的中转站）起来的时刻：之前中转站没收到说明不了什么。
   private readonly startedAt: Date;
   private readonly modelsDev: ModelsDevCatalog;
+  private readonly icons: EndpointIcons;
+  private readonly fetchSite: FetchSite;
+  // 确认框打开时取到的导入链接图片（按图片地址），添加时存下；还在取的放在 importLinkPictureFetches。
+  private readonly importLinkPictures = new Map<string, ImportLinkPicture>();
+  private readonly importLinkPictureFetches = new Map<string, Promise<ImportLinkPicture | null>>();
+  private readonly reachesUnasked: (baseUrl: string) => boolean;
+  private readonly catalogRefresh: CatalogRefreshSchedule;
+  private readonly vendorStatusPages: VendorStatusPages;
+  private readonly importSourcePaths: ApiEndpointServiceOptions["importSourcePaths"];
+  // 导入指纹的 HMAC 密钥：存在 api-endpoints/ 下（0600），第一次扫描时读出（import-apps.ts）。
+  private importSecret: Buffer | null = null;
+  // 发现提示上次真读别的软件的结果（不含 OpenCode）与时刻：一分钟内照用，导入之后丢掉。
+  private discoveryRead: DiscoveryRead | null = null;
+  private readonly isAutoUpdate: () => boolean;
   private readonly readCodexSignIn: ReadCodexSignIn;
   // 最近一次判断出的 Codex 登录方式；还没判断过、或一直判断不出时为 null，按接管记录现在的接法。
   private codexSignIn: CodexSignIn | null = null;
@@ -605,7 +955,11 @@ export class ApiEndpointService {
 
   constructor(options: ApiEndpointServiceOptions) {
     this.logger = options.logger.child({ module: "api-endpoints" });
-    this.store = new ApiEndpointStore({ paseoHome: options.paseoHome, logger: this.logger });
+    this.store = new ApiEndpointStore({
+      paseoHome: options.paseoHome,
+      logger: this.logger,
+      fileSystem: options.dataFileSystem,
+    });
     this.env = options.env ?? process.env;
     this.homeDir = options.homeDir ?? homedir();
     this.claudeManagedSettingsDir =
@@ -661,14 +1015,28 @@ export class ApiEndpointService {
     this.upstreamTimeoutMs = options.upstreamTimeoutMs ?? DEFAULT_UPSTREAM_TIMEOUT_MS;
     this.connectionTestTimeoutMs =
       options.connectionTestTimeoutMs ?? DEFAULT_CONNECTION_TEST_TIMEOUT_MS;
+    ({ limits: this.modelTestLimits, timers: this.modelTestTimers } = modelTestSetup(options));
+    this.detectEachLimits = { ...DETECT_EACH_DEFAULTS, ...options.detectEach };
     this.beforeConfigRecheck = options.beforeConfigRecheck;
     this.cooldowns = options.cooldowns;
     this.retiredModels = options.retiredModels;
     this.sightings = options.sightings;
+    this.readCodexCliVersion = codexCliVersionReader(options);
     this.readCliUse = options.readCliUse ?? readCliUse;
     this.startedAt = this.now();
+    this.icons = new EndpointIcons({ endpointsDir: this.store.endpointsDir, now: this.now });
+    this.fetchSite = options.fetchSite ?? defaultFetchSite({ userAgent });
+    this.reachesUnasked = options.reachesUnasked ?? reachesAnyAddress;
     this.readCodexSignIn = options.readCodexSignIn ?? defaultCodexSignInReader(options);
     const isModelsDevAutoUpdate = options.isModelsDevAutoUpdate ?? (() => false);
+    this.isAutoUpdate = isModelsDevAutoUpdate;
+    this.importSourcePaths = options.importSourcePaths;
+    this.vendorStatusPages = new VendorStatusPages({
+      logger: this.logger,
+      now: this.now,
+      summaryUrls: options.vendorStatusUrls,
+      timers: options.vendorStatusTimers,
+    });
     this.modelsDev = new ModelsDevCatalog({
       filePath: this.store.modelsDevPath,
       logger: this.logger,
@@ -680,6 +1048,24 @@ export class ApiEndpointService {
       timers: options.modelsDevTimers,
     });
     this.modelsDev.start();
+    this.catalogRefresh = new CatalogRefreshSchedule({
+      logger: this.logger,
+      now: this.now,
+      isAllowed: isModelsDevAutoUpdate,
+      candidates: () =>
+        (this.readStateForSnapshot()?.endpoints ?? []).map((endpoint) => ({
+          id: endpoint.id,
+          enabled: endpoint.enabled,
+          fetchedAt: endpoint.catalog?.fetchedAt,
+        })),
+      refresh: (endpointId, signal) =>
+        this.refreshCatalog({
+          endpointId,
+          signal: AbortSignal.any([signal, AbortSignal.timeout(DAILY_LIST_TIMEOUT_MS)]),
+        }),
+      timers: options.catalogRefreshTimers,
+    });
+    this.catalogRefresh.start();
   }
 
   /**
@@ -735,6 +1121,10 @@ export class ApiEndpointService {
       gatewayUnavailable: this.gatewayUnavailable(),
       agentIssues: { claude: statuses.claude.issues, codex: statuses.codex.issues },
       reopenHints,
+      longConversations: state.longConversations ?? {},
+      disabledModels: state.disabledModels ?? [],
+      endpointNameDisplay: endpointNameDisplayOf(state),
+      endpointNamesUnreached: this.endpointNamesUnreached(state),
     };
   }
 
@@ -755,6 +1145,8 @@ export class ApiEndpointService {
   /** daemon 停下：不再每隔一会儿看要重开谁。 */
   dispose(): void {
     this.reopenHints.dispose();
+    this.catalogRefresh.dispose();
+    closeUncheckedDispatchers();
   }
 
   /** 一个 CLI 要重开谁的依据：配置目录、启动时读的那部分最近一次变了的时刻、Osuna 里那之前启动的会话数。 */
@@ -912,12 +1304,14 @@ export class ApiEndpointService {
     // 指定了某一家的默认模型，在老客户端的光秃秃列表里标它的模型名。
     const defaultModel = bareDefaultModel(state, agent.defaultModelId);
     const thinkingOf = this.chatThinking(state, supported);
-    return usableModels(this.retiredModels.listed(state)).map((model) =>
+    const models = usableModels(this.served(state));
+    const labels = this.bareModelLabels(state, models);
+    return models.map((model, index) =>
       Object.assign(
         {
           provider: supported,
           id: model.id,
-          label: model.label ?? model.id,
+          label: labels[index] ?? model.id,
           isDefault: model.id === defaultModel,
         },
         thinkingOf(model.id),
@@ -985,20 +1379,81 @@ export class ApiEndpointService {
       return model.id === agent.defaultModelId;
     }
     const thinkingOf = this.chatThinking(state, supported);
-    function toDefinition(entry: EndpointGroupModel): AgentModelDefinition {
-      const { id, model } = entry;
+    function toDefinition(entry: EndpointGroupModel, label: string): AgentModelDefinition {
+      const { id } = entry;
       const isDefault = !defaultMarked && isDefaultEntry(entry);
       if (isDefault) defaultMarked = true;
-      const label = model.label ?? model.id;
       return { provider: agentProvider, id, label, isDefault, ...thinkingOf(id) };
     }
-    return endpointModelGroups(this.retiredModels.listed(state)).map((group) => {
-      const models = group.models.map(toDefinition);
+    return endpointModelGroups(this.served(state)).map((group) => {
+      const labels = this.groupModelLabels(group);
+      const models = group.models.map((entry, index) =>
+        toDefinition(entry, labels[index] ?? entry.model.id),
+      );
       return { name: group.endpoint.name, models };
     });
   }
 
-  save(provider: string, input: ApiEndpointSaveInput): Promise<ApiEndpoint> {
+  /**
+   * 新建一家或换了 key 时，保存后当场向上游拉一次清单（照 magpie providers.go 的 save：限时 8 秒，失败不挡保存），
+   * 保存完这家就有带模型资料的上游清单；拉不到时留着请求带来的那份（添加窗口里预览的）。
+   */
+  async save(provider: string, input: ApiEndpointSaveInput): Promise<ApiEndpoint> {
+    const saved = await this.saveQueued(provider, input);
+    if (!saved.fetchesList) return saved.endpoint;
+    const supported = requireProvider(provider);
+    await this.fetchListAfterSave({ provider: supported, endpointId: saved.endpoint.id });
+    const state = this.readState();
+    const stored = findEndpoint(state, saved.endpoint.id);
+    // 拉的这几秒里被删了：回刚保存的样子。
+    if (!stored) return saved.endpoint;
+    return this.toWire(state, stored, supported);
+  }
+
+  private async fetchListAfterSave(input: {
+    provider: ApiEndpointProvider;
+    endpointId: string;
+  }): Promise<void> {
+    await this.refreshCatalog({
+      endpointId: input.endpointId,
+      signal: AbortSignal.timeout(SAVE_LIST_TIMEOUT_MS),
+    });
+  }
+
+  /**
+   * daemon 自己发起的拉清单（保存后当场、每天刷新）：按这家已存的地址与 key 各格式拉一次、合并后记下；
+   * 只问 reachesUnasked 放行的地址。都没答上只记日志，清单不动。
+   */
+  private async refreshCatalog(input: {
+    endpointId: string;
+    signal: AbortSignal;
+  }): Promise<CatalogRefreshOutcome> {
+    const endpoint = findEndpoint(this.readState(), input.endpointId);
+    if (!endpoint) return "failed";
+    const addresses = endpoint.baseUrls.filter(({ url }) => this.reachesUnasked(url));
+    if (addresses.length === 0) return "failed";
+    try {
+      await this.fetchMergedModels({
+        input: { endpointId: endpoint.id, baseUrl: addresses[0]?.url ?? "" },
+        addresses,
+        keeps: true,
+        signal: input.signal,
+      });
+      return "listed";
+    } catch (error) {
+      if (!(error instanceof ApiEndpointRequestError)) throw error;
+      this.logger.info(
+        { endpointId: endpoint.id, code: error.code },
+        "Could not fetch the model list",
+      );
+      return "failed";
+    }
+  }
+
+  private saveQueued(
+    provider: string,
+    input: ApiEndpointSaveInput,
+  ): Promise<{ endpoint: ApiEndpoint; fetchesList: boolean }> {
     return this.exclusiveFollowing(async () => {
       const supported = requireProvider(provider);
       const state = this.readState();
@@ -1006,27 +1461,48 @@ export class ApiEndpointService {
       if (input.endpointId && !existing) {
         throw new ApiEndpointRequestError({ code: "not_found", message: "API endpoint not found" });
       }
-      const apiKey = input.apiKey?.trim() ? input.apiKey.trim() : undefined;
-      if (!existing && !apiKey) {
-        throw new ApiEndpointRequestError({
-          code: "invalid_input",
-          message: "API key is required",
-        });
-      }
+      const copySource = copySourceOf(state, input);
+      // 编辑的这家，或复制时原来那家：请求没给的从它取。
+      const base = existing ?? copySource;
+      // key 选填：新建时不填就不留条目，发请求时不带认证头；编辑时不填保留原 key；复制时不填用原来那家的。
+      const apiKey = savedKeyOf({ input, copySource, store: this.store });
       const isLegacyForm = input.baseUrls === undefined;
-      const fields = isLegacyForm
-        ? validateLegacyFields(supported, input, existing)
-        : validateFields(input.baseUrls ?? [], input);
-      const endpoint = buildEndpoint({
+      const template = validateTemplate(input, base);
+      // Azure 模板的地址不论怎么粘来（只有资源名也行），都先放到资源的 v1 API 上再校验。
+      const templateId = input.templateId ?? base?.templateId;
+      const { fields, modelScope } = savedFieldsOf({
+        provider: supported,
+        input,
+        existing,
+        base,
+        templateId,
+      });
+      this.validateIcon({ icon: input.icon, templateId });
+      const built = buildEndpoint({
         state,
         existing,
+        copySource,
         fields,
-        searchesWeb: keptSearchesWeb(input.searchesWeb, existing),
+        template,
+        searchesWeb: keptSearchesWeb(input.searchesWeb, base),
+        icon: input.icon,
+        catalog: input.catalog,
+        requestExtras: savedRequestExtras({ request: input, base, templateId }),
+        cooldownSettings: savedCooldownSettings({ requested: input.cooldownSettings, base }),
         // 新客户端建的接口默认开着；老客户端建的要等 set_active 才开，和以前「保存不启用」一样。
         enabledWhenNew: !isLegacyForm,
         timestamp: this.now().toISOString(),
       });
+      const scoped = settleSavedScope({
+        endpoint: built,
+        base,
+        input,
+        modelScope,
+        isLegacyForm,
+      });
+      const endpoint = this.withModelSettings(scoped, input.modelSettings);
       const endpoints = withEndpoint(state.endpoints, endpoint);
+      const fetchesList = fetchesListOnSave({ existing, apiKey, store: this.store });
       let agents = state.agents;
       // 老客户端编辑它眼里启用中的接口：表单里的默认模型就是该 Agent 的默认模型。
       const editsActiveEndpoint =
@@ -1043,7 +1519,7 @@ export class ApiEndpointService {
       }
       const next = await this.commit(
         state,
-        { endpoints, agents },
+        { ...state, endpoints, agents },
         {
           keys: apiKey ? { [endpoint.id]: apiKey } : {},
         },
@@ -1056,8 +1532,111 @@ export class ApiEndpointService {
         if (connectionEdited) this.cooldowns.clear(existing.id);
         else this.cooldowns.clearNeedsCheck(existing.id);
       }
-      return this.toWire(next, endpoint, supported);
+      return { endpoint: this.toWire(next, endpoint, supported), fetchesList };
     });
+  }
+
+  /**
+   * 请求带了模型设置就整份换上（照 magpie SetModelPrefs 等的校验与收拢），没带保留原来的。
+   * 新改的那几个模型要是这家的（已选、清单里或手动添加的）；和自动取到的一样的看图答案不记（magpie setModelImage）。
+   */
+  private withModelSettings(
+    endpoint: StoredApiEndpoint,
+    requested: ApiEndpointModelSettings | undefined,
+  ): StoredApiEndpoint {
+    if (requested === undefined) return endpoint;
+    const { modelSettings: stored, ...rest } = endpoint;
+    const settled = settleModelSettings({
+      requested,
+      stored,
+      isOwnModel: (modelId) => endpointKnowsModel(endpoint, modelId),
+      hasUrlFor: (format) => endpoint.baseUrls.some((entry) => entry.format === format),
+      basisOf: (modelId) => ({
+        knownEfforts: this.autoModelFacts(endpoint, modelId).efforts,
+        listedImages: listedFactsOf(endpoint, modelId)?.images,
+      }),
+    });
+    if (settled.kind === "invalid") {
+      throw new ApiEndpointRequestError({
+        code: "invalid_model_settings",
+        message: settled.message,
+      });
+    }
+    return settled.settings === undefined ? rest : { ...rest, modelSettings: settled.settings };
+  }
+
+  /** 内置模板清单（templates.ts），随版本走，不联网。 */
+  listTemplates(): ApiEndpointTemplate[] {
+    return [...API_ENDPOINT_TEMPLATES];
+  }
+
+  /** 存一张图片给接口当图标，返回保存时要带的 icon 值（照 magpie StoreIcon）。 */
+  storeIcon(bytes: Buffer): string {
+    try {
+      return this.icons.store(bytes);
+    } catch (error) {
+      if (error instanceof StoreIconError) {
+        throw new ApiEndpointRequestError({ code: error.code, message: error.message });
+      }
+      throw error;
+    }
+  }
+
+  /** 从地址所在的网站找图标并存下，返回图标值（照 magpie FaviconFor）；只在用户点「从网站取图标」时调用。 */
+  async fetchSiteIcon(
+    input: { baseUrl: string; name: string },
+    signal: AbortSignal,
+  ): Promise<string> {
+    try {
+      return await findSiteIcon({
+        ...input,
+        fetchSite: this.fetchSite,
+        store: (bytes) => this.icons.store(bytes),
+        signal,
+      });
+    } catch (error) {
+      if (error instanceof SiteIconError) {
+        throw new ApiEndpointRequestError({ code: error.code, message: error.message });
+      }
+      throw error;
+    }
+  }
+
+  /** 取回存下的图标图片（base64）；不是存下的、或已经删了为 not_found。 */
+  readIcon(icon: string): ApiEndpointIconImage {
+    const image = this.icons.read(icon);
+    if (!image) {
+      throw new ApiEndpointRequestError({ code: "not_found", message: "Icon not found" });
+    }
+    return { data: image.data.toString("base64"), mimeType: image.mimeType };
+  }
+
+  /** 图标只给「自定义」加的接口选（照 magpie）；`file:` 的要是存下的，别的要像内置图标的名字。 */
+  private validateIcon(input: { icon: string | null | undefined; templateId: string | undefined }) {
+    const { icon } = input;
+    if (icon === undefined || icon === null) return;
+    if (input.templateId !== undefined) {
+      throw new ApiEndpointRequestError({
+        code: "invalid_input",
+        message: "An endpoint added from a template uses the template's icon",
+      });
+    }
+    const isKnown =
+      storedIconName(icon) !== null ? this.icons.isStored(icon) : isBuiltInIconName(icon);
+    if (!isKnown) {
+      throw new ApiEndpointRequestError({
+        code: "invalid_input",
+        message: `Unknown icon: ${icon}`,
+      });
+    }
+  }
+
+  /** 读回一家接口已保存的 key 原文（编辑窗口的「显示」）；没有 key 为 null。照 magpie 不确认、不限次数。 */
+  revealKey(endpointId: string): string | null {
+    if (!findEndpoint(this.readState(), endpointId)) {
+      throw new ApiEndpointRequestError({ code: "not_found", message: "API endpoint not found" });
+    }
+    return this.store.getApiKey(endpointId);
   }
 
   /** 接口是主机共用的，删除对所有 Agent 生效；返回值按 provider 投影。 */
@@ -1099,7 +1678,7 @@ export class ApiEndpointService {
         return { activeEndpointId: null };
       }
       const endpoint = findEndpoint(state, endpointId);
-      if (!endpoint || this.store.getApiKey(endpointId) === null) {
+      if (!endpoint) {
         throw new ApiEndpointRequestError({ code: "not_found", message: "API endpoint not found" });
       }
       if (endpoint.models.length === 0) {
@@ -1112,6 +1691,7 @@ export class ApiEndpointService {
       const next = await this.commit(
         state,
         {
+          ...state,
           endpoints: withEndpoint(state.endpoints, { ...endpoint, enabled: true }),
           agents: {
             ...state.agents,
@@ -1126,7 +1706,7 @@ export class ApiEndpointService {
 
   /**
    * 「使用第三方接口」总开关与默认模型。打开要求至少一家接口开着且已选模型；
-   * 省略默认模型时保留当前的（还能用的话），否则取最早开着接口的第一个已选模型。关掉时忽略默认模型。
+   * 省略默认模型时保留当前的（还能用的话），否则取接口顺序里最靠前的开着接口的第一个已选模型。关掉时忽略默认模型。
    */
   setAgentSettings(
     provider: string,
@@ -1344,7 +1924,7 @@ export class ApiEndpointService {
     const state = this.readStateForSnapshot();
     if (!state || findProvider(provider) !== "codex") return null;
     if (!state.agents.codex.enabled) return null;
-    const listed = this.retiredModels.listed(state);
+    const listed = this.served(state);
     const options: ApiEndpointSideModelOption[] = this.codexOwnModels().map((model) => ({
       id: model.slug,
       model: model.label,
@@ -1889,6 +2469,125 @@ export class ApiEndpointService {
   }
 
   /**
+   * 整体改写接口顺序（照 magpie SetOrder）：同一个 id 出现两次或不是接口就拒收；没列出的按现在的先后接在后面。
+   * 顺序也决定 Codex 模型目录、Claude Code 选单的先后，所以走 commit 让 CLI 配置跟上。
+   */
+  setOrder(endpointIds: string[]): Promise<void> {
+    return this.exclusiveFollowing(async () => {
+      const state = this.readState();
+      const byId = new Map(state.endpoints.map((endpoint) => [endpoint.id, endpoint]));
+      const named = new Set<string>();
+      for (const id of endpointIds) {
+        if (named.has(id)) {
+          throw new ApiEndpointRequestError({
+            code: "invalid_input",
+            message: `${id} is in the order twice`,
+          });
+        }
+        if (!byId.has(id)) {
+          throw new ApiEndpointRequestError({
+            code: "invalid_input",
+            message: `${id} is not an API endpoint`,
+          });
+        }
+        named.add(id);
+      }
+      const endpoints = [
+        ...endpointIds.flatMap((id) => byId.get(id) ?? []),
+        ...state.endpoints.filter((endpoint) => !named.has(endpoint.id)),
+      ];
+      await this.commit(state, { ...state, endpoints });
+    });
+  }
+
+  /**
+   * 长对话（照 magpie SetFullContext、SetCompactAt）：fullContext 开关「完整窗口」；compactAt 为正整数时设全局压缩阈值
+   * （272K 等于不设），null 回到 272K，省略即不变。告诉 Codex 的窗口与 Claude Code 的压缩阈值跟着改，所以走 commit。
+   */
+  setLongConversations(input: { fullContext: boolean; compactAt?: number | null }): Promise<void> {
+    return this.exclusiveFollowing(async () => {
+      const { compactAt } = input;
+      const isTokenCount =
+        compactAt === undefined ||
+        compactAt === null ||
+        (Number.isInteger(compactAt) && compactAt > 0);
+      if (!isTokenCount) {
+        throw new ApiEndpointRequestError({
+          code: "invalid_input",
+          message: `Compact at must be a number of tokens, not ${compactAt}`,
+        });
+      }
+      const state = this.readState();
+      let kept = state.longConversations?.compactAt;
+      if (compactAt !== undefined) kept = compactAt ?? undefined;
+      if (kept === WORKING_WINDOW) kept = undefined;
+      const longConversations: ApiEndpointLongConversations = {
+        ...(input.fullContext ? { fullContext: true } : {}),
+        ...(kept === undefined ? {} : { compactAt: kept }),
+      };
+      const { longConversations: _previous, ...rest } = state;
+      const isEmpty = Object.keys(longConversations).length === 0;
+      await this.commit(state, isEmpty ? rest : { ...rest, longConversations });
+    });
+  }
+
+  /**
+   * 已禁用的模型（照 magpie SetDisabledModels）：整份名单换掉，去掉首尾空白、空的与只差大小写的重复。命中的模型不再在服务，
+   * 默认模型被禁时按失踪规则换掉，CLI 配置与 Codex 目录跟着改，所以走 commit。
+   */
+  setDisabledModels(input: { models: string[] }): Promise<void> {
+    return this.exclusiveFollowing(async () => {
+      const state = this.readState();
+      const disabledModels = cleanDisabledModels(input.models);
+      const { disabledModels: _previous, ...rest } = state;
+      await this.commit(state, disabledModels.length === 0 ? rest : { ...rest, disabledModels });
+    });
+  }
+
+  /**
+   * 接口名显示方式（照 magpie SetSuffixMode）：always 不存。写给 Codex 的显示名跟着改、Codex 的清单标记跟着变，所以走 commit。
+   */
+  setEndpointNameDisplay(input: { display: string }): Promise<void> {
+    return this.exclusiveFollowing(async () => {
+      const { display } = input;
+      if (!isApiEndpointNameDisplay(display)) {
+        throw new ApiEndpointRequestError({
+          code: "invalid_input",
+          message: `Endpoint name in model lists must be always, clash or never, not ${display}`,
+        });
+      }
+      const state = this.readState();
+      const { endpointNameDisplay: _previous, ...rest } = state;
+      await this.commit(
+        state,
+        display === "always" ? rest : { ...rest, endpointNameDisplay: display },
+      );
+    });
+  }
+
+  /**
+   * 接口名显示方式管不到的 Agent（magpie noNamesSaid / agent.NoNames）：开着、用 API key 接的 Codex，
+   * 它的 /model 只列光秃秃的名字（模型目录），本来就不带接口名。
+   */
+  private endpointNamesUnreached(state: ApiEndpointState): ApiEndpointProvider[] {
+    if (!state.agents.codex.enabled) return [];
+    return this.isCodexChatGptWired() ? [] : ["codex"];
+  }
+
+  /** 选择器里接口名的显示方式；官方模式、不支持的提供方或文件读不懂时返回 null。 */
+  endpointNameDisplay(provider: string): ApiEndpointNameDisplay | null {
+    const state = this.readStateForSnapshot();
+    const supported = findProvider(provider);
+    if (!state || !supported || !state.agents[supported].enabled) return null;
+    return endpointNameDisplayOf(state);
+  }
+
+  /** 在服务的模型：去掉一周内下线的与已禁用的。选单、默认模型、写给 CLI 的模型都按它。 */
+  private served(state: ApiEndpointState): ApiEndpointState {
+    return withoutDisabledModels(this.retiredModels.listed(state));
+  }
+
+  /**
    * 落下一次变更：先按默认模型失踪规则整理各 Agent，再让 Codex 模型目录与 CLI 配置跟上（改不成就整个不保存），
    * 最后写 key、endpoints.json 与口令，并通知设置有变的 Agent。返回落下的状态。
    * 开着却没有口令的补一个；口令关掉不作废（nextGatewayTokens）。
@@ -1904,11 +2603,14 @@ export class ApiEndpointService {
       isFollowingCli?: boolean;
     } = {},
   ): Promise<ApiEndpointState> {
+    this.forgetDiscoveryIfHeldChanges({ previous, proposed, keys: options.keys });
     const ownModels = this.codexOwnModels().map((model) => model.slug);
-    const settled = this.settleThinking({
-      previous,
-      next: settleAgentSettings({ state: proposed, codexOwnModels: ownModels }),
+    // 默认模型等按在服务的模型整理：被禁的和删掉的一样换掉；存下的已选模型不动。
+    const { agents } = settleAgentSettings({
+      state: withoutDisabledModels(proposed),
+      codexOwnModels: ownModels,
     });
+    const settled = this.settleThinking({ previous, next: { ...proposed, agents } });
     const next = this.settleSubagentThinking(settled);
     for (const provider of API_ENDPOINT_PROVIDERS) {
       if (!previous.agents[provider].enabled && next.agents[provider].enabled) {
@@ -1968,6 +2670,8 @@ export class ApiEndpointService {
       this.store.setApiKey(id, apiKey);
     }
     this.store.writeState(next);
+    releaseUncheckedHosts(releasedUncheckedHosts({ previous, next }));
+    this.icons.prune({ usedBefore: endpointIcons(previous), usedNow: endpointIcons(next) });
     if (!sameTokens(tokens, previousTokens)) this.store.writeGatewayTokens(tokens);
     this.recordCliRewrites(synced);
     this.staleCodexModels(next);
@@ -2131,7 +2835,7 @@ export class ApiEndpointService {
 
   /** 一个模型写进 Claude Code env 的写法（同起始模型）。 */
   private claudeEnvModel(state: ApiEndpointState, modelId: string): string {
-    const listed = this.retiredModels.listed(state);
+    const listed = this.served(state);
     const marked = markOneMillion({ id: modelId, facts: this.startModelFacts(listed, modelId) });
     const served = [
       ...usableModels(listed).map((model) => model.id),
@@ -2177,43 +2881,73 @@ export class ApiEndpointService {
     state: ApiEndpointState,
     provider: ApiEndpointProvider,
     defaultModelId: string,
-  ): Pick<CliWiring, "model" | "modelPicker" | "hintEnv" | "endpointModels"> {
+  ): Pick<
+    CliWiring,
+    "model" | "modelPicker" | "hintEnv" | "compactYieldsToOwn" | "endpointModels"
+  > {
     if (provider !== "claude") {
-      const endpointModels = endpointModelGroups(this.retiredModels.listed(state)).flatMap(
-        (group) => group.models.map(({ id }) => id),
+      const endpointModels = endpointModelGroups(this.served(state)).flatMap((group) =>
+        group.models.map(({ id }) => id),
       );
       return { model: defaultModelId, modelPicker: [], hintEnv: {}, endpointModels };
     }
-    const listed = this.retiredModels.listed(state);
-    const start: ClaudeHintModel = {
-      id: defaultModelId,
-      facts: this.startModelFacts(listed, defaultModelId),
-    };
-    const rows = endpointModelGroups(listed).flatMap((group) =>
-      group.models.map(({ id, model }) => ({
+    const listed = this.served(state);
+    const named = endpointModelGroups(listed).flatMap((group) => {
+      const labels = this.groupModelLabels(group);
+      return group.models.map(({ id, model }, index) => ({
         hint: { id, facts: this.modelFacts(group.endpoint, model.id) },
-        label: model.label ?? model.id,
-        description: group.endpoint.name,
-      })),
+        name: labels[index] ?? model.id,
+        endpointName: group.endpoint.name,
+      }));
+    });
+    // 接口名显示方式也管终端 /model（magpie listLabels）：带接口名的行写「模型名 (接口名)」，说明换成 via Osuna，
+    // 不重复说接口名；不带的照旧在说明里写接口名（magpie 的 note 同样留着提供方）。
+    const shows = showsEndpointNames({
+      display: endpointNameDisplayOf(state),
+      names: named.map(({ name }) => name),
+    });
+    const rows = named.map(({ hint, name, endpointName }, index) =>
+      shows[index]
+        ? { hint, label: `${name} (${endpointName})`, description: VIA_OSUNA }
+        : { hint, label: name, description: endpointName },
     );
     // 带点的 Claude 版本写成连字符（只在能唯一对回时），中转站再认回这家自己的写法。
     const served = [
       ...usableModels(listed).map((model) => model.id),
       ...rows.map((row) => row.hint.id),
     ];
+    const spelled = (model: ClaudeHintModel): ClaudeHintModel => ({
+      id: claudeSpelled({ model: model.id, served }),
+      facts: model.facts,
+    });
+    const hintModel = (modelId: string): ClaudeHintModel =>
+      spelled({ id: modelId, facts: this.startModelFacts(listed, modelId) });
+    const start = hintModel(defaultModelId);
+    // 后台小任务模型是 magpie 的 haiku 档位模型；Subagent 模型只在设了时算（只设档位时跟主模型）。
+    const agent = state.agents.claude;
+    const tiers = agent.backgroundModelId ? [hintModel(agent.backgroundModelId)] : [];
+    const subagent = agent.subagentModelId ? hintModel(agent.subagentModelId) : null;
+    const hints = claudeHints({
+      start,
+      tiers,
+      subagent,
+      listed: rows.map((row) => spelled(row.hint)),
+      longConversations: state.longConversations,
+    });
     return {
-      model: claudeSpelled({ model: markOneMillion(start), served }),
+      model: markOneMillion(start),
       modelPicker: rows.map((row) => ({
-        model: claudeSpelled({ model: markOneMillion(row.hint), served }),
+        model: markOneMillion(spelled(row.hint)),
         label: row.label,
         description: row.description,
       })),
-      hintEnv: claudeHintEnv({ start, listed: rows.map((row) => row.hint) }),
+      hintEnv: hints.env,
+      compactYieldsToOwn: hints.compactYieldsToOwn,
       endpointModels: [],
     };
   }
 
-  /** 起始模型是不带接口标识的模型名，中转站先发给最早开着、选了它的那家：资料也按那家查。 */
+  /** 起始模型是不带接口标识的模型名，中转站先发给接口顺序里最靠前、开着、选了它的那家：资料也按那家查。 */
   private startModelFacts(state: ApiEndpointState, modelId: string): ModelFacts {
     // 指定了某一家的默认模型按那一家查。
     const named = namedDefaultModel(state, modelId);
@@ -2228,14 +2962,68 @@ export class ApiEndpointService {
    * 这家这个模型的资料：这家上游清单给的在前，models.dev 补上没给的。
    * Codex 模型目录、Claude Code 的模型提示与中转站（翻译时的档位、回复上限、采样参数，选路时的窗口）都按它查。
    */
-  modelFacts(endpoint: StoredApiEndpoint, modelId: string): ModelFacts {
-    const listed = endpoint.catalog?.models.find((model) => model.id === modelId)?.facts;
-    const facts = mergeModelFacts(listed, this.modelsDev.facts(modelId));
+  modelFacts(endpoint: StoredApiEndpoint, modelId: string): EndpointModelFacts {
+    const auto = this.autoModelFacts(endpoint, modelId);
+    const resolved = resolveModelFacts({ settings: endpoint.modelSettings, modelId, auto });
+    const { noThinking, contextSet, ...facts } = resolved;
+    // 档位不知道的模型（或知道它没有可挑的）由用户给的几档当它自己的（magpie Efforts）。
+    const vendorEfforts = auto.efforts?.length ? auto.efforts : resolved.efforts;
     // 收不收采样参数只认这家自己（按地址的主机名）在 models.dev 的条目，不借别家的目录。
     const hosts = endpoint.baseUrls.map((base) => hostOf(base.url));
     const takesSampling = this.modelsDev.takesSampling({ hosts, modelId });
-    if (takesSampling === undefined) return facts;
-    return { ...facts, takesSampling };
+    return {
+      ...facts,
+      ...(vendorEfforts === undefined ? {} : { vendorEfforts }),
+      ...(noThinking ? { noThinking } : {}),
+      ...(contextSet ? { contextSet } : {}),
+      ...(takesSampling === undefined ? {} : { takesSampling }),
+    };
+  }
+
+  /**
+   * 不看模型设置、Osuna 自动取到的资料：这家上游清单给的在前，models.dev 补上没给的；显示名先取这家清单（或已选、
+   * 手动添加时记下）的，再取 models.dev 的。
+   */
+  private autoModelFacts(endpoint: StoredApiEndpoint, modelId: string): ModelFacts {
+    const listed = endpoint.catalog?.models.find((model) => model.id === modelId);
+    const known = this.modelsDev.facts(modelId);
+    const facts = mergeModelFacts(listed?.facts, known);
+    const label =
+      listed?.label ??
+      endpoint.models.find((model) => model.id === modelId)?.label ??
+      endpoint.manualModels?.find((model) => model.id === modelId)?.label;
+    return label === undefined ? facts : { ...facts, name: label };
+  }
+
+  /** 这家这个模型的名字：用户起的，再是清单或 models.dev 的，都没有就是模型 id。 */
+  private modelName(endpoint: StoredApiEndpoint, modelId: string): string {
+    return this.modelFacts(endpoint, modelId).name ?? modelId;
+  }
+
+  /** 一家的模型在选单里的名字；同一家里撞名的显示模型 id（照 magpie）。不同家的由分组或接口名分开。 */
+  private groupModelLabels(group: {
+    endpoint: StoredApiEndpoint;
+    models: EndpointGroupModel[];
+  }): string[] {
+    return distinctModelLabels(
+      group.models.map(({ model }) => ({
+        id: model.id,
+        label: this.modelName(group.endpoint, model.id),
+      })),
+    );
+  }
+
+  /** 光秃秃的模型名在选单里的名字：按接口顺序里最靠前、开着、选了它的那家查（中转站也先发给那家）；撞名的显示模型 id。 */
+  private bareModelLabels(
+    state: ApiEndpointState,
+    models: ReadonlyArray<{ id: string }>,
+  ): string[] {
+    const named = models.map(({ id }) => {
+      const endpoint = firstEnabledServing(state, id);
+      const label = endpoint ? this.modelName(endpoint, id) : id;
+      return { id, label };
+    });
+    return distinctModelLabels(named);
   }
 
   /**
@@ -2293,6 +3081,11 @@ export class ApiEndpointService {
     this.staleCodexModels(state);
   }
 
+  /** 中转站收到 ChatGPT 后端那组路径的请求时调用：记下请求头里 Codex 的版本，「按 Codex 的样子测」用。 */
+  noteCliVersion(headers: IncomingHttpHeaders): void {
+    this.codexSeenVersion.saw(headers);
+  }
+
   /**
    * 用 ChatGPT 登录的 Codex 的模型清单里接在 ChatGPT 自带模型后面的接口模型（中转站合并清单时用）、
    * 这部分清单的标记，与正被改写的 config.toml 所在的 CODEX_HOME（ChatGPT 拿不到时读 Codex 上次的清单）。
@@ -2302,24 +3095,36 @@ export class ApiEndpointService {
     const codexHome = path.dirname(this.resolveCodexConfigPath());
     const state = this.readStateForSnapshot();
     const marksAgentsV1 = state?.agents.codex.allowsAnySubagentModel === true;
-    let entries: CodexModelEntry[] = [];
+    let endpoints: CodexEndpointListing = { entries: [], endpointNames: [] };
     if (state) {
-      entries = codexEndpointEntries({
-        state: this.retiredModels.listed(state),
+      endpoints = codexEndpointEntries({
+        state: this.served(state),
         reasoningEffort: this.codexStartEffort(state),
         factsFor: (endpoint, modelId) => this.modelFacts(endpoint, modelId),
         marksAgentsV1,
       });
     }
+    const nameDisplay = state ? endpointNameDisplayOf(state) : "always";
     const defaultModelId = state?.agents.codex.defaultModelId ?? null;
-    let tag = codexListTag({ entries, defaultModelId });
+    const disabledModels = state?.disabledModels ?? [];
+    // 被禁的 Codex 自己的模型也从清单里拿掉（magpie 把名单算进标记），名单一变 Codex 就重拉；
+    // 接口名与显示方式变了显示名就变，也算进标记。
+    let tag = codexListTag({
+      entries: endpoints.entries,
+      endpointNames: endpoints.endpointNames,
+      nameDisplay,
+      defaultModelId,
+      ...(disabledModels.length === 0 ? {} : { disabledModels }),
+    });
     if (marksAgentsV1) tag = agentsV1Tag(tag);
     return {
-      entries,
+      endpoints,
+      nameDisplay,
       tag,
       codexHome,
       marksAgentsV1,
       agentVersionsPath: this.store.codexAgentVersionsPath,
+      disabledModels,
     };
   }
 
@@ -2417,45 +3222,621 @@ export class ApiEndpointService {
   /**
    * 从上游列出模型。只读，不进串行队列：慢的上游不该挡住切换。
    * 失败抛 ApiEndpointRequestError，code 区分鉴权/不支持/超时/取消。
+   * 带 baseUrls 时各格式各拉一次再合并（fetchMergedModels）。
    */
   async fetchModels(
     provider: string,
-    input: ApiEndpointUpstreamInput,
+    input: ApiEndpointFetchModelsInput,
     signal: AbortSignal,
   ): Promise<ApiEndpointModel[]> {
     const supported = requireProvider(provider);
-    const format = input.format === undefined ? null : requireFormat(input.format);
-    const baseUrl = normalizeBaseUrl(input.baseUrl);
-    const apiKey = this.resolveRequestKey(input);
-    const result = await fetchUpstreamModels({
-      provider: format === null ? supported : providerWithListingHeaders(format),
-      baseUrl,
-      apiKey,
-      signal,
-      timeoutMs: this.upstreamTimeoutMs,
-    });
-    if (!result.ok)
-      throw new ApiEndpointRequestError({ code: result.error.code, message: result.error.message });
-    if (format !== null && input.endpointId) {
-      await this.keepCatalog(input.endpointId, result.models);
+    if (input.baseUrls !== undefined) {
+      const addresses = input.baseUrls.map(({ format, url }) => ({
+        format: requireFormat(format),
+        url,
+      }));
+      const models = await this.fetchMergedModels({
+        input,
+        addresses,
+        keeps: input.endpointId !== undefined && input.preview !== true,
+        signal,
+      });
+      return models.map(toWireModel);
     }
-    return result.models.map(toWireModel);
+    const format = input.format === undefined ? null : requireFormat(input.format);
+    // 从模板加的这家：没有清单接口的用内置清单、不问上游，有前缀的只留套餐自己的（照 magpie）。
+    const place = this.upstreamPlace(input);
+    const baseUrl = upstreamBaseUrl({ place, format, raw: input.baseUrl });
+    const apiKey = this.resolveRequestKey(input);
+    let models: ListedModel[];
+    if (listsNoModels(place)) {
+      models = planModelsOf(place, []);
+    } else {
+      const result = await fetchUpstreamModels({
+        provider: format === null ? supported : providerWithListingHeaders(format),
+        baseUrl,
+        apiKey,
+        templateId: place.templateId,
+        extras: this.requestExtras(input),
+        signal,
+        timeoutMs: this.upstreamTimeoutMs,
+      });
+      if (!result.ok) throw requestErrorOf(result.error);
+      models = planModelsOf(place, result.models);
+    }
+    if (format !== null && input.endpointId && input.preview !== true) {
+      await this.keepCatalog(input.endpointId, models);
+    }
+    return models.map(toWireModel);
+  }
+
+  /**
+   * 有几种格式地址就各拉一次，按模型 id 合并（catalog-merge.ts，照 magpie fetchOne）；同一个列表地址只问一次。
+   * 有一种答上就算成功：keeps 时记作这家的上游清单，这次没答上的格式上次列过的模型留着。都没答上抛最后的原因。
+   */
+  private async fetchMergedModels(options: {
+    input: ApiEndpointUpstreamInput;
+    addresses: { format: ApiEndpointRequestFormat; url: string }[];
+    keeps: boolean;
+    signal: AbortSignal;
+  }): Promise<CatalogModel[]> {
+    const { input, addresses, signal } = options;
+    const place = this.upstreamPlace(input);
+    const apiKey = this.resolveRequestKey(input);
+    const extras = this.requestExtras(input);
+    const endpointId = options.keeps ? input.endpointId : undefined;
+    let models: CatalogModel[];
+    if (listsNoModels(place)) {
+      models = planModelsOf(place, []);
+    } else {
+      const asked = new Map<string, ReturnType<typeof fetchUpstreamModels>>();
+      const lists: FormatList[] = [];
+      const failed: ApiEndpointRequestFormat[] = [];
+      let lastFailure: UpstreamFailure | null = null;
+      for (const { format, url } of addresses) {
+        const baseUrl = upstreamBaseUrl({ place, format, raw: url });
+        const listing = providerWithListingHeaders(format);
+        const key = `${listing} ${baseUrl}`;
+        let pending = asked.get(key);
+        if (!pending) {
+          pending = fetchUpstreamModels({
+            provider: listing,
+            baseUrl,
+            apiKey,
+            templateId: place.templateId,
+            extras,
+            signal,
+            timeoutMs: this.upstreamTimeoutMs,
+          });
+          asked.set(key, pending);
+        }
+        const result = await pending;
+        if (result.ok) {
+          lists.push({ format, models: result.models });
+          continue;
+        }
+        if (result.error.code === "cancelled") throw requestErrorOf(result.error);
+        failed.push(format);
+        lastFailure = result.error;
+      }
+      if (lists.length === 0) {
+        throw lastFailure
+          ? requestErrorOf(lastFailure)
+          : new ApiEndpointRequestError({ code: "invalid_input", message: "No base URL to ask" });
+      }
+      const previous = endpointId
+        ? (findEndpoint(this.readState(), endpointId)?.catalog?.models ?? [])
+        : [];
+      models = planModelsOf(
+        place,
+        keepFailedFormats({ merged: mergeFormatLists(lists), previous, failed }),
+      );
+    }
+    if (endpointId) await this.keepCatalog(endpointId, models);
+    return models;
   }
 
   /**
    * 记下这家的上游清单，不影响路由。拉取期间被删的接口不再写回。
    * 清单带的模型资料改变了 Codex 模型目录或 Claude Code 的模型提示时，跟着重写。
    */
-  private keepCatalog(endpointId: string, models: ListedModel[]): Promise<void> {
-    return this.exclusiveFollowing(() => {
+  private keepCatalog(endpointId: string, models: CatalogModel[]): Promise<void> {
+    return this.writeCatalog(endpointId, { fetchedAt: this.now().toISOString(), models });
+  }
+
+  /**
+   * 各接口对上的厂商（按各格式地址的主机名）与这些厂商、另外要的厂商的状态页读数。
+   * 「价格表自动更新」关着时一页都不读（docs/usage.md「Outbound requests」）。
+   */
+  async vendorStatus(input: { vendors: readonly string[] }): Promise<VendorStatusResult> {
+    const endpointVendors: Record<string, string> = {};
+    for (const endpoint of this.readState().endpoints) {
+      const vendor = vendorOfBaseUrls(endpoint.baseUrls.map((baseUrl) => baseUrl.url));
+      if (vendor !== null) endpointVendors[endpoint.id] = vendor;
+    }
+    const vendorIds = [...new Set([...Object.values(endpointVendors), ...input.vendors])];
+    if (!this.isAutoUpdate()) {
+      return {
+        autoUpdate: false,
+        vendors: this.vendorStatusPages.unread(vendorIds),
+        endpointVendors,
+      };
+    }
+    const vendors = await this.vendorStatusPages.read({ vendors: vendorIds });
+    return { autoUpdate: true, vendors, endpointVendors };
+  }
+
+  /**
+   * 本机别的软件里的接口配置，对照已有的接口（从别的软件导入，ADR 0013）。只读；key 只给打码的。
+   * includeOpenCode 为 false 时不碰 OpenCode 的 auth.json。
+   */
+  scanImports(input: { includeOpenCode: boolean }): ApiEndpointImportSource[] {
+    const settled = this.settledImports(input);
+    // 刚读过的比发现提示存着的新：提示照它算（不含 OpenCode），一分钟从这一刻重新算。
+    const withoutOpenCode = settled.filter(({ source }) => source.id !== "opencode");
+    this.discoveryRead = {
+      at: this.now().getTime(),
+      candidates: offeredCandidates(withoutOpenCode),
+    };
+    return settled.map(({ source, entries }) => ({
+      id: source.id,
+      name: source.name,
+      path: this.homeRelative(source.path),
+      found: source.found,
+      error: source.error,
+      items: entries.map(wireImportItem),
+    }));
+  }
+
+  /**
+   * 导入选中的发现（magpie ImportFromApps）：重读一遍来源、按指纹找回 key，一条一条地加；一条不成就停下，前面加好的留着，
+   * 回出错的那条与原因。已添加的、读不了的跳过；新增一家时名称重了照 freeEndpointName 加「 2」；替换保留那家的 id、标识与顺序位置。
+   * 加好的照保存那样当场拉一次清单。
+   */
+  async importFromApps(picks: readonly ApiEndpointImportPick[]): Promise<ImportOutcome> {
+    const outcome = await this.exclusiveFollowing(() => this.importPicked(picks));
+    // 导入之后的发现提示重新读一遍（magpie 导入后 discoverLocalProviders(true)）。
+    this.discoveryRead = null;
+    await Promise.all(
+      outcome.imported.map(({ endpointId }) =>
+        this.refreshCatalog({ endpointId, signal: AbortSignal.timeout(SAVE_LIST_TIMEOUT_MS) }),
+      ),
+    );
+    return outcome;
+  }
+
+  private async importPicked(picks: readonly ApiEndpointImportPick[]): Promise<ImportOutcome> {
+    const entries = this.settledImports({ includeOpenCode: true }).flatMap(
+      (source) => source.entries,
+    );
+    const imported: ApiEndpointNameRef[] = [];
+    for (const pick of picks) {
+      const entry = entries.find((candidate) => candidate.fingerprint === pick.fingerprint);
+      // 指纹对不上（来源变了、daemon 重启过）：扫描结果过时了，没有可说的那一条。
+      if (entry === undefined) return { imported, failed: null, error: importGone() };
+      try {
+        const added = await this.importOne({ pick, entry });
+        if (added !== null) imported.push(added);
+      } catch (error) {
+        // 任何错都停在这一条，回前面加好的（magpie 不论什么错都回 added）。
+        const failed = { fingerprint: pick.fingerprint, name: entry.name };
+        return { imported, failed, error: this.importItemError({ error, entry }) };
+      }
+    }
+    return { imported, failed: null, error: null };
+  }
+
+  /** 一条没成的原因：请求的错照原样；写文件等别的错记日志，换成 import_failed（params.reason 是 errno 或错误名）。 */
+  private importItemError(input: { error: unknown; entry: SettledEntry }): ApiEndpointRequestError {
+    const { error } = input;
+    if (error instanceof ApiEndpointRequestError) return error;
+    this.logger.error({ err: error, source: input.entry.source }, "Importing an endpoint failed");
+    let reason = "unknown";
+    if (isErrnoException(error) && error.code !== undefined) reason = error.code;
+    else if (error instanceof Error) reason = error.name;
+    return new ApiEndpointRequestError({
+      code: "import_failed",
+      message: `Osuna couldn't save ${input.entry.name} (${reason})`,
+      params: { reason },
+    });
+  }
+
+  /** 加一条或换上一条，单独落下（magpie 每条 Save 一次）；已经有了的为 null。 */
+  private async importOne(input: {
+    pick: ApiEndpointImportPick;
+    entry: SettledEntry;
+  }): Promise<ApiEndpointNameRef | null> {
+    const { pick, entry } = input;
+    const found = entry.found;
+    if (found === null || entry.status === "added") return null;
+    const action = importActionOf({ pick, found });
+    const previous = this.readState();
+    if (action.kind === "replace") {
+      const index = replaceTargetIndex({ entry, endpoints: previous.endpoints });
+      return this.landImported({
+        previous,
+        found,
+        name: found.name,
+        replaceIndex: index,
+        icon: null,
+      });
+    }
+    // 两个软件里是同一个账号、两条都选了：只加一次（magpie holds）。
+    const holds = previous.endpoints.some((held) =>
+      sameAccount({ have: { ...held, key: this.store.getApiKey(held.id) }, found }),
+    );
+    if (holds) return null;
+    const name = freeEndpointName(previous, action.name);
+    return this.landImported({ previous, found, name, replaceIndex: null, icon: null });
+  }
+
+  /**
+   * 导入的一家落下（从别的软件导入与导入链接共用）：replaceIndex 是被换掉的那家（保留它的 id、标识与顺序位置），
+   * 为 null 时用 name 新增一家、加在最后。没有 key 的换上后去掉原来那家的 key。
+   */
+  private async landImported(input: {
+    previous: ApiEndpointState;
+    found: FoundEndpoint;
+    name: string;
+    replaceIndex: number | null;
+    icon: string | null;
+  }): Promise<ApiEndpointNameRef> {
+    const { previous, found, name, replaceIndex, icon } = input;
+    const timestamp = this.now().toISOString();
+    let endpoints: StoredApiEndpoint[];
+    let endpoint: StoredApiEndpoint;
+    if (replaceIndex !== null) {
+      const target = previous.endpoints[replaceIndex];
+      if (target === undefined) throw importGone();
+      endpoint = importedEndpoint({ found, name, kept: target, timestamp, icon });
+      endpoints = previous.endpoints.with(replaceIndex, endpoint);
+    } else {
+      const slug = generateEndpointSlug(name, new Set(previous.endpoints.map((held) => held.slug)));
+      const kept = { id: `ep_${randomUUID()}`, slug, createdAt: timestamp };
+      endpoint = importedEndpoint({ found, name, kept, timestamp, icon });
+      endpoints = [...previous.endpoints, endpoint];
+    }
+    const keys = found.key === null ? {} : { [endpoint.id]: found.key };
+    await this.commit(previous, { ...previous, endpoints }, { keys });
+    // 换成不要 key 的那家：原来那把 key 不再是它的。
+    if (found.key === null && this.store.getApiKey(endpoint.id) !== null) {
+      this.store.removeApiKey(endpoint.id);
+    }
+    if (replaceIndex !== null) this.cooldowns.clear(endpoint.id);
+    return { endpointId: endpoint.id, name: endpoint.name };
+  }
+
+  /**
+   * 读一条导入链接给确认框（ADR 0013，magpie importlink.go）：照 magpie 解析、拒收，说会替换哪家；不存任何东西。
+   * 链接给了图标图片的，这时开始在后台取（magpie：确认框开着就是同意），不等它；客户端用 importLinkIcon 要图片。
+   */
+  previewImportLink(link: string): ApiEndpointImportLinkPreview {
+    const parsed = parsedImportLinkOrRefuse(link);
+    const target = importLinkTarget({ endpoints: this.readState().endpoints, parsed });
+    const hostNames = parsed.baseUrls.map(({ url }) => new URL(url).host);
+    const hosts = [...new Set(hostNames)];
+    let replaces: ApiEndpointImportLinkPreview["replaces"] = null;
+    if (target !== null) replaces = { endpointId: target.id, name: target.name };
+    const iconUrl = parsed.iconUrl;
+    if (iconUrl !== null) void this.startLinkPictureFetch(iconUrl);
+    return {
+      name: parsed.name,
+      key: parsed.key,
+      baseUrls: parsed.baseUrls,
+      hosts,
+      models: parsed.models,
+      templateId: parsed.templateId,
+      region: parsed.region,
+      keysUrl: parsed.keysUrl,
+      replaces,
+      ignoredGemini: parsed.ignoredGemini,
+      icon: parsed.icon,
+      iconPending: iconUrl !== null,
+    };
+  }
+
+  /**
+   * 确认框里点了添加：重新解析、拒收一遍链接（客户端说的不算），用确认框里的名称（同样截到 80 字节）与 key 加上那家，
+   * 或换上 magpie Find(id) 找到的那家（Save 整个换上）。icon= 的图片有就用它（模板接口也一样），否则用 catalog= 的图标；
+   * 图片在这一刻才存下，没加成就删掉。加好的照保存那样当场拉一次清单。
+   */
+  async addFromImportLink(input: {
+    link: string;
+    name: string;
+    key: string;
+  }): Promise<ApiEndpointNameRef> {
+    const parsed = parsedImportLinkOrRefuse(input.link);
+    const name = cutImportLinkName(validateName(input.name));
+    const key = input.key.trim();
+    if (!isKeyLike(key)) {
+      throw new ApiEndpointRequestError({
+        code: "import_link_refused",
+        message: "That is not a key",
+        params: { reason: "bad_key" },
+      });
+    }
+    // 只用已经取到的图片：没取到、还在取都不等，照常添加（默认图标）。
+    let picture: ImportLinkPicture | null = null;
+    if (parsed.iconUrl !== null) picture = this.importLinkPictures.get(parsed.iconUrl) ?? null;
+    const found: FoundEndpoint = {
+      name,
+      key: key === "" ? null : key,
+      baseUrls: parsed.baseUrls,
+      models: parsed.models,
+      headers: null,
+      templateId: parsed.templateId,
+      region: parsed.region,
+    };
+    const added = await this.exclusiveFollowing(async () => {
+      const previous = this.readState();
+      const target = importLinkTarget({ endpoints: previous.endpoints, parsed });
+      let stored: StoredIcon | null = null;
+      if (picture !== null) stored = this.icons.storeTracked(picture.bytes);
+      const icon = stored?.icon ?? parsed.icon;
+      let landed = false;
+      try {
+        let replaceIndex: number | null = null;
+        let freeName = freeImportLinkName(previous, name);
+        if (target !== null) {
+          // 改了名的不和别的几家重名；和被换掉的那家同名不算。
+          const othersHeld = previous.endpoints.filter((held) => held !== target);
+          freeName = freeImportLinkName({ ...previous, endpoints: othersHeld }, name);
+          replaceIndex = previous.endpoints.indexOf(target);
+        }
+        const ref = await this.landImported({
+          previous,
+          found,
+          name: freeName,
+          replaceIndex,
+          icon,
+        });
+        landed = true;
+        return ref;
+      } finally {
+        // 没加成：这次才存下的图片没人用，删掉。
+        if (!landed && stored?.isNew === true) this.icons.discard(stored.icon);
+      }
+    });
+    if (parsed.iconUrl !== null) {
+      this.importLinkPictures.delete(parsed.iconUrl);
+      this.importLinkPictureFetches.delete(parsed.iconUrl);
+    }
+    const signal = AbortSignal.timeout(SAVE_LIST_TIMEOUT_MS);
+    await this.refreshCatalog({ endpointId: added.endpointId, signal });
+    return added;
+  }
+
+  /**
+   * 导入链接 icon= 的图片（给确认框）：读链接时已开始取的等它取完，没开始的现在开始。取不到为 null。
+   */
+  async importLinkIcon(link: string): Promise<ApiEndpointIconImage | null> {
+    const parsed = parsedImportLinkOrRefuse(link);
+    if (parsed.iconUrl === null) return null;
+    const picture = await this.startLinkPictureFetch(parsed.iconUrl);
+    if (picture === null) return null;
+    const data = picture.bytes.toString("base64");
+    return { data, mimeType: picture.mimeType };
+  }
+
+  /** 开始取（或接着等已经在取的）一张导入链接图片；取到的留在内存里，等添加时存下。 */
+  private startLinkPictureFetch(url: string): Promise<ImportLinkPicture | null> {
+    const running = this.importLinkPictureFetches.get(url);
+    if (running !== undefined) return running;
+    const fetching = this.fetchLinkPicture(url);
+    this.importLinkPictureFetches.set(url, fetching);
+    fetching.then(
+      (picture) => {
+        if (picture !== null) this.importLinkPictures.set(url, picture);
+        keepNewest(this.importLinkPictures);
+        return picture;
+      },
+      // 取图时想不到的错：记日志（只有主机名），确认框照常用默认图标；等它的请求会把错报回去。
+      (error: unknown) => {
+        this.importLinkPictureFetches.delete(url);
+        this.logger.error({ err: error, host: new URL(url).host }, "Import link icon fetch broke");
+        return null;
+      },
+    );
+    keepNewest(this.importLinkPictureFetches);
+    return fetching;
+  }
+
+  /** 取一张导入链接图片：取不到、不是认得的图片为 null，原因写一行日志（只有主机名与原因，不写 key 与查询串）。 */
+  private async fetchLinkPicture(url: string): Promise<ImportLinkPicture | null> {
+    const signal = AbortSignal.timeout(IMPORT_LINK_ICON_TIMEOUT_MS);
+    const fetched = await fetchIconPicture({ url, fetchSite: this.fetchSite, signal });
+    const host = new URL(url).host;
+    if (!fetched.ok) {
+      this.logger.warn({ host, reason: fetched.reason }, "Import link icon couldn't be fetched");
+      return null;
+    }
+    const mimeType = iconMimeType(fetched.bytes);
+    if (mimeType === null) {
+      this.logger.warn({ host, reason: "not_image" }, "Import link icon couldn't be fetched");
+      return null;
+    }
+    return { bytes: fetched.bytes, mimeType };
+  }
+
+  /**
+   * 发现提示（magpie importapps/discovery）：导入窗口打开时会默认选上、又没被忽略的那几条。不含 OpenCode；
+   * 一分钟内只真读、对照一次（magpie 的发现也是整个一分钟一次），接口变了或导入之后重来。已忽略的每次现滤。
+   */
+  discoverImports(): ApiEndpointImportCandidate[] {
+    const ignored = new Set(this.readState().ignoredImports ?? []);
+    return this.discoveryCandidates().filter((candidate) => !ignored.has(candidate.fingerprint));
+  }
+
+  /**
+   * 「忽略」：这几条的指纹并进主机的已忽略记录（magpie 记在 localStorage，这里记在主机上、跨客户端）。
+   * 不是指纹的拒收；最多留 MAX_IGNORED_IMPORTS 条，丢最早的。暂时不在的不删（magpie 也不忘：来源一时读不到时照样认得）。
+   */
+  ignoreImports(input: { fingerprints: readonly string[] }): Promise<void> {
+    const malformed = input.fingerprints.find(
+      (fingerprint) => !IMPORT_FINGERPRINT.test(fingerprint),
+    );
+    if (malformed !== undefined) {
+      return Promise.reject(
+        new ApiEndpointRequestError({
+          code: "invalid_input",
+          message: `'${malformed}' isn't an import fingerprint`,
+        }),
+      );
+    }
+    return this.exclusiveFollowing(async () => {
+      const state = this.readState();
+      const merged = [...new Set([...(state.ignoredImports ?? []), ...input.fingerprints])];
+      const ignoredImports = merged.slice(-MAX_IGNORED_IMPORTS);
+      await this.commit(state, { ...state, ignoredImports });
+    }).catch((error: unknown) => {
+      throw this.ignoreError(error);
+    });
+  }
+
+  /** 忽略没记上的原因：请求的错照原样；别的记日志，换成 import_ignore_failed（params.reason 同 import_failed）。 */
+  private ignoreError(error: unknown): ApiEndpointRequestError {
+    if (error instanceof ApiEndpointRequestError) return error;
+    this.logger.error({ err: error }, "Ignoring import candidates failed");
+    let reason = "unknown";
+    if (isErrnoException(error) && error.code !== undefined) reason = error.code;
+    else if (error instanceof ApiEndpointsFileUnparsableError) reason = "endpoints_unparsable";
+    else if (error instanceof Error) reason = error.name;
+    return new ApiEndpointRequestError({
+      code: "import_ignore_failed",
+      message: `Osuna couldn't save the ignored entries (${reason})`,
+      params: { reason },
+    });
+  }
+
+  /** 接口或 key 变了：发现提示存着的对照结果作废。 */
+  private forgetDiscoveryIfHeldChanges(input: {
+    previous: ApiEndpointState;
+    proposed: ApiEndpointState;
+    keys: Record<string, string> | undefined;
+  }): void {
+    const changesHeld =
+      input.previous.endpoints !== input.proposed.endpoints || input.keys !== undefined;
+    if (changesHeld) this.discoveryRead = null;
+  }
+
+  private discoveryCandidates(): ApiEndpointImportCandidate[] {
+    const at = this.now().getTime();
+    const cached = this.discoveryRead;
+    if (cached !== null && at - cached.at < DISCOVERY_READ_INTERVAL_MS) return cached.candidates;
+    this.discoveryRead = null;
+    const settled = settleImports({
+      sources: readImportSources({ context: this.importContext(), includeOpenCode: false }),
+      held: this.heldForImport(this.readState()),
+      fingerprintSecret: this.importFingerprintSecret(),
+    });
+    const candidates = offeredCandidates(settled);
+    this.discoveryRead = { at, candidates };
+    return candidates;
+  }
+
+  private importFingerprintSecret(): Buffer {
+    this.importSecret ??= this.store.readImportFingerprintSecret();
+    return this.importSecret;
+  }
+
+  private heldForImport(state: ApiEndpointState): HeldEndpoint[] {
+    return state.endpoints.map((endpoint) => ({
+      id: endpoint.id,
+      name: endpoint.name,
+      slug: endpoint.slug,
+      baseUrls: endpoint.baseUrls,
+      headers: endpoint.headers,
+      key: this.store.getApiKey(endpoint.id),
+    }));
+  }
+
+  private settledImports(input: { includeOpenCode: boolean }) {
+    const sources = readImportSources({
+      context: this.importContext(),
+      includeOpenCode: input.includeOpenCode,
+    });
+    return settleImports({
+      sources,
+      held: this.heldForImport(this.readState()),
+      fingerprintSecret: this.importFingerprintSecret(),
+    });
+  }
+
+  private importContext(): ImportReadContext {
+    const defaults = defaultImportSourcePaths({
+      homeDir: this.homeDir,
+      env: this.env,
+      claudeSettings: this.resolveClaudeSettingsPath(),
+      codexConfig: this.resolveCodexConfigPath(),
+    });
+    return {
+      paths: { ...defaults, ...this.importSourcePaths },
+      homeDir: this.homeDir,
+      isGatewayUrl: (url) => this.isGatewayUrl(url),
+      claudeOriginalEnv: () => this.claudeOriginalEnv(),
+      osunaCodexCatalog: this.store.codexModelCatalogPath,
+    };
+  }
+
+  /** 本机上指向中转站的地址：路径是中转站的，或端口是它监听的（magpie gatewayURL）。 */
+  private isGatewayUrl(url: URL): boolean {
+    if (!LOOPBACK_HOSTS.has(url.hostname)) return false;
+    if (url.pathname.startsWith(API_ENDPOINT_GATEWAY_PATH)) return true;
+    const gateway = this.gatewayUrlFor("claude") ?? this.gatewayUrlFor("codex");
+    if (gateway === null || !URL.canParse(gateway)) return false;
+    return new URL(gateway).port === url.port;
+  }
+
+  /** Osuna 接管 Claude Code 时 ADR 0004 记下的 env 原值；没接管为 null。 */
+  private claudeOriginalEnv(): Record<string, string> | null {
+    const takeover = this.store.readClaudeTakeover().takeover;
+    if (takeover === null) return null;
+    const env: Record<string, string> = {};
+    for (const [name, record] of Object.entries(takeover.env)) {
+      const original = record.original;
+      if (original.present && typeof original.value === "string") env[name] = original.value;
+    }
+    return env;
+  }
+
+  /** 家目录下的路径写成 ~ 开头（magpie 的导入窗口这样显示）。 */
+  private homeRelative(filePath: string): string {
+    const relative = path.relative(this.homeDir, filePath);
+    const isInside = relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
+    return isInside ? path.join("~", relative) : filePath;
+  }
+
+  /** 丢掉拉回的清单：清空上游清单与拉取时间，已选与手动添加的不动（照 magpie unfetch）。 */
+  async forgetCatalog(endpointId: string): Promise<void> {
+    if (!findEndpoint(this.readState(), endpointId)) {
+      throw new ApiEndpointRequestError({ code: "not_found", message: "API endpoint not found" });
+    }
+    await this.writeCatalog(endpointId, undefined);
+  }
+
+  /**
+   * 换上新清单（或丢掉）。在服务的模型跟着定（model-scope.ts）：跟随清单时重算，挑选时按规则勾上清单里新出的；
+   * 它们变了就和保存一样走 commit，默认模型与 CLI 配置跟着对账。
+   */
+  private writeCatalog(endpointId: string, catalog: StoredApiEndpoint["catalog"]): Promise<void> {
+    return this.exclusiveFollowing(async () => {
       const state = this.readState();
       const endpoint = findEndpoint(state, endpointId);
       if (!endpoint) return;
-      const catalog = { fetchedAt: this.now().toISOString(), models };
-      const next = {
-        ...state,
-        endpoints: withEndpoint(state.endpoints, { ...endpoint, catalog }),
-      };
+      const { catalog: _previous, ...rest } = endpoint;
+      const listedBefore = new Set((endpoint.catalog?.models ?? []).map((model) => model.id));
+      const updated = settleServedModels(
+        catalog ? { ...rest, catalog } : rest,
+        (modelId) => !listedBefore.has(modelId),
+      );
+      const next = { ...state, endpoints: withEndpoint(state.endpoints, updated) };
+      const servesOthers =
+        !isDeepStrictEqual(updated.models, endpoint.models) ||
+        !isDeepStrictEqual(updated.modelMapping, endpoint.modelMapping);
+      if (servesOthers) {
+        await this.commit(state, next);
+        return;
+      }
       this.store.writeState(next);
       this.rewriteCodexCatalog(next);
       const tokens = this.store.readGatewayTokens();
@@ -2484,15 +3865,21 @@ export class ApiEndpointService {
     if (!modelId) {
       throw new ApiEndpointRequestError({ code: "invalid_input", message: "A model is required" });
     }
+    const disabled = this.testDisabledResult(input.endpointId, modelId);
+    if (disabled !== null) return disabled;
     const baseUrl = normalizeBaseUrl(input.baseUrl);
     const apiKey = this.resolveRequestKey(input);
+    const { templateId } = this.upstreamPlace(input);
     const outcome = await testUpstreamConnection({
       provider: supported,
       // Codex 和写进 config.toml 的 base_url 一样补 /v1。
       baseUrl:
         supported === "codex" ? (normalizeOpenAICompatibleBaseUrl(baseUrl) ?? baseUrl) : baseUrl,
       apiKey,
+      templateId,
       modelId,
+      sentModel: this.sentNameOf(input.endpointId)(modelId),
+      extras: this.requestExtras(input),
       signal,
       timeoutMs: this.connectionTestTimeoutMs,
     });
@@ -2508,17 +3895,44 @@ export class ApiEndpointService {
     input: ApiEndpointTestConnectionInput,
     signal: AbortSignal,
   ): Promise<ApiEndpointTestConnectionResult> {
-    const baseUrl = normalizeBaseUrl(input.baseUrl);
+    const place = this.upstreamPlace(input);
+    const { templateId } = place;
+    const baseUrl = upstreamBaseUrl({ place, format, raw: input.baseUrl });
     const apiKey = this.resolveRequestKey(input);
+    const extras = this.requestExtras(input);
     const startedAt = performance.now();
     const elapsed = () => Math.round(performance.now() - startedAt);
-    let modelId = input.modelId?.trim() || this.probeModelFromEndpoint(input.endpointId, format);
+    const isAskable = this.isTestAskable(input.endpointId);
+    const servedHere = (ids: string[]) =>
+      ids.filter(
+        (model) =>
+          isAskable(model) && (modelFormatsAt({ templateId, model })?.includes(format) ?? true),
+      );
+    const typedModelId = input.modelId?.trim();
+    if (typedModelId) {
+      const disabled = this.testDisabledResult(input.endpointId, typedModelId);
+      if (disabled !== null) return disabled;
+    }
+    let modelId =
+      typedModelId ||
+      (input.modelIds === undefined
+        ? this.probeModelFromEndpoint(input.endpointId, format)
+        : pickProbeModel(servedHere(input.modelIds), format));
+    if (!modelId && listsNoModels(place)) {
+      // 没有清单接口的模板（Bedrock）：从内置清单挑，不问上游。
+      modelId = pickProbeModel(
+        servedHere(planModelsOf(place, []).map((model) => model.id)),
+        format,
+      );
+    }
     if (!modelId) {
       // 这家还没选模型也没拉过清单：先列一次（不花钱）再挑。
       const listed = await fetchUpstreamModels({
         provider: providerWithListingHeaders(format),
         baseUrl,
         apiKey,
+        templateId,
+        extras,
         signal,
         timeoutMs: this.upstreamTimeoutMs,
       });
@@ -2528,15 +3942,12 @@ export class ApiEndpointService {
         }
         const status = listed.error.status ?? null;
         const code = status === 401 || status === 403 ? "auth_failed" : listed.error.code;
-        return {
-          ok: false,
-          status,
-          durationMs: elapsed(),
-          error: { code, message: listed.error.message },
-        };
+        const error: ApiEndpointError = { code, message: listed.error.message };
+        if (listed.error.params !== undefined) error.params = listed.error.params;
+        return { ok: false, status, durationMs: elapsed(), error };
       }
       modelId = pickProbeModel(
-        listed.models.map((model) => model.id),
+        servedHere(planModelsOf(place, listed.models).map((model) => model.id)),
         format,
       );
     }
@@ -2544,7 +3955,10 @@ export class ApiEndpointService {
       format,
       baseUrl,
       apiKey,
+      templateId,
       modelId: modelId ?? null,
+      sentModel: modelId ? this.sentNameOf(input.endpointId)(modelId) : null,
+      extras,
       signal,
       timeoutMs: this.connectionTestTimeoutMs,
     });
@@ -2553,7 +3967,36 @@ export class ApiEndpointService {
     return testResultOf(detection, elapsed());
   }
 
-  /** 从这家已选的模型、再从上游清单里挑一个适合该格式的；都没有时为 null。 */
+  /**
+   * 拉模型、测试用的模板与区域：表单给了就按表单（保存前的添加 / 编辑窗口），否则按 endpointId 那家记下的；
+   * 都没有即「自定义」。不认识的模板拒收。
+   */
+  private upstreamPlace(input: ApiEndpointUpstreamInput): TemplatePlace {
+    if (input.templateId !== undefined) {
+      if (!findTemplate(input.templateId)) {
+        throw new ApiEndpointRequestError({
+          code: "invalid_input",
+          message: `Unknown template: ${input.templateId}`,
+        });
+      }
+      return {
+        templateId: input.templateId,
+        ...(input.region === undefined ? {} : { region: input.region }),
+      };
+    }
+    if (!input.endpointId) return {};
+    const endpoint = findEndpoint(this.readState(), input.endpointId);
+    if (!endpoint) return {};
+    return {
+      ...(endpoint.templateId === undefined ? {} : { templateId: endpoint.templateId }),
+      ...(endpoint.region === undefined ? {} : { region: endpoint.region }),
+    };
+  }
+
+  /**
+   * 从这家已选的模型、再从上游清单里挑一个适合该格式的；都没有时为 null。
+   * Bedrock 只从在这种格式上给的模型里挑（modelFormatsAt）。
+   */
   private probeModelFromEndpoint(
     endpointId: string | undefined,
     format: ApiEndpointRequestFormat,
@@ -2561,15 +4004,16 @@ export class ApiEndpointService {
     if (!endpointId) return null;
     const endpoint = findEndpoint(this.readState(), endpointId);
     if (!endpoint) return null;
+    const { templateId } = endpoint;
+    const isAskable = this.isTestAskable(endpointId);
+    const servedHere = (ids: string[]) =>
+      ids.filter(
+        (model) =>
+          isAskable(model) && (modelFormatsAt({ templateId, model })?.includes(format) ?? true),
+      );
     return (
-      pickProbeModel(
-        endpoint.models.map((model) => model.id),
-        format,
-      ) ??
-      pickProbeModel(
-        (endpoint.catalog?.models ?? []).map((model) => model.id),
-        format,
-      )
+      pickProbeModel(servedHere(endpoint.models.map((model) => model.id)), format) ??
+      pickProbeModel(servedHere((endpoint.catalog?.models ?? []).map((model) => model.id)), format)
     );
   }
 
@@ -2578,14 +4022,22 @@ export class ApiEndpointService {
    * 每种格式的结论（含失败）放在返回值里；请求本身不成立或被取消才抛 ApiEndpointRequestError。
    */
   async detectFormats(
-    input: ApiEndpointUpstreamInput,
+    input: ApiEndpointDetectInput,
     signal: AbortSignal,
-  ): Promise<ApiEndpointFormatDetection[]> {
+  ): Promise<ApiEndpointDetectOutcome> {
     const baseUrl = normalizeBaseUrl(input.baseUrl);
     const apiKey = this.resolveRequestKey(input);
+    if (input.eachModel === true) {
+      return this.detectEachModel({ input, baseUrl, apiKey, signal });
+    }
     const outcome = await detectUpstreamFormats({
       baseUrl,
       apiKey,
+      modelId: input.modelId?.trim() || null,
+      // 检测照样问被禁的模型（magpie Detect 不看禁用，只有测试和中转站看）。
+      pickedModelIds: input.modelIds ?? [],
+      sentNameOf: this.sentNameOf(input.endpointId),
+      extras: this.requestExtras(input),
       signal,
       modelsTimeoutMs: this.upstreamTimeoutMs,
       probeTimeoutMs: this.connectionTestTimeoutMs,
@@ -2593,22 +4045,218 @@ export class ApiEndpointService {
     if (outcome.kind === "cancelled") {
       throw new ApiEndpointRequestError({ code: "cancelled", message: "Request cancelled" });
     }
-    return outcome.results;
+    return { results: outcome.results, models: null };
   }
 
-  /** 请求里带了 key 就用它；否则用 endpointId 对应的已保存 key。key 从不回给客户端。 */
-  private resolveRequestKey(input: ApiEndpointUpstreamInput): string {
+  /** 逐个模型识别（照 magpie DetectModels）：和单次检测一样，被禁的模型也问。 */
+  private async detectEachModel(args: {
+    input: ApiEndpointDetectInput;
+    baseUrl: string;
+    apiKey: string | null;
+    signal: AbortSignal;
+  }): Promise<ApiEndpointDetectOutcome> {
+    const { input } = args;
+    const sentNameOf = this.sentNameOf(input.endpointId);
+    const outcome = await detectEachModel({
+      baseUrl: args.baseUrl,
+      apiKey: args.apiKey,
+      modelIds: input.modelIds ?? [],
+      sentNameOf,
+      extras: this.requestExtras(input),
+      limits: this.detectEachLimits,
+      timers: this.modelTestTimers,
+      signal: args.signal,
+    });
+    if (outcome.kind === "cancelled") {
+      throw new ApiEndpointRequestError({ code: "cancelled", message: "Request cancelled" });
+    }
+    if (outcome.kind === "noModels") {
+      throw new ApiEndpointRequestError({
+        code: "invalid_input",
+        message: "No model to try: pick the models first",
+      });
+    }
+    return { results: outcome.results, models: outcome.models };
+  }
+
+  /**
+   * 测试模型（照 magpie TestModels）：给 modelId 只测那一个，否则测这家所有在服务的模型（一周内下线的不算），
+   * 被禁的不发请求、记成已禁用。每测完一个调 onResult。和拉取模型一样只读、不进串行队列。
+   */
+  async testModels(input: {
+    request: ApiEndpointTestModelsInput;
+    signal: AbortSignal;
+    // 开测前：要测的模型，按测试顺序。
+    onStarted: (modelIds: string[]) => void;
+    onResult: (progress: ModelTestProgress) => void;
+  }): Promise<ModelTestsOutcome> {
+    const { request } = input;
+    const method = request.method ?? "plain";
+    if (!API_ENDPOINT_MODEL_TEST_METHODS.some((known) => known === method)) {
+      throw new ApiEndpointRequestError({
+        code: "invalid_input",
+        message: `Unknown test method '${method}'`,
+      });
+    }
+    const state = this.readState();
+    const endpoint = findEndpoint(state, request.endpointId);
+    if (!endpoint) {
+      throw new ApiEndpointRequestError({ code: "not_found", message: "API endpoint not found" });
+    }
+    const listed = findEndpoint(this.retiredModels.listed(state), endpoint.id) ?? endpoint;
+    const typed = request.modelId?.trim();
+    const modelIds = typed ? [typed] : listed.models.map((model) => model.id);
+    const identity = await this.testIdentity({ endpoint, method });
+    // 按 CLI 的样子测只问那个 CLI 的请求去的格式，不管「只用这种格式」（magpie clientProto）。
+    let cliAddress: ModelTestAttempt | null = null;
+    if (isCliTestClient(method)) cliAddress = cliTestAddress({ endpoint, client: method });
+    const plans = modelIds.map((modelId): ModelTestPlan => {
+      const sentModel = upstreamModelName({ settings: endpoint.modelSettings, modelId });
+      const disabledBy = endpointDisabledBy({ state, endpoint, model: modelId });
+      let attempts = testAttempts({ endpoint, modelId });
+      if (cliAddress !== null) attempts = [cliAddress];
+      return { modelId, sentModel, disabledBy, attempts };
+    });
+    input.onStarted(modelIds);
+    const apiKey = this.store.getApiKey(endpoint.id);
+    const clock = { now: this.now, timers: this.modelTestTimers };
+    return runModelTests({
+      plans,
+      apiKey,
+      templateId: endpoint.templateId,
+      extras: storedRequestExtras(endpoint),
+      identity,
+      limits: this.modelTestLimits,
+      clock,
+      signal: input.signal,
+      onResult: input.onResult,
+    });
+  }
+
+  /**
+   * 以谁的样子测（ADR 0013）：plain 是 Osuna 自己；按 CLI 测时这家不提供就拒收，Claude Code 没有样本时每个模型记成
+   * cli_sample_missing，Codex 没有样本时用 ChatGPT 账号那套 Codex 请求头（magpie clientHeaders）。
+   */
+  private async testIdentity(input: {
+    endpoint: StoredApiEndpoint;
+    method: string;
+  }): Promise<ModelTestIdentity> {
+    const { endpoint, method } = input;
+    if (!isCliTestClient(method)) return { kind: "own" };
+    const refusal = cliTestRefusal({ endpoint, client: method });
+    if (refusal !== null) {
+      throw new ApiEndpointRequestError({ code: "invalid_input", message: refusal });
+    }
+    const sample = this.store.readCliHeaderSample(method);
+    if (sample !== null) return { kind: "cli", client: method, headers: sample };
+    if (needsCliSample(method)) return { kind: "sampleMissing", error: CLI_SAMPLE_MISSING };
+    const cached = readCodexModelsCache(path.dirname(this.resolveCodexConfigPath()));
+    const version = newestCodexVersion([
+      cachedCodexVersion(cached),
+      await this.installedCodexVersion(),
+      this.codexSeenVersion.version(),
+    ]);
+    const headers = codexSignHeaders({ version, system: await readCodexSystem() });
+    return { kind: "cli", client: method, headers };
+  }
+
+  /** 本机 Codex CLI 的版本，十分钟内问过就用上次的；问不到为 null。 */
+  private async installedCodexVersion(): Promise<string | null> {
+    const read = this.readCodexCliVersion;
+    if (read === null) return null;
+    const now = this.now().getTime();
+    const cache = this.codexCliVersionCache;
+    if (cache !== null && now - cache.at < CODEX_CLI_VERSION_TTL_MS) return cache.version;
+    const version = await read();
+    this.codexCliVersionCache = { at: now, version };
+    return version;
+  }
+
+  /**
+   * 测试连接不挑被禁的模型（magpie test.go 的 testOne、testModel；检测不看禁用）：已保存的那家按它的接口标识认，
+   * 还没保存的只按名字认。
+   */
+  private isTestAskable(endpointId: string | undefined): (modelId: string) => boolean {
+    const state = this.readState();
+    const endpoint = endpointId ? findEndpoint(state, endpointId) : null;
+    const disabledBy = (modelId: string): string | null => {
+      // 已保存的那家按它的接口标识认，还没保存的只按名字认。
+      if (endpoint) return endpointDisabledBy({ state, endpoint, model: modelId });
+      return askedDisabledBy({ state, model: modelId });
+    };
+    return (modelId) => disabledBy(modelId) === null;
+  }
+
+  /** 点名测一个被禁的模型：不发请求，结论写明命中的条目（magpie testOne）；没被禁为 null。 */
+  private testDisabledResult(
+    endpointId: string | undefined,
+    modelId: string,
+  ): ApiEndpointTestConnectionResult | null {
+    const state = this.readState();
+    const endpoint = endpointId ? findEndpoint(state, endpointId) : null;
+    const pattern = endpoint
+      ? endpointDisabledBy({ state, endpoint, model: modelId })
+      : askedDisabledBy({ state, model: modelId });
+    if (pattern === null) return null;
+    return {
+      ok: false,
+      status: null,
+      durationMs: 0,
+      error: {
+        code: "model_disabled",
+        params: { model: modelId, pattern },
+        message: disabledMessage({ model: modelId, pattern }),
+      },
+    };
+  }
+
+  /** 测试与自动检测发给上游的模型名：已保存那家的上游模型名（magpie test.go、detect.go 的 UpstreamName）；新加的按模型 id。 */
+  private sentNameOf(endpointId: string | undefined): (modelId: string) => string {
+    const endpoint = endpointId ? findEndpoint(this.readState(), endpointId) : null;
+    const settings = endpoint?.modelSettings;
+    return (modelId) => upstreamModelName({ settings, modelId });
+  }
+
+  /**
+   * 请求里带了 key 就用它；否则用 endpointId 对应的已保存 key。都没有为 null：不带认证头。
+   * key 从不回给客户端。
+   */
+  private resolveRequestKey(input: { endpointId?: string; apiKey?: string }): string | null {
     const typed = input.apiKey?.trim();
     if (typed) return typed;
-    if (input.endpointId) {
-      const endpointId = input.endpointId;
-      if (!findEndpoint(this.readState(), endpointId)) {
-        throw new ApiEndpointRequestError({ code: "not_found", message: "API endpoint not found" });
-      }
-      const saved = this.store.getApiKey(input.endpointId);
-      if (saved !== null) return saved;
+    if (!input.endpointId) return null;
+    if (!findEndpoint(this.readState(), input.endpointId)) {
+      throw new ApiEndpointRequestError({ code: "not_found", message: "API endpoint not found" });
     }
-    throw new ApiEndpointRequestError({ code: "invalid_input", message: "API key is required" });
+    return this.store.getApiKey(input.endpointId);
+  }
+
+  /**
+   * 拉模型、测试、检测带的请求头、附加请求体、key 放哪个头与不校验证书：表单给了的用表单的（保存前），没给的用 endpointId
+   * 那家存的。不校验证书的主机取表单盖过那家之后的地址（formAddressesOver，照 magpie typed），模板按表单的、没给按那家的。
+   */
+  private requestExtras(
+    input: {
+      endpointId?: string;
+      baseUrl: string;
+      format?: string;
+      baseUrls?: { format: string; url: string }[];
+      templateId?: string;
+    } & ApiEndpointRequestExtrasInput,
+  ): RequestExtras {
+    let endpoint: StoredApiEndpoint | null = null;
+    if (input.endpointId) endpoint = findEndpoint(this.readState(), input.endpointId);
+    const saved = storedRequestExtras(endpoint);
+    let { headers } = saved;
+    if (input.headers !== undefined) headers = cleanRequestHeaders(input.headers) ?? {};
+    const extraBody = input.extraBody ?? saved.extraBody;
+    const keyHeader = input.keyHeader ?? saved.keyHeader;
+    const uncheckedHosts = uncheckedHostsOf({
+      insecureTls: input.insecureTls ?? endpoint?.insecureTls,
+      templateId: input.templateId ?? endpoint?.templateId,
+      urls: formAddressesOver({ saved: endpoint?.baseUrls ?? [], form: input }),
+    });
+    return { headers, extraBody, keyHeader, uncheckedHosts };
   }
 
   resolveClaudeSettingsPath(): string {
@@ -2644,7 +4292,7 @@ export class ApiEndpointService {
   /** 目录的默认档跟着默认思考档位，没设时跟着用户 config.toml 的 model_reasoning_effort；读不出按没设。 */
   private codexModelCatalog(state: ApiEndpointState): string {
     return buildCodexModelCatalog({
-      state: this.retiredModels.listed(state),
+      state: this.served(state),
       reasoningEffort: this.codexStartEffort(state),
       factsFor: (endpoint, modelId) => this.modelFacts(endpoint, modelId),
       marksAgentsV1: state.agents.codex.allowsAnySubagentModel === true,
@@ -3132,23 +4780,27 @@ export class ApiEndpointService {
     return { health, issues, baseUrl: result.baseUrl };
   }
 
-  /** 主机级字段原样给出；provider、baseUrl、defaultModelId 是给老客户端的投影。标识不出现。 */
+  /** 主机级字段原样给出；provider、baseUrl、defaultModelId 是给老客户端的投影。 */
   private toWire(
     state: ApiEndpointState,
     endpoint: StoredApiEndpoint,
     provider: ApiEndpointProvider,
   ): ApiEndpoint {
+    const apiKey = this.store.getApiKey(endpoint.id);
     return {
       id: endpoint.id,
       provider,
       name: endpoint.name,
+      slug: endpoint.slug,
       baseUrl: projectedBaseUrl(endpoint, provider),
       baseUrls: endpoint.baseUrls,
       models: endpoint.models,
       defaultModelId: projectedDefaultModelId(state.agents[provider], endpoint),
       ...(endpoint.modelMapping ? { modelMapping: endpoint.modelMapping } : {}),
       enabled: endpoint.enabled,
-      hasApiKey: this.store.getApiKey(endpoint.id) !== null,
+      hasApiKey: apiKey !== null,
+      ...(apiKey !== null ? { apiKeyMask: maskApiKey(apiKey) } : {}),
+      defaultModelProviders: defaultModelProvidersOf(state, endpoint.id),
       cooldown: this.cooldownOf(endpoint.id),
       ...(endpoint.catalog
         ? {
@@ -3159,8 +4811,38 @@ export class ApiEndpointService {
           }
         : {}),
       ...(endpoint.manualModels ? { manualModels: endpoint.manualModels } : {}),
+      ...(endpoint.modelScope !== undefined ? { modelScope: endpoint.modelScope } : {}),
+      ...(endpoint.autoPick ? { autoPick: endpoint.autoPick } : {}),
       searchesWeb: endpoint.searchesWeb === true,
+      ...(endpoint.templateId !== undefined ? { templateId: endpoint.templateId } : {}),
+      ...(endpoint.region !== undefined ? { region: endpoint.region } : {}),
+      ...(endpoint.icon !== undefined ? { icon: endpoint.icon } : {}),
+      ...(endpoint.modelSettings !== undefined ? { modelSettings: endpoint.modelSettings } : {}),
+      modelFacts: this.wireModelFacts(endpoint),
+      testsAs: cliTestsOffered({
+        endpoint,
+        hasSample: (client) => this.store.readCliHeaderSample(client) !== null,
+      }),
+      ...(endpoint.headers !== undefined ? { headers: endpoint.headers } : {}),
+      ...(endpoint.extraBody !== undefined ? { extraBody: endpoint.extraBody } : {}),
+      ...(endpoint.keyHeader !== undefined ? { keyHeader: endpoint.keyHeader } : {}),
+      ...(endpoint.insecureTls === true ? { insecureTls: true } : {}),
+      ...(endpoint.cooldownSettings !== undefined
+        ? { cooldownSettings: endpoint.cooldownSettings }
+        : {}),
     };
+  }
+
+  /** 这家每个模型（在服务的、清单里的、手动添加的）自动取到的资料，模型设置窗口拿它当默认。 */
+  private wireModelFacts(endpoint: StoredApiEndpoint): Record<string, ApiEndpointModelFacts> {
+    const models = [
+      ...endpoint.models,
+      ...(endpoint.catalog?.models ?? []),
+      ...(endpoint.manualModels ?? []),
+    ];
+    const facts: Record<string, ApiEndpointModelFacts> = {};
+    for (const { id } of models) facts[id] ??= this.autoModelFacts(endpoint, id);
+    return facts;
   }
 
   /** 整家接口的冷却；只冷却了某个模型的不算。 */
@@ -3187,6 +4869,36 @@ export class ApiEndpointService {
     this.queue = next.catch(() => undefined);
     return next;
   }
+}
+
+/** 导入窗口会默认选上的那几条（发现提示的候选）：只留指纹与来源软件。 */
+function offeredCandidates(
+  settled: ReturnType<typeof settleImports>,
+): ApiEndpointImportCandidate[] {
+  const candidates: ApiEndpointImportCandidate[] = [];
+  for (const { source, entries } of settled) {
+    for (const entry of entries) {
+      const facts = { ...entry, hasOtherKey: entry.otherKey !== null };
+      if (!isPreselectedImport(facts)) continue;
+      candidates.push({ fingerprint: entry.fingerprint, sourceId: source.id, source: source.name });
+    }
+  }
+  return candidates;
+}
+
+/** 接口顺序里最靠前、开着、选了这个模型的那家（中转站对光秃秃的模型名先发给它）。 */
+function firstEnabledServing(
+  state: ApiEndpointState,
+  modelId: string,
+): StoredApiEndpoint | undefined {
+  return state.endpoints.find(
+    (entry) => entry.enabled && entry.models.some((model) => model.id === modelId),
+  );
+}
+
+/** 这家上游清单自己给的资料（不含 models.dev 补的）。 */
+function listedFactsOf(endpoint: StoredApiEndpoint, modelId: string): ModelFacts | undefined {
+  return endpoint.catalog?.models.find((model) => model.id === modelId)?.facts;
 }
 
 function findProvider(provider: string): ApiEndpointProvider | undefined {
@@ -3238,12 +4950,20 @@ function agentFingerprint(state: ApiEndpointState, provider: ApiEndpointProvider
     agent.subagentThinkingOptionId ?? null,
     agent.memoryModelId ?? null,
     usableModels(state),
+    state.disabledModels ?? null,
+    state.endpointNameDisplay ?? null,
     target ? [target.id, target.name] : null,
     endpointModelGroups(state).map((group) => [
       group.endpoint.name,
       group.models.map((entry) => [entry.id, entry.model.label]),
+      // 模型设置改了显示名与思考档位。
+      group.endpoint.modelSettings ?? null,
     ]),
   ]);
+}
+
+function requestErrorOf(failure: UpstreamFailure): ApiEndpointRequestError {
+  return new ApiEndpointRequestError(failure);
 }
 
 /** 上游清单里的模型资料只留在 daemon 里；发给客户端的只有 id 和显示名。 */
@@ -3402,13 +5122,156 @@ function reconnectRecord(defaultModelId: string | null, left: string | null): Re
   return defaultModelId === null ? {} : { reconnect: { model: defaultModelId, left } };
 }
 
-/** 按 id 替换，找不到就追加到末尾（创建顺序）。 */
+/** 按 id 替换，找不到就追加到末尾：新建的接口排在接口顺序的最后。 */
 function withEndpoint(
   endpoints: StoredApiEndpoint[],
   endpoint: StoredApiEndpoint,
 ): StoredApiEndpoint[] {
   const index = endpoints.findIndex((entry) => entry.id === endpoint.id);
   return index === -1 ? [...endpoints, endpoint] : endpoints.with(index, endpoint);
+}
+
+/** 存下的图标：请求给了就用它（null 是去掉），没给留下原来的。 */
+function iconFieldOf(input: {
+  requested: string | null | undefined;
+  kept: string | undefined;
+}): Pick<StoredApiEndpoint, "icon"> {
+  const icon = input.requested === undefined ? input.kept : input.requested;
+  return icon === undefined || icon === null ? {} : { icon };
+}
+
+/** 接口用着的图标值（存下的图片与内置图标都算；prune 只看 `file:` 的）。 */
+function endpointIcons(state: ApiEndpointState): string[] {
+  return state.endpoints.flatMap((endpoint) =>
+    endpoint.icon === undefined ? [] : [endpoint.icon],
+  );
+}
+
+/** 复制（copyOf）的原来那家；不复制时为 null。和 endpointId 一起给、或那家不在了都拒收。 */
+function copySourceOf(
+  state: ApiEndpointState,
+  input: ApiEndpointSaveInput,
+): StoredApiEndpoint | null {
+  if (input.copyOf === undefined) return null;
+  if (input.endpointId !== undefined) {
+    throw new ApiEndpointRequestError({
+      code: "invalid_input",
+      message: "A save that duplicates an endpoint cannot also edit one",
+    });
+  }
+  const source = findEndpoint(state, input.copyOf);
+  if (!source) {
+    throw new ApiEndpointRequestError({ code: "not_found", message: "API endpoint not found" });
+  }
+  return source;
+}
+
+/** 这次保存要存的 key：打了就用打的；没打时复制用原来那家的，其余为 undefined（新建不存、编辑保留）。 */
+function savedKeyOf(input: {
+  input: ApiEndpointSaveInput;
+  copySource: StoredApiEndpoint | null;
+  store: ApiEndpointStore;
+}): string | undefined {
+  const typed = input.input.apiKey?.trim();
+  if (typed) return typed;
+  if (!input.copySource) return undefined;
+  return input.store.getApiKey(input.copySource.id) ?? undefined;
+}
+
+function reachesAnyAddress(): boolean {
+  return true;
+}
+
+/** 照 magpie：新建一家，或换成了另一把 key，保存后当场拉一次清单。要在写入新 key 之前问。 */
+function fetchesListOnSave(input: {
+  existing: StoredApiEndpoint | null;
+  apiKey: string | undefined;
+  store: ApiEndpointStore;
+}): boolean {
+  const { existing, apiKey } = input;
+  if (existing === null) return true;
+  return apiKey !== undefined && apiKey !== input.store.getApiKey(existing.id);
+}
+
+/**
+ * 新建的接口名称重了（不分大小写）就加「 2」「 3」……（照 magpie freeName）；编辑时不改用户起的名字。
+ */
+/** 导入链接的那家重名时加「 2」「 3」……：加上之后仍截到 80 字节，截名称、留着后缀。 */
+function freeImportLinkName(state: ApiEndpointState, name: string): string {
+  const taken = new Set(state.endpoints.map((entry) => entry.name.toLowerCase()));
+  let candidate = name;
+  for (let n = 2; taken.has(candidate.toLowerCase()); n += 1) {
+    candidate = importLinkNameWithSuffix({ name, suffix: ` ${n}` });
+  }
+  return candidate;
+}
+
+/** 生产里取外网用公网限定的那个；浏览器测试的 daemon 用 e2e 封条装上的假外网。 */
+function defaultFetchSite(input: { userAgent: string }): FetchSite {
+  return sealedFetchSite() ?? createPublicFetchSite(input);
+}
+
+/** 内存里只留最近几项（Map 按放进去的先后排）。 */
+function keepNewest<T>(entries: Map<string, T>): void {
+  for (const old of [...entries.keys()].slice(0, -MAX_KEPT_LINK_PICTURES)) entries.delete(old);
+}
+
+function freeEndpointName(state: ApiEndpointState, name: string): string {
+  const taken = new Set(state.endpoints.map((entry) => entry.name.toLowerCase()));
+  let candidate = name;
+  for (let n = 2; taken.has(candidate.toLowerCase()); n += 1) candidate = `${name} ${n}`;
+  return candidate;
+}
+
+/** 这次保存的模板与区域：templateId undefined 即沿用 base 的；region 给了就用，否则 keepsRegion 时沿用 base 的。 */
+interface SavedTemplate {
+  templateId: string | undefined;
+  region: string | undefined;
+  keepsRegion: boolean;
+}
+
+/** 存下的模板与区域：没给模板就由 kept 带着原来的；换了模板而没给区域时，原来的区域不属于新模板，不留。 */
+function templateFieldsOf(
+  saved: SavedTemplate,
+  keptRegion: string | undefined,
+): Pick<StoredApiEndpoint, "templateId" | "region"> {
+  const region = saved.region ?? (saved.keepsRegion ? keptRegion : undefined);
+  return {
+    ...(saved.templateId !== undefined ? { templateId: saved.templateId } : {}),
+    ...(region !== undefined ? { region } : {}),
+  };
+}
+
+/** 模板要是内置的，区域要是那个模板的；区域单给时按这家原来的模板查。 */
+function validateTemplate(
+  input: ApiEndpointSaveInput,
+  base: StoredApiEndpoint | null,
+): SavedTemplate {
+  const templateId = input.templateId ?? base?.templateId;
+  const keepsRegion = input.templateId === undefined || input.templateId === base?.templateId;
+  if (input.templateId === undefined && input.region === undefined) {
+    return { templateId: undefined, region: undefined, keepsRegion };
+  }
+  const template = templateId === undefined ? null : findTemplate(templateId);
+  if (!template) {
+    throw new ApiEndpointRequestError({
+      code: "invalid_input",
+      message:
+        templateId === undefined
+          ? "A region needs the template it belongs to"
+          : `Unknown template: ${templateId}`,
+    });
+  }
+  const regionIsTemplates =
+    input.region === undefined ||
+    (template.regions ?? []).some((candidate) => candidate.id === input.region);
+  if (!regionIsTemplates) {
+    throw new ApiEndpointRequestError({
+      code: "invalid_input",
+      message: `Template ${template.id} has no region ${input.region}`,
+    });
+  }
+  return { templateId: input.templateId, region: input.region, keepsRegion };
 }
 
 /** 保存请求省略「自己能联网搜索」时沿用这家原来的；新建为关。 */
@@ -3419,34 +5282,309 @@ function keptSearchesWeb(
   return requested ?? existing?.searchesWeb === true;
 }
 
-/** 标识、开关、创建时间与老表单的默认模型沿用已有的；新建时生成标识。 */
+/**
+ * 从已有的这家起步，只换掉这次保存给的字段：没给的保留原值，老客户端（含官方 Paseo 手机 App）
+ * 不认识的字段不会被它的保存清掉（上游清单、开关、别的格式的地址，以及以后加的字段）。
+ * 档位映射每次整份提交、省略即不映射；手动添加的模型与「自己能联网搜索」由下面按请求换算。新建时生成标识。
+ */
 function buildEndpoint(input: {
   state: ApiEndpointState;
   existing: StoredApiEndpoint | null;
+  // 复制时原来那家：没给的字段取它的，id、标识、开关、时间仍按新建。
+  copySource: StoredApiEndpoint | null;
   fields: EndpointFields;
   // 「自己能联网搜索」：请求省略时调用方已换成这家原来的值。
   searchesWeb: boolean;
+  // 模板与区域：validateTemplate 已换算好，undefined 的那项从 base 原样留下。
+  template: SavedTemplate;
+  // 请求给的图标：null 去掉，undefined 留下 base 的。
+  icon: string | null | undefined;
+  // 添加窗口里保存前拉到的上游清单：拉取时间记为保存时刻；undefined 留下 base 的。
+  catalog: ApiEndpointModel[] | undefined;
+  // 请求头、附加请求体、key 放哪个头：savedRequestExtras 已按请求与 base 定好，没有的项就是没有。
+  requestExtras: StoredRequestExtras;
+  // 冷却设置：savedCooldownSettings 已按请求与 base 定好，没设就没有这项。
+  cooldownSettings: StoredCooldownSettings;
   enabledWhenNew: boolean;
   timestamp: string;
 }): StoredApiEndpoint {
   const { state, existing, fields } = input;
-  const legacyDefaultModelId = fields.legacyDefaultModelId ?? existing?.legacyDefaultModelId;
-  const manualModels = fields.manualModels ?? existing?.manualModels;
+  const base = existing ?? input.copySource;
+  const legacyDefaultModelId = fields.legacyDefaultModelId ?? base?.legacyDefaultModelId;
+  const manualModels = fields.manualModels ?? base?.manualModels;
+  const {
+    modelMapping: _resubmitted,
+    manualModels: _manualModels,
+    searchesWeb: _searchesWeb,
+    region: keptRegion,
+    icon: keptIcon,
+    headers: _headers,
+    extraBody: _extraBody,
+    keyHeader: _keyHeader,
+    insecureTls: _insecureTls,
+    cooldownSettings: _cooldownSettings,
+    ...kept
+  } = base ?? {};
+  const name = existing ? fields.name : freeEndpointName(state, fields.name);
   return {
+    ...kept,
+    ...templateFieldsOf(input.template, keptRegion),
     id: existing?.id ?? `ep_${randomUUID()}`,
     slug:
       existing?.slug ??
-      generateEndpointSlug(fields.name, new Set(state.endpoints.map((entry) => entry.slug))),
+      generateEndpointSlug(name, new Set(state.endpoints.map((entry) => entry.slug))),
     ...fields,
+    name,
     enabled: existing?.enabled ?? input.enabledWhenNew,
     ...(legacyDefaultModelId ? { legacyDefaultModelId } : {}),
-    // 上游清单只由拉取模型改，保存时沿用。
-    ...(existing?.catalog ? { catalog: existing.catalog } : {}),
     ...(manualModels && manualModels.length > 0 ? { manualModels } : {}),
     ...(input.searchesWeb ? { searchesWeb: true as const } : {}),
+    ...iconFieldOf({ requested: input.icon, kept: keptIcon }),
+    ...catalogFieldOf({ requested: input.catalog, timestamp: input.timestamp }),
+    ...input.requestExtras,
+    ...input.cooldownSettings,
     createdAt: existing?.createdAt ?? input.timestamp,
     updatedAt: input.timestamp,
   };
+}
+
+type StoredRequestExtras = Pick<
+  StoredApiEndpoint,
+  "headers" | "extraBody" | "keyHeader" | "insecureTls"
+>;
+
+/**
+ * 存下的请求头、附加请求体、key 放哪个头与不校验证书：请求给了的换上（空的、both、false 不存），没给的留 base 的。
+ * 请求头照 magpie 照存，发不出去的头发时每个请求报 invalid_header；附加请求体校验后才存。
+ * 模板接口打开不校验证书拒收（照 magpie Validate 的 TakesInsecureTLS）。
+ */
+function savedRequestExtras(input: {
+  request: ApiEndpointSaveInput;
+  base: StoredApiEndpoint | null;
+  templateId: string | undefined;
+}): StoredRequestExtras {
+  const { request, base, templateId } = input;
+  const insecureTls = request.insecureTls ?? base?.insecureTls === true;
+  if (insecureTls && templateId !== undefined) {
+    throw new ApiEndpointRequestError({
+      code: "insecure_tls_template",
+      message: `An endpoint added from the ${templateId} template always checks its certificate: only an endpoint you added as Custom can skip it`,
+      params: { template: templateId },
+    });
+  }
+  let headers = base?.headers ?? null;
+  if (request.headers !== undefined) headers = cleanRequestHeaders(request.headers);
+  let extraBody = base?.extraBody ?? null;
+  if (request.extraBody !== undefined) extraBody = validatedExtraBody(request.extraBody);
+  let keyHeader: ApiEndpointKeyHeader = base?.keyHeader ?? "both";
+  if (request.keyHeader !== undefined) keyHeader = request.keyHeader;
+  const saved: StoredRequestExtras = {};
+  if (headers !== null) saved.headers = headers;
+  if (extraBody !== null) saved.extraBody = extraBody;
+  if (keyHeader !== "both") saved.keyHeader = keyHeader;
+  if (insecureTls) saved.insecureTls = true;
+  return saved;
+}
+
+type StoredCooldownSettings = Pick<StoredApiEndpoint, "cooldownSettings">;
+
+/**
+ * 存下的冷却设置：请求给了就整份换上（0 是用中转站自己的，不存；「原因不明不冷却」开着时冷却上限不存，照 magpie 的
+ * RestCapOff 与 RestCap 是同一项；设了每天几点恢复时分钟数不存），没给留 base 的。分钟数不是 0 到八天的整数、时刻读不懂的拒收
+ * （照 magpie SetQuotaRest、SetRestCap、SetQuotaResetAt）。
+ * 什么都没设时没有这项。
+ */
+function savedCooldownSettings(input: {
+  requested: ApiEndpointCooldownSettings | undefined;
+  base: StoredApiEndpoint | null;
+}): StoredCooldownSettings {
+  const { requested } = input;
+  const kept = input.base?.cooldownSettings;
+  if (requested === undefined) return kept !== undefined ? { cooldownSettings: kept } : {};
+  const problem = cooldownSettingsProblem(requested);
+  if (problem !== null) {
+    throw new ApiEndpointRequestError({
+      code: "invalid_cooldown_settings",
+      message: cooldownProblemMessage({ field: problem.field, requested }),
+      params: { field: problem.field, max: String(API_ENDPOINT_COOLDOWN_MAX_MINUTES) },
+    });
+  }
+  const saved: ApiEndpointCooldownSettings = {};
+  const noFailRest = requested.noFailRest === true;
+  const quotaRest = requested.quotaRestMinutes ?? 0;
+  const restCap = requested.restCapMinutes ?? 0;
+  const resetAt = requested.quotaResetAt?.trim() ?? "";
+  // 每天几点恢复与分钟数是同一项的两种设法（magpie SetQuotaResetAt 清掉 QuotaRest）：两个都给时时刻说了算。
+  if (resetAt !== "") saved.quotaResetAt = resetAt;
+  else if (quotaRest > 0) saved.quotaRestMinutes = quotaRest;
+  if (noFailRest) saved.noFailRest = true;
+  else if (restCap > 0) saved.restCapMinutes = restCap;
+  return Object.keys(saved).length > 0 ? { cooldownSettings: saved } : {};
+}
+
+/** 冷却设置哪一项不对，用英文说给老客户端看（新客户端按 field 用界面语言说）。 */
+function cooldownProblemMessage(input: {
+  field: ApiEndpointCooldownField;
+  requested: ApiEndpointCooldownSettings;
+}): string {
+  const { field, requested } = input;
+  if (field === "quotaResetAt") {
+    return `quotaResetAt is a time of day like 08:00, or 00:00+08:00 on the vendor's clock, not "${requested.quotaResetAt}"`;
+  }
+  return `${field} is whole minutes from 0 (the gateway's own) to ${API_ENDPOINT_COOLDOWN_MAX_MINUTES} (${API_ENDPOINT_COOLDOWN_MAX_DAYS} days), not ${requested[field]}`;
+}
+
+/** 这次变更后不再不校验证书的主机：地址换了、不校验关了、整家关了或删了的那几家原来的。 */
+function releasedUncheckedHosts(input: {
+  previous: ApiEndpointState;
+  next: ApiEndpointState;
+}): string[] {
+  const released: string[] = [];
+  for (const before of input.previous.endpoints) {
+    const after = findEndpoint(input.next, before.id);
+    const kept = after ? liveUncheckedHostsOf(after) : [];
+    for (const host of liveUncheckedHostsOf(before)) {
+      if (!kept.includes(host)) released.push(host);
+    }
+  }
+  return released;
+}
+
+/**
+ * 拉模型、测试、检测时这家的地址：表单的盖过存的（照 magpie typed）。给了 baseUrls 是表单的全部地址；只给一种格式的
+ * baseUrl 就换掉存的那种格式，被换掉的旧地址不再算这家的；不带格式（自动检测问的那个地址）就加上它。
+ */
+function formAddressesOver(input: {
+  saved: { format: string; url: string }[];
+  form: { baseUrl: string; format?: string; baseUrls?: { format: string; url: string }[] };
+}): string[] {
+  const { form } = input;
+  if (form.baseUrls !== undefined) return form.baseUrls.map(({ url }) => url);
+  const byFormat = new Map(input.saved.map(({ format, url }) => [format, url]));
+  if (form.format === undefined) return [...byFormat.values(), form.baseUrl];
+  byFormat.set(form.format, form.baseUrl);
+  return [...byFormat.values()];
+}
+
+/** 附加请求体：字段没名字、是保留字段、同名写了两次的拒收（照 magpie ExtraBodyOK）。空的为 null。 */
+function validatedExtraBody(raw: Record<string, unknown>): Record<string, unknown> | null {
+  if (Object.keys(raw).length === 0) return null;
+  const problem = extraBodyProblem(raw);
+  if (problem === null) return raw;
+  const field = problem.reason === "unnamed" ? "" : problem.field;
+  const messages: Record<ExtraBodyProblem["reason"], string> = {
+    unnamed: "An extra body field needs a name",
+    reserved: `Extra body can't set "${field}": Osuna sets the model, stream and the conversation itself`,
+    duplicate: `Extra body names "${field}" twice`,
+  };
+  throw new ApiEndpointRequestError({
+    code: "invalid_extra_body",
+    message: messages[problem.reason],
+    params: { reason: problem.reason, field },
+  });
+}
+
+/** 请求里的字段与这次定下的服务范围（省略时取原来那家的）。 */
+function savedFieldsOf(input: {
+  provider: ApiEndpointProvider;
+  input: ApiEndpointSaveInput;
+  existing: StoredApiEndpoint | null;
+  base: StoredApiEndpoint | null;
+  templateId: string | undefined;
+}): { fields: EndpointFields; modelScope: ApiEndpointModelScope | undefined } {
+  const { input: request } = input;
+  const modelScope = request.modelScope ?? storedModelScopeOf(input.base);
+  if (request.baseUrls === undefined) {
+    return { fields: validateLegacyFields(input.provider, request, input.existing), modelScope };
+  }
+  // 跟随清单时档位映射对着在服务的模型校验（settleSavedScope），不对着请求里的 models。
+  const formInput = followsList({ modelScope }) ? { ...request, modelMapping: undefined } : request;
+  const baseUrls = templateBaseUrls({ templateId: input.templateId, baseUrls: request.baseUrls });
+  return { fields: validateFields(baseUrls, formInput), modelScope };
+}
+
+/** 存的范围是字符串（降级后读得懂）；不认识的当 picked。没有就是没设过。 */
+function storedModelScopeOf(endpoint: StoredApiEndpoint | null): ApiEndpointModelScope | undefined {
+  if (endpoint?.modelScope === undefined) return undefined;
+  return endpoint.modelScope === "vendor" ? "vendor" : "picked";
+}
+
+/** 线上的服务范围是字符串：不认识的拒收。 */
+export function validateModelScope(raw: string | undefined): ApiEndpointModelScope | undefined {
+  if (raw === undefined) return undefined;
+  const scope = API_ENDPOINT_MODEL_SCOPES.find((candidate) => candidate === raw);
+  if (!scope) {
+    throw new ApiEndpointRequestError({
+      code: "invalid_input",
+      message: `Unknown model scope '${raw}'`,
+    });
+  }
+  return scope;
+}
+
+/**
+ * 保存时定下服务范围、自动勾选规则与在服务的模型（model-scope.ts）。跟随清单：models 按清单与手动添加的算，
+ * 新客户端的档位映射对着它校验，老客户端的只留还在服务的档位。挑选：规则改了时当前清单里匹配的也勾上
+ * （照 magpie SetAutoInclude），随保存带来新清单时勾上其中新出的。
+ */
+function settleSavedScope(input: {
+  endpoint: StoredApiEndpoint;
+  base: StoredApiEndpoint | null;
+  input: ApiEndpointSaveInput;
+  modelScope: ApiEndpointModelScope | undefined;
+  isLegacyForm: boolean;
+}): StoredApiEndpoint {
+  const { base, input: request } = input;
+  const { modelScope: _scope, autoPick: _autoPick, ...rest } = input.endpoint;
+  const autoPick =
+    request.autoPick === undefined ? (base?.autoPick ?? []) : validateAutoPick(request.autoPick);
+  const endpoint: StoredApiEndpoint = {
+    ...rest,
+    ...(input.modelScope !== undefined ? { modelScope: input.modelScope } : {}),
+    ...(autoPick.length > 0 ? { autoPick } : {}),
+  };
+  if (followsList(endpoint)) {
+    const models = vendorServedModels(endpoint);
+    const { modelMapping: _mapping, ...unmapped } = endpoint;
+    const modelMapping = input.isLegacyForm
+      ? keepValidMapping(endpoint.modelMapping, models)
+      : validateModelMapping(request.modelMapping, models);
+    return { ...unmapped, models, ...(modelMapping ? { modelMapping } : {}) };
+  }
+  const rulesChanged = !isDeepStrictEqual(autoPick, base?.autoPick ?? []);
+  const listedBefore = new Set((base?.catalog?.models ?? []).map((model) => model.id));
+  let isNew: ((modelId: string) => boolean) | null = null;
+  if (rulesChanged) isNew = () => true;
+  else if (request.catalog !== undefined) isNew = (modelId) => !listedBefore.has(modelId);
+  return settleServedModels(endpoint, isNew);
+}
+
+function validateAutoPick(raw: string[]): string[] {
+  const cleaned = cleanAutoPickRules(raw);
+  if (!cleaned.ok) {
+    throw new ApiEndpointRequestError({
+      code: "invalid_input",
+      message: `"${cleaned.rule}" ${AUTO_PICK_PROBLEM_MESSAGES[cleaned.problem]}`,
+      // app 按 problem 用界面语言说明。
+      params: { rule: cleaned.rule, problem: cleaned.problem },
+    });
+  }
+  return cleaned.rules;
+}
+
+const AUTO_PICK_PROBLEM_MESSAGES: Record<AutoPickRuleProblem, string> = {
+  not_rule: "is a model's id, not a rule: a rule has a * in it, or starts with re:",
+  empty_regex: "has no regular expression after re:",
+  invalid_regex: "is not a regular expression RE2 can read",
+};
+
+/** 添加窗口里保存前拉到的清单：拉取时间记为保存时刻；没给时不写，留下 base 的。 */
+function catalogFieldOf(input: {
+  requested: ApiEndpointModel[] | undefined;
+  timestamp: string;
+}): Pick<StoredApiEndpoint, "catalog"> {
+  if (input.requested === undefined) return {};
+  return { catalog: { fetchedAt: input.timestamp, models: validateModels(input.requested) } };
 }
 
 type EndpointFields = Pick<
@@ -3591,20 +5729,6 @@ function validateModelMapping(
   return Object.keys(mapping).length === 0 ? undefined : mapping;
 }
 
-/** 保留已有映射里仍在模型之中的档位。 */
-function keepValidMapping(
-  mapping: ApiEndpointModelMapping | undefined,
-  models: ApiEndpointModel[],
-): ApiEndpointModelMapping | undefined {
-  if (!mapping) return undefined;
-  const kept: ApiEndpointModelMapping = {};
-  for (const tier of API_ENDPOINT_MODEL_TIERS) {
-    const modelId = mapping[tier];
-    if (modelId && models.some((model) => model.id === modelId)) kept[tier] = modelId;
-  }
-  return Object.keys(kept).length === 0 ? undefined : kept;
-}
-
 function requireFormat(format: string): ApiEndpointRequestFormat {
   const known = API_ENDPOINT_REQUEST_FORMATS.find((candidate) => candidate === format);
   if (!known) {
@@ -3624,6 +5748,70 @@ function providerWithListingHeaders(format: ApiEndpointRequestFormat): ApiEndpoi
   return format === "anthropic_messages" ? "claude" : "codex";
 }
 
+const CODEX_CLI_VERSION_TTL_MS = 10 * 60_000;
+
+/**
+ * 本机 Codex CLI 的版本：先读 npm 包，读不到才跑 codex --version，跑失败的同一个文件不再跑（magpie proc.Version）。
+ * 没注入、也没有 providerRuntimeSettings（不知道用户配的命令）时不查。
+ */
+function codexCliVersionReader(
+  options: Pick<ApiEndpointServiceOptions, "readCodexCliVersion" | "providerRuntimeSettings">,
+): (() => Promise<string | null>) | null {
+  if (options.readCodexCliVersion) return options.readCodexCliVersion;
+  const settings = options.providerRuntimeSettings;
+  if (!settings) return null;
+  const installed = new InstalledCodexVersion({
+    locate: async () => {
+      const program = await findCodexCommand({ runtimeSettings: settings("codex"), env: {} });
+      return program?.command ?? null;
+    },
+    runVersion: () => probeCodexVersion(settings("codex")),
+  });
+  return () => installed.read();
+}
+
+/** 测试模型的限值与计时器：没给的用缺省（并发 4、单个 20 秒、整批 3 分钟，真的计时器）。 */
+function modelTestSetup(options: ApiEndpointServiceOptions): {
+  limits: ModelTestLimits;
+  timers: UsagePricingTimers;
+} {
+  const limits = { ...MODEL_TEST_DEFAULTS, ...options.modelTests };
+  const timers = options.modelTestTimers ?? REAL_PRICING_TIMERS;
+  return { limits, timers };
+}
+
+/**
+ * 测一个模型时按先后试的格式与地址：设了「只用这种格式」且还有那种地址时只有它（同中转站）；否则这家给它的格式按地址顺序，
+ * 上游清单说它在哪几种格式上的先问那几种，没说时 Claude 模型先问 Anthropic（magpie testOne 挑格式的先后）。
+ */
+function testAttempts(input: { endpoint: StoredApiEndpoint; modelId: string }): ModelTestAttempt[] {
+  const { endpoint, modelId } = input;
+  const pin = pinnedFormat({
+    settings: endpoint.modelSettings,
+    modelId,
+    baseUrls: endpoint.baseUrls,
+  });
+  const formats =
+    pin.kind === "pinned"
+      ? [pin.format]
+      : servedFormats({
+          templateId: endpoint.templateId,
+          baseUrls: endpoint.baseUrls,
+          model: modelId,
+        });
+  const listedOn = endpoint.catalog?.models.find((model) => model.id === modelId)?.formats ?? [];
+  let preferred: string[] = listedOn;
+  if (preferred.length === 0) preferred = isClaudeModel(modelId) ? ["anthropic_messages"] : [];
+  const ordered = [
+    ...formats.filter((format) => preferred.includes(format)),
+    ...formats.filter((format) => !preferred.includes(format)),
+  ];
+  return ordered.flatMap((format) => {
+    const url = endpoint.baseUrls.find((entry) => entry.format === format)?.url;
+    return url === undefined ? [] : [{ format, baseUrl: url.replace(/\/+$/, "") }];
+  });
+}
+
 /** 按格式测试的结论换成测试连接的结果；没收到响应的是连不上。 */
 function testResultOf(
   detection: ApiEndpointFormatDetection,
@@ -3631,10 +5819,27 @@ function testResultOf(
 ): ApiEndpointTestConnectionResult {
   const { httpStatus: status, message } = detection;
   if (detection.status === "ok") return { ok: true, status, durationMs, error: null };
+  // 这家的请求头发不出去：原因码照带，界面按语言说。
+  if (detection.code === "invalid_header") {
+    const error: ApiEndpointError = { code: detection.code, message: message ?? "" };
+    if (detection.params !== undefined) error.params = detection.params;
+    return { ok: false, status, durationMs, error };
+  }
   let code: "auth_failed" | "upstream_unreachable" | "upstream_error" = "upstream_error";
   if (detection.status === "auth_failed") code = "auth_failed";
   else if (status === null) code = "upstream_unreachable";
   return { ok: false, status, durationMs, error: { code, message: message ?? "" } };
+}
+
+/** 拉模型、测试时一种格式的地址：Azure 模板的先放到资源的 v1 API 上（同保存时），再去掉末尾斜杠。 */
+function upstreamBaseUrl(input: {
+  place: TemplatePlace;
+  format: ApiEndpointRequestFormat | null;
+  raw: string;
+}): string {
+  const { place, format, raw } = input;
+  if (format === null) return normalizeBaseUrl(raw);
+  return normalizeBaseUrl(templateBaseUrl({ templateId: place.templateId, format, url: raw }));
 }
 
 /** 去掉末尾斜杠，和 CLI 自己拼路径的方式一致。 */
@@ -3829,4 +6034,156 @@ function usesModelFacts(state: ApiEndpointState | null): boolean {
 /** 接管记录是 ChatGPT 登录的接法：Osuna 写了 openai_base_url。 */
 function isChatGptWiring(takeover: CodexConfigTakeover | null): boolean {
   return typeof takeover?.keys.openai_base_url?.written === "string";
+}
+
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
+
+/**
+ * 这次导入一出错就停下：加好的那几家，与出错的那条（指纹对不上时为 null）和原因。
+ */
+export interface ImportOutcome {
+  imported: ApiEndpointNameRef[];
+  failed: { fingerprint: string; name: string } | null;
+  error: ApiEndpointRequestError | null;
+}
+
+/** 一条怎么进来：替换名称撞上的那家，或用某个名称新增一家。 */
+type ImportAction = { kind: "replace" } | { kind: "add"; name: string };
+
+/**
+ * 这条怎么进来：替换，或用某个名称新增。改名后新增的名称是空的（或就是原名）当没改名，按新增（magpie 的 pk.Name）。
+ */
+function importActionOf(input: {
+  pick: ApiEndpointImportPick;
+  found: FoundEndpoint;
+}): ImportAction {
+  const { pick, found } = input;
+  const action = API_ENDPOINT_IMPORT_ACTIONS.find((candidate) => candidate === pick.action);
+  if (action === undefined) {
+    throw new ApiEndpointRequestError({
+      code: "invalid_input",
+      message: `Unknown import action '${pick.action}'`,
+    });
+  }
+  const renamed = action === "rename" ? (pick.name?.trim() ?? "") : "";
+  if (renamed !== "" && renamed !== found.name) return { kind: "add", name: renamed };
+  if (action === "replace") return { kind: "replace" };
+  return { kind: "add", name: found.name };
+}
+
+/** 解析导入链接，拒收时换成 import_link_refused（params.reason 加上拒收的参数，从不带 key）。 */
+function parsedImportLinkOrRefuse(link: string): ParsedImportLink {
+  try {
+    return parseImportLink(link);
+  } catch (error) {
+    if (!(error instanceof ImportLinkRefusedError)) throw error;
+    throw new ApiEndpointRequestError({
+      code: "import_link_refused",
+      message: error.message,
+      params: { ...error.params, reason: error.reason },
+    });
+  }
+}
+
+/**
+ * 导入链接会替换的那家（照 magpie Find(id)）：先找标识就是链接标识的，再找名称（不分大小写）就是链接标识的。
+ * 只看链接的名称不算：name=DeepSeek&id=my-ds 是新的一家，不替换用户的 DeepSeek。magpie 还认改过的旧 id，
+ * Osuna 的标识建好就锁定，没有旧 id。没有为 null。
+ */
+function importLinkTarget(input: {
+  endpoints: readonly StoredApiEndpoint[];
+  parsed: ParsedImportLink;
+}): StoredApiEndpoint | null {
+  const { endpoints, parsed } = input;
+  const byId = endpoints.find((endpoint) => endpoint.slug === parsed.identity);
+  if (byId !== undefined) return byId;
+  const byName = endpoints.find((endpoint) => endpoint.name.toLowerCase() === parsed.identity);
+  return byName ?? null;
+}
+
+function importGone(): ApiEndpointRequestError {
+  return new ApiEndpointRequestError({
+    code: "import_gone",
+    message: "The scan is out of date: that entry changed or is no longer in its app. Scan again",
+  });
+}
+
+/** 替换只给名称撞上的那家（magpie 只让 taken 的替换）；那家已经不在了按来源变了处理。 */
+function replaceTargetIndex(input: {
+  entry: SettledEntry;
+  endpoints: readonly StoredApiEndpoint[];
+}): number {
+  const { entry } = input;
+  if (entry.status !== "name_taken" || entry.existing === null) {
+    throw new ApiEndpointRequestError({
+      code: "import_cannot_replace",
+      message: `${entry.name} doesn't share a name with an endpoint you have: add it instead`,
+      params: { name: entry.name },
+    });
+  }
+  const existingId = entry.existing.id;
+  const index = input.endpoints.findIndex((endpoint) => endpoint.id === existingId);
+  if (index === -1) throw importGone();
+  return index;
+}
+
+/**
+ * 导进来的那家（magpie 的 Save 整个换上）：kept 是保留的 id、标识与创建时间（替换时是原来那家的）。
+ * 带了模型的只用这几个（「只用挑选的」），没带的跟随接口清单，和新建的一样；开着。
+ */
+function importedEndpoint(input: {
+  found: FoundEndpoint;
+  name: string;
+  kept: Pick<StoredApiEndpoint, "id" | "slug" | "createdAt">;
+  timestamp: string;
+  icon: string | null;
+}): StoredApiEndpoint {
+  const { found, kept } = input;
+  const templateId = found.templateId ?? undefined;
+  const models = found.models.map((id) => ({ id }));
+  const scope: Pick<StoredApiEndpoint, "modelScope" | "manualModels"> =
+    models.length > 0 ? { modelScope: "picked", manualModels: models } : { modelScope: "vendor" };
+  // 导入链接给的图标（只给「自定义」加的）；没有即用默认的。
+  const iconField: Pick<StoredApiEndpoint, "icon"> = {};
+  if (input.icon !== null) iconField.icon = input.icon;
+  return {
+    id: kept.id,
+    slug: kept.slug,
+    name: input.name,
+    baseUrls: templateBaseUrls({ templateId, baseUrls: found.baseUrls }),
+    models,
+    ...scope,
+    enabled: true,
+    ...(templateId !== undefined ? { templateId } : {}),
+    ...(found.region !== null ? { region: found.region } : {}),
+    ...(found.headers !== null ? { headers: found.headers } : {}),
+    ...iconField,
+    createdAt: kept.createdAt,
+    updatedAt: input.timestamp,
+  };
+}
+
+function maskedKeyOf(key: string | null): string | null {
+  if (key === null) return null;
+  return maskApiKey(key);
+}
+
+function wireImportItem(entry: SettledEntry): ApiEndpointImportItem {
+  const found = entry.found;
+  return {
+    fingerprint: entry.fingerprint,
+    ref: entry.ref,
+    from: entry.from,
+    name: entry.name,
+    baseUrls: found?.baseUrls ?? [],
+    maskedKey: maskedKeyOf(found?.key ?? null),
+    models: found?.models ?? [],
+    templateId: found?.templateId ?? null,
+    status: entry.status,
+    existingEndpointId: entry.existing?.id ?? null,
+    existingName: entry.existing?.name ?? null,
+    otherKeyName: entry.otherKey?.name ?? null,
+    skip: entry.skip,
+    off: entry.off,
+  };
 }

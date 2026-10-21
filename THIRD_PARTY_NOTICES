@@ -481,6 +481,122 @@ smallest request) follows magpie's internal/provider/detect.go and test.go:
 
   packages/server/src/server/api-endpoints/upstream-detect.ts
 
+Detecting each picked model (the first 30 picked models asked once on every
+format, eight requests at a time, each waiting 12 seconds and the whole
+detection two minutes, what was not reached in time said not asked, image
+models not asked, by format the first model that answered; the model-by-model
+table, the note when only the first models were asked, and Use these giving a
+model that answered on one format only that format) follows DetectModels,
+DetectMax, DetectWide and detectWait in magpie's internal/provider/detect.go,
+ImagesAPI in internal/catalog/catalog.go, TestDetectModels and
+TestDetectModelsOutOfTime in internal/provider/detect_test.go, and the "Each
+picked model" button of detectAPIs in internal/gui/assets/app.js:
+
+  packages/server/src/server/api-endpoints/detect-models.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-detect.e2e.test.ts
+  packages/app/src/api-endpoints/internal/connection-form-model.ts
+  packages/app/src/api-endpoints/connection-form-sheet.tsx
+
+Test models (four at a time, one "hi" capped at 16 tokens per model, a
+disabled model never asked, each model's result in page memory, the free word
+in a model's id or name, the context tag over a million tokens, and how long a
+test took) follows TestModels, testOne and tinyBody in magpie's
+internal/provider/test.go and modelTests, namedFree, contextTag and ledTook in
+internal/gui/assets/app.js:
+
+  packages/server/src/server/api-endpoints/model-tests.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-test-models.e2e.test.ts
+  packages/app/src/api-endpoints/internal/model-tests.ts
+
+Test as Claude Code and Test as Codex (the gateway keeping the identifying
+headers of the last Claude Code or Codex request as that CLI's sample, minus
+sessions, threads, turns, request ids, subagents, sign-ins and anthropic-beta;
+which endpoints offer each; Codex's ChatGPT-account headers when Codex has not
+come through; the streamed test body and reading a stream to its first word or
+error) follows shapeHeader, SawClient, clientHeaders, clientProto, TestsAs,
+TestClients and asClient in magpie's internal/provider/test_as.go, streamAnswer
+in internal/provider/test.go, fromClaudeCode, claudeCodeHeader, fromCodex and
+codexClientHeader in internal/gateway/gateway.go, codexHeader in
+internal/gateway/codex_backend.go, codexSign, codexUserAgent and codexOS in
+internal/provider/codex_request.go, codexClientVersion, codexVersion,
+newerVersion and SawCodexClient in internal/provider/codex_models.go, IsBedrock
+in internal/provider/provider.go and IsAzure and AzureHost in
+internal/provider/azure.go; Codex's identity headers on a request translated to
+Chat or Responses follow the Codex branch of magpie's outbound headers in
+internal/gateway/gateway.go:
+
+  packages/server/src/server/api-endpoints/cli-header-samples.ts
+  packages/server/src/server/api-endpoints/cli-header-samples.test.ts
+  packages/server/src/server/api-endpoints/test-as.ts
+  packages/server/src/server/api-endpoints/upstream-detect.ts
+  packages/server/src/server/api-endpoints/gateway/gateway.ts
+  packages/server/src/server/api-endpoints/gateway/translated.ts
+
+An endpoint's own headers, extra body and key header (the user's headers
+written after Osuna's, in place of the same name in any case, anthropic-beta
+added to rather than replaced; the reserved extra body fields, a "!" name
+forcing its value, ${sessionId} from the agent's session header or its first
+user message, a test's own session; which header the key goes in on a
+third-party Anthropic address, and not asking again with one header when the
+user wrote an auth header) follows Sign, ListHeader and MergeList in magpie's
+internal/provider/account.go, PutUserHeader in internal/catalog/userheader.go,
+ExtraBodyReserved, extraName, ExtraBodyOK, WithExtraBody, withSession and
+tested in internal/provider/extrabody.go, AuthChoices and RetryOneAuth in
+internal/provider/authheader.go, cleanHeaders in internal/provider/provider.go,
+sessionOf and conversationID in internal/gateway/gateway.go, and headerEditor,
+headersOf, extraBodyOf and twoKeyHeaders in internal/gui/assets/app.js:
+
+  packages/protocol/src/api-endpoint/request-extras.ts
+  packages/protocol/src/api-endpoint/request-extras.test.ts
+  packages/server/src/server/api-endpoints/request-extras.ts
+  packages/server/src/server/api-endpoints/request-extras.test.ts
+  packages/app/src/api-endpoints/internal/request-extras-form.ts
+  packages/app/src/api-endpoints/internal/request-extras-form.test.ts
+
+Skipping the certificate check for an endpoint (only one added as Custom,
+only the https hosts of its own addresses, each such host on connections of its
+own so a redirect elsewhere and another endpoint at the same server are still
+checked; the switch offered only with an https address) follows TakesInsecureTLS
+and UncheckedHosts in magpie's internal/provider/insecure_tls.go, Via in
+internal/provider/proxy.go, WithUncheckedTLS, uncheckedHost and hostKey in
+internal/netproxy/unchecked.go, dispatch.transport in internal/netproxy/netproxy.go,
+the InsecureTLS check in internal/provider/provider.go's Validate, and tlsTakes and
+onHTTPS in internal/gui/assets/app.js:
+
+  packages/protocol/src/api-endpoint/request-extras.ts
+  packages/server/src/server/api-endpoints/insecure-tls.ts
+
+An endpoint's own cooldown settings (how long it rests out of quota when the
+vendor says nothing of when it is back, or until a time of day it next comes
+round on the host's clock, in UTC or at a fixed offset, a Retry-After cut to the
+hour giving way to a longer one of its own; the most it rests while it keeps failing or being rate
+limited, the vendor's own time still standing over it; no rest at all after a
+failure that says nothing of why, which takes the place of that most; minutes from
+0, the gateway's own, to eight days) follow QuotaRest and RestCap in magpie's
+internal/provider/provider.go (and QuotaResetAt, cleared there when unreadable),
+MaxQuotaRest, QuotaRestFor, SetQuotaRest, ParseResetAt, NextResetAt, OwnQuotaRest,
+SetQuotaResetAt, RestCapOff,
+NoFailRest, RestCapOr and SetRestCap in internal/provider/concurrency.go, and their
+use in restAfterMarked and rateRest in internal/gateway/routing.go and quotaRestCmd
+in internal/cli/providers_cli.go:
+
+  packages/protocol/src/api-endpoint/cooldown-settings.ts
+  packages/protocol/src/api-endpoint/cooldown-settings.test.ts
+  packages/server/src/server/api-endpoints/gateway/cooldown.ts
+  packages/server/src/server/api-endpoints/gateway/cooldown.test.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-cooldown-settings.e2e.test.ts
+  packages/app/src/api-endpoints/internal/cooldown-settings-form.ts
+  packages/server/src/server/api-endpoints/store.ts
+
+The installed Codex CLI's version (its npm package's package.json, or the
+package a Windows npm shim starts, before running --version; a run that said no
+version not made again until the executable changes; lookups at once sharing
+one run) follows Version, npmVersion, shimVersion and versionsFailed in
+magpie's internal/proc/version.go:
+
+  packages/server/src/server/api-endpoints/codex-cli-version.ts
+  packages/server/src/server/api-endpoints/codex-cli-version.test.ts
+
 Who owns the modelPicker in Claude Code's settings.json (the user's is left
 alone; magpie's own is rewritten, or dropped when it has no rows) follows
 writePicker and dropPicker in magpie's internal/agent/claude.go:
@@ -554,6 +670,86 @@ minimax-color, mimocode, stepfun-color), with width, height, style and
   packages/app/src/api-endpoints/internal/model-families.test.ts
   packages/app/src/assets/model-family-icons.ts
   packages/app/src/assets/model-family-icons/*.svg
+
+The API endpoint templates (each vendor's and relay service's base URLs,
+regions and plans, key pages, models.dev ids, built-in model lists and header
+hints) are taken from magpie's internal/provider/presets.go, leaving out its
+decision models, Remote magpie and Google Vertex AI; a template's own models
+(the built-in list of a plan with no model list, the prefix of a plan behind a
+shared key) follow NoList, listRegion and planModels in magpie's
+internal/provider/models.go. Amazon Bedrock's and Azure OpenAI's key headers,
+the formats Bedrock serves each model on, and Azure's v1 address and
+deployment list follow AuthHeaders in internal/provider/authheader.go, the
+Bedrock part of internal/provider/account.go with ResponsesFirst and
+claudeModel in internal/provider/provider.go, tinyBody in
+internal/provider/test.go, and AzureBase, azureEndpoints and azureModels in
+internal/provider/azure.go. The request rewrites for those two templates
+(packages/server/src/server/api-endpoints/gateway/template-rewrites.ts) follow
+the Bedrock and Azure branches of passthrough and the translated build,
+asCompletionTokens and withoutFields in internal/gateway/gateway.go,
+bedrockBetas and bedrockRefuses in internal/gateway/betas.go, and
+withoutReasoningText, validatesItemIDs and plainItemIDs in
+internal/gateway/codex_backend.go; asking again with effort none follows
+toolsWithoutEffort in internal/gateway/gateway.go. The add dialog's template
+list (its three groups, search by name, id, host and note, and a vendor's
+global and China presets made one row, an added preset's dot and what a click
+on it does, chinaOf, pairTile, tile and markAdded in internal/gui/assets/app.js)
+follows magpie's add sheet. The template logos are
+magpie's internal/gui/assets/icons/ (zai, baiducloud-color, tencentcloud-color,
+huaweicloud-color, volcengine-color, bailian-color, groq, bedrock-color,
+azure-color, ollama, nousresearch,
+openrouter, opencode, cline, kilo, commandcode, together-color,
+fireworks-color, siliconcloud-color, nvidia-color, modelscope-color,
+aihubmix-color, pipellm-color, ai302-color, cherryin-color, yylx), with width,
+height, style and <title> removed:
+
+  packages/server/src/server/api-endpoints/templates.ts
+  packages/app/src/api-endpoints/internal/templates.ts
+  packages/app/src/assets/endpoint-template-icons.ts
+  packages/app/src/assets/endpoint-template-icons/*.svg
+
+The local server templates (Ollama, LM Studio, oMLX, MLX-Serve) are magpie's
+KindLocal presets in internal/provider/presets.go; moving their addresses to
+the server address typed in the add dialog follows AtAddress, AddressOf and
+parseAddress in internal/provider/local_address.go and localAddress, originOf,
+movedURLs and atAddress in internal/gui/assets/app.js. A custom endpoint's own
+icon follows magpie's internal/provider/icon.go (StoreIcon, IconFile, iconExt,
+MaxIcon, pruneIcons) and the iconPicker in internal/gui/assets/app.js; its
+"From the website" follows FaviconFor, faviconSites, favicon, statusLogo,
+pageIcons, dataURI, panelName, siteLabel and letterIcon in
+internal/provider/favicon.go, guardClient, publicDial, publicIP and iconIPs in
+internal/provider/icon.go, and local and iconURL in
+internal/provider/importurl.go; the
+built-in icons offered there are the rest of magpie's
+internal/gui/assets/icons/ that its presets and MORE_ICONS use (all but
+magpie's own logo), with width, height, style and <title> removed, and the two
+that are PNG files (mlx-serve, typesafe) kept as they are. omlx.svg is oMLX's
+menu bar glyph, https://github.com/jundot/omlx, Apache License 2.0, as
+magpie's copy notes:
+
+  packages/server/src/server/api-endpoints/endpoint-icons.ts
+  packages/server/src/server/api-endpoints/site-icon.ts
+  packages/app/src/api-endpoints/internal/endpoint-icon-names.ts
+  packages/app/src/api-endpoints/endpoint-icon.tsx
+  packages/app/src/api-endpoints/connection-form-sheet.tsx
+  packages/app/src/api-endpoints/internal/connection-form-model.ts
+  packages/app/src/assets/endpoint-template-icons.ts
+  packages/app/src/assets/endpoint-template-icons/*.svg
+  packages/app/src/assets/endpoint-template-icons/*.png
+
+A curl command pasted into the add dialog's address or key (the API its
+URL's endpoint names, the base URL respelled for that API, the key from
+Authorization: Bearer, x-api-key or api-key unless it only stands for one, the
+model of its JSON body, lines joined by \, ^ or a backtick, and the notes on
+what was taken) follows curlOf, respellURL and fromCurl in magpie's
+internal/gui/assets/app.js; its tests reuse the vendors' examples of
+internal/gui/tests/fixtures/curl and provider-curl-paste.test.cjs:
+
+  packages/app/src/api-endpoints/internal/curl-command.ts
+  packages/app/src/api-endpoints/internal/connection-form-model.ts
+  packages/app/src/api-endpoints/internal/connection-form-model.test.ts
+  packages/app/src/api-endpoints/connection-form-sheet.tsx
+  packages/app/e2e/browser/settings-api-endpoints.spec.ts
 
 How the gateway recognises its callers (loopback only, the forwarding headers
 that mark a proxied request, DNS rebinding, refusing web pages by Origin,
@@ -784,6 +980,157 @@ TestDiffLines and TestMask in preview_test.go:
   packages/server/src/server/api-endpoints/switch-off-preview.test.ts
   packages/app/src/api-endpoints/internal/switch-off-preview.ts
   packages/app/src/api-endpoints/switch-off-sheet.tsx
+
+An API endpoint's model settings (the order a value is taken in, a context set
+for all models kept within a model's own window, the thinking levels kept in
+the vendor's order, names two models share shown by their ids, and what a save
+accepts) follow WindowOf, ReplyLimit and outputOf in magpie's
+internal/provider/models.go, compactOf and SetModelCompacts in compact.go, and
+Levels, effortsKept, Labels, setModelName, setModelEfforts and setModelImage in
+modelprefs.go; a model with no level kept is sent no thinking field, as
+withoutAnyReasoning in internal/gateway/quiet.go, and Codex's model list takes
+the smaller of a model's window and its compaction threshold as entriesAt in
+internal/codexcat/codexcat.go. The model settings dialog's format choice (the
+formats offered when an endpoint has two or more, a saved one shown even when
+void) and the token counts it reads (1m, 200k and the like) follow the Names &
+levels editor, modelAPIs and parseContexts in internal/gui/assets/app.js and
+ParseTokens in internal/provider/ruleparse.go:
+
+  packages/protocol/src/api-endpoint/model-settings.ts
+  packages/server/src/server/api-endpoints/model-settings.ts
+  packages/app/src/api-endpoints/internal/model-settings-form.ts
+  packages/app/src/api-endpoints/internal/model-settings-form.test.ts
+  packages/server/src/server/api-endpoints/gateway/no-thinking.ts
+  packages/server/src/server/api-endpoints/codex-model-catalog.ts
+
+What the gateway's model list and single-model answer (GET /v1/models and
+GET /v1/models/{id}) give for each model (display name, thinking levels,
+context window, reply limit kept within it, input modalities) follows
+modelObject and model in magpie's internal/gateway/gateway.go and Thinks,
+PublishedOutput, OutputWithin and Modalities in internal/provider:
+
+  packages/server/src/server/api-endpoints/gateway/model-list.ts
+  packages/server/src/server/api-endpoints/model-facts.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
+
+Disabled models (the host-wide list of ids and globs in any case, a model on an
+endpoint matched by its id, by slug/id and by its last segment, a requested
+name by the whole of it, its last segment and what follows the first slash,
+Codex's own models as codex/<model>, and the gateway turning a request down
+before any endpoint is asked, naming the entry) follows matchDisabled,
+globMatch, namesOf, IDDisabled, normalDisabled and BareDisabled in magpie's
+internal/provider/disabled.go and disabledError, idOff and codexNativeOff in
+internal/gateway/disabled.go; the settings page's list (which models each entry
+hits now, and the models offered to pick) follows DisabledHits in disabled.go
+and titleModels in internal/gui/assets/app.js; its tests follow disabled_test.go
+in both:
+
+  packages/protocol/src/api-endpoint/disabled-models.ts
+  packages/protocol/src/api-endpoint/disabled-models.test.ts
+  packages/app/src/api-endpoints/internal/disabled-models-list.ts
+  packages/server/src/server/api-endpoints/disabled-models.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-disabled-models.e2e.test.ts
+
+An endpoint's model scope and auto-pick rules (the vendor's list served up to
+its first 24 models, a model the list serves only on a format the endpoint has
+no URL for left out, rules written as a glob or as re: compiled with RE2, any
+case for a glob, only adding models newly listed) follow manyModels and NoAPIFor
+in magpie's internal/provider/models.go, IsPattern, compilePattern,
+CleanPatterns and PatternMatches in internal/provider/groupmatch.go, and
+CleanAutoInclude and takeMatching in internal/provider/autolist.go; reading a
+glob follows globMatch in internal/provider/disabled.go:
+
+  packages/protocol/src/api-endpoint/auto-pick-rules.ts
+  packages/protocol/src/api-endpoint/auto-pick-rules.test.ts
+  packages/protocol/src/api-endpoint/glob.ts
+  packages/server/src/server/api-endpoints/model-scope.ts
+
+An endpoint's model list (each format's list fetched and merged by model id,
+the first format listed winning, a format that did not answer keeping the
+models it listed last time) and its daily refresh (checked every minute, a
+list under a day old skipped, a failed one tried again 15 minutes later) follow
+fetchOne and keepDeadSides in magpie's internal/provider/models.go and
+listsEvery, listRetry, listsTried and refreshDueLists in
+internal/provider/autolist.go:
+
+  packages/server/src/server/api-endpoints/catalog-merge.ts
+  packages/server/src/server/api-endpoints/catalog-refresh.ts
+
+The endpoint list's order and search (moving a row up, down, to the top or
+bottom within its group, a move while searching going among the rows shown,
+and the words of a search each found in the name, id, address or models)
+follow stepProvider, shownToOn, arrangeProvider and findProviders in magpie's
+internal/gui/assets/app.js; showing an endpoint's name after its models
+always, on a clash or never, a clash being names that read the same in any
+case, follows Provider in model names and Labels in
+internal/provider/modelprefs.go:
+
+  packages/app/src/api-endpoints/internal/host-list.ts
+  packages/protocol/src/api-endpoint/endpoint-names.ts
+  packages/protocol/src/api-endpoint/endpoint-names.test.ts
+
+The vendors' own status pages (which vendors, their pages and API hosts, which
+of a page's parts the API stands on, an endpoint matched to a vendor by its base
+URLs' hosts, the worst part's level, the open incidents on those parts, a page
+read at most once in five minutes and a first look waiting a little for it, a
+page that fails being unknown, DeepSeek's only linked) follow Vendors, VendorOf,
+hostOf, Of, Wait, ask and read in magpie's internal/upstream/upstream.go, its
+tests in upstream_test.go, the /api/upstream handler in internal/gui/providers.go,
+and upstreamOf, upstreamBadge and loadUpstream in internal/gui/assets/app.js:
+
+  packages/server/src/server/api-endpoints/vendor-status.ts
+  packages/server/src/server/api-endpoints/vendor-status.test.ts
+  packages/app/src/api-endpoints/internal/vendor-status.ts
+  packages/app/src/api-endpoints/vendor-notice.tsx
+  packages/app/src/api-endpoints/use-vendor-status.ts
+
+Import from other apps (the five sources and where each keeps its file, how a
+CC Switch, Claude Code, Codex, Alma or OpenCode entry becomes an endpoint, a
+template's when the URLs are its own, entries of one account merged, Osuna's own
+gateway and Codex table refused, the lenient Codex TOML reading, read-only
+SQLite, the new / added / name in use / same vendor with another key standing,
+the fingerprint the key is looked up by, and add, replace and rename) follows
+importapps.go, import_codex.go and import_opencode.go in magpie's
+internal/provider, internal/gui/importapps.go, and openImportApps,
+renderImportApps and importAppRow in internal/gui/assets/app.js:
+
+  packages/server/src/server/api-endpoints/import-apps.ts
+  packages/server/src/server/api-endpoints/import-apps.test.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-import.e2e.test.ts
+  packages/app/src/api-endpoints/internal/import-picks.ts
+  packages/app/src/api-endpoints/internal/import-picks.test.ts
+  packages/app/src/api-endpoints/import-apps-sheet.tsx
+
+The prompt on the endpoints page for local configurations (what it offers, the
+apps it names, read at most once a minute and again after an import, Review
+picking only what it offered, Ignore remembering those fingerprints until they
+change) follows the GET /api/importapps/discovery handler in magpie's
+internal/gui/importapps.go, and discoverLocalProviders, renderProviderDiscovery
+and the Ignore handler in internal/gui/assets/app.js:
+
+  packages/protocol/src/api-endpoint/import-offer.ts
+  packages/protocol/src/api-endpoint/import-offer.test.ts
+  packages/app/src/api-endpoints/use-import-discovery.ts
+  packages/app/src/api-endpoints/import-discovery-banner.tsx
+
+Import links (paseo://import?..., the parameters a link takes, the forms of the
+link, https only except plain http to this machine or the local network, no
+account, query or fragment in a base URL, a key of at most 4096 bytes without
+control characters, a name cut to 80 bytes where a character begins, at most 200
+models, the unknown template, Vertex and no-base-URL refusals, the https picture
+on a public host fetched when the dialog opens and kept only once the user adds
+it, the endpoint with the same id replaced, and the dialog naming the hosts the
+prompts and the key go to with the name and key editable) follows importurl.go
+and importurl_test.go in magpie's internal/provider, internal/gui/importlink.go,
+and renderImport in internal/gui/assets/app.js:
+
+  packages/protocol/src/api-endpoint/import-link.ts
+  packages/protocol/src/api-endpoint/import-link.test.ts
+  packages/protocol/src/api-endpoint/template-icons.ts
+  packages/server/src/utils/local-host.ts
+  packages/server/src/server/api-endpoints/import-link.ts
+  packages/server/src/server/api-endpoints/import-link.test.ts
+  packages/app/src/api-endpoints/import-link-sheet.tsx
 
 MIT License
 

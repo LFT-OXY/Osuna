@@ -17,7 +17,7 @@ import { hostOf } from "./model-facts.js";
 
 /*
  * 主机级接口的规则：都是对 endpoints.json 内容的纯计算，读写与 CLI 配置改写在 service 里。
- * 接口数组的顺序即创建顺序，「最早建的」一律按它找。
+ * 接口数组的顺序即接口顺序（用户排的，新建的在最后），「最靠前的」一律按它找。
  */
 
 /** 每个 Agent 自己的请求格式：老客户端的 baseUrl 投影与老 save 的地址都按它落位。 */
@@ -53,7 +53,7 @@ export function findEndpoint(state: ApiEndpointState, id: string): StoredApiEndp
   return state.endpoints.find((endpoint) => endpoint.id === id) ?? null;
 }
 
-/** 所有开着的接口的已选模型，按创建顺序合并、按 id 去重，label 取最早的一家。 */
+/** 所有开着的接口的已选模型，按接口顺序合并、按 id 去重，label 取最靠前的一家。 */
 export function usableModels(state: ApiEndpointState): ApiEndpointModel[] {
   const models: ApiEndpointModel[] = [];
   for (const endpoint of state.endpoints) {
@@ -77,7 +77,7 @@ export interface EndpointModelGroup {
 }
 
 /**
- * 聊天模型选择器的分组：每家开着且选了模型的接口一组，按创建顺序；同名模型在各家各出现一次。
+ * 聊天模型选择器的分组：每家开着且选了模型的接口一组，按接口顺序；同名模型在各家各出现一次。
  * 模型名本身带斜杠时可能和别家的 `标识/模型名` 撞上，同一个 id 只留最早的一条。
  */
 export function endpointModelGroups(state: ApiEndpointState): EndpointModelGroup[] {
@@ -140,7 +140,7 @@ export function bareDefaultModel(state: ApiEndpointState, id: string | null): st
 
 /**
  * 默认模型失踪规则：打开着总开关的 Agent，默认模型不再能选时，指定的那家不再提供而别家还有同名的就改成光秃秃的名字，
- * 否则改成最早开着接口的第一个已选模型；一个可用模型都不剩时总开关关掉（回官方）。删除接口、关接口开关、去掉模型之后都走这里。
+ * 否则改成接口顺序里最靠前的开着接口的第一个已选模型；一个可用模型都不剩时总开关关掉（回官方）。删除接口、关接口开关、去掉模型之后都走这里。
  */
 export function settleAgentSettings(input: {
   state: ApiEndpointState;
@@ -205,7 +205,7 @@ function isUnserved(state: ApiEndpointState, id: string | null | undefined): boo
 }
 
 /**
- * CLI 当前指向的接口：总开关开着时，默认模型指定的那家，否则持有默认模型、开着的接口里最早建的一家；官方为 null。
+ * CLI 当前指向的接口：总开关开着时，默认模型指定的那家，否则持有默认模型、开着的接口里最靠前的一家；官方为 null。
  * 老客户端的 activeEndpointId 就是它。
  */
 export function agentTargetEndpoint(
@@ -222,6 +222,26 @@ export function agentTargetEndpoint(
         endpoint.enabled && endpoint.models.some((model) => model.id === agent.defaultModelId),
     ) ?? null
   );
+}
+
+/**
+ * 默认模型先去这家的 Agent（列表行上的「Claude Code、Codex 的默认模型」）：总开关开着，
+ * 默认模型指定了这家，或光秃秃的名字在接口顺序里最先由这家（开着、选了它）提供。
+ */
+export function defaultModelProvidersOf(
+  state: ApiEndpointState,
+  endpointId: string,
+): ApiEndpointProvider[] {
+  return API_ENDPOINT_PROVIDERS.filter(
+    (provider) => agentTargetEndpoint(state, provider)?.id === endpointId,
+  );
+}
+
+/** 列表行上的 key 打码，照 magpie provider.Mask：留头尾各 4 个字符，8 个及以下整串换成圆点。 */
+export function maskApiKey(key: string): string {
+  const chars = Array.from(key);
+  if (chars.length <= 8) return "•".repeat(chars.length);
+  return `${chars.slice(0, 4).join("")}…${chars.slice(-4).join("")}`;
 }
 
 /** 老客户端看到的 baseUrl：该 Agent 自己格式的地址，没有就取第一个。 */

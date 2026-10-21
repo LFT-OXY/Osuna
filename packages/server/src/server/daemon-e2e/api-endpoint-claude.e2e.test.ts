@@ -157,6 +157,8 @@ describe("Claude API endpoint over the daemon RPC", () => {
         ANTHROPIC_BASE_URL: gatewayUrl(),
         ANTHROPIC_AUTH_TOKEN: token,
         ANTHROPIC_API_KEY: "",
+        // 别家的起始模型照 magpie 在 272K 压缩（WorkingWindow）。
+        CLAUDE_CODE_AUTO_COMPACT_WINDOW: "272000",
         // 接口模型都不是 Claude：Claude Code 的自动模式不请服务器审查。
         CLAUDE_CODE_AUTO_MODE_SERVER: "0",
       },
@@ -164,8 +166,8 @@ describe("Claude API endpoint over the daemon RPC", () => {
       // 终端 /model 列出这家的已选模型：`标识/模型名`、模型名、接口名。
       modelPicker: {
         options: [
-          { model: "relay/relay/sonnet", label: "relay/sonnet", description: "Relay" },
-          { model: "relay/relay/haiku", label: "relay/haiku", description: "Relay" },
+          { model: "relay/relay/sonnet", label: "relay/sonnet (Relay)", description: "via Osuna" },
+          { model: "relay/relay/haiku", label: "relay/haiku (Relay)", description: "via Osuna" },
         ],
       },
     });
@@ -220,6 +222,7 @@ describe("Claude API endpoint over the daemon RPC", () => {
       "ANTHROPIC_BASE_URL",
       "ANTHROPIC_AUTH_TOKEN",
       "ANTHROPIC_API_KEY",
+      "CLAUDE_CODE_AUTO_COMPACT_WINDOW",
       "CLAUDE_CODE_AUTO_MODE_SERVER",
     ]);
 
@@ -340,9 +343,9 @@ describe("Claude API endpoint over the daemon RPC", () => {
 
     expect(await picker()).toEqual({
       options: [
-        { model: "relay/relay/sonnet", label: "relay/sonnet", description: "Relay" },
-        { model: "relay/relay/haiku", label: "relay/haiku", description: "Relay" },
-        { model: "backup/gpt-6", label: "gpt-6", description: "Backup" },
+        { model: "relay/relay/sonnet", label: "relay/sonnet (Relay)", description: "via Osuna" },
+        { model: "relay/relay/haiku", label: "relay/haiku (Relay)", description: "via Osuna" },
+        { model: "backup/gpt-6", label: "gpt-6 (Backup)", description: "via Osuna" },
       ],
     });
 
@@ -356,15 +359,65 @@ describe("Claude API endpoint over the daemon RPC", () => {
     });
     expect(await picker()).toEqual({
       options: [
-        { model: "relay/relay/haiku", label: "relay/haiku", description: "Relay" },
-        { model: "backup/gpt-6", label: "gpt-6", description: "Backup" },
+        { model: "relay/relay/haiku", label: "relay/haiku (Relay)", description: "via Osuna" },
+        { model: "backup/gpt-6", label: "gpt-6 (Backup)", description: "via Osuna" },
       ],
     });
 
     await client.apiEndpointSetEndpointState({ endpointId: backupId, enabled: false });
     expect(await picker()).toEqual({
-      options: [{ model: "relay/relay/haiku", label: "relay/haiku", description: "Relay" }],
+      options: [
+        { model: "relay/relay/haiku", label: "relay/haiku (Relay)", description: "via Osuna" },
+      ],
     });
+
+    await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
+    expect(await readFile(settingsPath, "utf8")).toBe(USER_SETTINGS);
+  });
+
+  test("Endpoint name in model lists governs /model: always every row, only when names clash the shared ones, never none", async () => {
+    const relayId = await createEndpoint();
+    const backup = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Backup",
+      baseUrl: "https://backup.example/v1",
+      apiKey: "sk-backup",
+      models: [{ id: "relay/sonnet" }, { id: "gpt-6" }],
+      defaultModelId: "gpt-6",
+    });
+    const backupId = backup.endpoint?.id;
+    if (!backupId) throw new Error("Expected a saved endpoint");
+    await client.apiEndpointSetActive("claude", relayId);
+    await client.apiEndpointSetEndpointState({ endpointId: backupId, enabled: true });
+    const rows = async () =>
+      (
+        JSON.parse(await readFile(settingsPath, "utf8")).modelPicker.options as {
+          label: string;
+          description: string;
+        }[]
+      ).map((row) => [row.label, row.description]);
+
+    expect(await rows()).toEqual([
+      ["relay/sonnet (Relay)", "via Osuna"],
+      ["relay/haiku (Relay)", "via Osuna"],
+      ["relay/sonnet (Backup)", "via Osuna"],
+      ["gpt-6 (Backup)", "via Osuna"],
+    ]);
+    await client.apiEndpointSetEndpointNameDisplay({ display: "clash" });
+    // 不带接口名的行照 magpie 在说明里留着接口名。
+    expect(await rows()).toEqual([
+      ["relay/sonnet (Relay)", "via Osuna"],
+      ["relay/haiku", "Relay"],
+      ["relay/sonnet (Backup)", "via Osuna"],
+      ["gpt-6", "Backup"],
+    ]);
+    await client.apiEndpointSetEndpointNameDisplay({ display: "never" });
+    expect(await rows()).toEqual([
+      ["relay/sonnet", "Relay"],
+      ["relay/haiku", "Relay"],
+      ["relay/sonnet", "Backup"],
+      ["gpt-6", "Backup"],
+    ]);
 
     await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
     expect(await readFile(settingsPath, "utf8")).toBe(USER_SETTINGS);
@@ -525,6 +578,7 @@ describe("Claude API endpoint over the daemon RPC", () => {
     "DISABLE_TELEMETRY": "1", // 关遥测
     "ANTHROPIC_AUTH_TOKEN": "${token}",
     "ANTHROPIC_API_KEY": "",
+    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "272000",
     "CLAUDE_CODE_AUTO_MODE_SERVER": "0",
   },
   "theme": "dark",
@@ -538,13 +592,13 @@ describe("Claude API endpoint over the daemon RPC", () => {
     "options": [
       {
         "model": "relay/relay/sonnet",
-        "label": "relay/sonnet",
-        "description": "Relay"
+        "label": "relay/sonnet (Relay)",
+        "description": "via Osuna"
       },
       {
         "model": "relay/relay/haiku",
-        "label": "relay/haiku",
-        "description": "Relay"
+        "label": "relay/haiku (Relay)",
+        "description": "via Osuna"
       }
     ]
   },
@@ -913,6 +967,7 @@ describe("Claude API endpoint over the daemon RPC", () => {
                 // 中转站口令遮住。
                 { op: "removed", text: '    "ANTHROPIC_AUTH_TOKEN": ••••' },
                 { op: "removed", text: '    "ANTHROPIC_API_KEY": "",' },
+                { op: "removed", text: '    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "272000",' },
                 { op: "removed", text: '    "CLAUDE_CODE_AUTO_MODE_SERVER": "0"' },
                 { op: "restored", text: '  "model": "opus"', was: '  "model": "relay/sonnet",' },
                 { op: "removed", text: '  "permissions": {' },
@@ -921,11 +976,11 @@ describe("Claude API endpoint over the daemon RPC", () => {
                 { op: "removed", text: '  "modelPicker": {' },
                 { op: "removed", text: '    "options": [' },
                 { op: "removed", text: '        "model": "relay/relay/sonnet",' },
-                { op: "removed", text: '        "label": "relay/sonnet",' },
-                { op: "removed", text: '        "description": "Relay"' },
+                { op: "removed", text: '        "label": "relay/sonnet (Relay)",' },
+                { op: "removed", text: '        "description": "via Osuna"' },
                 { op: "removed", text: '        "model": "relay/relay/haiku",' },
-                { op: "removed", text: '        "label": "relay/haiku",' },
-                { op: "removed", text: '        "description": "Relay"' },
+                { op: "removed", text: '        "label": "relay/haiku (Relay)",' },
+                { op: "removed", text: '        "description": "via Osuna"' },
               ],
             },
           ],
@@ -1075,15 +1130,16 @@ describe("Claude API endpoint over the daemon RPC", () => {
     expect((await client.apiEndpointList("claude")).activeEndpointId).toBe(endpointId);
   });
 
-  test("rejects invalid input and unsupported providers with a code", async () => {
-    const missingKey = await client.apiEndpointSave({
+  test("rejects invalid input and unsupported providers with a code; a save without a key is not one", async () => {
+    // key 选填（工单 02）：不填就保存成没有 key 的一家，不再拒收。
+    const withoutKey = await client.apiEndpointSave({
       provider: "claude",
       name: "Relay",
       baseUrl: "https://relay.example",
       models: [{ id: "m" }],
       defaultModelId: "m",
     });
-    expect(missingKey).toMatchObject({ endpoint: null, error: { code: "invalid_input" } });
+    expect(withoutKey).toMatchObject({ error: null, endpoint: { hasApiKey: false } });
 
     const badDefault = await client.apiEndpointSave({
       provider: "claude",
@@ -1430,7 +1486,7 @@ describe("Claude Code is told what the endpoint models can do", () => {
     return JSON.parse(await readFile(settingsPath, "utf8"));
   }
 
-  test("marks [1m], writes the three hints, and Official returns the file to its bytes", async () => {
+  test("marks [1m], writes the four hints, and Official returns the file to its bytes", async () => {
     await start(USER_SETTINGS);
     await switchOn();
 
@@ -1441,11 +1497,14 @@ describe("Claude Code is told what the endpoint models can do", () => {
       "relay/deepseek-v4-pro[1m]",
       "relay/claude-opus-5-5[1m]",
     ]);
+    // 工单 14 照 magpie 合并后，没有手改时与之前的差别只有两处：Claude 模型也报档位（只报 Claude Code 给它的），
+    // 别家起始模型在 272K 压缩（magpie WorkingWindow）。
     expect(switched.env).toMatchObject({
       CLAUDE_CODE_MAX_CONTEXT_TOKENS: "922000",
       CLAUDE_CODE_MAX_OUTPUT_TOKENS: "128000",
       CLAUDE_CODE_MODEL_CAPABILITIES:
-        "gpt-6-sol=effort,xhigh_effort,max_effort;relay/gpt-6-sol=effort,xhigh_effort,max_effort;relay/deepseek-v4-pro=effort,xhigh_effort,max_effort",
+        "gpt-6-sol=effort,xhigh_effort,max_effort;relay/gpt-6-sol=effort,xhigh_effort,max_effort;relay/deepseek-v4-pro=effort,xhigh_effort,max_effort;relay/claude-opus-5-5=effort,xhigh_effort,max_effort",
+      CLAUDE_CODE_AUTO_COMPACT_WINDOW: "272000",
     });
     // 这几个值不算 Osuna 负责的键，健康检查不会因为它们报「被外部改动」。
     expect((await client.apiEndpointList("claude")).health ?? []).toEqual([]);
@@ -1468,6 +1527,153 @@ describe("Claude Code is told what the endpoint models can do", () => {
     expect(switched.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS).toBe("922000");
 
     await client.apiEndpointSetActive("claude", null);
+    expect(await readFile(settingsPath, "utf8")).toBe(own);
+  });
+
+  async function saveModelSettings(endpointId: string, modelSettings: object): Promise<void> {
+    const [stored] = (await client.apiEndpointList("claude")).endpoints;
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      endpointId,
+      name: "Relay",
+      baseUrls: stored?.baseUrls ?? [],
+      models: stored?.models ?? [],
+      modelSettings,
+    });
+    expect(saved.error).toBeNull();
+  }
+
+  test("hand-set context, reply limit, levels and Compact at reach Claude Code; Official puts the user's own values back", async () => {
+    const own = USER_SETTINGS.replace(
+      `"ANTHROPIC_BASE_URL": "https://hand-written.example"`,
+      `"ANTHROPIC_BASE_URL": "https://hand-written.example",
+    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "150000"`,
+    );
+    await start(USER_SETTINGS);
+    const endpointId = await switchOn();
+    await saveModelSettings(endpointId, {
+      models: {
+        "gpt-6-sol": {
+          context: 600_000,
+          output: 64_000,
+          efforts: ["low", "high"],
+          compact: 500_000,
+        },
+      },
+    });
+    expect((await settings()).env).toMatchObject({
+      CLAUDE_CODE_MAX_CONTEXT_TOKENS: "600000",
+      CLAUDE_CODE_MAX_OUTPUT_TOKENS: "64000",
+      CLAUDE_CODE_MODEL_CAPABILITIES: expect.stringMatching(
+        /^gpt-6-sol=effort;relay\/gpt-6-sol=effort;/,
+      ),
+      CLAUDE_CODE_AUTO_COMPACT_WINDOW: "500000",
+    });
+
+    // 整家默认的上下文算手填：没有压缩阈值时整个窗口跑到底（magpie #1809）。
+    await saveModelSettings(endpointId, { defaults: { context: 500_000 } });
+    const typed = (await settings()).env;
+    expect(typed.CLAUDE_CODE_MAX_CONTEXT_TOKENS).toBe("500000");
+    expect(typed.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBeUndefined();
+
+    await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
+    expect(await readFile(settingsPath, "utf8")).toBe(USER_SETTINGS);
+
+    // 用户自己写的压缩阈值归用户：开着时不碰，关掉后原样还在。
+    await writeFile(settingsPath, own);
+    await client.apiEndpointSetAgentSettings({
+      provider: "claude",
+      enabled: true,
+      defaultModelId: "gpt-6-sol",
+    });
+    await saveModelSettings(endpointId, { models: { "gpt-6-sol": { compact: 400_000 } } });
+    expect((await settings()).env.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBe("150000");
+    await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
+    expect(await readFile(settingsPath, "utf8")).toBe(own);
+  });
+
+  test("the host's long conversations: Full window drops the compaction, a typed Compact at replaces 272K and beats a typed window", async () => {
+    await start(USER_SETTINGS);
+    const endpointId = await switchOn();
+    const compactAt = async () => (await settings()).env.CLAUDE_CODE_AUTO_COMPACT_WINDOW;
+    expect(await compactAt()).toBe("272000");
+
+    const full = await client.apiEndpointSetLongConversations({ fullContext: true });
+    expect(full.error).toBeNull();
+    expect((await client.apiEndpointList("claude")).longConversations).toEqual({
+      fullContext: true,
+    });
+    expect(await compactAt()).toBeUndefined();
+
+    await client.apiEndpointSetLongConversations({ fullContext: false, compactAt: 400_000 });
+    expect((await client.apiEndpointList("claude")).longConversations).toEqual({
+      compactAt: 400_000,
+    });
+    expect(await compactAt()).toBe("400000");
+    await saveModelSettings(endpointId, { defaults: { context: 600_000 } });
+    expect(await compactAt()).toBe("400000");
+
+    // 272K 等于不设；数不是正整数拒收。
+    await client.apiEndpointSetLongConversations({ fullContext: false, compactAt: 272_000 });
+    expect((await client.apiEndpointList("claude")).longConversations).toEqual({});
+    expect(await compactAt()).toBeUndefined();
+    const refused = await client.apiEndpointSetLongConversations({
+      fullContext: false,
+      compactAt: 1.5,
+    });
+    expect(refused.error?.code).toBe("invalid_input");
+
+    await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
+    expect(await readFile(settingsPath, "utf8")).toBe(USER_SETTINGS);
+  });
+
+  test("the old client's save and switch keep the host's long conversations, disabled models and endpoint name display", async () => {
+    await start(USER_SETTINGS);
+    await client.apiEndpointSetLongConversations({ fullContext: false, compactAt: 400_000 });
+    await client.apiEndpointSetDisabledModels({ models: ["*-preview"] });
+    await client.apiEndpointSetEndpointNameDisplay({ display: "clash" });
+    const hostWide = async () => {
+      const list = await client.apiEndpointList("claude");
+      return {
+        longConversations: list.longConversations,
+        disabledModels: list.disabledModels,
+        endpointNameDisplay: list.endpointNameDisplay,
+      };
+    };
+    const kept = {
+      longConversations: { compactAt: 400_000 },
+      disabledModels: ["*-preview"],
+      endpointNameDisplay: "clash",
+    };
+    // switchOn 走老客户端的 save 与 set_active。
+    const endpointId = await switchOn();
+    expect(await hostWide()).toEqual(kept);
+    expect((await settings()).env.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBe("400000");
+    // 老样子的 save 改一家：几项主机设置照样留着。
+    const edited = await client.apiEndpointSave({
+      provider: "claude",
+      endpointId,
+      name: "Relay renamed",
+      baseUrl: "https://relay.example/api",
+      models: [{ id: "gpt-6-sol" }, { id: "gpt-6-preview" }],
+      defaultModelId: "gpt-6-sol",
+    });
+    expect(edited.error).toBeNull();
+    expect(await hostWide()).toEqual(kept);
+  });
+
+  test("Osuna's 272K gives way to an autoCompactWindow the user set in Claude Code", async () => {
+    const own = USER_SETTINGS.replace(
+      `"env": {`,
+      `"autoCompactWindow": 300000,
+  "env": {`,
+    );
+    await start(own);
+    await switchOn();
+    expect((await settings()).env.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBeUndefined();
+    await client.apiEndpointSetLongConversations({ fullContext: false, compactAt: 400_000 });
+    expect((await settings()).env.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBe("400000");
+    await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
     expect(await readFile(settingsPath, "utf8")).toBe(own);
   });
 
@@ -1544,7 +1750,7 @@ describe("Claude Code is told what the endpoint models can do", () => {
     expect(await readFile(settingsPath, "utf8")).toBe(own);
   });
 
-  test("numbers the endpoint's own model list gives win over models.dev and rewrite the file", async () => {
+  test("numbers the endpoint's own model list, fetched when it is saved, win over models.dev", async () => {
     await start(USER_SETTINGS);
     upstream = createServer((request, response) => {
       if (request.url !== "/api/v1/models") {
@@ -1560,8 +1766,12 @@ describe("Claude Code is told what the endpoint models can do", () => {
     });
     await new Promise<void>((resolve) => upstream?.listen(0, "127.0.0.1", resolve));
     const baseUrl = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}/api`;
+    // 照 magpie：新建一家时保存当场拉一次清单，打开开关写进 settings.json 时就用上清单给的数。
     const endpointId = await switchOn(baseUrl);
-    expect((await settings()).env.CLAUDE_CODE_MAX_CONTEXT_TOKENS).toBe("922000");
+    // 这些数只留在 daemon 里，不发给客户端。
+    expect((await client.apiEndpointList("claude")).endpoints[0]?.catalog?.models).toEqual([
+      { id: "gpt-6-sol" },
+    ]);
 
     const fetched = await client.apiEndpointFetchModels({
       provider: "claude",
@@ -1569,13 +1779,9 @@ describe("Claude Code is told what the endpoint models can do", () => {
       baseUrl,
       format: "anthropic_messages",
     });
-    // 这些数只留在 daemon 里，不发给客户端。
     expect(fetched.models).toEqual([{ id: "gpt-6-sol" }]);
-    expect((await client.apiEndpointList("claude")).endpoints[0]?.catalog?.models).toEqual([
-      { id: "gpt-6-sol" },
-    ]);
 
-    // 起始模型现在已知 105 万：带 [1m]，上下文那一项就不写了。
+    // 起始模型已知 105 万：带 [1m]，上下文那一项就不写了（models.dev 说的 92.2 万不用）。
     const refreshed = await settings();
     expect(refreshed.model).toBe("gpt-6-sol[1m]");
     expect(refreshed.modelPicker.options[0].model).toBe("relay/gpt-6-sol[1m]");

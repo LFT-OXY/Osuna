@@ -3,6 +3,12 @@
 
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { isRecord, parseJson } from "../upstream-http.js";
+import {
+  keyHeadersAt,
+  ownsKeyHeader,
+  withUserHeaders,
+  type RequestExtras,
+} from "../request-extras.js";
 import { FAILURE_WORDS, wordsOf } from "./failure.js";
 import { refusedDowngrades, type DowngradedShape } from "./refused-downgrades.js";
 import { refusedFields, refusesContent, type DroppedField } from "./refused-fields.js";
@@ -15,13 +21,15 @@ import type { FailedAttempt, UpstreamOpening } from "./upstream-call.js";
  */
 
 /**
- * none：不收 effort none；thinkingOff：不让关思考；`format:<格式>`：这个格式的地址不提供这个模型；
+ * none：不收 effort none；thinkingOff：不让关思考；toolsEffort：Chat 上带工具时不收推理力度（要 none）；
+ * `format:<格式>`：这个格式的地址不提供这个模型；
  * bothKeyHeaders：x-api-key 与 Authorization 不能同时带（只带 x-api-key）；xApiKeyAlone：只带 x-api-key 也不收（只带 Bearer）；
  * 其余是不收、要去掉的字段（DroppedField）与要降级的写法（DowngradedShape）。
  */
 export type RefusedShape =
   | "none"
   | "thinkingOff"
+  | "toolsEffort"
   | `format:${ApiEndpointRequestFormat}`
   | "bothKeyHeaders"
   | "xApiKeyAlone"
@@ -38,6 +46,8 @@ const REFUSAL_WORDS = {
     /always engages in thinking|thinking (?:can ?not|can't) be (?:disabled|turned off)|enable_thinking[^"]{0,60}restricted to true|始终(?:支持|开启|启用)?思考|思考[^"]{0,20}(?:不可|无法|不能)关闭|requires adaptive thinking\W+thinking\.type\W+disabled\W+\(including reasoning\.effort=none\) is not allowed|thinking\.type `disabled` is not supported by this model/i,
   // OpenRouter 要求必须推理。
   mandatoryReasoning: /reasoning is mandatory for this endpoint and cannot be disabled/i,
+  // Chat 上带工具时不收推理力度，要求设成 none（Bedrock 的 GPT，magpie #176 的 toolsWithoutEffort）。
+  toolsWithoutEffort: /tools with reasoning_effort are not supported.*reasoning_effort to .?none/is,
   // 任何档位都不收 disabled 的 Claude（Opus 5.5）。
   thinkingOffRefused: /thinking\.type\.disabled\W+is not supported/i,
 } as const;
@@ -72,7 +82,10 @@ export function refusedShape(input: {
     const off = type === "disabled" || type === "between_tools";
     return off && refusesThinkingOff(text) ? "thinkingOff" : null;
   }
-  return openAIEffortOf(input.format, body) === "none" && refusesNone(text) ? "none" : null;
+  const effort = openAIEffortOf(input.format, body);
+  if (effort === "none") return refusesNone(text) ? "none" : null;
+  const chat = input.format === "openai_chat";
+  return chat && W.toolsWithoutEffort.test(text) ? "toolsEffort" : null;
 }
 
 function openAIEffortOf(format: ApiEndpointRequestFormat, body: Record<string, unknown>): unknown {
@@ -213,29 +226,54 @@ export function refusesBothKeyHeaders(input: { status: number; text: string }): 
   return BOTH_KEY_HEADERS_WORDS.some((words) => text.includes(words));
 }
 
-/** key 放在哪个请求头：两个都放、只放 x-api-key、只放 Authorization: Bearer。 */
-export type KeyHeaders = "both" | "xApiKey" | "bearer";
+/** key 放在哪个请求头：两个都放、只放 x-api-key、只放 Authorization: Bearer、只放 Azure 的 api-key。 */
+export type KeyHeaders = "both" | "xApiKey" | "bearer" | "apiKey";
 
-/** 发给这家时 key 放哪：OpenAI 格式只放 Bearer；Anthropic 地址两个都放，这家说过不能同时带的只放它收的那个。 */
+/**
+ * 发给这家时 key 放哪：先按 keyHeadersAt（模板、格式、Anthropic 自己的地址、用户选的）；两个都放时，
+ * 这家说过不能同时带的只放它收的那个。
+ */
 export function keyHeadersFor(input: {
   format: ApiEndpointRequestFormat;
+  templateId: string | undefined;
+  baseUrl: string;
+  extras: RequestExtras;
   refusals: ShapeRefusals | undefined;
 }): KeyHeaders {
   const { refusals } = input;
-  if (input.format !== "anthropic_messages") return "bearer";
+  const keyHeader = input.extras.keyHeader;
+  const keys = keyHeadersAt({ ...input, keyHeader, anthropicDefault: "both" });
+  if (keys !== "both") return keys;
   if (refusals?.has("xApiKeyAlone")) return "bearer";
   return refusals?.has("bothKeyHeaders") ? "xApiKey" : "both";
 }
 
+/** 没 key 的接口（apiKey 为 null）一个认证头都不带。 */
 export function keyHeaderValues(input: {
-  apiKey: string;
+  apiKey: string | null;
   keys: KeyHeaders;
 }): Record<string, string> {
   const { apiKey, keys } = input;
+  if (apiKey === null) return {};
+  if (keys === "apiKey") return { "api-key": apiKey };
   const headers: Record<string, string> = {};
   if (keys !== "xApiKey") headers.authorization = `Bearer ${apiKey}`;
   if (keys !== "bearer") headers["x-api-key"] = apiKey;
   return headers;
+}
+
+/**
+ * 发给这家的每个上游请求最后都经这里定请求头：Osuna 填的头，再加 key，最后写上用户自己的头（request-extras.ts）。
+ * 中转站转发、测试连接、自动检测、拉模型、测试模型都用它。
+ */
+export function signedHeaders<V extends string | string[]>(input: {
+  headers: Record<string, V>;
+  apiKey: string | null;
+  keys: KeyHeaders;
+  extras: RequestExtras;
+}): Record<string, V | string> {
+  const signed = { ...input.headers, ...keyHeaderValues(input) };
+  return withUserHeaders(signed, input.extras);
 }
 
 /** 问一次上游的结果（开口、失败、Agent 走了）里，要不要换头只看这些。 */
@@ -254,11 +292,13 @@ const ONE_KEY_HEADER_ORDER = [
 export async function askWithOneKeyHeader<T extends AskedUpstream>(input: {
   refusals: ShapeRefusals;
   sent: KeyHeaders;
+  // 用户自己填了认证头时 key 怎么带由用户说了算，不换（magpie RetryOneAuth）。
+  extras: RequestExtras;
   failed: FailedAttempt;
   ask: (keys: KeyHeaders) => Promise<T | FailedAttempt>;
 }): Promise<T | FailedAttempt> {
   const { failed } = input;
-  if (input.sent !== "both") return failed;
+  if (input.sent !== "both" || ownsKeyHeader(input.extras)) return failed;
   if (!refusesBothKeyHeaders(failed)) return failed;
   let outcome: T | FailedAttempt = failed;
   for (const { keys, learned } of ONE_KEY_HEADER_ORDER) {
@@ -314,24 +354,38 @@ export interface ShapeRefusals {
   add(shape: RefusedShape): void;
 }
 
-/** 哪家的哪个模型不收哪种写法；只在内存里。 */
+/**
+ * 一条拒收记在哪：哪家、哪个模型、哪种格式（照 magpie fits 按协议记）。在 Chat 上不收的字段，Responses 照常发；
+ * 「这个格式的地址没有这个模型」（format:<格式>）本身就说的是格式，只按家与模型记，format 填 null。
+ */
+export interface RefusalKey {
+  endpointId: string;
+  model: string;
+  format: ApiEndpointRequestFormat | null;
+  shape: RefusedShape;
+}
+
+/** 哪家的哪个模型在哪种格式上不收哪种写法；只在内存里。 */
 export class RefusedShapes {
   private readonly refused = new Set<string>();
 
-  has(endpointId: string, model: string, shape: RefusedShape): boolean {
-    return this.refused.has(key(endpointId, model, shape));
+  has(input: RefusalKey): boolean {
+    return this.refused.has(keyOf(input));
   }
 
-  add(endpointId: string, model: string, shape: RefusedShape): void {
-    this.refused.add(key(endpointId, model, shape));
+  add(input: RefusalKey): void {
+    this.refused.add(keyOf(input));
   }
 
   forget(input: { endpointId: string; model: string; shapes: RefusedShape[] }): void {
-    for (const shape of input.shapes)
-      this.refused.delete(key(input.endpointId, input.model, shape));
+    for (const shape of input.shapes) {
+      this.refused.delete(keyOf({ ...input, format: null, shape }));
+    }
   }
 }
 
-function key(endpointId: string, model: string, shape: RefusedShape): string {
-  return `${endpointId}\0${model}\0${shape}`;
+function keyOf(input: RefusalKey): string {
+  const isFormatShape = input.shape.startsWith("format:");
+  const scope = isFormatShape ? "" : (input.format ?? "");
+  return `${input.endpointId}\0${input.model}\0${scope}\0${input.shape}`;
 }

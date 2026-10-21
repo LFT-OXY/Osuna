@@ -5,9 +5,19 @@ import type { IncomingMessage } from "node:http";
 import { StringDecoder } from "node:string_decoder";
 import type { Response } from "express";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
-import type { ModelFacts } from "../model-facts.js";
+import { upstreamModelName } from "@getpaseo/protocol/api-endpoint/model-settings";
+import type { EndpointModelFacts } from "../model-facts.js";
 import type { StoredApiEndpoint } from "../store.js";
-import { ANTHROPIC_VERSION, parseJson } from "../upstream-http.js";
+import { ANTHROPIC_VERSION, parseJson, type Secrets } from "../upstream-http.js";
+import {
+  secretsOf,
+  storedRequestExtras,
+  unsendableHeader,
+  unsendableHeaderMessage,
+  withExtraBody,
+  type RequestExtras,
+} from "../request-extras.js";
+import { adaptiveThinkingAsTaken } from "./translation/anthropic.js";
 import { sendAgentError, sendRefusal, type AgentError, type AgentWire } from "./agent-errors.js";
 import {
   ENDED_SHORT,
@@ -33,9 +43,9 @@ import {
   askRefitted,
   askWithOneKeyHeader,
   askWithoutField,
-  keyHeaderValues,
   keyHeadersFor,
   noteRefusal,
+  signedHeaders,
   refusesPrefill,
   type KeyHeaders,
   type RefusedShape,
@@ -47,12 +57,15 @@ import {
   takesImageTool,
   withoutImageToolRequest,
   withoutRefusedFields,
+  type FieldRefused,
 } from "./refused-fields.js";
 import {
   ReplyCollector,
   openAIEffort,
   passingFilter,
   requestForModel,
+  reasoningOff,
+  replaysThinking,
   thinkingBackOn,
   type EmitEvent,
   type GatewayRequest,
@@ -65,6 +78,9 @@ import { protocolOf, type StreamDecoder } from "./translation/protocols.js";
 import { SseReader } from "./translation/sse.js";
 import { textCallFilter } from "./translation/text-calls.js";
 import { withSearchSourcesFor, withThinkingInline, withVendorRewrites } from "./vendor-rewrites.js";
+import { withoutThinkingAsk } from "./no-thinking.js";
+import { withTemplateTranslatedRewrites } from "./template-rewrites.js";
+import { servedFormats } from "../templates.js";
 import { refusedAfterOpening } from "./safety-filter.js";
 import { isWholeReply } from "./whole-stream.js";
 import {
@@ -74,6 +90,7 @@ import {
   openUpstream,
   readLimited,
   answerUnlessRefused,
+  failedBySelf,
   upstreamUrl,
   type AnswerEnd,
   type AttemptOutcome,
@@ -102,7 +119,7 @@ export async function attemptTranslated(input: {
   wire: AgentWire;
   endpoint: StoredApiEndpoint;
   baseUrl: string;
-  apiKey: string;
+  apiKey: string | null;
   // Agent 说的格式与这次发给上游的格式。
   from: ApiEndpointRequestFormat;
   to: ApiEndpointRequestFormat;
@@ -110,26 +127,52 @@ export async function attemptTranslated(input: {
   requestedModel: string;
   upstreamModel: string;
   // 这家这个模型的资料（ModelFactsLookup）。
-  facts: ModelFacts;
+  facts: EndpointModelFacts;
   headerTimeoutMs: number;
   // CLI 自己的 User-Agent，它没带时是 Osuna/<版本>。
   userAgent: string;
+  // 照原样带给上游的 CLI 身份头（Codex 发往 Responses 或 Chat 时的 originator、x-codex-* 等）；没有为空。
+  clientIdentity: Record<string, string>;
   // 这家的这个模型不收哪些不思考的写法。
   refusals: ShapeRefusals;
   keepAlive: AgentKeepAlive;
   // 断了的回复接着写之前等多久（第二次加倍）。
   retryPauseMs: number;
+  // 附加请求体里 ${sessionId} 换成的对话标识（request-extras.ts 的 extraBodySession）。
+  sessionId: string;
 }): Promise<AttemptOutcome> {
   const { res, apiKey, to, refusals } = input;
   const url = upstreamUrl({ baseUrl: input.baseUrl, format: to });
-  const sends = () => keyHeadersFor({ format: to, refusals });
+  const extras = storedRequestExtras(input.endpoint);
+  const secrets = secretsOf({ apiKey, extras });
+  // 这家的请求头发不出去：这一个请求当作连不上，照常换家。
+  const unsendable = unsendableHeader(extras);
+  if (unsendable !== null) {
+    return failedBySelf({ status: 502, detail: unsendableHeaderMessage(unsendable) });
+  }
+  const sends = () =>
+    keyHeadersFor({
+      format: to,
+      templateId: input.endpoint.templateId,
+      baseUrl: input.baseUrl,
+      extras,
+      refusals,
+    });
   const openAt = (ask: { url: URL; body: string; keys: KeyHeaders }) =>
     openUpstream({
       res,
       url: ask.url,
-      headers: translatedHeaders({ apiKey, keys: ask.keys, to, userAgent: input.userAgent }),
+      headers: translatedHeaders({
+        apiKey,
+        keys: ask.keys,
+        extras,
+        to,
+        userAgent: input.userAgent,
+        clientIdentity: input.clientIdentity,
+      }),
       body: Buffer.from(ask.body),
-      apiKey,
+      secrets,
+      uncheckedHosts: extras.uncheckedHosts,
       headerTimeoutMs: input.headerTimeoutMs,
       reads: to,
       onHeard: () => input.keepAlive.heard(),
@@ -143,10 +186,18 @@ export async function attemptTranslated(input: {
     translatedBody({
       ...ask,
       baseUrl: input.baseUrl,
+      templateId: input.endpoint.templateId,
+      chatOnly: servesOnChatAlone({ endpoint: input.endpoint, model: input.upstreamModel }),
       from: input.from,
       to,
       model: input.upstreamModel,
+      sentModel: upstreamModelName({
+        settings: input.endpoint.modelSettings,
+        modelId: input.upstreamModel,
+      }),
       facts: input.facts,
+      extraBody: extras.extraBody,
+      session: input.sessionId,
     });
   const build = (asked: ShapeRefusals = refusals) =>
     bodyOf({ request: input.request, continuation: null, refusals: asked });
@@ -157,16 +208,18 @@ export async function attemptTranslated(input: {
       const sent = bodyOf({ request, continuation: mode, refusals });
       const resumeUrl = continuationUrl({ baseUrl: input.baseUrl, to, mode });
       const opening = await openAt({ url: resumeUrl, body: sent, keys: sends() });
-      return resumedFrom({ opening, sent, url: resumeUrl, apiKey, to, refusals });
+      return resumedFrom({ opening, sent, url: resumeUrl, secrets, to, refusals });
     },
   });
   const body = build();
   const keys = sends();
   let opened = await open(body, keys);
-  if (opened.kind === "failed") {
+  // 没 key 时没带认证头，401 与「两个头不能同时带」无关。
+  if (opened.kind === "failed" && apiKey !== null) {
     opened = await askWithOneKeyHeader({
       refusals,
       sent: keys,
+      extras,
       failed: opened,
       ask: (alone) => open(body, alone),
     });
@@ -200,7 +253,7 @@ export async function attemptTranslated(input: {
   return answerUnlessRefused({
     opened,
     format: to,
-    answer: (ready) => answerOpened({ ...input, url, opened: ready, goOn }),
+    answer: (ready) => answerOpened({ ...input, url, secrets, opened: ready, goOn }),
   });
 }
 
@@ -220,7 +273,7 @@ interface TranslatedAnswer {
   res: Response;
   wire: AgentWire;
   endpoint: StoredApiEndpoint;
-  apiKey: string;
+  secrets: Secrets;
   from: ApiEndpointRequestFormat;
   to: ApiEndpointRequestFormat;
   request: GatewayRequest;
@@ -240,14 +293,14 @@ async function upstreamReplyOf(input: {
   opened: OpenedUpstream;
   to: ApiEndpointRequestFormat;
   url: URL;
-  apiKey: string;
+  secrets: Secrets;
 }): Promise<UpstreamReply | FailedAttempt> {
   const { response, held } = input.opened;
   if (isEventStream(response, held)) return { kind: "stream", response, held };
   const text = await readLimited({ stream: response, first: held });
   const whole = parseJson(text);
   if (!isWholeReply(input.to, whole))
-    return notAStream({ url: input.url, text, apiKey: input.apiKey });
+    return notAStream({ url: input.url, text, secrets: input.secrets });
   return { kind: "whole", body: whole };
 }
 
@@ -323,7 +376,7 @@ async function resumedFrom(input: {
   opening: UpstreamOpening;
   sent: string;
   url: URL;
-  apiKey: string;
+  secrets: Secrets;
   to: ApiEndpointRequestFormat;
   refusals: ShapeRefusals;
 }): Promise<AskedToGoOn> {
@@ -354,34 +407,45 @@ type UpstreamReply =
   | { kind: "whole"; body: unknown };
 
 function translatedHeaders(input: {
-  apiKey: string;
+  apiKey: string | null;
   keys: KeyHeaders;
+  extras: RequestExtras;
   to: ApiEndpointRequestFormat;
   userAgent: string;
+  clientIdentity: Record<string, string>;
 }): Record<string, string> {
   const headers: Record<string, string> = {
+    ...input.clientIdentity,
     "content-type": "application/json",
     "user-agent": input.userAgent,
     accept: "text/event-stream",
     // 要上游不压缩：错误体要读出原文。
     "accept-encoding": "identity",
-    ...keyHeaderValues({ apiKey: input.apiKey, keys: input.keys }),
   };
   if (input.to === "anthropic_messages") headers["anthropic-version"] = ANTHROPIC_VERSION;
-  return headers;
+  return signedHeaders({ ...input, headers });
 }
 
 /** 翻译后发给上游的请求体要的：Agent 的请求、这家的地址、两种格式、上游模型名与资料、这家这个模型不收的写法。 */
 export interface TranslatedBodyInput {
   request: GatewayRequest;
   baseUrl: string;
+  // 这家从哪个模板加的：Bedrock、Azure 按模板改（template-rewrites.ts）；「自定义」的没有。
+  templateId: string | undefined;
+  // 这家只在 Chat 上给这个模型：Chat 带工具不收推理力度时，没有别的格式可去，关掉推理重问（magpie servesElsewhere）。
+  chatOnly: boolean;
   from: ApiEndpointRequestFormat;
   to: ApiEndpointRequestFormat;
   model: string;
-  facts: ModelFacts;
+  // 请求体里的模型名（上游模型名）；没设上游模型名时同 model。
+  sentModel: string;
+  facts: EndpointModelFacts;
   refusals: ShapeRefusals;
   // 断了的回复接着写时这家怎么接（request 的最后一条是 Agent 已经收到的部分）；平常的请求为 null。
   continuation: PrefillMode | null;
+  // 这家的附加请求体与 ${sessionId} 换成的对话标识（request-extras.ts）；没有为不加。
+  extraBody?: Record<string, unknown>;
+  session?: string;
 }
 
 /**
@@ -390,7 +454,12 @@ export interface TranslatedBodyInput {
  */
 export function translatedBody(input: TranslatedBodyInput): string {
   const { to, refusals, baseUrl, continuation } = input;
-  let request = allowedReasoning({ request: input.request, to, refusals });
+  let request = allowedReasoning({
+    request: input.request,
+    to,
+    refusals,
+    chatOnly: input.chatOnly,
+  });
   if (refusals.has("imageTool")) request = withoutImageToolRequest(request);
   request = downgradedRequest({
     request,
@@ -401,8 +470,13 @@ export function translatedBody(input: TranslatedBodyInput): string {
     lastIsTurn: input.from !== "anthropic_messages" && continuation === null,
   });
   request = requestForModel({ request, to, facts: input.facts });
+  // 模型设置里一档思考都不留：编出的请求不带任何思考参数（no-thinking.ts）。
+  if (input.facts.noThinking === true) request = withoutThinkingAsk(request);
   if (to === "openai_chat") request = withThinkingInline({ baseUrl, request });
-  const built = protocolOf(to).build({ ...request, stream: true }, input.model);
+  // 要回放推理的模型按原名或上游模型名认出一个就算（magpie）；请求体里的模型名总是上游模型名。
+  const replayModel = replaysThinking(input.model) ? input.model : input.sentModel;
+  const built = protocolOf(to).build({ ...request, stream: true }, replayModel);
+  built.model = input.sentModel;
   let body = withoutRefusedFields({
     format: to,
     body: built,
@@ -414,7 +488,35 @@ export function translatedBody(input: TranslatedBodyInput): string {
   if (to === "openai_responses") {
     body = withSearchSourcesFor({ baseUrl, body, asked: request.include });
   }
-  return JSON.stringify(withVendorRewrites({ format: to, baseUrl, model: input.model, body }));
+  body = withExtraFields({ ...input, body });
+  body = withVendorRewrites({ format: to, baseUrl, model: input.model, body });
+  return JSON.stringify(
+    withTemplateTranslatedRewrites({ templateId: input.templateId, format: to, body }),
+  );
+}
+
+/**
+ * 补上用户的附加请求体（照 magpie forwardOnce）：Anthropic 上补进来的思考预算按模型改成 adaptive；
+ * 这家这个模型不收的字段，补进来的也去掉（每种格式都去，和直通一样；不然被拒的字段每次重问都又补回来）。
+ */
+function withExtraFields(input: {
+  body: Record<string, unknown>;
+  to: ApiEndpointRequestFormat;
+  model: string;
+  refusals: ShapeRefusals;
+  extraBody?: Record<string, unknown>;
+  session?: string;
+}): Record<string, unknown> {
+  const { body, to, refusals } = input;
+  const extraBody = input.extraBody ?? {};
+  const session = input.session ?? "";
+  const added = withExtraBody({ body, extraBody, session });
+  const isUnchanged = added === body;
+  if (isUnchanged) return added;
+  let fitted = added;
+  if (to === "anthropic_messages") fitted = adaptiveThinkingAsTaken(added, input.model);
+  const refused: FieldRefused = (field) => refusals.has(field);
+  return withoutRefusedFields({ format: to, body: fitted, refused });
 }
 
 /** 这次翻出的请求带着 prompt_cache_key：Chat 与 Responses 上游才收，这家这个模型没说过不收。 */
@@ -427,17 +529,39 @@ function sendsCacheKey(input: {
   return carried && !input.refusals.has("cacheKey");
 }
 
-/** 关推理的请求：这家说过不收这种写法（Anthropic 关思考、OpenAI 的 none）的，打开推理、用最低档问。 */
+/**
+ * 关推理的请求：这家说过不收这种写法（Anthropic 关思考、OpenAI 的 none）的，打开推理、用最低档问。
+ * 只在 Chat 上给这个模型的、说过带工具不收推理力度的，关掉推理问（magpie #176）；它也说过不收 none 的不关。
+ */
 function allowedReasoning(input: {
   request: GatewayRequest;
   to: ApiEndpointRequestFormat;
   refusals: ShapeRefusals;
+  chatOnly: boolean;
 }): GatewayRequest {
   const { request, to, refusals } = input;
   const anthropic = to === "anthropic_messages";
   const off = anthropic ? request.thinkOff : openAIEffort(request) === "none";
   const shape: RefusedShape = anthropic ? "thinkingOff" : "none";
-  return off && refusals.has(shape) ? thinkingBackOn(request) : request;
+  if (off && refusals.has(shape)) return thinkingBackOn(request);
+  const turnsOff =
+    to === "openai_chat" &&
+    input.chatOnly &&
+    !off &&
+    refusals.has("toolsEffort") &&
+    !refusals.has("none");
+  return turnsOff ? reasoningOff(request) : request;
+}
+
+/** 这家有地址给这个模型的格式只有 Chat。 */
+function servesOnChatAlone(input: { endpoint: StoredApiEndpoint; model: string }): boolean {
+  const { endpoint, model } = input;
+  const formats = servedFormats({
+    templateId: endpoint.templateId,
+    baseUrls: endpoint.baseUrls,
+    model,
+  });
+  return formats.every((format) => format === "openai_chat");
 }
 
 /**
@@ -474,6 +598,7 @@ async function streamReply(input: {
   const numbers = wholeNumbersFilter({
     requestedModel: input.requestedModel,
     upstreamModel: input.upstreamModel,
+    endpoint: input.endpoint,
     emit: (event) => fence.event(event),
   });
   // 接着写时 Agent 收到的要连成一份回复：这之后的几道修补与编码器各次共用。
@@ -584,6 +709,7 @@ async function wholeReply(input: {
   const numbers = wholeNumbersFilter({
     requestedModel: input.requestedModel,
     upstreamModel: input.upstreamModel,
+    endpoint: input.endpoint,
     emit: (event) => collector.add(event),
   });
   const calls = textCallFilter({
@@ -659,9 +785,14 @@ function wholeFailureError(input: { failure: WholeFailure; endpointName: string 
 function wholeNumbersFilter(input: {
   requestedModel: string;
   upstreamModel: string;
+  endpoint: Pick<StoredApiEndpoint, "modelSettings">;
   emit: EmitEvent;
 }): ReplyFilter {
-  if (isGrokReply(input)) return wholeArgsFilter(input.emit);
+  const sentModel = upstreamModelName({
+    settings: input.endpoint.modelSettings,
+    modelId: input.upstreamModel,
+  });
+  if (isGrokReply({ ...input, sentModel })) return wholeArgsFilter(input.emit);
   return passingFilter(input.emit);
 }
 

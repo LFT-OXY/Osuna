@@ -11,6 +11,8 @@ import {
   Text,
   View,
   type PressableStateCallbackType,
+  type StyleProp,
+  type TextStyle,
   type ViewStyle,
 } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -223,6 +225,11 @@ function resolveItemLabel(input: {
 
 export interface MenuItemProps {
   description?: string;
+  /**
+   * The description is shown whole, never cut, with the icon held to the title line; disabled, only
+   * the icon and title dim, so a reason the row can't be used stays readable.
+   */
+  explainsFully?: boolean;
   onSelect?: () => void;
   disabled?: boolean;
   muted?: boolean;
@@ -253,9 +260,51 @@ export interface MenuItemProps {
   tooltip?: string;
 }
 
+/** Icon, title and description; a fully explained row dims only its icon and title when disabled. */
+function ItemBody({
+  leadingContent,
+  label,
+  labelStyle,
+  description,
+  isSettling,
+  explainsFully = false,
+  isDisabled,
+}: {
+  leadingContent: ReactNode;
+  label: ReactNode;
+  labelStyle: StyleProp<TextStyle>;
+  description: string | undefined;
+  // Pending or just succeeded: the label says so, and the description steps aside.
+  isSettling: boolean;
+  explainsFully: boolean | undefined;
+  isDisabled: boolean;
+}): ReactElement {
+  const dim = isDisabled && explainsFully ? styles.partDisabled : null;
+  const leadingStyle = explainsFully ? styles.leadingSlotOnTitle : styles.leadingSlot;
+  // 0 lets React Native wrap the text without a limit.
+  const descriptionLines = explainsFully ? 0 : 2;
+  const shownDescription = description && !isSettling ? description : null;
+  return (
+    <>
+      {leadingContent ? <View style={[leadingStyle, dim]}>{leadingContent}</View> : null}
+      <View style={styles.itemContent}>
+        <Text numberOfLines={1} style={[labelStyle, dim]}>
+          {label}
+        </Text>
+        {shownDescription !== null ? (
+          <Text numberOfLines={descriptionLines} style={styles.itemDescription}>
+            {shownDescription}
+          </Text>
+        ) : null}
+      </View>
+    </>
+  );
+}
+
 export function MenuItem({
   children,
   description,
+  explainsFully,
   onSelect,
   disabled,
   muted = false,
@@ -307,12 +356,13 @@ export function MenuItem({
     ({ pressed, hovered = false }: PressableStateCallbackType & { hovered?: boolean }) => [
       styles.item,
       active ? styles.itemActive : null,
-      isDisabled ? styles.itemDisabled : null,
+      // A fully explained row dims its icon and title itself (ItemBody), not the whole row.
+      isDisabled && !explainsFully ? styles.itemDisabled : null,
       muted && !isDisabled ? styles.itemMuted : null,
       hovered && !pressed && !isDisabled ? styles.itemHovered : null,
       pressed && !isDisabled ? styles.itemPressed : null,
     ],
-    [active, isDisabled, muted],
+    [active, explainsFully, isDisabled, muted],
   );
 
   const itemTextStyle = useMemo(
@@ -346,17 +396,15 @@ export function MenuItem({
           {selected ? <ThemedCheck size={16} uniProps={foregroundMapping} /> : null}
         </View>
       ) : null}
-      {leadingContent ? <View style={styles.leadingSlot}>{leadingContent}</View> : null}
-      <View style={styles.itemContent}>
-        <Text numberOfLines={1} style={itemTextStyle}>
-          {label}
-        </Text>
-        {description && !isPending && !isSuccess ? (
-          <Text numberOfLines={2} style={styles.itemDescription}>
-            {description}
-          </Text>
-        ) : null}
-      </View>
+      <ItemBody
+        leadingContent={leadingContent}
+        label={label}
+        labelStyle={itemTextStyle}
+        description={description}
+        isSettling={Boolean(isPending) || isSuccess}
+        explainsFully={explainsFully}
+        isDisabled={isDisabled}
+      />
       {trailingContent ? <View style={styles.trailingSlot}>{trailingContent}</View> : null}
     </Pressable>
   );
@@ -496,6 +544,9 @@ const styles = StyleSheet.create((theme) => ({
   itemDisabled: {
     opacity: 0.5,
   },
+  partDisabled: {
+    opacity: 0.5,
+  },
   itemMuted: {
     opacity: 0.72,
   },
@@ -526,6 +577,14 @@ const styles = StyleSheet.create((theme) => ({
   },
   leadingSlot: {
     width: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  // Centred on the title's line, however many lines the description below it takes.
+  leadingSlotOnTitle: {
+    width: 16,
+    height: MENU_ITEM_LINE_HEIGHT,
+    alignSelf: "flex-start",
     alignItems: "center",
     justifyContent: "center",
   },

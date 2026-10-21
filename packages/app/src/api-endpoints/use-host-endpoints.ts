@@ -1,4 +1,6 @@
-import { useCallback, useMemo, useState } from "react";
+import type { ApiEndpointNameDisplay } from "@getpaseo/protocol/api-endpoint/endpoint-names";
+import { Buffer } from "buffer";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import type {
@@ -8,6 +10,8 @@ import type {
   ApiEndpointListResponse,
   ApiEndpointSetAgentSettingsRequest,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import { DaemonConnectionError, DaemonRpcError } from "@getpaseo/client/internal/daemon-client";
+import { useToast } from "@/contexts/toast-context";
 import { useFetchQuery } from "@/data/query";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
@@ -15,18 +19,31 @@ import { confirmDialog } from "@/utils/confirm-dialog";
 import { toErrorMessage } from "@/utils/error-messages";
 import { resolveProviderLabel } from "@/utils/provider-definitions";
 import { describeUnparsableFile } from "./config-unparsable-copy";
+import { localizedTestResult, requestExtrasErrorText } from "./request-extras-copy";
+import { cooldownSettingsErrorText } from "./cooldown-settings-copy";
 import type {
   ConnectionDetectRequest,
   ConnectionDetectResult,
+  ConnectionFetchRequest,
+  ConnectionFetchResult,
+  ConnectionRevealKeyResult,
+  ConnectionIconError,
+  ConnectionIconResult,
   ConnectionSaveRequest,
   ConnectionSaveResult,
+  ConnectionTestRequest,
+  ConnectionTestResult,
 } from "./internal/connection-form-model";
+import { CONNECTION_ICON_ERROR_CODES } from "./internal/connection-form-model";
 import {
   agentsReturningToOfficial,
+  arrangeEndpoint,
   selectHostEndpointsState,
+  type EndpointArrangement,
   type HostEndpointsLoadState,
 } from "./internal/host-list";
 import type { AgentIssueAction } from "./internal/agent-settings";
+import type { LongConversationsChange } from "./internal/long-conversations-form";
 import { createUpstreamRequestId, linkAbortToCancel } from "./internal/upstream-request";
 
 // 接口是主机共用的，按哪个 provider 查列表都一样；和 Claude Code 页共用同一份缓存。
@@ -89,6 +106,15 @@ export interface UseHostEndpointsResult {
   dismissActionError: () => void;
   setEnabled: (endpoint: ApiEndpoint, enabled: boolean) => void;
   resume: (endpoint: ApiEndpoint) => void;
+  // 挪动接口顺序：列表先按新顺序排，保存失败时回到主机上的顺序，原因在 actionError 里。
+  // 搜索时带上显示着的行，上移、下移与拖动只在它们之间挪。
+  arrange: (arrangement: EndpointArrangement) => void;
+  // 改整台主机的长对话设置；返回失败原因，成功为 null。只有声明了 apiEndpointManagement 的主机认。
+  setLongConversations: (change: LongConversationsChange) => Promise<string | null>;
+  // 换掉整台主机的已禁用的模型；返回失败原因，成功为 null。只有声明了 apiEndpointManagement 的主机认。
+  setDisabledModels: (models: string[]) => Promise<string | null>;
+  // 设接口名显示方式；返回失败原因，成功为 null。
+  setEndpointNameDisplay: (display: ApiEndpointNameDisplay) => Promise<string | null>;
   // 正在改总开关或默认模型的 Agent。
   pendingAgent: string | null;
   // 改失败的原因在 actionError 里。
@@ -106,12 +132,28 @@ export interface UseHostEndpointsResult {
     request: ConnectionDetectRequest,
     signal: AbortSignal,
   ) => Promise<ConnectionDetectResult>;
+  // 读回已存 key 的原文；只有声明了 apiEndpointManagement 的主机认。
+  revealKey: (endpointId: string) => Promise<ConnectionRevealKeyResult>;
+  // 存一张图片给「自定义」接口当图标；只有声明了 apiEndpointManagement 的主机认。
+  storeIcon: (bytes: Uint8Array) => Promise<ConnectionIconResult>;
+  // 从地址所在网站取图标；同上。
+  fetchSiteIcon: (input: { baseUrl: string; name: string }) => Promise<ConnectionIconResult>;
+  // 添加窗口保存前拉模型、测试连接；只在声明了 apiEndpointManagement 的主机上用。
+  fetchModels: (
+    request: ConnectionFetchRequest,
+    signal: AbortSignal,
+  ) => Promise<ConnectionFetchResult>;
+  testConnection: (
+    request: ConnectionTestRequest,
+    signal: AbortSignal,
+  ) => Promise<ConnectionTestResult>;
 }
 
 /** 调用方已经确认主机声明了 apiEndpointGateway 能力。 */
 export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const toast = useToast();
   const client = useHostRuntimeClient(serverId);
   const isConnected = useHostRuntimeIsConnected(serverId);
   const { entries: providerEntries } = useProvidersSnapshot(serverId);
@@ -222,6 +264,94 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     [runStateChange],
   );
 
+  // 照 magpie providerArrangeSeq：后发的挪动说了算。前一次保存回来时后一次还在路上，就不刷新也不报它的错，
+  // 免得把后一次先画好的顺序刷回旧样子。
+  const arrangeSeqRef = useRef(0);
+  const arrange = useCallback(
+    ({ endpoint, place, shown }: EndpointArrangement) => {
+      if (!client) return;
+      const current = queryClient.getQueryData<ApiEndpointListResponse["payload"]>(queryKey);
+      if (!current) return;
+      const order = arrangeEndpoint({
+        endpoints: current.endpoints,
+        id: endpoint.id,
+        place,
+        shown,
+      });
+      if (!order) return;
+      const seq = ++arrangeSeqRef.current;
+      // 先按新顺序画出来（照 magpie）；进行中的刷新不能把它盖回去。
+      void queryClient.cancelQueries({ queryKey }, { revert: false });
+      const byId = new Map(current.endpoints.map((entry) => [entry.id, entry]));
+      queryClient.setQueryData<ApiEndpointListResponse["payload"]>(queryKey, {
+        ...current,
+        endpoints: order.flatMap((id) => byId.get(id) ?? []),
+      });
+      setActionFailure(null);
+      void (async () => {
+        let failure: ActionFailure | null = null;
+        try {
+          const result = await client.apiEndpointSetOrder({ endpointIds: order });
+          if (result.error) {
+            failure = { code: result.error.code, message: describeError(result.error) };
+          }
+        } catch (error) {
+          failure = { code: null, message: toErrorMessage(error) };
+        }
+        if (seq !== arrangeSeqRef.current) return;
+        if (failure) setActionFailure(failure);
+        else toast.show(t("settings.apiEndpoints.order.saved"), { variant: "success" });
+        await refresh();
+      })();
+    },
+    [client, describeError, queryClient, queryKey, refresh, t, toast],
+  );
+
+  const setDisabledModels = useCallback(
+    async (models: string[]): Promise<string | null> => {
+      if (!client) return t("workspace.terminal.hostDisconnected");
+      try {
+        const result = await client.apiEndpointSetDisabledModels({ models });
+        if (result.error) return describeError(result.error);
+        await refresh();
+        return null;
+      } catch (error) {
+        return requestFailureMessage(error);
+      }
+    },
+    [client, describeError, refresh, t],
+  );
+
+  const setEndpointNameDisplay = useCallback(
+    async (display: ApiEndpointNameDisplay): Promise<string | null> => {
+      if (!client) return t("workspace.terminal.hostDisconnected");
+      try {
+        const result = await client.apiEndpointSetEndpointNameDisplay({ display });
+        if (result.error) return describeError(result.error);
+        await refresh();
+        return null;
+      } catch (error) {
+        return requestFailureMessage(error);
+      }
+    },
+    [client, describeError, refresh, t],
+  );
+
+  const setLongConversations = useCallback(
+    async (change: LongConversationsChange): Promise<string | null> => {
+      if (!client) return t("workspace.terminal.hostDisconnected");
+      try {
+        const result = await client.apiEndpointSetLongConversations(change);
+        if (result.error) return describeError(result.error);
+        await refresh();
+        return null;
+      } catch (error) {
+        return requestFailureMessage(error);
+      }
+    },
+    [client, describeError, refresh, t],
+  );
+
   const setAgentSettings = useCallback(
     (provider: string, settings: AgentSettingsChange) => {
       if (!client) return;
@@ -276,7 +406,13 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
       if (!client) return { status: "failed", message: t("workspace.terminal.hostDisconnected") };
       try {
         const result = await client.apiEndpointSave({ provider: LIST_PROVIDER, ...request });
-        if (result.error) return { status: "failed", message: result.error.message };
+        if (result.error) {
+          const message =
+            requestExtrasErrorText(t, result.error) ??
+            cooldownSettingsErrorText(t, result.error) ??
+            result.error.message;
+          return { status: "failed", message };
+        }
         if (!result.endpoint) throw new Error("The host returned neither an endpoint nor an error");
         return { status: "saved", endpointId: result.endpoint.id };
       } catch (error) {
@@ -300,7 +436,7 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
         const response = await client.apiEndpointDetectFormats(request, requestId);
         if (signal.aborted || response.error?.code === "cancelled") return { status: "cancelled" };
         if (response.error) return { status: "failed", message: response.error.message };
-        return { status: "done", results: response.results };
+        return { status: "done", results: response.results, models: response.models ?? null };
       } catch (error) {
         if (signal.aborted) return { status: "cancelled" };
         return { status: "failed", message: toErrorMessage(error) };
@@ -309,6 +445,111 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
       }
     },
     [client, t],
+  );
+
+  const fetchModels = useCallback(
+    async (
+      request: ConnectionFetchRequest,
+      signal: AbortSignal,
+    ): Promise<ConnectionFetchResult> => {
+      if (!client) return { status: "failed", message: t("workspace.terminal.hostDisconnected") };
+      const requestId = createUpstreamRequestId();
+      const unlink = linkAbortToCancel(signal, () => client.apiEndpointCancel(requestId));
+      try {
+        const response = await client.apiEndpointFetchModels(
+          { provider: LIST_PROVIDER, ...request },
+          requestId,
+        );
+        if (signal.aborted || response.error?.code === "cancelled") return { status: "cancelled" };
+        if (response.error) {
+          const message = requestExtrasErrorText(t, response.error) ?? response.error.message;
+          return { status: "failed", message };
+        }
+        return { status: "done", models: response.models };
+      } catch (error) {
+        if (signal.aborted) return { status: "cancelled" };
+        return { status: "failed", message: toErrorMessage(error) };
+      } finally {
+        unlink();
+      }
+    },
+    [client, t],
+  );
+
+  const testConnection = useCallback(
+    async (request: ConnectionTestRequest, signal: AbortSignal): Promise<ConnectionTestResult> => {
+      if (!client) return { status: "failed", message: t("workspace.terminal.hostDisconnected") };
+      const requestId = createUpstreamRequestId();
+      const unlink = linkAbortToCancel(signal, () => client.apiEndpointCancel(requestId));
+      try {
+        const response = await client.apiEndpointTestConnection(
+          { provider: LIST_PROVIDER, ...request },
+          requestId,
+        );
+        if (signal.aborted || response.error?.code === "cancelled") return { status: "cancelled" };
+        if (response.error) return { status: "failed", message: response.error.message };
+        if (!response.result) throw new Error("The host returned neither a result nor an error");
+        return { status: "done", result: localizedTestResult(t, response.result) };
+      } catch (error) {
+        if (signal.aborted) return { status: "cancelled" };
+        return { status: "failed", message: toErrorMessage(error) };
+      } finally {
+        unlink();
+      }
+    },
+    [client, t],
+  );
+
+  const revealKey = useCallback(
+    async (endpointId: string): Promise<ConnectionRevealKeyResult> => {
+      if (!client) return { status: "failed", message: t("workspace.terminal.hostDisconnected") };
+      try {
+        const result = await client.apiEndpointRevealKey(endpointId);
+        if (result.error) return { status: "failed", message: result.error.message };
+        return { status: "revealed", apiKey: result.apiKey };
+      } catch (error) {
+        return { status: "failed", message: toErrorMessage(error) };
+      }
+    },
+    [client, t],
+  );
+
+  // 存图片与从网站取图标的回复一样：主机给的图标值，或失败原因。
+  const iconRequest = useCallback(
+    async (
+      send: (
+        hostClient: HostClient,
+      ) => Promise<{ icon: string | null; error: ApiEndpointError | null }>,
+    ): Promise<ConnectionIconResult> => {
+      if (!client) {
+        const message = t("workspace.terminal.hostDisconnected");
+        return { status: "failed", error: { code: "failed", message } };
+      }
+      try {
+        const result = await send(client);
+        if (result.error) return { status: "failed", error: iconErrorOf(result.error) };
+        if (result.icon === null) {
+          const message = t("common.errors.unableToSave");
+          return { status: "failed", error: { code: "failed", message } };
+        }
+        return { status: "stored", icon: result.icon };
+      } catch (error) {
+        return { status: "failed", error: { code: "failed", message: toErrorMessage(error) } };
+      }
+    },
+    [client, t],
+  );
+  const storeIcon = useCallback(
+    (bytes: Uint8Array) =>
+      iconRequest((hostClient) =>
+        hostClient.apiEndpointStoreIcon({ data: Buffer.from(bytes).toString("base64") }),
+      ),
+    [iconRequest],
+  );
+  const fetchSiteIcon = useCallback(
+    (input: { baseUrl: string; name: string }) =>
+      iconRequest((hostClient) => hostClient.apiEndpointFetchSiteIcon(input)),
+    [iconRequest],
   );
 
   const dismissActionError = useCallback(() => setActionFailure(null), []);
@@ -322,6 +563,10 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     dismissActionError,
     setEnabled,
     resume,
+    arrange,
+    setLongConversations,
+    setDisabledModels,
+    setEndpointNameDisplay,
     pendingAgent,
     setAgentSettings,
     lastConnection,
@@ -331,10 +576,29 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     dismissIssueActionError,
     save,
     detect,
+    revealKey,
+    storeIcon,
+    fetchSiteIcon,
+    fetchModels,
+    testConnection,
   };
 }
 
 type HostClient = NonNullable<ReturnType<typeof useHostRuntimeClient>>;
+
+/** 请求本身没成：连接断了或超时（DaemonConnectionError）、主机回了 RPC 错误（DaemonRpcError）。别的照抛。 */
+function requestFailureMessage(error: unknown): string {
+  if (error instanceof DaemonConnectionError || error instanceof DaemonRpcError) {
+    return toErrorMessage(error);
+  }
+  throw error;
+}
+
+/** daemon 的错误码认得的按界面语言说明，别的照原文显示。 */
+function iconErrorOf(error: ApiEndpointError): ConnectionIconError {
+  const known = CONNECTION_ICON_ERROR_CODES.find((code) => code === error.code);
+  return { code: known ?? "failed", message: error.message };
+}
 
 /**
  * 重新应用 = 开着、按当前设置重写；保留当前设置是单独的 RPC（「模型被换掉」时带上它的 code）；

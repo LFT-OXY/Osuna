@@ -143,4 +143,18 @@ describe("models.dev facts", () => {
     expect(ask(["other.example", "api.deepseek.com"], "deepseek-reasoner")).toBe(false);
     expect(ask(["other.example"], "deepseek-reasoner")).toBeUndefined();
   });
+
+  test("a model's name is the one most providers give it, filled in below the endpoint's own facts", () => {
+    const index = indexModelsDev({
+      a: { models: { "glm-5": { id: "glm-5", name: "GLM-5" } } },
+      b: { models: { "zai/glm-5": { id: "zai/glm-5", name: "GLM 5" } } },
+      c: { models: { "glm-5": { id: "glm-5", name: "GLM-5" }, "no-name": { id: "no-name" } } },
+    });
+    expect(lookupModelFacts(index, "glm-5").name).toBe("GLM-5");
+    expect(lookupModelFacts(index, "no-name").name).toBeUndefined();
+    expect(mergeModelFacts({ context: 1 }, { name: "GLM-5" })).toEqual({
+      name: "GLM-5",
+      context: 1,
+    });
+  });
 });

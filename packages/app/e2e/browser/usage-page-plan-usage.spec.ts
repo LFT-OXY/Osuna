@@ -110,6 +110,72 @@ test.describe("plan usage on the usage page", () => {
     expect(beyondTheHostList).toEqual([]);
   });
 
+  test("a vendor that reports problems is said on its subscription's card, with a link to its status page", async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    const usageFixture = await installUsageReportsFixture(page, {
+      lists: [
+        [
+          report(
+            { sourceId: "claude", sourceLabel: "Claude" },
+            { planLabel: "Max 20x", windows: [{ id: "session", label: "Session", usedPct: 7 }] },
+          ),
+          report(
+            { sourceId: "codex", sourceLabel: "Codex" },
+            { planLabel: "Pro 20x", windows: [{ id: "weekly", label: "Weekly", usedPct: 29 }] },
+          ),
+        ],
+      ],
+      vendorStatus: {
+        autoUpdate: true,
+        vendors: [
+          {
+            vendor: "anthropic",
+            name: "Anthropic",
+            page: "https://status.claude.com",
+            isLinkOnly: false,
+            level: "partial",
+            parts: [{ name: "Claude Code", status: "partial_outage" }],
+            incidents: [{ name: "Elevated errors on Claude Code", impact: "major", url: null }],
+            readAt: "2026-10-21T08:00:00.000Z",
+            error: null,
+          },
+          {
+            vendor: "openai",
+            name: "OpenAI",
+            page: "https://status.openai.com",
+            isLinkOnly: false,
+            level: "ok",
+            parts: [],
+            incidents: [],
+            readAt: "2026-10-21T08:00:00.000Z",
+            error: null,
+          },
+        ],
+        endpointVendors: {},
+        error: null,
+      },
+    });
+    await gotoAppShell(page);
+    await openUsagePageFromShell(page);
+    const card = page.getByTestId("usage-plan-usage-card");
+    await expect(card.getByText("Claude", { exact: true })).toBeVisible({ timeout: 10_000 });
+
+    // 只问这两个订阅对上的厂商；Anthropic 报中断，OpenAI 正常不提示。
+    await expect
+      .poll(() => usageFixture.vendorStatusRequests().at(-1))
+      .toEqual(["anthropic", "openai"]);
+    const notices = card.getByTestId("usage-plan-vendor-status");
+    await expect(notices).toHaveCount(1);
+    await expect(notices.getByTestId("usage-plan-vendor-status-text")).toHaveText(
+      "Anthropic reports problems",
+    );
+    await expect(notices).toContainText("Claude Code: partial outage");
+    await expect(notices).toContainText("Elevated errors on Claude Code");
+    await expect(notices.getByTestId("usage-plan-vendor-status-link")).toHaveText("Status page ↗");
+  });
+
   test("refresh invalidates and refetches usage", async ({ page }) => {
     test.setTimeout(120_000);
     function glm(usedPct: number): UsageReportEntry {

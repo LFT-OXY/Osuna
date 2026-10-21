@@ -5,8 +5,11 @@ import {
   codexEndpointEntries,
   codexModelEntry,
   codexReasoningLevels,
+  namedCodexEndpointEntries,
+  type CodexEndpointListing,
 } from "./codex-model-catalog.js";
-import type { ModelFacts } from "./model-facts.js";
+import type { EndpointModelFacts, ModelFacts } from "./model-facts.js";
+import type { ApiEndpointLongConversations } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { ApiEndpointState, StoredApiEndpoint } from "./store.js";
 
 function endpoint(input: {
@@ -38,6 +41,12 @@ const STATE: ApiEndpointState = {
   },
 };
 
+/** 服务按模型设置、清单与 models.dev 定下的显示名在 facts.name；这里拿已选模型记下的 label 当它。 */
+function labelled(owner: StoredApiEndpoint, modelId: string): ModelFacts {
+  const label = owner.models.find((model) => model.id === modelId)?.label;
+  return label === undefined ? {} : { name: label };
+}
+
 interface CatalogEntry {
   slug: string;
   display_name: string;
@@ -56,7 +65,7 @@ function entries(
   const catalog = buildCodexModelCatalog({
     state,
     reasoningEffort: options.reasoningEffort ?? null,
-    factsFor: options.facts ?? (() => ({})),
+    factsFor: options.facts ?? labelled,
     marksAgentsV1: options.marksAgentsV1 ?? false,
   });
   return (JSON.parse(catalog) as { models: CatalogEntry[] }).models;
@@ -170,7 +179,7 @@ describe("buildCodexModelCatalog", () => {
 });
 
 describe("codexModelEntry", () => {
-  function entry(facts: ModelFacts, reasoningEffort: string | null = null) {
+  function entry(facts: EndpointModelFacts, reasoningEffort: string | null = null) {
     return codexModelEntry({
       slug: "relay/m",
       displayName: "M",
@@ -193,7 +202,8 @@ describe("codexModelEntry", () => {
       display_name: "M",
       visibility: "hide",
       priority: 3,
-      context_window: 1_000_000,
+      context_window: 272_000,
+      max_context_window: 1_000_000,
       input_modalities: ["text", "image"],
       supported_reasoning_levels: [
         { effort: "low", description: "Fast responses with lighter reasoning" },
@@ -205,8 +215,48 @@ describe("codexModelEntry", () => {
     });
   });
 
-  it("a known window is the whole window: no larger maximum is claimed", () => {
-    expect(entry({ context: 1_000_000 })).not.toHaveProperty("max_context_window");
+  it("a known window up to 272K is told whole, with no larger maximum claimed", () => {
+    expect(entry({ context: 262_144 })).toMatchObject({ context_window: 262_144 });
+    expect(entry({ context: 262_144 })).not.toHaveProperty("max_context_window");
+  });
+
+  it("a larger window is told as 272K unless the user typed it; a compaction threshold comes first (magpie Working, CompactFor)", () => {
+    const told = (facts: Parameters<typeof entry>[0]) => {
+      const written = entry(facts);
+      return [written.context_window, written.max_context_window];
+    };
+    expect(told({ context: 1_000_000 })).toEqual([272_000, 1_000_000]);
+    expect(told({ context: 1_000_000, contextSet: true })).toEqual([1_000_000, undefined]);
+    expect(told({ context: 1_000_000, contextSet: true, compact: 500_000 })).toEqual([
+      500_000, 1_000_000,
+    ]);
+  });
+
+  it("the host's long conversation settings: Full window tells the whole window, a host Compact at replaces 272K and a typed window (magpie Settings.Working, CompactFor)", () => {
+    const told = (facts: EndpointModelFacts, longConversations: ApiEndpointLongConversations) => {
+      const written = codexModelEntry({
+        slug: "relay/m",
+        displayName: "M",
+        visibility: "hide",
+        priority: 1,
+        facts,
+        reasoningEffort: null,
+        marksAgentsV1: false,
+        longConversations,
+      });
+      return [written.context_window, written.max_context_window];
+    };
+    expect(told({ context: 1_000_000 }, { fullContext: true })).toEqual([1_000_000, undefined]);
+    // 「完整窗口」也让不过模型自己的压缩阈值。
+    expect(told({ context: 1_000_000, compact: 300_000 }, { fullContext: true })).toEqual([
+      300_000, 1_000_000,
+    ]);
+    expect(told({ context: 1_000_000 }, { compactAt: 400_000 })).toEqual([400_000, 1_000_000]);
+    // 用户打了全局压缩阈值时，手填的窗口也按它压缩（magpie CompactFor 只在 CompactAt 为 0 时给整个窗口）。
+    expect(told({ context: 1_000_000, contextSet: true }, { compactAt: 400_000 })).toEqual([
+      400_000, 1_000_000,
+    ]);
+    expect(told({ context: 262_144 }, { compactAt: 128_000 })).toEqual([128_000, 262_144]);
   });
 
   it("says text only for a model known not to see images", () => {
@@ -269,16 +319,23 @@ describe("codexDefaultLevel", () => {
 });
 
 describe("codexEndpointEntries", () => {
+  // 一直显示、旁边没有 ChatGPT 自带模型时的显示名。
+  function named(listing: CodexEndpointListing) {
+    return namedCodexEndpointEntries({ listing, display: "always", ownNames: [] });
+  }
+
   it("lists every on endpoint's picked models as <slug>/<model> named <model> (<endpoint name>), in the chat model picker's order, with what is known of them", () => {
-    const listed = codexEndpointEntries({
-      state: STATE,
-      reasoningEffort: "high",
-      marksAgentsV1: false,
-      factsFor: (owner, modelId) =>
-        owner.slug === "relay-b" && modelId === "glm-4.6"
-          ? { context: 200_000, efforts: ["low", "high"], images: false }
-          : {},
-    });
+    const listed = named(
+      codexEndpointEntries({
+        state: STATE,
+        reasoningEffort: "high",
+        marksAgentsV1: false,
+        factsFor: (owner, modelId) =>
+          owner.slug === "relay-b" && modelId === "glm-4.6"
+            ? { context: 200_000, efforts: ["low", "high"], images: false }
+            : labelled(owner, modelId),
+      }),
+    );
     expect(
       listed.map((entry) => [entry.slug, entry.display_name, entry.visibility, entry.priority]),
     ).toEqual([
@@ -295,21 +352,49 @@ describe("codexEndpointEntries", () => {
   });
 
   it("tells apart the same model picked on two endpoints", () => {
-    const listed = codexEndpointEntries({
-      state: {
-        ...STATE,
-        endpoints: [
-          endpoint({ slug: "relay-a", models: [{ id: "gpt-6-sol" }] }),
-          endpoint({ slug: "relay-b", models: [{ id: "gpt-6-sol" }] }),
-        ],
-      },
-      reasoningEffort: null,
-      marksAgentsV1: false,
-      factsFor: () => ({}),
-    });
+    const listed = named(
+      codexEndpointEntries({
+        state: {
+          ...STATE,
+          endpoints: [
+            endpoint({ slug: "relay-a", models: [{ id: "gpt-6-sol" }] }),
+            endpoint({ slug: "relay-b", models: [{ id: "gpt-6-sol" }] }),
+          ],
+        },
+        reasoningEffort: null,
+        marksAgentsV1: false,
+        factsFor: () => ({}),
+      }),
+    );
     expect(listed.map((entry) => entry.display_name)).toEqual([
       "gpt-6-sol (RELAY-A)",
       "gpt-6-sol (RELAY-B)",
+    ]);
+  });
+
+  it("shows the model id for two models of one endpoint that would be called the same (ticket 13)", () => {
+    const listed = named(
+      codexEndpointEntries({
+        state: {
+          ...STATE,
+          endpoints: [
+            endpoint({
+              slug: "relay-a",
+              models: [
+                { id: "glm-5", label: "GLM" },
+                { id: "glm-5-air", label: "glm" },
+              ],
+            }),
+          ],
+        },
+        reasoningEffort: null,
+        marksAgentsV1: false,
+        factsFor: labelled,
+      }),
+    );
+    expect(listed.map((entry) => entry.display_name)).toEqual([
+      "glm-5 (RELAY-A)",
+      "glm-5-air (RELAY-A)",
     ]);
   });
 });

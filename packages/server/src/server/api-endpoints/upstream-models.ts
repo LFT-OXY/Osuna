@@ -11,12 +11,23 @@ import {
   isRecord,
   parseJson,
   redactKey,
+  type Secrets,
 } from "./upstream-http.js";
+import { signedHeaders } from "./gateway/refusals.js";
+import {
+  keyHeadersAt,
+  secretsOf,
+  unsendableHeader,
+  unsendableHeaderMessage,
+  type RequestExtras,
+} from "./request-extras.js";
+import { upstreamFetch } from "./insecure-tls.js";
+import { templateModelListUrls } from "./templates.js";
 
 /*
  * 从第三方接口列出模型。daemon 在主机上发请求，key 不经过客户端。
  * 先试 <base>/v1/models，失败再试 <base>/models；兼容 OpenAI/Anthropic 的 data[] 和 Codex 的 models[].slug。
- * Codex 的 base 通常已经以 /v1 结尾，第一次会落空，第二次命中。
+ * Codex 的 base 通常已经以 /v1 结尾，第一次会落空，第二次命中。Azure 模板先问部署名、再问 /models（templateModelListUrls）。
  */
 
 export type UpstreamFailureCode =
@@ -24,11 +35,14 @@ export type UpstreamFailureCode =
   | "upstream_unreachable"
   | "upstream_timeout"
   | "models_unsupported"
-  | "cancelled";
+  | "cancelled"
+  // 这家的请求头发不出去（params.name）。
+  | "invalid_header";
 
 export interface UpstreamFailure {
   code: UpstreamFailureCode;
   message: string;
+  params?: Record<string, string>;
   // 上游回了非 404 / 405 的错误状态码时带上，自动检测据此认出 key 无效。
   status?: number;
 }
@@ -54,21 +68,42 @@ const MAX_PAGES = 20;
 export async function fetchUpstreamModels(input: {
   provider: ApiEndpointProvider;
   baseUrl: string;
-  apiKey: string;
+  // 没 key 的接口为 null，不带认证头。
+  apiKey: string | null;
+  // 这家从哪个模板加的：Bedrock、Azure 的认证头与 Azure 列模型的地址由它定；「自定义」的没有。
+  templateId: string | undefined;
+  // 这家的请求头与 key 放哪个头（request-extras.ts）。
+  extras: RequestExtras;
   // 调用方取消（客户端取消或断开）。
   signal: AbortSignal;
   timeoutMs: number;
 }): Promise<UpstreamModelsResult> {
+  const unsendable = unsendableHeader(input.extras);
+  if (unsendable !== null) {
+    const message = unsendableHeaderMessage(unsendable);
+    return { ok: false, error: { code: "invalid_header", message, params: { ...unsendable } } };
+  }
   const timeout = AbortSignal.timeout(input.timeoutMs);
   const signal = AbortSignal.any([input.signal, timeout]);
   const base = input.baseUrl.trim().replace(/\/+$/, "");
-  const headers = buildHeaders(input.provider, input.apiKey);
-  const redact = (text: string) => redactKey(text, input.apiKey);
+  const headers = buildHeaders(input);
+  const secrets = secretsOf(input);
+  const redact = (text: string) => redactKey(text, secrets);
+  const urls = templateModelListUrls({ templateId: input.templateId, baseUrl: base }) ?? [
+    `${base}/v1/models`,
+    `${base}/models`,
+  ];
 
   const attempts: FailedAttempt[] = [];
-  for (const url of [`${base}/v1/models`, `${base}/models`]) {
+  for (const url of urls) {
     try {
-      const attempt = await listModels({ url, headers, signal, apiKey: input.apiKey });
+      const attempt = await listModels({
+        url,
+        headers,
+        signal,
+        secrets,
+        uncheckedHosts: input.extras.uncheckedHosts,
+      });
       if (attempt.kind === "ok") return { ok: true, models: attempt.models };
       attempts.push(attempt);
     } catch (error) {
@@ -90,37 +125,46 @@ export async function fetchUpstreamModels(input: {
   return { ok: false, error: summarize(attempts, redact) };
 }
 
-function buildHeaders(provider: ApiEndpointProvider, apiKey: string): Record<string, string> {
-  const headers: Record<string, string> = {
-    accept: "application/json",
-    authorization: `Bearer ${apiKey}`,
-  };
-  // Claude 接口可能是 Anthropic 兼容网关，只认 x-api-key；两种都带上。
-  if (provider === "claude") {
-    headers["x-api-key"] = apiKey;
-    headers["anthropic-version"] = ANTHROPIC_VERSION;
-  }
-  return headers;
+function buildHeaders(input: {
+  provider: ApiEndpointProvider;
+  baseUrl: string;
+  apiKey: string | null;
+  templateId: string | undefined;
+  extras: RequestExtras;
+}): Record<string, string> {
+  const anthropic = input.provider === "claude";
+  const format = anthropic ? "anthropic_messages" : "openai_chat";
+  // Claude 接口可能是 Anthropic 兼容网关，只认 x-api-key；两种都带上，用户选了只放一个的照用户的。
+  const keyHeader = input.extras.keyHeader;
+  const keys = keyHeadersAt({ ...input, format, keyHeader, anthropicDefault: "both" });
+  const headers: Record<string, string> = { accept: "application/json" };
+  if (anthropic) headers["anthropic-version"] = ANTHROPIC_VERSION;
+  return signedHeaders({ headers, apiKey: input.apiKey, keys, extras: input.extras });
 }
 
 async function listModels(input: {
   url: string;
   headers: Record<string, string>;
   signal: AbortSignal;
-  apiKey: string;
+  secrets: Secrets;
+  uncheckedHosts: readonly string[];
 }): Promise<Attempt> {
   const { url, headers, signal } = input;
   const models: ListedModel[] = [];
   let pageUrl = url;
   for (let page = 0; page < MAX_PAGES; page += 1) {
-    const response = await fetch(pageUrl, { headers, signal });
+    const response = await upstreamFetch({
+      url: pageUrl,
+      init: { headers, signal },
+      uncheckedHosts: input.uncheckedHosts,
+    });
     const text = await response.text();
     if (!response.ok) {
       return {
         kind: "http",
         url,
         status: response.status,
-        detail: extractErrorDetail(text, input.apiKey),
+        detail: extractErrorDetail(text, input.secrets),
       };
     }
     const body = parseJson(text);

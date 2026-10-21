@@ -1,4 +1,6 @@
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import pino from "pino";
@@ -6,6 +8,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import type { AgentModelDefinition } from "@getpaseo/protocol/agent-types";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
+import type { FetchSite } from "../api-endpoints/site-icon.js";
 
 // 升级前的 endpoints.json：接口按 Agent 各存一份，每个 Agent 有一家「当前启用」。
 const LEGACY_ENDPOINTS = {
@@ -79,11 +82,16 @@ interface Harness {
 
 const tempRoots: string[] = [];
 const harnesses: Harness[] = [];
+const servers: Server[] = [];
 
 afterEach(async () => {
   for (const harness of harnesses.splice(0)) {
     await harness.client.close();
     await harness.daemon.close();
+  }
+  for (const server of servers.splice(0)) {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
   }
   await Promise.all(tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
@@ -92,7 +100,11 @@ afterEach(async () => {
  * 起一个隔离 daemon；`files` 是启动前就放进 $PASEO_HOME/api-endpoints/ 的文件。
  * 给了 `reuse` 就沿用那次的 home（先关掉它的 daemon），模拟重启。
  */
-async function start(files: Record<string, string> = {}, reuse?: Harness): Promise<Harness> {
+async function start(
+  files: Record<string, string> = {},
+  reuse?: Harness,
+  services: { fetchSite?: FetchSite } = {},
+): Promise<Harness> {
   let root: string;
   if (reuse) {
     await reuse.client.close();
@@ -122,7 +134,7 @@ async function start(files: Record<string, string> = {}, reuse?: Harness): Promi
     // home 在 tempRoots 里统一删；重启要沿用它。
     cleanup: false,
     logger,
-    apiEndpoints: { env: { CLAUDE_CONFIG_DIR: claudeConfigDir }, homeDir: root },
+    apiEndpoints: { env: { CLAUDE_CONFIG_DIR: claudeConfigDir }, homeDir: root, ...services },
   });
   const client = new DaemonClient({
     url: `ws://127.0.0.1:${daemon.port}/ws`,
@@ -258,8 +270,8 @@ describe("old per-agent endpoints are read as host-wide endpoints", () => {
   });
 });
 
-describe("the identifier and the keys stay inside the daemon", () => {
-  test("no response carries the identifier; keys.json is private", async () => {
+describe("the keys stay inside the daemon", () => {
+  test("no response carries a key; keys.json is private", async () => {
     const { client, daemon } = await startWithLegacyFile();
     const saved = await client.apiEndpointSave({
       provider: "claude",
@@ -272,8 +284,6 @@ describe("the identifier and the keys stay inside the daemon", () => {
     expect(JSON.stringify(saved)).not.toContain("sk-e");
 
     const listed = JSON.stringify(await client.apiEndpointList("claude"));
-    expect(listed).not.toContain("slug");
-    expect(listed).not.toContain("relay-a");
     expect(listed).not.toContain("sk-a");
 
     const keysPath = path.join(daemon.paseoHome, "api-endpoints", "keys.json");
@@ -389,6 +399,115 @@ test("turning the switch off is never refused, even with a default model that is
   });
 
   expect(off).toMatchObject({ agent: { enabled: false, defaultModelId: "m1" }, error: null });
+});
+
+describe("the endpoint order", () => {
+  async function names(client: DaemonClient): Promise<string[]> {
+    return (await client.apiEndpointList("claude")).endpoints.map((endpoint) => endpoint.name);
+  }
+
+  test("is rewritten as a whole, survives a restart, and a new endpoint goes last", async () => {
+    const harness = await start();
+    const a = await saveEndpoint(harness.client, "A", ["a1"]);
+    const b = await saveEndpoint(harness.client, "B", ["b1"]);
+    const c = await saveEndpoint(harness.client, "C", ["c1"]);
+
+    expect(await harness.client.apiEndpointSetOrder({ endpointIds: [c, a, b] })).toMatchObject({
+      error: null,
+    });
+    expect(await names(harness.client)).toEqual(["C", "A", "B"]);
+
+    const restarted = await start({}, harness);
+    expect(await names(restarted.client)).toEqual(["C", "A", "B"]);
+    await saveEndpoint(restarted.client, "D", ["d1"]);
+    expect(await names(restarted.client)).toEqual(["C", "A", "B", "D"]);
+  });
+
+  test("the ids left out follow the ones named, in the order they had (as magpie)", async () => {
+    const { client } = await start();
+    const a = await saveEndpoint(client, "A", ["a1"]);
+    await saveEndpoint(client, "B", ["b1"]);
+    const c = await saveEndpoint(client, "C", ["c1"]);
+
+    expect((await client.apiEndpointSetOrder({ endpointIds: [c, a] })).error).toBeNull();
+
+    expect(await names(client)).toEqual(["C", "A", "B"]);
+  });
+
+  test("an id named twice or not an endpoint is refused and the order stays", async () => {
+    const { client } = await start();
+    const a = await saveEndpoint(client, "A", ["a1"]);
+    const b = await saveEndpoint(client, "B", ["b1"]);
+
+    for (const endpointIds of [
+      [b, a, b],
+      [b, "ep_missing", a],
+    ]) {
+      const refused = await client.apiEndpointSetOrder({ endpointIds });
+      expect(refused.error?.code).toBe("invalid_input");
+    }
+    expect(await names(client)).toEqual(["A", "B"]);
+  });
+
+  test("an endpoint switched off and on again comes back to its place", async () => {
+    const { client } = await start();
+    const a = await saveEndpoint(client, "A", ["a1"]);
+    const b = await saveEndpoint(client, "B", ["b1"]);
+    const c = await saveEndpoint(client, "C", ["c1"]);
+    await client.apiEndpointSetOrder({ endpointIds: [b, c, a] });
+
+    await client.apiEndpointSetEndpointState({ endpointId: c, enabled: false });
+    expect(await names(client)).toEqual(["B", "C", "A"]);
+    await client.apiEndpointSetEndpointState({ endpointId: c, enabled: true });
+
+    expect(await names(client)).toEqual(["B", "C", "A"]);
+  });
+
+  test("turning the switch on without a default model picks the first model of the first endpoint in the order", async () => {
+    const { client, settingsPath } = await start();
+    await saveEndpoint(client, "A", ["a1"]);
+    const b = await saveEndpoint(client, "B", ["b1"]);
+    await client.apiEndpointSetOrder({ endpointIds: [b] });
+
+    const enabled = await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: true });
+
+    expect(enabled.agent).toEqual({ enabled: true, defaultModelId: "b1" });
+    expect(JSON.parse(await readFile(settingsPath, "utf8")).model).toBe("b1");
+  });
+});
+
+describe("each row in the list", () => {
+  test("carries its key mask, none without a key, and the providers whose default model goes there first", async () => {
+    const { client } = await start();
+    const a = await saveEndpoint(client, "Alphabet", ["glm-4.6"]);
+    const b = await saveEndpoint(client, "Betamax", ["glm-4.6"]);
+    const local = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Local",
+      baseUrls: [{ format: "anthropic_messages", url: "http://127.0.0.1:11434" }],
+      models: [{ id: "qwen3" }],
+    });
+    await client.apiEndpointSetAgentSettings({
+      provider: "claude",
+      enabled: true,
+      defaultModelId: "glm-4.6",
+    });
+    const rows = async () =>
+      new Map((await client.apiEndpointList("claude")).endpoints.map((row) => [row.id, row]));
+
+    const listed = await rows();
+    expect(listed.get(a)).toMatchObject({
+      slug: "alphabet",
+      apiKeyMask: "sk-A…abet",
+      defaultModelProviders: ["claude"],
+    });
+    expect(listed.get(b)).toMatchObject({ apiKeyMask: "sk-B…amax", defaultModelProviders: [] });
+    expect(listed.get(local.endpoint?.id ?? "")?.apiKeyMask).toBeUndefined();
+
+    // 第一家关掉，光秃秃的名字归第二家。
+    await client.apiEndpointSetEndpointState({ endpointId: a, enabled: false });
+    expect((await rows()).get(b)?.defaultModelProviders).toEqual(["claude"]);
+  });
 });
 
 describe("a default model that goes missing", () => {
@@ -819,5 +938,1217 @@ describe("Claude Code's WebSearch follows the endpoints that search the web by t
 
     const settings = JSON.parse(await readFile(settingsPath, "utf8"));
     expect(settings.permissions.deny).toEqual(["WebSearch"]);
+  });
+});
+
+interface RecordingUpstream {
+  url: string;
+  requests: { method: string; url: string; headers: IncomingHttpHeaders }[];
+}
+
+/** 本机假上游，像不要 key 的本机模型服务：谁来都答，列模型给 local-1，对话回一句 ok。记下每个请求的头。 */
+/** `listed` 是它 GET 模型清单时给的模型 id。 */
+async function startRecordingUpstream(listed = ["local-1"]): Promise<RecordingUpstream> {
+  const upstream: RecordingUpstream = { url: "", requests: [] };
+  const server = createServer((request, response) => {
+    request.resume();
+    request.on("end", () => {
+      upstream.requests.push({
+        method: request.method ?? "",
+        url: request.url ?? "",
+        headers: request.headers,
+      });
+      response.writeHead(200, { "content-type": "application/json" });
+      if (request.method === "GET") {
+        response.end(JSON.stringify({ data: listed.map((id) => ({ id })) }));
+        return;
+      }
+      response.end(
+        JSON.stringify({
+          type: "message",
+          role: "assistant",
+          content: [{ type: "text", text: "ok" }],
+          stop_reason: "end_turn",
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+      );
+    });
+  });
+  servers.push(server);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  upstream.url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  return upstream;
+}
+
+/** 这家拉一次模型、测一次连接，再扮演 Claude Code 经中转站问一句；返回上游收到的 key 头（之前收到的不算）。 */
+async function askThroughEveryPath(input: {
+  harness: Harness;
+  upstream: RecordingUpstream;
+  endpointId: string;
+}): Promise<{ authorization?: string; "x-api-key"?: string | string[] }[]> {
+  const { harness, upstream, endpointId } = input;
+  const { client, daemon } = harness;
+  upstream.requests.length = 0;
+  const fetched = await client.apiEndpointFetchModels({
+    provider: "claude",
+    endpointId,
+    baseUrl: upstream.url,
+    format: "anthropic_messages",
+  });
+  expect(fetched).toMatchObject({ error: null, models: [{ id: "local-1" }] });
+  const tested = await client.apiEndpointTestConnection({
+    provider: "claude",
+    endpointId,
+    baseUrl: upstream.url,
+    format: "anthropic_messages",
+    modelId: "local-1",
+  });
+  expect(tested).toMatchObject({ error: null, result: { ok: true } });
+
+  // 老客户端的切换也认这家：打开 Claude Code 的总开关，默认模型是它。
+  expect(await client.apiEndpointSetActive("claude", endpointId)).toMatchObject({ error: null });
+  const tokensPath = path.join(daemon.paseoHome, "api-endpoints", "gateway-tokens.json");
+  const token = JSON.parse(await readFile(tokensPath, "utf8")).tokens.claude as string;
+  const answered = await fetch(`http://127.0.0.1:${daemon.port}/api-endpoint-gateway/v1/messages`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${token}`,
+      "content-type": "application/json",
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: "local-1",
+      max_tokens: 1,
+      messages: [{ role: "user", content: "hi" }],
+    }),
+  });
+  expect(answered.status).toBe(200);
+
+  expect(upstream.requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+    "GET /v1/models",
+    "POST /v1/messages",
+    "POST /v1/messages",
+  ]);
+  return upstream.requests.map(({ headers }) => ({
+    authorization: headers.authorization,
+    "x-api-key": headers["x-api-key"],
+  }));
+}
+
+describe("an API key is optional", () => {
+  test("an endpoint saved without a key keeps no key and no request to its upstream carries one", async () => {
+    const upstream = await startRecordingUpstream();
+    const harness = await start();
+    expect(harness.client.getLastServerInfoMessage()?.features?.apiEndpointManagement).toBe(true);
+    const saved = await harness.client.apiEndpointSave({
+      provider: "claude",
+      name: "Local",
+      baseUrls: [{ format: "anthropic_messages", url: upstream.url }],
+      models: [{ id: "local-1" }],
+    });
+    expect(saved.error).toBeNull();
+    expect(saved.endpoint?.hasApiKey).toBe(false);
+    const endpointId = saved.endpoint?.id ?? "";
+    // 新建时保存当场拉的清单（照 magpie）同样不带 key。
+    expect(upstream.requests.map((request) => request.headers.authorization)).toEqual([undefined]);
+    expect(upstream.requests[0]?.headers["x-api-key"]).toBeUndefined();
+
+    const sent = await askThroughEveryPath({ harness, upstream, endpointId });
+
+    expect(sent).toEqual([
+      { authorization: undefined, "x-api-key": undefined },
+      { authorization: undefined, "x-api-key": undefined },
+      { authorization: undefined, "x-api-key": undefined },
+    ]);
+    const keysPath = path.join(harness.daemon.paseoHome, "api-endpoints", "keys.json");
+    const keys = await readFile(keysPath, "utf8").catch(() => "{}");
+    expect(keys).not.toContain(endpointId);
+  });
+
+  test("an endpoint with a key still sends it, and an edit with a blank key keeps it", async () => {
+    const upstream = await startRecordingUpstream();
+    const harness = await start();
+    const saved = await harness.client.apiEndpointSave({
+      provider: "claude",
+      name: "Relay",
+      baseUrls: [{ format: "anthropic_messages", url: upstream.url }],
+      apiKey: "sk-relay",
+      models: [{ id: "local-1" }],
+    });
+    const endpointId = saved.endpoint?.id ?? "";
+    const edited = await harness.client.apiEndpointSave({
+      provider: "claude",
+      endpointId,
+      name: "Relay renamed",
+      baseUrls: [{ format: "anthropic_messages", url: upstream.url }],
+      apiKey: " ",
+      models: [{ id: "local-1" }],
+    });
+    expect(edited.error).toBeNull();
+    expect(edited.endpoint?.hasApiKey).toBe(true);
+
+    const sent = await askThroughEveryPath({ harness, upstream, endpointId });
+
+    // Anthropic 地址两个头都带（ADR 0008）。
+    const both = { authorization: "Bearer sk-relay", "x-api-key": "sk-relay" };
+    expect(sent).toEqual([both, both, both]);
+  });
+
+  test("a save in the old shape keeps the fields that client does not know", async () => {
+    const upstream = await startRecordingUpstream();
+    const { client } = await start();
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Relay",
+      baseUrls: [
+        { format: "anthropic_messages", url: upstream.url },
+        { format: "openai_responses", url: `${upstream.url}/v1` },
+      ],
+      apiKey: "sk-relay",
+      models: [{ id: "local-1" }],
+      manualModels: [{ id: "by-hand" }],
+      searchesWeb: true,
+      templateId: "zhipu",
+      region: "coding",
+      modelScope: "vendor",
+      autoPick: ["glm-*"],
+      modelSettings: {
+        defaults: { compact: 100_000, upstreamName: "zhipu/*" },
+        models: {
+          "by-hand": {
+            name: "By Hand",
+            efforts: [],
+            upstreamName: "vendor/by-hand",
+            format: "openai_responses",
+          },
+        },
+      },
+    });
+    const endpointId = saved.endpoint?.id ?? "";
+    await client.apiEndpointFetchModels({
+      provider: "claude",
+      endpointId,
+      baseUrl: upstream.url,
+      format: "anthropic_messages",
+    });
+    await client.apiEndpointSetEndpointState({ endpointId, enabled: false });
+
+    // 官方 Paseo 手机 App 的保存：只有 baseUrl、defaultModelId 与模型。
+    const oldSave = await client.apiEndpointSave({
+      provider: "claude",
+      endpointId,
+      name: "Relay renamed",
+      baseUrl: upstream.url,
+      models: [{ id: "local-1" }],
+      defaultModelId: "local-1",
+    });
+
+    expect(oldSave.error).toBeNull();
+    const listed = await client.apiEndpointList("claude");
+    expect(listed.endpoints.find((endpoint) => endpoint.id === endpointId)).toMatchObject({
+      name: "Relay renamed",
+      hasApiKey: true,
+      enabled: false,
+      baseUrls: [
+        { format: "anthropic_messages", url: upstream.url },
+        { format: "openai_responses", url: `${upstream.url}/v1` },
+      ],
+      manualModels: [{ id: "by-hand" }],
+      searchesWeb: true,
+      catalog: { models: [{ id: "local-1" }] },
+      templateId: "zhipu",
+      region: "coding",
+      modelScope: "vendor",
+      autoPick: ["glm-*"],
+      modelSettings: {
+        defaults: { compact: 100_000, upstreamName: "zhipu/*" },
+        models: {
+          "by-hand": {
+            name: "By Hand",
+            efforts: [],
+            upstreamName: "vendor/by-hand",
+            format: "openai_responses",
+          },
+        },
+      },
+    });
+  });
+});
+
+describe("Duplicate", () => {
+  /** 一家什么都带着的接口：两种格式的地址、key、已选模型、档位映射、手动添加的模型、联网搜索、拉回的清单。 */
+  async function saveFullEndpoint(harness: Harness, upstream: RecordingUpstream): Promise<string> {
+    const { client } = harness;
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Relay",
+      baseUrls: [
+        { format: "anthropic_messages", url: upstream.url },
+        { format: "openai_responses", url: `${upstream.url}/v1` },
+      ],
+      apiKey: "sk-relay-original",
+      models: [{ id: "local-1" }, { id: "by-hand" }],
+      modelMapping: { opus: "local-1" },
+      manualModels: [{ id: "by-hand" }],
+      searchesWeb: true,
+      modelSettings: { models: { "local-1": { context: 64_000 } } },
+    });
+    const endpointId = saved.endpoint?.id ?? "";
+    await client.apiEndpointFetchModels({
+      provider: "claude",
+      endpointId,
+      baseUrl: upstream.url,
+      format: "anthropic_messages",
+    });
+    return endpointId;
+  }
+
+  function copyRequest(sourceId: string, upstream: RecordingUpstream) {
+    return {
+      provider: "claude",
+      name: "Relay copy",
+      baseUrls: [
+        { format: "anthropic_messages" as const, url: upstream.url },
+        { format: "openai_responses" as const, url: `${upstream.url}/v1` },
+      ],
+      models: [{ id: "local-1" }, { id: "by-hand" }],
+      modelMapping: { opus: "local-1" },
+      copyOf: sourceId,
+    };
+  }
+
+  test("a copy saved with a blank key takes the original's key and everything the request leaves out", async () => {
+    const upstream = await startRecordingUpstream();
+    const harness = await start();
+    const { client } = harness;
+    const sourceId = await saveFullEndpoint(harness, upstream);
+    const before = (await client.apiEndpointList("claude")).endpoints;
+
+    const copied = await client.apiEndpointSave(copyRequest(sourceId, upstream));
+
+    expect(copied.error).toBeNull();
+    const copyId = copied.endpoint?.id ?? "";
+    expect(copyId).not.toBe(sourceId);
+    const listed = (await client.apiEndpointList("claude")).endpoints;
+    expect(listed.map((row) => row.id)).toEqual([sourceId, copyId]);
+    expect(listed[1]).toMatchObject({
+      name: "Relay copy",
+      slug: "relay-copy",
+      enabled: true,
+      hasApiKey: true,
+      apiKeyMask: listed[0]?.apiKeyMask,
+      baseUrls: listed[0]?.baseUrls,
+      models: [{ id: "local-1" }, { id: "by-hand" }],
+      modelMapping: { opus: "local-1" },
+      manualModels: [{ id: "by-hand" }],
+      searchesWeb: true,
+      catalog: { models: [{ id: "local-1" }] },
+      modelSettings: { models: { "local-1": { context: 64_000 } } },
+    });
+    // 原来那家不变。
+    expect(listed[0]).toEqual(before[0]);
+    expect(await client.apiEndpointRevealKey(copyId)).toMatchObject({
+      apiKey: "sk-relay-original",
+      error: null,
+    });
+
+    // 新接口用的就是这把 key。
+    upstream.requests.length = 0;
+    const sent = await askThroughEveryPath({ harness, upstream, endpointId: copyId });
+    const both = { authorization: "Bearer sk-relay-original", "x-api-key": "sk-relay-original" };
+    expect(sent).toEqual([both, both, both]);
+  });
+
+  test("a copy saved with a key of its own uses that key and leaves the original's alone", async () => {
+    const upstream = await startRecordingUpstream();
+    const harness = await start();
+    const { client } = harness;
+    const sourceId = await saveFullEndpoint(harness, upstream);
+
+    const copied = await client.apiEndpointSave({
+      ...copyRequest(sourceId, upstream),
+      apiKey: "sk-second-key",
+    });
+
+    const copyId = copied.endpoint?.id ?? "";
+    expect(copied.error).toBeNull();
+    expect((await client.apiEndpointRevealKey(copyId)).apiKey).toBe("sk-second-key");
+    expect((await client.apiEndpointRevealKey(sourceId)).apiKey).toBe("sk-relay-original");
+  });
+
+  test("a copy of an endpoint without a key has none either", async () => {
+    const upstream = await startRecordingUpstream();
+    const { client } = await start();
+    const source = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Local",
+      baseUrls: [{ format: "anthropic_messages", url: upstream.url }],
+      models: [{ id: "local-1" }],
+    });
+
+    const copied = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Local copy",
+      baseUrls: [{ format: "anthropic_messages", url: upstream.url }],
+      models: [{ id: "local-1" }],
+      copyOf: source.endpoint?.id ?? "",
+    });
+
+    expect(copied.endpoint?.hasApiKey).toBe(false);
+  });
+
+  test("a name already taken gets 2, 3… (whatever its case) and the identifier -2, -3…", async () => {
+    const upstream = await startRecordingUpstream();
+    const harness = await start();
+    const { client } = harness;
+    const sourceId = await saveFullEndpoint(harness, upstream);
+
+    const names: string[] = [];
+    for (const name of ["Relay copy", "relay COPY", "Relay copy"]) {
+      const copied = await client.apiEndpointSave({ ...copyRequest(sourceId, upstream), name });
+      expect(copied.error).toBeNull();
+      names.push(copied.endpoint?.name ?? "");
+    }
+
+    expect(names).toEqual(["Relay copy", "relay COPY 2", "Relay copy 3"]);
+    const listed = (await client.apiEndpointList("claude")).endpoints;
+    expect(listed.map((row) => row.slug)).toEqual([
+      "relay",
+      "relay-copy",
+      "relay-copy-2",
+      "relay-copy-3",
+    ]);
+    // 新建一家（不是复制）也避让；编辑时用自己原来的名字不算重名。
+    const added = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Relay",
+      baseUrls: [{ format: "anthropic_messages", url: upstream.url }],
+      models: [],
+    });
+    expect(added.endpoint).toMatchObject({ name: "Relay 2", slug: "relay-2" });
+    const edited = await client.apiEndpointSave({
+      provider: "claude",
+      endpointId: sourceId,
+      name: "Relay",
+      baseUrls: [{ format: "anthropic_messages", url: upstream.url }],
+      models: [{ id: "local-1" }],
+    });
+    expect(edited.endpoint?.name).toBe("Relay");
+  });
+
+  test("copying an endpoint that is gone, or together with endpointId, is refused and adds nothing", async () => {
+    const upstream = await startRecordingUpstream();
+    const harness = await start();
+    const { client } = harness;
+    const sourceId = await saveFullEndpoint(harness, upstream);
+
+    const gone = await client.apiEndpointSave({ ...copyRequest("ep_gone", upstream) });
+    expect(gone.error?.code).toBe("not_found");
+    const both = await client.apiEndpointSave({
+      ...copyRequest(sourceId, upstream),
+      endpointId: sourceId,
+    });
+    expect(both.error?.code).toBe("invalid_input");
+
+    expect((await client.apiEndpointList("claude")).endpoints.map((row) => row.id)).toEqual([
+      sourceId,
+    ]);
+  });
+});
+
+describe("reading a saved key back", () => {
+  test("gives the key as saved, null for an endpoint without one, and not_found for one that is gone", async () => {
+    const { client } = await start();
+    const withKey = await saveEndpoint(client, "Relay", ["glm-4.6"]);
+    const local = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Local",
+      baseUrls: [{ format: "anthropic_messages", url: "http://127.0.0.1:11434" }],
+      models: [],
+    });
+
+    expect(await client.apiEndpointRevealKey(withKey)).toMatchObject({
+      apiKey: "sk-Relay",
+      error: null,
+    });
+    // 不限次数。
+    expect((await client.apiEndpointRevealKey(withKey)).apiKey).toBe("sk-Relay");
+    expect(await client.apiEndpointRevealKey(local.endpoint?.id ?? "")).toMatchObject({
+      apiKey: null,
+      error: null,
+    });
+    expect(await client.apiEndpointRevealKey("ep_gone")).toMatchObject({
+      apiKey: null,
+      error: { code: "not_found" },
+    });
+  });
+});
+
+describe("Templates", () => {
+  // magpie 的 57 个去掉 5 个决策模型、Remote magpie、Google Vertex AI、Google Gemini（子任务 7）。
+  const LEFT_OUT = new Set([
+    "typesafe",
+    "vercel-jev",
+    "cloudflare-jev",
+    "bailian-decision",
+    "qwen-decision",
+    "remote-magpie",
+    "vertex",
+    "google",
+  ]);
+
+  test("the list has magpie's vendors, relay services and local servers, and none of what is left out", async () => {
+    const { client } = await start();
+
+    const { templates, error } = await client.apiEndpointListTemplates();
+
+    expect(error).toBeNull();
+    expect(templates.length).toBe(49);
+    const groups = new Map<string, number>();
+    for (const template of templates) {
+      groups.set(template.group, (groups.get(template.group) ?? 0) + 1);
+    }
+    expect(Object.fromEntries(groups)).toEqual({ vendor: 29, relay: 16, local: 4 });
+    const ids = templates.map((template) => template.id);
+    expect(ids.filter((id) => LEFT_OUT.has(id))).toEqual([]);
+    expect(new Set(ids).size).toBe(ids.length);
+    // 中国站与国际站成对：每个 -cn 都有对应的国际站。
+    const chinaSites = ids.filter((id) => id.endsWith("-cn"));
+    expect(chinaSites.sort()).toEqual([
+      "kimi-code-cn",
+      "minimax-cn",
+      "moonshot-cn",
+      "qwen-cn",
+      "stepfun-cn",
+    ]);
+    for (const id of chinaSites) expect(ids).toContain(id.slice(0, -3));
+    // 每个都能直接用：有地址（Azure 要填自己资源的地址），要 key 的有「去拿 key」的页面。
+    for (const template of templates) {
+      const hasAddress = template.baseUrls.length > 0 || template.endpointExample !== undefined;
+      expect(hasAddress, template.id).toBe(true);
+      if (template.group !== "local") expect(template.keysUrl, template.id).toMatch(/^https:\/\//);
+    }
+    const zhipu = templates.find((template) => template.id === "zhipu");
+    expect(zhipu).toMatchObject({
+      group: "vendor",
+      regionLabel: "plan",
+      regions: [
+        { id: "api", name: "Pay as you go" },
+        {
+          id: "coding",
+          name: "Coding Plan",
+          baseUrls: [
+            { format: "anthropic_messages", url: "https://open.bigmodel.cn/api/anthropic" },
+            { format: "openai_chat", url: "https://open.bigmodel.cn/api/coding/paas/v4" },
+            { format: "openai_responses", url: "https://open.bigmodel.cn/api/v1" },
+          ],
+        },
+      ],
+    });
+  });
+
+  test("the local servers need no key and are reached on this machine at their default ports (as magpie)", async () => {
+    const { client } = await start();
+
+    const { templates } = await client.apiEndpointListTemplates();
+
+    const locals = templates.filter((template) => template.group === "local");
+    expect(
+      locals.map(({ id, name, keyOptional, baseUrls }) => ({ id, name, keyOptional, baseUrls })),
+    ).toEqual([
+      {
+        id: "ollama",
+        name: "Ollama",
+        keyOptional: true,
+        baseUrls: [
+          { format: "anthropic_messages", url: "http://localhost:11434" },
+          { format: "openai_chat", url: "http://localhost:11434/v1" },
+        ],
+      },
+      {
+        id: "lmstudio",
+        name: "LM Studio",
+        keyOptional: true,
+        baseUrls: [{ format: "openai_chat", url: "http://localhost:1234/v1" }],
+      },
+      {
+        id: "omlx",
+        name: "oMLX",
+        keyOptional: true,
+        baseUrls: [
+          { format: "anthropic_messages", url: "http://localhost:8000" },
+          { format: "openai_chat", url: "http://localhost:8000/v1" },
+          { format: "openai_responses", url: "http://localhost:8000/v1" },
+        ],
+      },
+      {
+        id: "mlx-serve",
+        name: "MLX-Serve",
+        keyOptional: true,
+        baseUrls: [
+          { format: "anthropic_messages", url: "http://localhost:11234" },
+          { format: "openai_chat", url: "http://localhost:11234/v1" },
+          { format: "openai_responses", url: "http://localhost:11234/v1" },
+        ],
+      },
+    ]);
+  });
+
+  test("an endpoint saved from a template keeps its address, template and region; switching the region moves the address", async () => {
+    const { client } = await start();
+    const { templates } = await client.apiEndpointListTemplates();
+    const zhipu = templates.find((template) => template.id === "zhipu");
+    const [payAsYouGo, coding] = zhipu?.regions ?? [];
+    if (!payAsYouGo || !coding) throw new Error("zhipu has no plans");
+
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Zhipu GLM",
+      baseUrls: payAsYouGo.baseUrls,
+      apiKey: "sk-zhipu",
+      models: [],
+      templateId: "zhipu",
+      region: "api",
+    });
+    expect(saved.error).toBeNull();
+    const endpointId = saved.endpoint?.id ?? "";
+    expect(saved.endpoint).toMatchObject({
+      templateId: "zhipu",
+      region: "api",
+      baseUrls: payAsYouGo.baseUrls,
+    });
+
+    const switched = await client.apiEndpointSave({
+      provider: "claude",
+      endpointId,
+      name: "Zhipu GLM",
+      baseUrls: coding.baseUrls,
+      models: [],
+      region: "coding",
+    });
+
+    expect(switched.error).toBeNull();
+    const listed = (await client.apiEndpointList("claude")).endpoints[0];
+    expect(listed).toMatchObject({
+      templateId: "zhipu",
+      region: "coding",
+      baseUrls: coding.baseUrls,
+      hasApiKey: true,
+    });
+  });
+
+  test("Add another from the same template gets a name of its own", async () => {
+    const { client } = await start();
+    const { templates } = await client.apiEndpointListTemplates();
+    const deepseek = templates.find((template) => template.id === "deepseek");
+    if (!deepseek) throw new Error("no DeepSeek template");
+    const names: string[] = [];
+    for (const apiKey of ["sk-one", "sk-two"]) {
+      const saved = await client.apiEndpointSave({
+        provider: "claude",
+        name: deepseek.name,
+        baseUrls: deepseek.baseUrls,
+        apiKey,
+        models: [],
+        templateId: deepseek.id,
+      });
+      names.push(saved.endpoint?.name ?? "");
+    }
+    expect(names).toEqual(["DeepSeek", "DeepSeek 2"]);
+    const listed = (await client.apiEndpointList("claude")).endpoints;
+    expect(listed.map((row) => row.templateId)).toEqual(["deepseek", "deepseek"]);
+    expect(listed.map((row) => row.region)).toEqual([undefined, undefined]);
+  });
+
+  /** 存一家从模板加的接口，各格式地址换到假上游，返回 id。 */
+  async function saveAtUpstream(input: {
+    client: DaemonClient;
+    upstream: RecordingUpstream;
+    templateId: string;
+    region?: string;
+  }): Promise<string> {
+    const saved = await input.client.apiEndpointSave({
+      provider: "claude",
+      name: input.templateId,
+      baseUrls: [{ format: "openai_chat", url: `${input.upstream.url}/v1` }],
+      apiKey: "sk-plan",
+      models: [],
+      templateId: input.templateId,
+      ...(input.region ? { region: input.region } : {}),
+    });
+    if (!saved.endpoint) throw new Error(saved.error?.message ?? "not saved");
+    // 新建时保存当场拉过一次清单（照 magpie）；用例只看之后的请求。
+    input.upstream.requests.length = 0;
+    return saved.endpoint.id;
+  }
+
+  test("a plan with no model list gives its built-in models without asking; its pay-as-you-go region asks (as magpie NoList)", async () => {
+    const upstream = await startRecordingUpstream(["doubao-seed-2.1-pro", "something-else"]);
+    const { client } = await start();
+    const coding = await saveAtUpstream({
+      client,
+      upstream,
+      templateId: "volcengine",
+      region: "coding",
+    });
+    const payAsYouGo = await saveAtUpstream({
+      client,
+      upstream,
+      templateId: "volcengine",
+      region: "api",
+    });
+    const fetch = (endpointId: string) =>
+      client.apiEndpointFetchModels({
+        provider: "claude",
+        endpointId,
+        baseUrl: `${upstream.url}/v1`,
+        format: "openai_chat",
+      });
+
+    const planned = await fetch(coding);
+
+    expect(planned.error).toBeNull();
+    expect(planned.models.map((model) => model.id)).toContain("ark-code-latest");
+    expect(planned.models).toHaveLength(15);
+    expect(upstream.requests).toEqual([]);
+    const listed = (await client.apiEndpointList("claude")).endpoints.find(
+      (endpoint) => endpoint.id === coding,
+    );
+    expect(listed?.catalog?.models).toHaveLength(15);
+
+    const asked = await fetch(payAsYouGo);
+    expect(asked.models.map((model) => model.id)).toEqual([
+      "doubao-seed-2.1-pro",
+      "something-else",
+    ]);
+    expect(upstream.requests.map((request) => request.method)).toEqual(["GET"]);
+  });
+
+  test("a plan behind a shared key keeps the models with its prefix, and its built-in ones when the list has none (as magpie Only)", async () => {
+    const shared = await startRecordingUpstream([
+      "anthropic/claude-sonnet-5",
+      "cline-pass/glm-5.3",
+      "cline-pass/kimi-k3",
+    ]);
+    const without = await startRecordingUpstream(["anthropic/claude-sonnet-5"]);
+    const { client } = await start();
+    const fetchFrom = async (upstream: RecordingUpstream) => {
+      const endpointId = await saveAtUpstream({ client, upstream, templateId: "clinepass" });
+      return client.apiEndpointFetchModels({
+        provider: "claude",
+        endpointId,
+        baseUrl: `${upstream.url}/v1`,
+        format: "openai_chat",
+      });
+    };
+
+    const kept = await fetchFrom(shared);
+    const given = await fetchFrom(without);
+
+    expect(kept.models.map((model) => model.id)).toEqual([
+      "cline-pass/glm-5.3",
+      "cline-pass/kimi-k3",
+    ]);
+    expect(given.models.map((model) => model.id)).toContain("cline-pass/qwen3.8-max");
+    expect(given.models.every((model) => model.id.startsWith("cline-pass/"))).toBe(true);
+  });
+
+  test("a template it does not know, or a region not of that template, is refused and adds nothing", async () => {
+    const { client } = await start();
+    const base = {
+      provider: "claude",
+      name: "Somewhere",
+      baseUrls: [{ format: "openai_chat" as const, url: "https://somewhere.example/v1" }],
+      models: [],
+    };
+
+    const unknown = await client.apiEndpointSave({ ...base, templateId: "no-such-template" });
+    const wrongRegion = await client.apiEndpointSave({
+      ...base,
+      templateId: "zhipu",
+      region: "moon",
+    });
+    const regionAlone = await client.apiEndpointSave({ ...base, region: "coding" });
+
+    expect(unknown.error?.code).toBe("invalid_input");
+    expect(wrongRegion.error?.code).toBe("invalid_input");
+    expect(regionAlone.error?.code).toBe("invalid_input");
+    expect((await client.apiEndpointList("claude")).endpoints).toEqual([]);
+  });
+
+  test("Amazon Bedrock offers its ten regions, each with the runtime's three addresses there", async () => {
+    const { client } = await start();
+    const { templates } = await client.apiEndpointListTemplates();
+
+    const bedrock = templates.find((template) => template.id === "bedrock");
+
+    expect(bedrock).toMatchObject({ group: "vendor", noModelList: true });
+    expect(bedrock?.regions?.map((region) => region.id)).toEqual([
+      "us-east-1",
+      "us-east-2",
+      "us-west-2",
+      "eu-central-1",
+      "eu-west-1",
+      "eu-west-3",
+      "ap-northeast-1",
+      "ap-southeast-1",
+      "ap-southeast-2",
+      "ap-south-1",
+    ]);
+    expect(bedrock?.regions?.find((region) => region.id === "eu-west-1")?.baseUrls).toEqual([
+      {
+        format: "anthropic_messages",
+        url: "https://bedrock-runtime.eu-west-1.amazonaws.com/anthropic",
+      },
+      { format: "openai_chat", url: "https://bedrock-runtime.eu-west-1.amazonaws.com/openai/v1" },
+      {
+        format: "openai_responses",
+        url: "https://bedrock-runtime.eu-west-1.amazonaws.com/openai/v1",
+      },
+    ]);
+  });
+
+  test("Amazon Bedrock's models are its built-in list, given without asking the runtime", async () => {
+    const upstream = await startRecordingUpstream(["something-listed"]);
+    const { client } = await start();
+    const endpointId = await saveAtUpstream({
+      client,
+      upstream,
+      templateId: "bedrock",
+      region: "us-west-2",
+    });
+
+    const fetched = await client.apiEndpointFetchModels({
+      provider: "claude",
+      endpointId,
+      baseUrl: `${upstream.url}/v1`,
+      format: "openai_chat",
+    });
+
+    expect(fetched.error).toBeNull();
+    const ids = fetched.models.map((model) => model.id);
+    expect(ids).toContain("global.anthropic.claude-opus-5-5");
+    expect(ids).toContain("global.openai.gpt-6-luna");
+    expect(ids).toContain("deepseek.v3.2");
+    expect(ids).not.toContain("something-listed");
+    expect(upstream.requests).toEqual([]);
+  });
+
+  test("Azure OpenAI has no address of its own: the form asks for the resource's", async () => {
+    const { client } = await start();
+    const { templates } = await client.apiEndpointListTemplates();
+
+    const azure = templates.find((template) => template.id === "azure");
+
+    expect(azure).toMatchObject({
+      group: "vendor",
+      baseUrls: [],
+      endpointExample: "https://<resource>.openai.azure.com",
+    });
+    expect(azure?.endpointHint).toMatch(/Keys and Endpoint/);
+  });
+
+  test("Azure OpenAI's address, however it was pasted, is saved on the resource's v1 API", async () => {
+    const { client } = await start();
+    const save = (url: string) =>
+      client.apiEndpointSave({
+        provider: "codex",
+        name: "Azure OpenAI",
+        baseUrls: [
+          { format: "openai_chat", url },
+          { format: "openai_responses", url },
+        ],
+        apiKey: "azure-key",
+        models: [],
+        templateId: "azure",
+      });
+
+    const bare = await save("https://my-res.openai.azure.com");
+    const classic = await save(
+      "https://other-res.cognitiveservices.azure.com/openai/deployments/gpt-5/chat/completions?api-version=2025-01-01-preview",
+    );
+    // 门户里列的只有资源名。
+    const named = await save("named-res");
+
+    expect(bare.endpoint?.baseUrls).toEqual([
+      { format: "openai_chat", url: "https://my-res.openai.azure.com/openai/v1" },
+      { format: "openai_responses", url: "https://my-res.openai.azure.com/openai/v1" },
+    ]);
+    expect(classic.endpoint?.baseUrls?.map((entry) => entry.url)).toEqual([
+      "https://other-res.cognitiveservices.azure.com/openai/v1",
+      "https://other-res.cognitiveservices.azure.com/openai/v1",
+    ]);
+    expect(named.endpoint?.baseUrls?.[0]?.url).toBe("https://named-res.openai.azure.com/openai/v1");
+  });
+
+  /** 假 Azure 资源：给了 deployments 就答部署名，否则 404；/v1/models 答 v1 模型。记下每个请求。 */
+  async function startAzure(deployments: string[] | null): Promise<RecordingUpstream> {
+    const upstream: RecordingUpstream = { url: "", requests: [] };
+    const listed = deployments?.map((id) => ({ id })) ?? null;
+    const server = createServer((request, response) => {
+      request.resume();
+      request.on("end", () => {
+        upstream.requests.push({
+          method: request.method ?? "",
+          url: request.url ?? "",
+          headers: request.headers,
+        });
+        const url = request.url ?? "";
+        if (url.startsWith("/openai/deployments") && listed !== null) {
+          response.writeHead(200, { "content-type": "application/json" });
+          response.end(JSON.stringify({ object: "list", data: listed }));
+          return;
+        }
+        if (url === "/openai/v1/models") {
+          response.writeHead(200, { "content-type": "application/json" });
+          response.end(JSON.stringify({ object: "list", data: [{ id: "gpt-5.5" }] }));
+          return;
+        }
+        response.writeHead(404, { "content-type": "application/json" });
+        response.end(JSON.stringify({ error: { code: "404", message: "Resource not found" } }));
+      });
+    });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    upstream.url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    return upstream;
+  }
+
+  async function fetchFromAzure(azure: RecordingUpstream) {
+    const { client } = await start();
+    const base = `${azure.url}/openai/v1`;
+    const saved = await client.apiEndpointSave({
+      provider: "codex",
+      name: "Azure OpenAI",
+      baseUrls: [
+        { format: "openai_chat", url: base },
+        { format: "openai_responses", url: base },
+      ],
+      apiKey: "azure-key",
+      models: [],
+      templateId: "azure",
+    });
+    // 新建时保存当场拉过一次清单（照 magpie）；用例只看之后的请求。
+    azure.requests.length = 0;
+    return client.apiEndpointFetchModels({
+      provider: "codex",
+      endpointId: saved.endpoint?.id ?? "",
+      baseUrl: base,
+      format: "openai_responses",
+    });
+  }
+
+  test("Azure OpenAI's models are the resource's deployments, asked with the key in api-key alone", async () => {
+    const azure = await startAzure(["my-gpt-deployment", "kimi-deployment"]);
+
+    const fetched = await fetchFromAzure(azure);
+
+    expect(fetched.error).toBeNull();
+    expect(fetched.models.map((model) => model.id)).toEqual([
+      "my-gpt-deployment",
+      "kimi-deployment",
+    ]);
+    expect(azure.requests.map((request) => request.url)).toEqual([
+      "/openai/deployments?api-version=2022-12-01",
+    ]);
+    expect(azure.requests[0]?.headers["api-key"]).toBe("azure-key");
+    expect(azure.requests[0]?.headers.authorization).toBeUndefined();
+  });
+
+  test("Azure OpenAI's models fall back to its v1 list when the deployments can't be listed", async () => {
+    const azure = await startAzure(null);
+
+    const fetched = await fetchFromAzure(azure);
+
+    expect(fetched.error).toBeNull();
+    expect(fetched.models.map((model) => model.id)).toEqual(["gpt-5.5"]);
+    expect(azure.requests.map((request) => request.url)).toEqual([
+      "/openai/deployments?api-version=2022-12-01",
+      "/openai/v1/models",
+    ]);
+    expect(azure.requests.every((request) => request.headers["api-key"] === "azure-key")).toBe(
+      true,
+    );
+  });
+});
+
+describe("an endpoint's own icon", () => {
+  // 最小的 1×1 PNG。
+  const PNG = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+    "base64",
+  );
+  const MAX_ICON_BYTES = 1 << 20;
+
+  function iconsDir(harness: Harness): string {
+    return path.join(path.dirname(harness.endpointsPath), "icons");
+  }
+
+  async function exists(filePath: string): Promise<boolean> {
+    return stat(filePath).then(
+      () => true,
+      () => false,
+    );
+  }
+
+  test("a picture is kept by its content and read back; one too large or not a picture is refused", async () => {
+    const harness = await start();
+    const { client } = harness;
+
+    const stored = await client.apiEndpointStoreIcon({ data: PNG.toString("base64") });
+
+    expect(stored.error).toBeNull();
+    expect(stored.icon).toMatch(/^file:[0-9a-f]{16}\.png$/);
+    const again = await client.apiEndpointStoreIcon({ data: PNG.toString("base64") });
+    expect(again.icon).toBe(stored.icon);
+    expect(await client.apiEndpointReadIcon({ icon: stored.icon ?? "" })).toMatchObject({
+      icon: { data: PNG.toString("base64"), mimeType: "image/png" },
+      error: null,
+    });
+    const svg = await client.apiEndpointStoreIcon({
+      data: Buffer.from('<svg viewBox="0 0 1 1"><path d="M0 0h1v1H0z"/></svg>').toString("base64"),
+    });
+    expect(svg.icon).toMatch(/^file:[0-9a-f]{16}\.svg$/);
+
+    // 比 1 MB 的 base64 还长的在协议上就不收，不解码。
+    const tooLarge = Buffer.concat([PNG, Buffer.alloc(MAX_ICON_BYTES)]);
+    await expect(
+      client.apiEndpointStoreIcon({ data: tooLarge.toString("base64") }),
+    ).rejects.toThrow(/Too big/);
+    expect(
+      await client.apiEndpointStoreIcon({ data: Buffer.from("just text").toString("base64") }),
+    ).toMatchObject({ icon: null, error: { code: "icon_not_image" } });
+    // 只读 icons 目录里按内容起名的文件，别的路径一概不认。
+    expect(await client.apiEndpointReadIcon({ icon: "file:../endpoints.json" })).toMatchObject({
+      icon: null,
+      error: { code: "not_found" },
+    });
+  });
+
+  test("an endpoint keeps the picture it was saved with; deleting the last endpoint with it deletes the copy", async () => {
+    const harness = await start();
+    const { client } = harness;
+    const { icon } = await client.apiEndpointStoreIcon({ data: PNG.toString("base64") });
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Home relay",
+      baseUrls: [{ format: "anthropic_messages", url: "https://home.example" }],
+      models: [],
+      icon,
+    });
+    expect(saved.error).toBeNull();
+    const endpointId = saved.endpoint?.id ?? "";
+    expect(saved.endpoint?.icon).toBe(icon);
+    const copy = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Home relay",
+      baseUrls: [{ format: "anthropic_messages", url: "https://home.example" }],
+      models: [],
+      copyOf: endpointId,
+    });
+    expect(copy.endpoint?.icon).toBe(icon);
+    const file = path.join(iconsDir(harness), (icon ?? "").slice("file:".length));
+    expect(await exists(file)).toBe(true);
+
+    // 副本还用着它：删掉原来那家不删图片。
+    await client.apiEndpointDelete("claude", endpointId);
+    expect(await exists(file)).toBe(true);
+    await client.apiEndpointDelete("claude", copy.endpoint?.id ?? "");
+
+    expect(await exists(file)).toBe(false);
+    expect(await client.apiEndpointReadIcon({ icon: icon ?? "" })).toMatchObject({
+      icon: null,
+      error: { code: "not_found" },
+    });
+  });
+
+  test("changing or taking off the picture deletes the copy; a built-in icon is kept by name", async () => {
+    const harness = await start();
+    const { client } = harness;
+    const { icon } = await client.apiEndpointStoreIcon({ data: PNG.toString("base64") });
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Home relay",
+      baseUrls: [{ format: "anthropic_messages", url: "https://home.example" }],
+      models: [],
+      icon,
+    });
+    const endpointId = saved.endpoint?.id ?? "";
+    const file = path.join(iconsDir(harness), (icon ?? "").slice("file:".length));
+
+    const builtIn = await client.apiEndpointSave({
+      provider: "claude",
+      endpointId,
+      name: "Home relay",
+      baseUrls: [{ format: "anthropic_messages", url: "https://home.example" }],
+      models: [],
+      icon: "deepseek-color",
+    });
+    expect(builtIn.endpoint?.icon).toBe("deepseek-color");
+    expect(await exists(file)).toBe(false);
+
+    // 老客户端的保存不带 icon，不把它清掉。
+    await client.apiEndpointSave({
+      provider: "claude",
+      endpointId,
+      name: "Home relay",
+      baseUrl: "https://home.example",
+      models: [{ id: "m1" }],
+      defaultModelId: "m1",
+    });
+    const listed = await client.apiEndpointList("claude");
+    expect(listed.endpoints.find((endpoint) => endpoint.id === endpointId)?.icon).toBe(
+      "deepseek-color",
+    );
+
+    const cleared = await client.apiEndpointSave({
+      provider: "claude",
+      endpointId,
+      name: "Home relay",
+      baseUrls: [{ format: "anthropic_messages", url: "https://home.example" }],
+      models: [],
+      icon: null,
+    });
+    expect(cleared.endpoint?.icon).toBeUndefined();
+  });
+
+  test("a picture that was never stored, a name that is no icon's, or an icon on a template's endpoint is refused", async () => {
+    const { client } = await start();
+    const base = {
+      provider: "claude",
+      name: "Home relay",
+      baseUrls: [{ format: "anthropic_messages", url: "https://home.example" }],
+      models: [],
+    };
+
+    expect(
+      await client.apiEndpointSave({ ...base, icon: "file:0123456789abcdef.png" }),
+    ).toMatchObject({ endpoint: null, error: { code: "invalid_input" } });
+    expect(await client.apiEndpointSave({ ...base, icon: "../keys" })).toMatchObject({
+      endpoint: null,
+      error: { code: "invalid_input" },
+    });
+    // 图标只给「自定义」加的接口选（照 magpie）。
+    expect(
+      await client.apiEndpointSave({
+        ...base,
+        templateId: "ollama",
+        icon: "deepseek-color",
+      }),
+    ).toMatchObject({ endpoint: null, error: { code: "invalid_input" } });
+    expect((await client.apiEndpointList("claude")).endpoints).toEqual([]);
+  });
+});
+
+describe("an icon from the endpoint's website", () => {
+  const SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><path d="M0 0h1v1H0z"/></svg>';
+
+  /** 假的外网：网址到回复，别的都是 404；记下问过的网址。绝不真的上网。 */
+  function fakeSites(pages: Record<string, string>): { fetchSite: FetchSite; asked: string[] } {
+    const asked: string[] = [];
+    const fetchSite: FetchSite = async ({ url }) => {
+      asked.push(url);
+      const body = pages[url];
+      return body === undefined
+        ? { status: 404, url, body: Buffer.from("not found") }
+        : { status: 200, url, body: Buffer.from(body) };
+    };
+    return { fetchSite, asked };
+  }
+
+  test("asks the API's host, then the domains above it; the page's icon comes before /favicon.ico", async () => {
+    const sites = fakeSites({
+      "https://relay.example/": '<html><head><link rel="icon" href="/brand.svg"></head></html>',
+      "https://relay.example/brand.svg": SVG,
+    });
+    const { client } = await start({}, undefined, { fetchSite: sites.fetchSite });
+
+    const fetched = await client.apiEndpointFetchSiteIcon({
+      baseUrl: "https://api.relay.example:8443/v1",
+      name: "Relay",
+    });
+
+    expect(fetched.error).toBeNull();
+    expect(fetched.icon).toMatch(/^file:[0-9a-f]{16}\.svg$/);
+    expect((await client.apiEndpointReadIcon({ icon: fetched.icon ?? "" })).icon).toEqual({
+      data: Buffer.from(SVG).toString("base64"),
+      mimeType: "image/svg+xml",
+    });
+    expect(sites.asked).toEqual([
+      "https://api.relay.example:8443/api/status",
+      "https://api.relay.example:8443/",
+      "https://api.relay.example:8443/favicon.ico",
+      "https://api.relay.example/api/status",
+      "https://api.relay.example/",
+      "https://api.relay.example/favicon.ico",
+      "https://relay.example/api/status",
+      "https://relay.example/",
+      "https://relay.example/brand.svg",
+    ]);
+  });
+
+  test("a new-api panel's logo comes from /api/status; one with none gets the name's first letters", async () => {
+    const sites = fakeSites({
+      "https://withlogo.example/api/status": JSON.stringify({
+        success: true,
+        data: { system_name: "New API", logo: "/brand.svg" },
+      }),
+      "https://withlogo.example/brand.svg": SVG,
+      // 面板自己的 favicon 每家都一样，不要。
+      "https://nologo.example/api/status": JSON.stringify({
+        success: true,
+        data: { system_name: "New API", logo: "" },
+      }),
+      "https://nologo.example/favicon.ico": SVG,
+    });
+    const harness = await start({}, undefined, { fetchSite: sites.fetchSite });
+    const { client } = harness;
+
+    const withLogo = await client.apiEndpointFetchSiteIcon({
+      baseUrl: "https://withlogo.example/v1",
+      name: "",
+    });
+    const noLogo = await client.apiEndpointFetchSiteIcon({
+      baseUrl: "https://nologo.example/v1",
+      name: "Home lab",
+    });
+
+    expect((await client.apiEndpointReadIcon({ icon: withLogo.icon ?? "" })).icon?.data).toBe(
+      Buffer.from(SVG).toString("base64"),
+    );
+    const letters = await client.apiEndpointReadIcon({ icon: noLogo.icon ?? "" });
+    expect(letters.icon?.mimeType).toBe("image/svg+xml");
+    expect(Buffer.from(letters.icon?.data ?? "", "base64").toString("utf8")).toContain(
+      ">HL</text>",
+    );
+    expect(sites.asked).not.toContain("https://nologo.example/favicon.ico");
+  });
+
+  test("an address on this machine, one that is no address, a page icon that is not public https, and a site with no icon say why", async () => {
+    const sites = fakeSites({
+      "https://plain.example/": '<link rel="icon" href="http://plain.example/icon.png">',
+    });
+    const { client } = await start({}, undefined, { fetchSite: sites.fetchSite });
+
+    expect(
+      await client.apiEndpointFetchSiteIcon({ baseUrl: "http://127.0.0.1:11434/v1", name: "" }),
+    ).toMatchObject({ icon: null, error: { code: "site_icon_local" } });
+    expect(
+      await client.apiEndpointFetchSiteIcon({ baseUrl: "http://box.local:8080", name: "" }),
+    ).toMatchObject({ icon: null, error: { code: "site_icon_local" } });
+    expect(await client.apiEndpointFetchSiteIcon({ baseUrl: "relay", name: "" })).toMatchObject({
+      icon: null,
+      error: { code: "site_icon_no_address" },
+    });
+    expect(sites.asked).toEqual([]);
+
+    const notFound = await client.apiEndpointFetchSiteIcon({
+      baseUrl: "https://plain.example/v1",
+      name: "",
+    });
+    expect(notFound).toMatchObject({ icon: null, error: { code: "site_icon_not_found" } });
+    expect(notFound.error?.message).toContain("https://plain.example");
+    expect(sites.asked).not.toContain("http://plain.example/icon.png");
   });
 });

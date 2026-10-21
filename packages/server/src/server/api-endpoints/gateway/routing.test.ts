@@ -397,6 +397,7 @@ describe("which request format an endpoint is asked in", () => {
         agentFormat: "openai_responses",
         model: "gpt-5.5",
         formats: ["openai_chat", "openai_responses", "anthropic_messages"],
+        formatOrder: null,
       }),
     ).toBe("openai_responses");
   });
@@ -407,6 +408,7 @@ describe("which request format an endpoint is asked in", () => {
         agentFormat: "openai_responses",
         model: "relay-a/claude-sonnet-4-5",
         formats: ["openai_responses", "anthropic_messages"],
+        formatOrder: null,
       }),
     ).toBe("anthropic_messages");
   });
@@ -417,6 +419,7 @@ describe("which request format an endpoint is asked in", () => {
         agentFormat: "anthropic_messages",
         model: "kimi-k2",
         formats: ["openai_responses", "openai_chat"],
+        formatOrder: null,
       }),
     ).toBe("openai_chat");
   });
@@ -427,6 +430,7 @@ describe("which request format an endpoint is asked in", () => {
         agentFormat: "anthropic_messages",
         model: "kimi-k2",
         formats: ["openai_responses"],
+        formatOrder: null,
       }),
     ).toBe("openai_responses");
     expect(
@@ -434,13 +438,41 @@ describe("which request format an endpoint is asked in", () => {
         agentFormat: "openai_responses",
         model: "kimi-k2",
         formats: ["anthropic_messages"],
+        formatOrder: null,
+      }),
+    ).toBe("anthropic_messages");
+  });
+
+  test("a Bedrock GPT is translated to Responses first, as its order says (magpie ResponsesFirst)", () => {
+    expect(
+      chooseRequestFormat({
+        agentFormat: "anthropic_messages",
+        model: "global.openai.gpt-6-luna",
+        formats: ["openai_chat", "openai_responses"],
+        formatOrder: ["openai_responses", "openai_chat"],
+      }),
+    ).toBe("openai_responses");
+  });
+
+  test("a Bedrock Claude id counts as a Claude model", () => {
+    expect(
+      chooseRequestFormat({
+        agentFormat: "openai_responses",
+        model: "global.anthropic.claude-sonnet-5",
+        formats: ["openai_responses", "anthropic_messages"],
+        formatOrder: null,
       }),
     ).toBe("anthropic_messages");
   });
 
   test("an endpoint with no address at all is asked in none", () => {
     expect(
-      chooseRequestFormat({ agentFormat: "anthropic_messages", model: "kimi-k2", formats: [] }),
+      chooseRequestFormat({
+        agentFormat: "anthropic_messages",
+        model: "kimi-k2",
+        formats: [],
+        formatOrder: null,
+      }),
     ).toBeNull();
   });
 });

@@ -681,6 +681,78 @@ type ApiEndpointSetEndpointStatePayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.set_endpoint_state.response" }
 >["payload"];
+type ApiEndpointSetOrderPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.set_order.response" }
+>["payload"];
+type ApiEndpointSetLongConversationsPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.set_long_conversations.response" }
+>["payload"];
+type ApiEndpointSetDisabledModelsPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.set_disabled_models.response" }
+>["payload"];
+type ApiEndpointSetEndpointNameDisplayPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.set_endpoint_name_display.response" }
+>["payload"];
+type ApiEndpointRevealKeyPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.reveal_key.response" }
+>["payload"];
+type ApiEndpointForgetCatalogPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.forget_catalog.response" }
+>["payload"];
+type ApiEndpointVendorStatusPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.vendor_status.response" }
+>["payload"];
+type ApiEndpointImportScanPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.import_scan.response" }
+>["payload"];
+type ApiEndpointImportPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.import.response" }
+>["payload"];
+type ApiEndpointImportDiscoveryPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.import_discovery.response" }
+>["payload"];
+type ApiEndpointImportIgnorePayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.import_ignore.response" }
+>["payload"];
+type ApiEndpointImportLinkPreviewPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.import_link_preview.response" }
+>["payload"];
+type ApiEndpointImportLinkIconPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.import_link_icon.response" }
+>["payload"];
+type ApiEndpointImportLinkPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.import_link.response" }
+>["payload"];
+type ApiEndpointListTemplatesPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.list_templates.response" }
+>["payload"];
+type ApiEndpointStoreIconPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.store_icon.response" }
+>["payload"];
+type ApiEndpointFetchSiteIconPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.fetch_site_icon.response" }
+>["payload"];
+type ApiEndpointReadIconPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.read_icon.response" }
+>["payload"];
 
 type ApiEndpointFetchModelsPayload = Extract<
   SessionOutboundMessage,
@@ -693,6 +765,18 @@ type ApiEndpointTestConnectionPayload = Extract<
 type ApiEndpointDetectFormatsPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.detect_formats.response" }
+>["payload"];
+type ApiEndpointTestModelsPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.test_models.response" }
+>["payload"];
+type ApiEndpointTestModelsStartedPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.test_models.started" }
+>["payload"];
+type ApiEndpointTestModelsProgressPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.test_models.progress" }
 >["payload"];
 type ApiEndpointCancelPayload = Extract<
   SessionOutboundMessage,
@@ -732,6 +816,29 @@ export type ApiEndpointSetEndpointStateOptions = Omit<
   "type" | "requestId"
 >;
 
+export type ApiEndpointSetOrderOptions = Omit<
+  Extract<SessionInboundMessage, { type: "provider.api_endpoint.set_order.request" }>,
+  "type" | "requestId"
+>;
+
+export type ApiEndpointSetLongConversationsOptions = Omit<
+  Extract<SessionInboundMessage, { type: "provider.api_endpoint.set_long_conversations.request" }>,
+  "type" | "requestId"
+>;
+
+export type ApiEndpointSetDisabledModelsOptions = Omit<
+  Extract<SessionInboundMessage, { type: "provider.api_endpoint.set_disabled_models.request" }>,
+  "type" | "requestId"
+>;
+
+export type ApiEndpointSetEndpointNameDisplayOptions = Omit<
+  Extract<
+    SessionInboundMessage,
+    { type: "provider.api_endpoint.set_endpoint_name_display.request" }
+  >,
+  "type" | "requestId"
+>;
+
 export type ApiEndpointFetchModelsOptions = Omit<
   Extract<SessionInboundMessage, { type: "provider.api_endpoint.fetch_models.request" }>,
   "type" | "requestId"
@@ -739,6 +846,11 @@ export type ApiEndpointFetchModelsOptions = Omit<
 
 export type ApiEndpointDetectFormatsOptions = Omit<
   Extract<SessionInboundMessage, { type: "provider.api_endpoint.detect_formats.request" }>,
+  "type" | "requestId"
+>;
+
+export type ApiEndpointTestModelsOptions = Omit<
+  Extract<SessionInboundMessage, { type: "provider.api_endpoint.test_models.request" }>,
   "type" | "requestId"
 >;
 
@@ -1223,6 +1335,10 @@ function toTimeoutError(error: unknown, label: string, timeoutMs: number): Error
 const DEFAULT_RECONNECT_BASE_DELAY_MS = 1500;
 const DEFAULT_RECONNECT_MAX_DELAY_MS = 30000;
 const DEFAULT_SESSION_RPC_TIMEOUT_MS = 60_000;
+// 测试模型整批 3 分钟，再留些余量给最后的回应。
+const API_ENDPOINT_TEST_MODELS_TIMEOUT_MS = 200_000;
+// 逐个模型识别整次 2 分钟，同样留些余量。
+const API_ENDPOINT_DETECT_EACH_TIMEOUT_MS = 140_000;
 const PUSH_TOKEN_REVOCATION_TIMEOUT_MS = 2_000;
 const DEFAULT_CONNECT_TIMEOUT_MS = 15_000;
 const DEFAULT_LIVENESS_TIMEOUT_MS = 5000;
@@ -1717,11 +1833,11 @@ export class DaemonClient {
     this.resetConnectTimeout();
     this.disposeTransport(1000, "Client closed");
     this.providerSnapshotUpdates.clear();
-    this.clearWaiters(new Error("Daemon client closed"));
+    this.clearWaiters(new DaemonConnectionError("Daemon client closed"));
     await this.owned.close();
     this.creations.close();
-    this.rejectPendingSendQueue(new Error("Daemon client closed"));
-    this.rejectPingProbe(new Error("Daemon client closed"));
+    this.rejectPendingSendQueue(new DaemonConnectionError("Daemon client closed"));
+    this.rejectPingProbe(new DaemonConnectionError("Daemon client closed"));
     this.terminalStreams.clearSlots();
     this.lastServerInfoMessage = null;
     if (this.runtimeMetricsInterval) {
@@ -2045,7 +2161,9 @@ export class DaemonClient {
           pending.reject(new DaemonConnectionError("Connection lost before message could be sent"));
         }
       } catch (error) {
-        pending.reject(error instanceof Error ? error : new Error(String(error)));
+        // 排队的消息发不出去就是连接出了问题，和上面「连接已断」一样交给调用方。
+        const reason = error instanceof Error ? error.message : String(error);
+        pending.reject(new DaemonConnectionError(`Message could not be sent: ${reason}`));
       }
     }
   }
@@ -6475,6 +6593,211 @@ export class DaemonClient {
     });
   }
 
+  /** 整体改写接口顺序（Endpoint order）。 */
+  async apiEndpointSetOrder(
+    options: ApiEndpointSetOrderOptions,
+    requestId?: string,
+  ): Promise<ApiEndpointSetOrderPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.set_order.request", ...options },
+    });
+  }
+
+  /** 设整台主机的长对话：完整窗口与全局压缩阈值。 */
+  async apiEndpointSetLongConversations(
+    options: ApiEndpointSetLongConversationsOptions,
+    requestId?: string,
+  ): Promise<ApiEndpointSetLongConversationsPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.set_long_conversations.request", ...options },
+    });
+  }
+
+  /** 设整台主机的已禁用的模型：整份名单一起发。 */
+  async apiEndpointSetDisabledModels(
+    options: ApiEndpointSetDisabledModelsOptions,
+    requestId?: string,
+  ): Promise<ApiEndpointSetDisabledModelsPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.set_disabled_models.request", ...options },
+    });
+  }
+
+  /** 设整台主机的接口名显示方式：always、clash 或 never。 */
+  async apiEndpointSetEndpointNameDisplay(
+    options: ApiEndpointSetEndpointNameDisplayOptions,
+    requestId?: string,
+  ): Promise<ApiEndpointSetEndpointNameDisplayPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.set_endpoint_name_display.request", ...options },
+    });
+  }
+
+  /** 读回一家接口已保存的 key 原文；没有 key 时 apiKey 为 null。 */
+  async apiEndpointRevealKey(
+    endpointId: string,
+    requestId?: string,
+  ): Promise<ApiEndpointRevealKeyPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.reveal_key.request", endpointId },
+    });
+  }
+
+  /** 丢掉这家拉回的上游清单与拉取时间；只有声明了 apiEndpointManagement 的 daemon 认。 */
+  async apiEndpointForgetCatalog(
+    endpointId: string,
+    requestId?: string,
+  ): Promise<ApiEndpointForgetCatalogPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.forget_catalog.request", endpointId },
+    });
+  }
+
+  /**
+   * 各厂商官方状态页的读数与各接口对上的厂商；`vendors` 是另外要看的厂商（用量页的订阅卡片）。
+   * 只有声明了 apiEndpointManagement 的 daemon 认。
+   */
+  async apiEndpointVendorStatus(
+    options: { vendors?: string[] } = {},
+    requestId?: string,
+  ): Promise<ApiEndpointVendorStatusPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.vendor_status.request", ...options },
+    });
+  }
+
+  /**
+   * 扫描本机别的软件里的接口配置（从别的软件导入）；includeOpenCode 只在打开导入窗口时给。
+   * key 只给打码的，导入时按指纹找回。只有声明了 apiEndpointManagement 的 daemon 认。
+   */
+  async apiEndpointImportScan(
+    options: { includeOpenCode?: boolean } = {},
+    requestId?: string,
+  ): Promise<ApiEndpointImportScanPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.import_scan.request", ...options },
+    });
+  }
+
+  /** 导入选中的发现：每条带操作（add、replace、rename）。只有声明了 apiEndpointManagement 的 daemon 认。 */
+  async apiEndpointImport(
+    picks: { fingerprint: string; action: string; name?: string }[],
+    requestId?: string,
+  ): Promise<ApiEndpointImportPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.import.request", picks },
+    });
+  }
+
+  /**
+   * 「第三方接口」页的发现提示：默认会选上、没被忽略的那几条的指纹与来源软件（不含 OpenCode）。
+   * daemon 一分钟内只真读一次别的软件的文件。只有声明了 apiEndpointManagement 的 daemon 认。
+   */
+  async apiEndpointImportDiscovery(requestId?: string): Promise<ApiEndpointImportDiscoveryPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.import_discovery.request" },
+    });
+  }
+
+  /** 忽略发现提示里的这几条：记进主机的已忽略记录。只有声明了 apiEndpointManagement 的 daemon 认。 */
+  async apiEndpointImportIgnore(
+    fingerprints: string[],
+    requestId?: string,
+  ): Promise<ApiEndpointImportIgnorePayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.import_ignore.request", fingerprints },
+    });
+  }
+
+  /** 读一条导入链接给确认框（daemon 解析、拒收，不存）。只有声明了 apiEndpointManagement 的 daemon 认。 */
+  async apiEndpointImportLinkPreview(
+    link: string,
+    requestId?: string,
+  ): Promise<ApiEndpointImportLinkPreviewPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.import_link_preview.request", link },
+    });
+  }
+
+  /** 导入链接 icon= 的图片：主机读链接时已开始取，这里等它取完（取不到为 null）。只有声明了 apiEndpointManagement 的 daemon 认。 */
+  async apiEndpointImportLinkIcon(
+    link: string,
+    requestId?: string,
+  ): Promise<ApiEndpointImportLinkIconPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.import_link_icon.request", link },
+    });
+  }
+
+  /** 确认框里点了添加：daemon 重新拒收一遍链接，用这里的名称与 key 加上或换上那家。只有声明了 apiEndpointManagement 的 daemon 认。 */
+  async apiEndpointImportLink(
+    input: { link: string; name: string; key: string },
+    requestId?: string,
+  ): Promise<ApiEndpointImportLinkPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.import_link.request", ...input },
+    });
+  }
+
+  /** 内置模板清单（「+」先出的列表）；只有声明了 apiEndpointManagement 的 daemon 认。 */
+  async apiEndpointListTemplates(requestId?: string): Promise<ApiEndpointListTemplatesPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.list_templates.request" },
+    });
+  }
+
+  /** 存一张图片给接口当图标（data 是 base64），返回保存时要带的 icon 值；只有声明了 apiEndpointManagement 的 daemon 认。 */
+  async apiEndpointStoreIcon(
+    options: { data: string },
+    requestId?: string,
+  ): Promise<ApiEndpointStoreIconPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.store_icon.request", data: options.data },
+    });
+  }
+
+  /** 从 baseUrl 所在的网站取图标并存下，返回保存时要带的 icon 值。传入 requestId 才能用 apiEndpointCancel 取消。 */
+  async apiEndpointFetchSiteIcon(
+    options: { baseUrl: string; name: string },
+    requestId?: string,
+  ): Promise<ApiEndpointFetchSiteIconPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: {
+        type: "provider.api_endpoint.fetch_site_icon.request",
+        baseUrl: options.baseUrl,
+        name: options.name,
+      },
+    });
+  }
+
+  /** 取回接口存下的图标图片（icon 是 `file:` 值）。 */
+  async apiEndpointReadIcon(
+    options: { icon: string },
+    requestId?: string,
+  ): Promise<ApiEndpointReadIconPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.read_icon.request", icon: options.icon },
+    });
+  }
+
   /** 省略 apiKey 并带 endpointId 时用已保存的 key。传入 requestId 才能用 apiEndpointCancel 取消。 */
   async apiEndpointFetchModels(
     options: ApiEndpointFetchModelsOptions,
@@ -6497,7 +6820,10 @@ export class DaemonClient {
     });
   }
 
-  /** 自动检测三种请求格式；key 规则同 apiEndpointFetchModels。传入 requestId 才能用 apiEndpointCancel 取消。 */
+  /**
+   * 自动检测三种请求格式；key 规则同 apiEndpointFetchModels。逐个模型（eachModel）整次最长 2 分钟，所以等得比一般请求久。
+   * 传入 requestId 才能用 apiEndpointCancel 取消。
+   */
   async apiEndpointDetectFormats(
     options: ApiEndpointDetectFormatsOptions,
     requestId?: string,
@@ -6505,7 +6831,40 @@ export class DaemonClient {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId,
       message: { type: "provider.api_endpoint.detect_formats.request", ...options },
+      ...(options.eachModel === true ? { timeout: API_ENDPOINT_DETECT_EACH_TIMEOUT_MS } : {}),
     });
+  }
+
+  /**
+   * 测试这家的模型（或只测 modelId 一个）。开测前调一次 onStarted（daemon 要测的模型），每测完一个调一次 onProgress；
+   * 整批最长 3 分钟，所以等得比一般请求久。传入 requestId 才能用 apiEndpointCancel 取消。
+   */
+  async apiEndpointTestModels(
+    options: ApiEndpointTestModelsOptions,
+    input: {
+      requestId?: string;
+      onStarted?: (started: ApiEndpointTestModelsStartedPayload) => void;
+      onProgress?: (progress: ApiEndpointTestModelsProgressPayload) => void;
+    } = {},
+  ): Promise<ApiEndpointTestModelsPayload> {
+    const requestId = this.createRequestId(input.requestId);
+    const { onStarted, onProgress } = input;
+    const stopStarted = this.on("provider.api_endpoint.test_models.started", (message) => {
+      if (message.payload.requestId === requestId) onStarted?.(message.payload);
+    });
+    const stopProgress = this.on("provider.api_endpoint.test_models.progress", (message) => {
+      if (message.payload.requestId === requestId) onProgress?.(message.payload);
+    });
+    try {
+      return await this.sendNamespacedCorrelatedSessionRequest({
+        requestId,
+        message: { type: "provider.api_endpoint.test_models.request", ...options },
+        timeout: API_ENDPOINT_TEST_MODELS_TIMEOUT_MS,
+      });
+    } finally {
+      stopStarted();
+      stopProgress();
+    }
   }
 
   async apiEndpointCancel(

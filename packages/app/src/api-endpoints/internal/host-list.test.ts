@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { ApiEndpoint } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import {
   agentsReturningToOfficial,
+  arrangeEndpoint,
+  endpointMoves,
   endpointRowStatus,
   endpointSummary,
+  findEndpoints,
   groupHostEndpoints,
   previewAgentSettlements,
   selectHostEndpointsState,
@@ -50,6 +53,11 @@ describe("selectHostEndpointsState", () => {
       // 老主机不发 agentIssues、reopenHints：提示区为空。
       agentIssues: {},
       reopenHints: {},
+      longConversations: {},
+      disabledModels: [],
+      // 老主机不发接口名显示方式：一直显示。
+      endpointNameDisplay: "always",
+      endpointNamesUnreached: [],
     });
   });
 
@@ -116,6 +124,227 @@ describe("groupHostEndpoints", () => {
     ]);
     expect(groups.enabled.map((entry) => entry.id)).toEqual(["a", "c"]);
     expect(groups.disabled.map((entry) => entry.id)).toEqual(["b"]);
+  });
+});
+
+describe("arrangeEndpoint", () => {
+  // 开着的 a、c、e，关着的 b、d，交错排着。
+  const list = [
+    endpoint({ id: "a" }),
+    endpoint({ id: "b", enabled: false }),
+    endpoint({ id: "c" }),
+    endpoint({ id: "d", enabled: false }),
+    endpoint({ id: "e" }),
+  ];
+
+  it("moves an endpoint among its own group; the other group keeps its places", () => {
+    expect(arrangeEndpoint({ endpoints: list, id: "e", place: "up", shown: null })).toEqual([
+      "a",
+      "b",
+      "e",
+      "d",
+      "c",
+    ]);
+    expect(arrangeEndpoint({ endpoints: list, id: "e", place: "top", shown: null })).toEqual([
+      "e",
+      "b",
+      "a",
+      "d",
+      "c",
+    ]);
+    expect(arrangeEndpoint({ endpoints: list, id: "a", place: "down", shown: null })).toEqual([
+      "c",
+      "b",
+      "a",
+      "d",
+      "e",
+    ]);
+    expect(arrangeEndpoint({ endpoints: list, id: "a", place: "bottom", shown: null })).toEqual([
+      "c",
+      "b",
+      "e",
+      "d",
+      "a",
+    ]);
+    expect(arrangeEndpoint({ endpoints: list, id: "d", place: "up", shown: null })).toEqual([
+      "a",
+      "d",
+      "c",
+      "b",
+      "e",
+    ]);
+  });
+
+  it("puts a dragged endpoint where the row it was dropped on was", () => {
+    expect(arrangeEndpoint({ endpoints: list, id: "a", place: { index: 2 }, shown: null })).toEqual(
+      ["c", "b", "e", "d", "a"],
+    );
+    expect(arrangeEndpoint({ endpoints: list, id: "e", place: { index: 1 }, shown: null })).toEqual(
+      ["a", "b", "e", "d", "c"],
+    );
+  });
+
+  it("is null when nothing would move", () => {
+    expect(arrangeEndpoint({ endpoints: list, id: "a", place: "up", shown: null })).toBeNull();
+    expect(arrangeEndpoint({ endpoints: list, id: "a", place: "top", shown: null })).toBeNull();
+    expect(arrangeEndpoint({ endpoints: list, id: "e", place: "down", shown: null })).toBeNull();
+    expect(arrangeEndpoint({ endpoints: list, id: "d", place: "bottom", shown: null })).toBeNull();
+    expect(
+      arrangeEndpoint({ endpoints: list, id: "c", place: { index: 1 }, shown: null }),
+    ).toBeNull();
+    expect(
+      arrangeEndpoint({ endpoints: list, id: "missing", place: "up", shown: null }),
+    ).toBeNull();
+  });
+});
+
+describe("arrangeEndpoint while a search shows some rows", () => {
+  // 开着的 a、c、e、g，关着的 b；搜索只显示 a、e、g 与 b。
+  const list = [
+    endpoint({ id: "a" }),
+    endpoint({ id: "b", enabled: false }),
+    endpoint({ id: "c" }),
+    endpoint({ id: "e" }),
+    endpoint({ id: "g" }),
+  ];
+  const shown = new Set(["a", "b", "e", "g"]);
+
+  it("steps past the row shown next to it, and the hidden ones keep their order (as magpie shownToOn)", () => {
+    expect(arrangeEndpoint({ endpoints: list, id: "e", place: "up", shown })).toEqual([
+      "e",
+      "b",
+      "a",
+      "c",
+      "g",
+    ]);
+    expect(arrangeEndpoint({ endpoints: list, id: "a", place: "down", shown })).toEqual([
+      "c",
+      "b",
+      "e",
+      "a",
+      "g",
+    ]);
+  });
+
+  it("puts a dragged row where the shown row it was dropped on was", () => {
+    expect(arrangeEndpoint({ endpoints: list, id: "g", place: { index: 1 }, shown })).toEqual([
+      "a",
+      "b",
+      "c",
+      "g",
+      "e",
+    ]);
+    expect(arrangeEndpoint({ endpoints: list, id: "a", place: { index: 2 }, shown })).toEqual([
+      "c",
+      "b",
+      "e",
+      "g",
+      "a",
+    ]);
+  });
+
+  it("moves to the top or the bottom of the whole group", () => {
+    expect(arrangeEndpoint({ endpoints: list, id: "e", place: "top", shown })).toEqual([
+      "e",
+      "b",
+      "a",
+      "c",
+      "g",
+    ]);
+    expect(arrangeEndpoint({ endpoints: list, id: "a", place: "bottom", shown })).toEqual([
+      "c",
+      "b",
+      "e",
+      "g",
+      "a",
+    ]);
+  });
+
+  it("offers up and down by the rows shown, top and bottom by the whole group", () => {
+    const hiddenFirst = new Set(["c", "e"]);
+    expect(endpointMoves({ endpoints: list, id: "c", shown: hiddenFirst })).toEqual({
+      top: true,
+      up: false,
+      down: true,
+      bottom: true,
+    });
+    expect(endpointMoves({ endpoints: list, id: "e", shown: hiddenFirst })).toEqual({
+      top: true,
+      up: true,
+      down: false,
+      bottom: true,
+    });
+  });
+});
+
+describe("findEndpoints", () => {
+  const relay = endpoint({
+    id: "relay",
+    name: "OpenRouter",
+    slug: "openrouter-cn",
+    baseUrls: [
+      { format: "anthropic_messages", url: "https://openrouter.ai/api" },
+      { format: "openai_chat", url: "https://gateway.example/v1" },
+    ],
+    models: [{ id: "z-ai/glm-4.6", label: "GLM 4.6" }],
+    catalog: { fetchedAt: "2026-10-14T00:00:00.000Z", models: [{ id: "moonshot/kimi-k2" }] },
+    manualModels: [{ id: "qwen3-coder" }],
+  });
+  const local = endpoint({
+    id: "local",
+    name: "Ollama",
+    baseUrls: [{ format: "openai_chat", url: "http://127.0.0.1:11434/v1" }],
+    models: [{ id: "llama3" }],
+  });
+  const ids = (query: string) => findEndpoints([relay, local], query).map((entry) => entry.id);
+
+  it("keeps every endpoint while the box is empty", () => {
+    expect(ids("")).toEqual(["relay", "local"]);
+    expect(ids("   ")).toEqual(["relay", "local"]);
+  });
+
+  it("finds by name, by endpoint slug, by address and by model name, whatever the case", () => {
+    expect(ids("openrouter")).toEqual(["relay"]);
+    expect(ids("gateway.example")).toEqual(["relay"]);
+    expect(ids("11434")).toEqual(["local"]);
+    expect(ids("GLM")).toEqual(["relay"]);
+    expect(ids("kimi-k2")).toEqual(["relay"]);
+    expect(ids("qwen3")).toEqual(["relay"]);
+    expect(ids("llama")).toEqual(["local"]);
+    expect(ids("openrouter-cn")).toEqual(["relay"]);
+  });
+
+  it("keeps the rows that say every word typed", () => {
+    expect(ids("open glm")).toEqual(["relay"]);
+    expect(ids("ollama glm")).toEqual([]);
+  });
+});
+
+describe("endpointMoves", () => {
+  it("offers the moves that would change the order within the endpoint's group", () => {
+    const list = [
+      endpoint({ id: "a" }),
+      endpoint({ id: "b", enabled: false }),
+      endpoint({ id: "c" }),
+    ];
+    expect(endpointMoves({ endpoints: list, id: "a", shown: null })).toEqual({
+      top: false,
+      up: false,
+      down: true,
+      bottom: true,
+    });
+    expect(endpointMoves({ endpoints: list, id: "c", shown: null })).toEqual({
+      top: true,
+      up: true,
+      down: false,
+      bottom: false,
+    });
+    expect(endpointMoves({ endpoints: list, id: "b", shown: null })).toEqual({
+      top: false,
+      up: false,
+      down: false,
+      bottom: false,
+    });
   });
 });
 

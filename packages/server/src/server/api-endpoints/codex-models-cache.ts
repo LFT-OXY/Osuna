@@ -92,10 +92,15 @@ export function codexOwnModels(text: string | null): CodexOwnModel[] {
     isRecord(model) && typeof model.priority === "number" ? model.priority : Number.MAX_VALUE;
   return listed
     .toSorted((a, b) => priorityOf(a) - priorityOf(b))
-    .map((model) => ({ slug: slugOf(model), label: labelOf(model), levels: levelsOf(model) }));
+    .map((model) => ({
+      slug: slugOf(model),
+      label: codexModelLabel(model),
+      levels: levelsOf(model),
+    }));
 }
 
-function labelOf(model: unknown): string {
+/** 清单里一个模型的显示名，没有就是 slug。 */
+export function codexModelLabel(model: unknown): string {
   if (isRecord(model) && typeof model.display_name === "string") return model.display_name;
   return slugOf(model);
 }

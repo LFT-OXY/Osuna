@@ -43,6 +43,10 @@ contextBridge.exposeInMainWorld("paseoDesktop", {
         agentId: string;
       } | null>,
   },
+  importLinks: {
+    // 主进程只交出字符串或 null（ImportLinkInbox）。
+    ready: (): Promise<string | null> => ipcRenderer.invoke("paseo:import-link:ready"),
+  },
   events: {
     on: (event: string, handler: EventHandler): Promise<() => void> => {
       const listener = (_ipcEvent: Electron.IpcRendererEvent, payload: unknown) => {

@@ -86,7 +86,9 @@ If you don't trust a page, read it in `Source`, which executes nothing. Source i
 
 ## Agent authentication
 
-Paseo wraps agent CLIs (Claude Code, Codex, OpenCode) but does not manage their authentication. Each agent provider handles its own credentials. Paseo never stores or transmits provider API keys. Agents run in your user context with your existing credentials.
+Paseo wraps agent CLIs (Claude Code, Codex, OpenCode) but does not manage their authentication. Each agent provider handles its own credentials. Agents run in your user context with your existing credentials. The one exception is an API endpoint: its key is stored in the daemon's `api-endpoints/keys.json` (mode `0600`). The CLI's config files get a per-agent gateway token, never the key, and no list or snapshot carries it. A client reads a key back only when the user presses Show in the endpoint's edit dialog, over an authenticated connection that holds `daemon.manage`.
+
+An endpoint added as Custom may have its certificate left unchecked (Skip certificate check), for a self-hosted relay with a self-signed or company certificate. Anyone who can answer at that address can then read the key and the conversations, which the app says in a confirm dialog before it turns on, and the endpoint's row keeps a mark while it is on. Only that endpoint's own https hosts go unchecked, on connections of their own: a redirect to another host, another endpoint at the same server, and every other request the daemon makes are checked as before. A template's endpoint can't turn it on. The daemon never sets `NODE_TLS_REJECT_UNAUTHORIZED` or a global agent (`server/api-endpoints/insecure-tls.ts`).
 
 ## Forge host trust
 

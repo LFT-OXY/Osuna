@@ -133,6 +133,8 @@ async function start(input: {
   // 强制 Subagent 模型与「Codex Subagent 可用任意模型」；缺省没设、关着。
   forcedSubagentModelId?: string;
   allowsAnySubagentModel?: boolean;
+  // 已禁用的模型；缺省没有。
+  disabledModels?: string[];
 }) {
   const root = await mkdtemp(path.join(os.tmpdir(), "paseo-chatgpt-backend-"));
   tempRoots.push(root);
@@ -164,6 +166,7 @@ async function start(input: {
         allowsAnySubagentModel: input.allowsAnySubagentModel === true,
       },
     },
+    ...(input.disabledModels ? { disabledModels: input.disabledModels } : {}),
   };
   await writeFile(path.join(endpointsDir, "endpoints.json"), JSON.stringify(endpoints));
   await writeFile(
@@ -507,6 +510,10 @@ interface ListedModel {
   visibility?: string;
 }
 
+const DisplayNamesSchema = z.object({
+  models: z.array(z.object({ slug: z.string(), display_name: z.string().optional() })),
+});
+
 function modelsOf(reply: Reply): ListedModel[] {
   return (JSON.parse(reply.body.toString("utf8")) as { models: ListedModel[] }).models;
 }
@@ -565,6 +572,110 @@ describe("endpoint models in the /model of a Codex signed in with ChatGPT", () =
     expect(reached.url).toBe("/backend-api/codex/models?client_version=0.163.0");
     expect(reached.headers.authorization).toBe(`Bearer ${CHATGPT_TOKEN}`);
     expect(reached.headers["chatgpt-account-id"]).toBe(ACCOUNT_ID);
+  });
+
+  test("the endpoint's name after a model follows the host's setting: always, only when names clash, never; the slugs keep them apart", async () => {
+    const chatgpt = await startBackend();
+    chatgpt.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "application/json", etag: 'W/"list-1"' });
+      res.end(JSON.stringify({ models: CHATGPT_MODELS }));
+    };
+    const { codexBase, daemon } = await start({
+      chatgptBaseUrl: `${chatgpt.url}/backend-api/codex`,
+      endpoints: [
+        {
+          id: "ep_a",
+          slug: "relay-a",
+          url: "http://127.0.0.1:9/v1",
+          models: [{ id: "kimi-k2", facts: { name: "Kimi K2" } }, { id: "glm-5" }],
+        },
+        {
+          id: "ep_b",
+          slug: "relay-b",
+          url: "http://127.0.0.1:9/v1",
+          models: [{ id: "kimi-k2", facts: { name: "kimi k2" } }],
+        },
+      ],
+    });
+    const client = new DaemonClient({
+      url: `ws://127.0.0.1:${daemon.port}/ws`,
+      appVersion: "0.17.0",
+    });
+    await client.connect();
+    const named = async () => {
+      const reply = await send({
+        url: `${codexBase}/models?client_version=0.163.0`,
+        method: "GET",
+        headers: codexHeaders(),
+      });
+      const list = DisplayNamesSchema.parse(JSON.parse(reply.body.toString("utf8")));
+      return list.models
+        .filter((model) => model.slug.includes("/"))
+        .map((model) => [model.slug, model.display_name]);
+    };
+
+    expect((await client.apiEndpointList("codex")).endpointNameDisplay).toBe("always");
+    expect(await named()).toEqual([
+      ["relay-a/kimi-k2", "Kimi K2 (RELAY-A)"],
+      ["relay-a/glm-5", "glm-5 (RELAY-A)"],
+      ["relay-b/kimi-k2", "kimi k2 (RELAY-B)"],
+    ]);
+
+    // 只差大小写也算同名（照 magpie）。
+    expect((await client.apiEndpointSetEndpointNameDisplay({ display: "clash" })).error).toBeNull();
+    expect((await client.apiEndpointList("codex")).endpointNameDisplay).toBe("clash");
+    expect(await named()).toEqual([
+      ["relay-a/kimi-k2", "Kimi K2 (RELAY-A)"],
+      ["relay-a/glm-5", "glm-5"],
+      ["relay-b/kimi-k2", "kimi k2 (RELAY-B)"],
+    ]);
+
+    await client.apiEndpointSetEndpointNameDisplay({ display: "never" });
+    expect(await named()).toEqual([
+      ["relay-a/kimi-k2", "Kimi K2"],
+      ["relay-a/glm-5", "glm-5"],
+      ["relay-b/kimi-k2", "kimi k2"],
+    ]);
+
+    const refused = await client.apiEndpointSetEndpointNameDisplay({ display: "sometimes" });
+    expect(refused.error?.code).toBe("invalid_input");
+    expect((await client.apiEndpointList("codex")).endpointNameDisplay).toBe("never");
+    await client.apiEndpointSetEndpointNameDisplay({ display: "always" });
+    expect((await client.apiEndpointList("codex")).endpointNameDisplay).toBe("always");
+    await client.close();
+  });
+
+  test("only when names clash counts ChatGPT's own models too: an endpoint's gpt-5.5 beside ChatGPT's GPT-5.5 keeps its endpoint name", async () => {
+    const chatgpt = await startBackend();
+    chatgpt.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "application/json", etag: 'W/"list-1"' });
+      res.end(JSON.stringify({ models: CHATGPT_MODELS }));
+    };
+    const { codexBase, daemon } = await start({
+      chatgptBaseUrl: `${chatgpt.url}/backend-api/codex`,
+      endpoints: [{ ...RELAY_A, models: [{ id: "gpt-5.5" }, { id: "glm-5" }] }],
+    });
+    const client = new DaemonClient({
+      url: `ws://127.0.0.1:${daemon.port}/ws`,
+      appVersion: "0.17.0",
+    });
+    await client.connect();
+    await client.apiEndpointSetEndpointNameDisplay({ display: "clash" });
+
+    const reply = await send({
+      url: `${codexBase}/models?client_version=0.163.0`,
+      method: "GET",
+      headers: codexHeaders(),
+    });
+
+    const list = DisplayNamesSchema.parse(JSON.parse(reply.body.toString("utf8")));
+    expect(list.models.map((model) => [model.slug, model.display_name])).toEqual([
+      ["gpt-5.5", "GPT-5.5"],
+      ["codex-auto-review", undefined],
+      ["relay-a/gpt-5.5", "gpt-5.5 (RELAY-A)"],
+      ["relay-a/glm-5", "glm-5"],
+    ]);
+    await client.close();
   });
 
   test("a default model naming one endpoint is in the merged list, so Codex knows it", async () => {
@@ -783,6 +894,64 @@ function compactionItemOf(reply: Reply): CompactionItem {
   const completed = events.find((event) => event.type === "response.completed");
   return completed!.response!.output[0]!;
 }
+
+// 已禁用的模型（工单 16）照 magpie codex_backend.go 的 codexNativeOff：Codex 自己的模型被禁了不转给 ChatGPT、不列。
+describe("disabled models for a Codex signed in with ChatGPT", () => {
+  test("a disabled ChatGPT model is refused with a 403 and never reaches ChatGPT, and is left out of the list with the disabled endpoint models", async () => {
+    const chatgpt = await startBackend();
+    chatgpt.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ models: CHATGPT_MODELS }));
+    };
+    const { codexBase } = await start({
+      chatgptBaseUrl: `${chatgpt.url}/backend-api/codex`,
+      endpoints: [
+        {
+          id: "ep_a",
+          slug: "relay-a",
+          url: "http://127.0.0.1:9/v1",
+          models: [{ id: "kimi-k2" }, { id: "glm-5-preview" }],
+        },
+      ],
+      disabledModels: ["GPT-5.?", "*-preview"],
+    });
+
+    const turn = await send({
+      url: `${codexBase}/responses`,
+      headers: codexHeaders({ accept: "application/json" }),
+      body: Buffer.from(JSON.stringify({ model: "gpt-5.5", input: "hi", stream: false })),
+    });
+    expect(turn.status).toBe(403);
+    expect(JSON.parse(turn.body.toString("utf8"))).toEqual({
+      error: {
+        message:
+          'model gpt-5.5 is disabled in Osuna (it matches "GPT-5.?" in Settings › API endpoints › Disabled models); enable it there. Only requests through Osuna are refused',
+        type: "permission_error",
+        code: null,
+        param: null,
+      },
+    });
+    const endpointTurn = await send({
+      url: `${codexBase}/responses`,
+      headers: codexHeaders({ accept: "application/json" }),
+      body: Buffer.from(
+        JSON.stringify({ model: "relay-a/glm-5-preview", input: "hi", stream: false }),
+      ),
+    });
+    expect(endpointTurn.status).toBe(403);
+    expect(chatgpt.requests).toEqual([]);
+
+    const listed = await send({
+      url: `${codexBase}/models`,
+      method: "GET",
+      headers: codexHeaders(),
+    });
+    expect(modelsOf(listed).map((model) => model.slug)).toEqual([
+      "codex-auto-review",
+      "relay-a/kimi-k2",
+    ]);
+  });
+});
 
 describe("compaction of an endpoint model's conversation for a Codex signed in with ChatGPT", () => {
   test("the compaction_trigger is summarised by the endpoint model, and the summary is read back in the next turn", async () => {

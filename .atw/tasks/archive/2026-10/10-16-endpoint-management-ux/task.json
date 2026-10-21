@@ -1,0 +1,28 @@
+{
+  "id": "endpoint-management-ux",
+  "name": "endpoint-management-ux",
+  "title": "接口管理好用性",
+  "description": "让第三方接口更好加、更好管（块 3）：复制这家接口、粘贴 curl、模板、排顺序、手改模型信息等，条目在本任务里挑",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": "app",
+  "priority": "P2",
+  "creator": "oxy",
+  "assignee": "oxy",
+  "createdAt": "2026-10-16",
+  "completedAt": "2026-10-21",
+  "branch": "start-magpie-osuna-gaps-subtask-3-api-usability",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": "10-16-magpie-osuna-gaps",
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "implementation_base_sha": "83fcfad8affb8a4770c5e694225a416a3d12e322"
+  }
+}

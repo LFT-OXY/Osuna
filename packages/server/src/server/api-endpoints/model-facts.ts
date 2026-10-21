@@ -3,6 +3,9 @@
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { z } from "zod";
+import { ApiEndpointModelFactsSchema } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type { ResolvedModelFacts } from "@getpaseo/protocol/api-endpoint/model-settings";
+import type { ApiEndpointState, StoredApiEndpoint } from "./store.js";
 import { isRecord } from "./upstream-http.js";
 
 /*
@@ -10,15 +13,46 @@ import { isRecord } from "./upstream-http.js";
  * 不知道的字段不出现；Claude Code 的模型提示与中转站只用知道的。
  */
 
-export const ModelFactsSchema = z.object({
-  context: z.number().optional(),
-  output: z.number().optional(),
-  efforts: z.array(z.string()).optional(),
-  images: z.boolean().optional(),
-  // false 是这家的这个模型不收 temperature 与 top_p：只按这家自己在 models.dev 的条目（samplingFor）。
+// 和线上发给模型设置窗口的自动资料是同一个东西（protocol 的 ApiEndpointModelFactsSchema），daemon 另记一项：
+// false 是这家的这个模型不收 temperature 与 top_p，只按这家自己在 models.dev 的条目（samplingFor）。
+export const ModelFactsSchema = ApiEndpointModelFactsSchema.extend({
   takesSampling: z.boolean().optional(),
 });
 export type ModelFacts = z.infer<typeof ModelFactsSchema>;
+
+/**
+ * 这家这个模型用起来的资料：自动取到的（上游清单在前，models.dev 补上）按用户的模型设置改过（protocol 的 resolveModelFacts）。
+ * efforts 是告诉 Agent 的档位（用户只留了几档时只有那几档）；中转站挑档位按 vendorEfforts：
+ * 模型自己的档位，用户少列几档不妨碍 Agent 要别的（照 magpie Efforts），档位不知道时才是用户给的那几档。
+ */
+export interface EndpointModelFacts
+  extends ModelFacts, Partial<Pick<ResolvedModelFacts, "compact" | "contextSet" | "noThinking">> {
+  vendorEfforts?: string[];
+}
+
+/** 一家接口的一个模型（按这家的写法）的资料：这家上游清单给的在前，models.dev 补上没给的。 */
+export type ModelFactsLookup = (endpoint: StoredApiEndpoint, modelId: string) => EndpointModelFacts;
+
+/** 光秃秃的模型名的资料：按接口顺序里最靠前、开着、选了它的那家查（中转站也先发给那家）；没有一家选了为空。 */
+export function bareModelFacts(input: {
+  state: ApiEndpointState;
+  modelId: string;
+  factsFor: ModelFactsLookup;
+}): EndpointModelFacts {
+  const { modelId } = input;
+  const endpoint = input.state.endpoints.find(
+    (entry) => entry.enabled && entry.models.some((own) => own.id === modelId),
+  );
+  return endpoint ? input.factsFor(endpoint, modelId) : {};
+}
+
+/** 模型公布的回复上限，不超过它的窗口；不知道是 0（magpie PublishedOutput、OutputWithin）。 */
+export function publishedOutput(facts: ModelFacts): number {
+  const output = facts.output ?? 0;
+  const context = facts.context ?? 0;
+  const pastWindow = context > 0 && output > context;
+  return pastWindow ? context : output;
+}
 
 /** 按去掉前缀的小写模型名索引的 models.dev 数据。 */
 export type ModelsDevIndex = Record<string, ModelFacts>;
@@ -30,6 +64,7 @@ export type SamplingByHost = Record<string, Record<string, boolean>>;
 const LEAST_WINDOW = 2048;
 
 interface Votes {
+  names: Map<string, number>;
   context: Map<number, number>;
   output: Map<number, number>;
   efforts: Map<string, number>;
@@ -51,12 +86,16 @@ export function indexModelsDev(raw: unknown): ModelsDevIndex {
       if (!isRecord(model)) continue;
       const key = bareModelId(id);
       const entry = votes.get(key) ?? {
+        names: new Map(),
         context: new Map(),
         output: new Map(),
         efforts: new Map(),
         images: 0,
       };
       votes.set(key, entry);
+      if (typeof model.name === "string" && model.name.trim() !== "") {
+        count(entry.names, model.name.trim());
+      }
       const limit = isRecord(model.limit) ? model.limit : {};
       const context = windowOf(limit);
       if (context !== undefined) count(entry.context, context);
@@ -70,6 +109,8 @@ export function indexModelsDev(raw: unknown): ModelsDevIndex {
   const index: ModelsDevIndex = {};
   for (const [id, entry] of votes) {
     const facts: ModelFacts = {};
+    const name = mostNamed(entry.names);
+    if (name !== undefined) facts.name = name;
     const context = mostGiven(entry.context);
     if (context !== undefined) facts.context = context;
     const output = mostGiven(entry.output);
@@ -138,11 +179,13 @@ function lookupBare<T>(index: Record<string, T>, id: string): T | undefined {
 
 /** 逐项取先知道的：接口自己列表里给的在前，models.dev 补上没给的。 */
 export function mergeModelFacts(listed: ModelFacts | undefined, known: ModelFacts): ModelFacts {
+  const name = listed?.name ?? known.name;
   const context = listed?.context ?? known.context;
   const output = listed?.output ?? known.output;
   const efforts = listed?.efforts ?? known.efforts;
   const images = listed?.images ?? known.images;
   return {
+    ...(name === undefined ? {} : { name }),
     ...(context === undefined ? {} : { context }),
     ...(output === undefined ? {} : { output }),
     ...(efforts === undefined ? {} : { efforts }),
@@ -197,6 +240,19 @@ function mostGiven(tally: Map<number, number>): number | undefined {
   for (const [value, n] of tally) {
     const isTieWin = n === bestCount && best !== undefined && value < best;
     if (n > bestCount || isTieWin) {
+      best = value;
+      bestCount = n;
+    }
+  }
+  return best;
+}
+
+/** 叫得最多的名字；打平取先列的。 */
+function mostNamed(tally: Map<string, number>): string | undefined {
+  let best: string | undefined;
+  let bestCount = 0;
+  for (const [value, n] of tally) {
+    if (n > bestCount) {
       best = value;
       bestCount = n;
     }

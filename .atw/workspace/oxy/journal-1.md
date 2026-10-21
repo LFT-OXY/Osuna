@@ -1142,6 +1142,17 @@ PR #16 并入后在主工作树拉取 main、重装依赖并重建，核对同�
 - 另开工单：daemon 重启后续不上的 Codex Agent 显示「Failed to load agent」页，缺说明与挪动按钮
 
 
+## Session 40: 接口管理好用性：31 张工单实现、验收与归档
+<!-- atw-session: v=2 fp=2a1cf2ecbce03682 -->
+
+**Date**: 2026-10-21
+**Task**: 接口管理好用性：31 张工单实现、验收与归档
+**Package**: app
+**Branch**: `start-magpie-osuna-gaps-subtask-3-api-usability`
+
+### Summary
+
+/atw-implement-all 串行做完 10-16-endpoint-management-ux 的 31 张工单（每张派实现子代理、三轴审查、一轮修复、写回规范、关票）。31 号由用户在 dev 桌面端（临时 CLAUDE_CONFIG_DIR/CODEX_HOME）亲自验收 Claude Code 与 Codex 通过；Codex 用 API key 接时接口名显示方式按 magpie 设计不生效。验收：7 个只读子代理核对 240 余条，勾 230 条；i18n、协议兼容、252 个文件 lint 本机通过。分支推到 origin 手动跑 CI：Ubuntu 26 装不上 Playwright（main 已由 #24 修）、浏览器测试误用 paseoDesktop、import-apps 权限用例 Windows 失败；连同 5 条未勾项记入后续任务 10-21-endpoint-management-ux-followups（合并 main 前必做）。用户认可后归档。
 ## Session 39: 逻辑图工单 08–10 收尾与任务归档
 <!-- atw-session: v=2 fp=73e61a8fc2130166 -->
 
@@ -1169,6 +1180,136 @@ PR #16 并入后在主工作树拉取 main、重装依赖并重建，核对同�
 
 | Hash | Message |
 |------|---------|
+| `9f8c11a40` | chore(task): 10-21-endpoint-management-ux-followups 记下分支 CI 的两处合并前必修与合并 main 后复跑 |
+| `efb611594` | chore(task): 10-16-endpoint-management-ux 验收：截图已给用户看过、CLI 配置照 magpie 的两处变化经用户认可；遗留小问题开后续任务 10-21-endpoint-management-ux-followups |
+| `1aa46d72c` | chore(task): 10-16-endpoint-management-ux acceptance check |
+| `97b46f095` | chore(task): 10-16-endpoint-management-ux 31 张工单全部完成，进入验收阶段 |
+| `59b9771dc` | chore(task): 10-16-endpoint-management-ux 工单 31 完成：用户在 dev 桌面端（临时 CLI 配置）亲自验收 Claude Code 与 Codex，全部通过 |
+| `83fcfad8a` | chore(task): 10-16-endpoint-management-ux 工单 30 规范路径修正 |
+| `90e1d6297` | chore(task): 10-16-endpoint-management-ux 工单 30 完成 |
+| `8e37a14fc` | fix(api-endpoints): 工单 30 再一轮：窄屏模型卡片的厂商标签条两侧有藏着的内容时渐隐（新的共用 HorizontalScrollFade，网页用遮罩、原生端叠卡片底色渐变）；导入链接拒收等一句话的提示框同样按内容缩高，换内容时重量；菜单抽屉底下多留 16，最后一项不贴屏幕底边；补详情页提示框截图并重拍受影响的 30 号截图（接口管理好用性工单 30） |
+| `ab9c0d400` | fix(api-endpoints): 工单 30 评审一轮：新界面的提示框统一用共享 Alert（PrimaryTextAlert：sm、说明用主文字色），粘贴 curl 的提示条与导入链接的提示不再手搭；导入链接的「替换」用危险色；模型行菜单窄屏同列表行菜单改为底部弹层；自动勾选规则与逐个检测的说明气泡朝下；导入窗口的首字头像用列表同款底块，导入窗口与导入链接里的小标题用设置分区标题的样式；窄屏模型清单高度跟内容、最高同前；用量热力图下个月太近时去掉开头半个月的标签（照 GitHub）；中文导入链接提示改写；补不校验证书标记的截图并重拍 30 号截图（不再压色）（接口管理好用性工单 30） |
+| `e4ac72cda` | fix(api-endpoints): 工单 30 界面统一：模型行菜单「只用这种格式」补图标对齐其余各项、菜单加宽到 300 不再截成「Use only this for…」；导入链接确认框在窄窗口按内容缩高（量出正文下的空白缩掉一次），拒收、读不到、要升级等提示的正文改用主文字色，与风险提示一致；用量页窄窗口两列只在并排时按 4:8 分宽，上下排时高度跟内容，卡片不再叠在一起；补 1280/390 浅深色与中文截图（接口管理好用性工单 30） |
+| `e6653fce4` | chore(task): 10-16-endpoint-management-ux 工单 29 完成 |
+| `ef009e31d` | docs(api-endpoints): 工单 29 评审一轮：移植自 magpie 的源码与用例补移植声明头（自动勾选规则、glob、接口名显示方式、服务范围、清单合并与每天刷新、列表挪动与搜索、已禁用的模型区、模型设置窗口，及已登记却缺头的添加窗口、导入窗口、图标名单、状态页、store 与几份测试），THIRD_PARTY_NOTICES 补对应条目；usage 测试连接一行写明没选模型也没拉过清单时先拉清单；catalog-refresh 的注释改为开关关着时下一分钟再问（接口管理好用性工单 29） |
+| `6dd878981` | docs(api-endpoints): 工单 29 文档收尾：usage 对外请求加「API endpoints」一节（每天刷新清单带 key、随价格表开关关掉，保存后、打开详情页、拉模型、测试连接、检测、测试模型与按 CLI 测各自何时发、带什么），开关关掉时不再自己刷新清单；data-model 补接口与主机的新字段（服务范围、自动勾选、模型设置、图标、请求头、附加请求体、key 头、不校验证书、冷却设置、长对话、已禁用的模型、接口名显示方式），数组顺序改为接口顺序，加 icons/ 目录；custom-providers 写进模板、粘贴 curl、导入、导入链接与复制，裸模型名按接口顺序；术语表的模板分组、导入与状态页按最终界面改；THIRD_PARTY_NOTICES 登记已禁用的模型三份移植文件，导入链接图标改为确认框打开即取（接口管理好用性工单 29） |
+| `6744e677d` | chore(task): 10-16-endpoint-management-ux 工单 28 完成 |
+| `770712c1d` | fix(api-endpoints): 工单 28 复查：读导入链接不再等图标，确认框先出来，图片经新的 import_link_icon 另外要、取到再显示（主机读链接时就在后台开始取）；添加只用已经取到的图片，没取到、还在取都照常添加；浏览器测试的 daemon 经 e2e 封条装上假外网（sealedFetchSite，默认一律抛错，PASEO_E2E_FAKE_SITES_PATH 写了的网址才有回复），加一条 icon= 的浏览器测试；监听只对桥不通（DesktopBridgeUnavailableError）重试，别的错交给桌面端的错误报告，9 种语言；重名加「 2」后仍截到 80 字节、留着后缀；service 里的重复类型换成 protocol 的 ApiEndpointNameRef，needs_https / bad_url 抛的时候才构造；端到端（读链接不等图标、添加不等图标、重名截断）与截图（接口管理好用性工单 28） |
+| `0043d1ece` | fix(api-endpoints): 工单 28 评审一轮：会被替换的那家照 magpie Find(id)（先同一标识，再名称就是链接标识的，只看链接名称不算，name=DeepSeek&id=my-ds 是新的一家）；icon= 确认框一打开就取（模板链接也用它），图片留在内存、加成才存、没加成删掉，取不到记主机名与原因；catalog= 照 IconForCatalog 经模板的 modelsDevIds 取图标（模板图标表挪到 protocol 共用）；空的「?」「#」照 Go 收下，IPv4 映射的 IPv6 本机与私有地址算本机（本机判断挪到 utils/local-host）；确认框里的名称同样截到 80 字节；拒收按确认框的叫法说哪个地址、整句收尾，9 种语言；警示正文用主文字色，图标加带边的底，拒收在窄窗口里只占四成高；拒收存 code 与 params、画的时候再翻译；加不了的几种直接用提示框；{ endpointId, name } 只定义一处；监听的 catch 只接 Error；preload 不用 as；端到端（Find(id)、80 字节、图标打开即取、 |
+| `99a358367` | feat(api-endpoints): 导入链接的确认框：桌面端收到 paseo://import 时照 magpie renderImport 弹出，加到这个窗口当前所在的主机（窗口看着的主机，否则上次工作区的、本机的、第一台），标题下写加到哪台；警告色写明对话与这把 key 会发往哪些主机、只在信任发链接的网站时添加，名称与 key 可当场改（显示 / 隐藏），链接没带 key 时有「去拿 key ↗」，列出地址与模型，Gemini 地址没用上时说明，会替换已有的那家时另外提示并把按钮换成「替换」；拒收、读不到、主机没连上、主机没声明 apiEndpointManagement 各自说明（主机的原因按 code 与 params 用界面语言说）；加好后提示「{name} 已添加」并到那台主机的「第三方接口」页；9 种语言；单元测试与浏览器测试（添加、取消、替换提示、拒收、添加失败留在框里、390 下警告完整与添加按钮可见、老主机）；截图（接口管理好用性工单 28） |
+| `3c0d6277d` | feat(api-endpoints): 导入链接（daemon 与桌面端）：照 magpie importurl.go 解析 paseo://import?…（preset、region、name、id、key、chat、responses、anthropic、models、keys、icon；gemini 照样校验、子任务 7 前不用），只收 https、本机与局域网可用 http，地址不带账号、查询串、片段，key ≤ 4096 字节无控制字符，名称截到 80 字节，模型最多 200 个，未知模板、Vertex、没有地址、只有 Gemini 地址都拒收（import_link_refused，params.reason 加参数名，从不带 key）；新 RPC provider.api_endpoint.import_link_preview 与 import_link，daemon 自己再拒收一遍，同一标识或名称的那家照 magpie 换上（保留 id 与顺序），与从别的软件导入共用落下的那一段；「自定义」接口的 icon= 点了添加才取；桌面端主进程认出导入链接交给当前窗口（没 |
+| `754f16650` | chore(task): 10-16-endpoint-management-ux 工单 27 完成 |
+| `e000b6815` | fix(api-endpoints): 工单 27 评审一轮：忽略失败按 code 加 params 用界面语言说（import_ignore_failed，params.reason；认不出的只说没忽略成），不露主机的英文，9 种语言；「忽略」字色抬到次要按钮的字色；忽略只收 64 位十六进制指纹、最多留 500 条丢最早的（暂时不在的照 magpie 不删）；发现提示只存指纹与来源软件、不留 key 原文，过了一分钟或接口、key 变了就丢；指纹密钥文件读不懂时换新的并记一行不含密钥的警告，读不了时提示与导入窗口的扫描各自报 unknown；默认选哪几条的规则挪到 protocol 的 isPreselectedImport，daemon 与 app 共用；起名 OfferedFingerprints、hasNoEndpointsYet；挪开密钥文件的 schema；data-model 加密钥文件一行；读不懂、读不了与非指纹的端到端；重拍截图并藏掉 Expo 浮层（接口管理好用性工单 27） |
+| `e033aeae6` | feat(api-endpoints): 「第三方接口」页顶的发现提示：照 magpie 打开页面时问一次（不含 OpenCode），有新的就出「发现 N 个本地配置」与来源软件，ⓘ 里说明；「查看」打开导入窗口且只选上提示里的那几条，「忽略」记在主机上、失败时留着提示说原因、再点重试；导入后提示重问；没有接口时「查看」是主按钮；问不到就不出提示；只在主机声明 apiEndpointManagement 时有；9 种语言；浏览器测试（查看、查看时扫描失败、忽略跨刷新与新加一条再提示、忽略失败、390 下两个按钮可见、老主机与问不到不出）；截图（接口管理好用性工单 27） |
+| `059b6f14d` | feat(api-endpoints): 导入的发现提示（daemon）：新 RPC provider.api_endpoint.import_discovery 与 import_ignore，照 magpie importapps/discovery 只回导入窗口会默认选上、又没被忽略的那几条的指纹与来源软件，不含 OpenCode；别的软件的文件一分钟内只真读一次（注入的时钟），导入后丢掉、导入窗口的扫描替换它，对照已有接口每次重做；忽略记进 endpoints.json 的 ignoredImports（主机级可选字段）；指纹的 HMAC 密钥改存 api-endpoints/import-fingerprint-key.json（0600），重启后指纹不变、已忽略的照样认得，改了 key 的再提示；端到端（一分钟只读一次、导入后重读、忽略跨重启、新加一条再提示）（接口管理好用性工单 27） |
+| `4ae966979` | chore(task): 10-16-endpoint-management-ux 工单 26 完成 |
+| `af16c3dcb` | fix(api-endpoints): 工单 26 复查：导入时任何错（写文件失败等）都停在那一条，回之前加好的与出错的那条（import_failed，params.reason），界面照样刷新、提示；指纹对不上时 failed 为空、说扫描已过时并重扫；只在模板某个区域的主机上时记下那个区域；SQLite 打开失败按结果码分（没权限、打不开是 unreadable 带 SQLITE_*，被锁是 busy，不是数据库是 not_database）；多字段的返回类型起名，会话里的三元式提出来；注入写失败的端到端、区域与无权限的单测；补拍读不了的来源与开关关着时淡下去的截图（接口管理好用性工单 26） |
+| `276f983b4` | fix(api-endpoints): 工单 26 评审一轮：照 magpie 一条一条地导入，出错就停、之前加好的留着，回出错的那条（failed）与原因，界面刷新列表、提示加了哪几家、窗口留着并在那一条下说原因；空的改名当没改名；名称被占用又是同一家 key 不同的默认选上、新增一家（otherKeyName）；只在模板主机上的记下模板、地址照原样；每节标能导入几条，没找到或读不了是「–」加说明，读不了按 daemon 的原因码（unreadable、not_json、not_database、no_providers_table、busy、no_sqlite）用界面语言说；有一条能选就有全选；没有 getBuiltinModule 或 node:sqlite 时那个来源报 no_sqlite，Node 22 只按下 node:sqlite 的 ExperimentalWarning；指纹改用 daemon 内存里的随机密钥做 HMAC；只读的说法写准（共享锁、-wal/-shm），端到端加查目录里没有新文件；打码的 key 不断开、只在「·」处换行；开关关着时改名与两种进来法淡下 |
+| `f4a30aad3` | feat(api-endpoints): 「第三方接口」页的「导入」入口与导入窗口：照 magpie 每个软件一节（路径、没找到、读不了、全选开关），每条写在那个软件里的哪儿、主机、打码的 key、模型数与状态（新的 / 已添加 / 名称已被占用 / 同一家、key 不同 / 不能导入）及原因；默认选上新的与同一家 key 不同的；名称被占用的可就地改名，或选「两家都留」「替换原来那家」；选择用开关；导入按钮在固定的底栏；导入成功关窗口、刷新列表并提示加了哪几家，失败留在窗口里说明原因；主机声明 apiEndpointManagement 才有；9 种语言；单元与浏览器测试（浏览器测试的 daemon 换临时 HOME 与 XDG 目录），截图（接口管理好用性工单 26） |
+| `1dbab6b91` | feat(api-endpoints): 从别的软件导入（daemon）：新 RPC provider.api_endpoint.import_scan 与 import，照 magpie importapps 只读地读 CC Switch（cc-switch.db，没有读 config.json）、Claude Code settings.json（Osuna 接管时读 ADR 0004 记下的原值）、Codex config.toml、Alma chat_threads.db、OpenCode auth.json（只在导入窗口要时读），数据库用 node:sqlite 只读打开；每条照 Osuna 会加的那家给出（地址正是模板的就用模板），对照已有接口标新的 / 已添加 / 名称已被占用 / 同一家、key 不同（含请求头比较），key 打码、按指纹导入；导入整批一次落下，新增一家、替换（保留原接口的 id、标识与顺序位置）、改名后新增；测试 daemon 的来源一律指临时目录；临时 HOME 五种假配置的端到端（接口管理好用性工单 26） |
+| `b7b4cc800` | chore(task): 10-16-endpoint-management-ux 工单 25 完成 |
+| `5246fc802` | fix(api-endpoints): 用量测试夹具读 vendor_status 请求的厂商用过滤代替类型断言（接口管理好用性工单 25） |
+| `f7ad7d02d` | fix(api-endpoints): 工单 25 评审一轮：状态页像 magpie 的 json.Unmarshal 那样宽松地读（组件、事件缺字段或为 null 当空的，只有没有 components 才读不懂）；提示整块占满行宽、与名称对齐，提示、受影响的项与事件、「状态页 ↗」从上往下排；只给链接的写「DeepSeek 状态页 ↗」（9 种语言）；用量页订阅卡片的浏览器测试与截图，重拍接口列表截图；forgetCatalog 的注释挪回原处；等级与 VendorStatusAnswer 只定义一处；端到端注入第一次看的等候计时器；docs/usage.md 开头一段写进状态页（接口管理好用性工单 25） |
+| `6ec3a308c` | feat(api-endpoints): 接口行上的厂商官方状态页提示：「{厂商} 官方报告服务异常」（降级是警告色、中断是危险色、维护是弱色，照 magpie）连同受影响的项与事件，加「状态页 ↗」（描边小按钮，有事件页先开事件页）；DeepSeek 只给链接；Claude Code、Codex 的套餐用量卡片同样提示；只在「第三方接口」页或用量页开着时每 5 分钟问一次，问失败不影响列表；主机声明 apiEndpointManagement 才问；9 种语言、术语表；单元、浏览器测试与截图（接口管理好用性工单 25） |
+| `cd7c5df1c` | feat(api-endpoints): 厂商官方状态页（daemon）：新 RPC provider.api_endpoint.vendor_status 读 Anthropic、OpenAI、Moonshot 的 /api/v2/summary.json，只看 API 依赖的那几项（照 magpie upstream：最差等级、不正常的项、这几项上没解决的事件，读失败是不知道），每页 5 分钟最多读一次、失败也记 5 分钟，第一次看等最多 4 秒；DeepSeek 只给链接；接口按各格式地址的主机名对厂商，另可要订阅卡片的厂商；「价格表自动更新」关着时一页不读、answer autoUpdate=false；测试 daemon 的状态页地址一律指本机；注入时钟的端到端；docs/usage.md 对外请求（接口管理好用性工单 25） |
+| `14ba0a10a` | chore(task): 10-16-endpoint-management-ux 工单 24 完成 |
+| `9a94fbf57` | fix(api-endpoints): 工单 24 复查：添加 / 编辑窗口里请求头、附加请求体、key 放在哪个头、不校验证书与冷却设置共用一个字段标签（主前景色，说明往下开），删掉重复的 FieldLabel；到某个时刻旁写明「每天，如 08:00」，说明里讲清不写时区按这台电脑的时钟、加 Z 或 +08:00 定时区（9 种语言）；「第三方接口中转站的地址」的注释挪回 createApiEndpointGatewayUrl；重拍到某个时刻与工单 22 的截图（接口管理好用性工单 24） |
+| `629f4eb03` | fix(api-endpoints): 工单 24 评审一轮：额度冷却可以冷却到每天几点（照 magpie QuotaResetAt：ParseResetAt 的 08:00 / 8:30 / 00:00+08:00 / 16:00Z，NextResetAt 今天已过取明天，经 OwnQuotaRest 生效，与分钟数二选一、时刻说了算，手改读不懂的当没设），界面按分钟 / 到某个时刻二选一，读不懂的时刻就地提示、拒收按界面语言说；createCooldowns 挪出别人的注释与目标之间；冷却最长多久等说明往下开；冷却的问题与文案从 request-extras 分出；测试复用 ApiEndpointCooldownSettings；八天一个常量；标签与开关同色；术语表补全；重拍截图并加到某个时刻的截图（接口管理好用性工单 24） |
+| `daecd342d` | feat(api-endpoints): 添加 / 编辑窗口「高级」里的冷却设置：额度用完后冷却多久、冷却最长多久（分钟，空着用中转站自己的，缺省值写在占位里）、原因不明的失败不冷却（Switch，打开后冷却上限收起）；不是 0 到 8 天的整数分钟就地提示并挡住保存，daemon 拒收按界面语言说；设了就展开；只在改过时整份带上；9 种语言、术语表；单元、浏览器测试与截图（接口管理好用性工单 24） |
+| `6244efa3f` | feat(api-endpoints): 每家的冷却设置（daemon）：接口新字段 cooldownSettings——额度用完后冷却多久（厂商给的时间仍优先，Retry-After 被截到一小时而这家设的更长时用这家的）、冷却最长多久（失败与限流同用，厂商说的时间仍优先）、原因不明的失败不冷却（不记失败次数，不提供模型与 401/403 照样冷却，与冷却上限互斥，照 magpie RestCapOff）；分钟数 0 到 8 天，越界拒收 invalid_cooldown_settings（field、max）；不设与改动前一致；复制带上；注入时钟的端到端（接口管理好用性工单 24） |
+| `1a3b57a48` | chore(task): 10-16-endpoint-management-ux 工单 23 完成 |
+| `4f18aa417` | fix(api-endpoints): 工单 23 评审一轮：不校验证书的 fetch 用 npm undici 自己的 fetch 与 Agent（Node 22 自带 undici 6，不混用），回复经 UpstreamResponse 读；保存前的检查按格式用表单地址盖过存的（照 magpie typed），被换掉的地址重新校验；每组主机一套连接，重定向到这家另一个地址照样不校验；地址换了、关掉、整家关或删时关掉连接，daemon 停下全关；insecureTls 手改坏值不让文件读不懂；https 判断统一用 isHttpsUrl；确认框按钮紧跟说明、弹层变矮，说明用主前景色；重拍截图（接口管理好用性工单 23） |
+| `949b43707` | feat(api-endpoints): 添加 / 编辑窗口的「不校验证书」：只对「自定义」、有 https 地址时显示，打开先弹确认框写明别人可能冒充这个地址、看到 key 和对话，关掉直接关；保存与保存前的拉模型、测试、检测带上；接口行上常驻警示标记；模板接口被拒按界面语言说；9 种语言；单元、浏览器测试与截图（接口管理好用性工单 23） |
+| `d79694a21` | feat(api-endpoints): 接口的「不校验证书」（daemon）：只对「自定义」加的接口自己的 https 主机起作用，中转站直通与翻译后、count_tokens、拉模型（保存时与每天）、测试连接、检测、测试模型都经 skipsCertificateCheck；fetch 用按主机分开的 undici Agent，中转站用 rejectUnauthorized，不碰全局；模板接口打开拒收 insecure_tls_template；表单未保存的值可带给拉模型、测试与检测；自签证书假上游端到端（接口管理好用性工单 23） |
+| `c2aa0d83e` | chore(task): 10-16-endpoint-management-ux 工单 22 完成 |
+| `229389bc7` | test(api-endpoints): 工单 18 遗留：两条 settings.json 用例的 modelPicker 预期跟上接口名显示方式 |
+| `66d74242b` | fix(api-endpoints): 工单 22 复查：JSDoc 放回原处；请求头值提示写明 Latin-1 以外的字符（如中文）发不出去（9 种语言与 daemon 原文）；拒收按格式记（照 magpie fits 按协议），Chat 上不收的字段 Responses 照发；key 头分段控件描输入框的边，浅色对话框里看得出；重拍截图（接口管理好用性工单 22） |
+| `fe0cd47f6` | fix(api-endpoints): 工单 22 评审一轮：Anthropic 自己与 Bedrock 的地址只放 x-api-key（照 magpie AuthHeaders）、key 头取法收成 keyHeadersAt 一处；不合法的请求头照 magpie 照存、表单只提示，发时每个请求报 invalid_header 并按界面语言说；值空的头照存；用户请求头值和 key 一样在报错里打码；翻译后补进的附加请求体每种格式都去掉不收的字段；keyHeader 在会话层收窄、协议共用 ApiEndpointRequestExtrasSchema；密度与类型守卫；附加请求体框不再折行、建议的头另起一行；补测试与重拍截图（接口管理好用性工单 22） |
+| `6668eca7f` | feat(api-endpoints): 添加 / 编辑窗口的「高级」：请求头（一行一个、值可按 JSON 展开、模板提示的头一点就加）、附加请求体（保留字段等当场提示并挡住保存）、key 放在哪个头（只在第三方 Anthropic 地址显示）；保存前的拉模型、测试连接、检测带表单里的值；daemon 拒收按界面语言说；9 种语言；浏览器测试与截图（接口管理好用性工单 22） |
+| `0dfb3f3fa` | feat(api-endpoints): 接口的请求头、附加请求体与 key 放哪个头（daemon）：中转站直通与翻译后、测试连接、自动检测（单次与逐个模型）、拉模型、测试模型（含按 CLI 的样子测）都经 signedHeaders 与附加请求体合并；用户头写在 Osuna 的之后、同名不分大小写替换、anthropic-beta 合并去重；用户自己填认证头时不改单头重发；保存时拒收保留字段与不合法的头；表单未保存的值可带给拉模型、测试与检测（接口管理好用性工单 22） |
+| `6803df2cf` | chore(task): 10-16-endpoint-management-ux 工单 21 完成 |
+| `e04e3289c` | fix(api-endpoints): 工单 21 复查：单次检测 daemon 自己写的原因（没有模型可问、列不出模型、连不上、超时、格式不对）也改为原因码由界面按语言说；英文提示给两个标签加引号；去重截断合成 modelsToAsk；拆开带调用的三元式；常量移到请求的注释之上；重拍 390 截图（接口管理好用性工单 21） |
+| `a82e94644` | fix(api-endpoints): 工单 21 评审一轮：检测照 magpie 也问被禁的模型、逐个模型的原因改为原因码由界面按语言说、30 个上限放进协议、窄窗口试用模型框与按钮上下排、格子里状态码与格式名同一行；补「只通一种格式→保存为只用这种格式」的端到端用例（接口管理好用性工单 21） |
+| `0cb34d170` | feat(api-endpoints): 自动识别加「逐个模型」：已选模型（前 30 个）在每种格式上各问一次、逐行显示，编辑时「采用这些」把只通一种格式的模型设成只用这种格式（接口管理好用性工单 21） |
+| `2d5d38b50` | chore(task): 10-16-endpoint-management-ux 工单 20 完成 |
+| `fe94aa563` | fix(api-endpoints): 工单 20 复查：本机 Codex 版本照 magpie proc.Version 先读 npm 包、跑失败的同一文件不再跑、并发合一；系统名问失败不缓存；翻译到 Chat 的请求不带 Cookie、账号 id 与客户端口令（接口管理好用性工单 20） |
+| `005f4f4bd` | fix(api-endpoints): 工单 20 评审一轮：Codex 版本取四个来源最新、按 Claude Code 测也排除 Bedrock 与 Azure、读出模型名就记 Claude Code 样本、翻译到 Chat 的 Codex 请求带身份头、原因不截断且深色可读（接口管理好用性工单 20） |
+| `58575dfb0` | feat(api-endpoints): 按 Claude Code / Codex 的样子测：中转站记下 CLI 请求头样本，测试模型加两种测法（接口管理好用性工单 20） |
+| `029ab4a2f` | chore(task): 10-16-endpoint-management-ux 工单 19 完成 |
+| `da79c5eaa` | fix(api-endpoints): 工单 19 复查：原因原文照登、Web 上模型名不折行、没发请求的不写耗时、取消只放过连接已断、写法密度（接口管理好用性工单 19） |
+| `3273c7748` | fix(api-endpoints): 工单 19 评审一轮：daemon 先报要测哪些、失败行照 magpie 写「格式 · 状态码 · 原因」、后面格式超时不盖掉第一个原因、计时器可注入、离开页面即取消（接口管理好用性工单 19） |
+| `9500574bf` | feat(api-endpoints): 测试模型：逐个模型发「hi」、并发 4、进度与取消，详情页红绿点、格式与耗时、只看免费 / 只看能用、免费与上下文小标（接口管理好用性工单 19） |
+| `4833afab2` | chore(task): 10-16-endpoint-management-ux 工单 18 完成 |
+| `f702a283e` | fix(api-endpoints): 工单 18 复查：预览照选单真实算、设置移到接口的「模型」区顶上、COMPAT 只标可删的部分、窄屏按宽度叠放（接口管理好用性工单 18） |
+| `8275457f7` | fix(api-endpoints): 工单 18 评审一轮：接口名显示方式也管 Claude Code /model、接口详情页加同一设置与预览、撞名按整份选单算（接口管理好用性工单 18） |
+| `5d2576490` | feat(api-endpoints): 整台主机的接口名显示方式：一直显示 / 同名时显示 / 不显示（接口管理好用性工单 18） |
+| `4bada6cea` | docs(task): 10-16-endpoint-management-ux 需求文档记单个模型查询已随工单 17 做上 |
+| `2488186ec` | chore(task): 10-16-endpoint-management-ux 工单 17 完成 |
+| `a64da3b5d` | fix(api-endpoints): 单个模型路由只接住 URIError，编码坏了的名字回 404（接口管理好用性工单 17） |
+| `9731a77b7` | fix(api-endpoints): 工单 17 评审一轮：中转站加 GET /v1/models/{id}、模型资料查法类型合一、回复上限收窗口共用一处、移植声明登记（接口管理好用性工单 17） |
+| `c26908fa1` | feat(api-endpoints): 中转站 /v1/models 每条带显示名、思考档位、上下文、回复上限与输入类型（接口管理好用性工单 17） |
+| `3fd8fec62` | chore(task): 10-16-endpoint-management-ux 工单 16 完成 |
+| `fc5e6f6d8` | fix(api-endpoints): 工单 16 再修一轮：客户端关闭与发送失败按连接断开报、选单里不能选的项不高亮也不响应回车、接口名另起一行、档位只为被禁模型去掉（接口管理好用性工单 16） |
+| `1a74e08d2` | fix(api-endpoints): 工单 16 评审一轮：收窄捕获、老客户端保存保留两项主机设置、只有 Chat 地址的一家也禁、已禁用的模型区改版（接口管理好用性工单 16） |
+| `d4f15a784` | feat(api-endpoints): 整台主机的已禁用的模型，中转站按请求格式回 403（接口管理好用性工单 16） |
+| `b7f6ef4db` | chore(task): 10-16-endpoint-management-ux 工单 15 完成 |
+| `7b5d5dbc5` | fix(api-endpoints): 工单 15 补一轮：advisor 不带前缀的 Claude id 原样用、行菜单能取消作废的格式，补编辑时新 key 与两种名字都认的测试（接口管理好用性工单 15） |
+| `aa2791a30` | fix(api-endpoints): 工单 15 评审一轮：编辑时测试与检测总带接口 id、中转站按上游模型名认 Claude 与 advisor、作废的格式照样标出、格式类型收紧与回复改写共用按行缓冲（接口管理好用性工单 15） |
+| `cd4a7f066` | fix(api-endpoints): 窄窗口的格式选择改下拉、作废提示整句显示，附工单 15 截图（接口管理好用性工单 15） |
+| `df1920464` | feat(api-endpoints): 模型设置与整家默认加上游模型名、只用这种格式，模型行菜单直接设格式，自动检测可只在通了的格式上问（接口管理好用性工单 15） |
+| `a3ccab9a6` | feat(api-endpoints): 中转站按上游模型名发、按只用这种格式问，CLI 收到的回复模型名不变（接口管理好用性工单 15） |
+| `db9a2a962` | chore(task): 10-16-endpoint-management-ux 工单 14 完成 |
+| `6aea3b7b6` | fix(api-endpoints): 工单 14 评审一轮：老客户端切换保留长对话、token 输入认 magpie 简写、长对话区文案与完整窗口时压缩阈值置灰（接口管理好用性工单 14） |
+| `524c9bedb` | feat(api-endpoints): 模型设置写进 Claude Code，照 magpie 合并模型提示，加整台主机的长对话（接口管理好用性工单 14） |
+| `d48187ab1` | chore(task): 10-16-endpoint-management-ux 工单 13 完成 |
+| `b6c032fd1` | fix(api-endpoints): token 数按各语言的千分位与数字写法读回，档位下拉勾着的用正文颜色（接口管理好用性工单 13） |
+| `ff9eb9f2d` | fix(api-endpoints): 模型设置评审一轮：Codex 272K 工作窗口、看图只比上游清单、收拢规则共用（接口管理好用性工单 13） |
+| `32976c7a2` | feat(api-endpoints): 模型行菜单的「模型设置」窗口与详情页「整家默认」（接口管理好用性工单 13） |
+| `9ee46c657` | feat(api-endpoints): 模型设置与整家默认写进 Codex 的模型清单，一档不留不发思考参数（接口管理好用性工单 13） |
+| `c15c5df97` | chore(task): 10-16-endpoint-management-ux 工单 12 完成 |
+| `dffd9b285` | fix(api-endpoints): 自动勾选规则改用 RE2（re2js），匹配不会卡住（接口管理好用性工单 12） |
+| `dd7657f50` | fix(api-endpoints): 服务范围评审一轮（接口管理好用性工单 12） |
+| `c8fa5c942` | feat(api-endpoints): 详情页服务范围与自动勾选规则（接口管理好用性工单 12） |
+| `3ae9af541` | feat(api-endpoints): 服务范围与自动勾选规则（接口管理好用性工单 12） |
+| `f1e5c8ac9` | chore(task): 10-16-endpoint-management-ux 工单 11 完成 |
+| `1cc9fe820` | fix(api-endpoints): 定时刷新先记尝试时刻、拉取时间整句文案（接口管理好用性工单 11） |
+| `2b3db4aad` | fix(api-endpoints): 清单刷新评审一轮（接口管理好用性工单 11） |
+| `e569eaafd` | feat(api-endpoints): 详情页丢掉拉回的清单、逗号批量添加与打开即刷新（接口管理好用性工单 11） |
+| `0c5d864b2` | feat(api-endpoints): 清单按格式合并、每天刷新与丢掉清单（接口管理好用性工单 11） |
+| `58b02fd7c` | chore(task): 10-16-endpoint-management-ux 工单 10 完成 |
+| `ffeaca07c` | test(api-endpoints): 保存后拉清单的测试 daemon 只去本机地址；key 选填后的拒收用例改对（接口管理好用性工单 10） |
+| `66e2250fa` | fix(api-endpoints): 保存前检查评审一轮（接口管理好用性工单 10） |
+| `26fba3a84` | feat(api-endpoints): 保存前拉模型、测试连接与自动识别（接口管理好用性工单 10） |
+| `93ea221f8` | chore(task): 10-16-endpoint-management-ux 工单 09 完成 |
+| `998cdf309` | fix(api-endpoints): 粘贴 curl 评审一轮（接口管理好用性工单 09） |
+| `0840929bc` | feat(api-endpoints): 粘贴 curl 自动填表（接口管理好用性工单 09） |
+| `81e9eb84d` | chore(task): 10-16-endpoint-management-ux 工单 08 完成 |
+| `2a5ba2f88` | fix(api-endpoints): 本机模板与自选图标评审一轮（接口管理好用性工单 08） |
+| `25d17c7a8` | feat(api-endpoints): 本机模板与自选图标（接口管理好用性工单 08） |
+| `4eeb024b0` | chore(task): 10-16-endpoint-management-ux 工单 07 完成 |
+| `a458d9833` | fix(api-endpoints): Bedrock 与 Azure 模板评审一轮（接口管理好用性工单 07） |
+| `b8c8534eb` | feat(api-endpoints): Bedrock 与 Azure 模板（接口管理好用性工单 07） |
+| `d9d331456` | chore(task): 10-16-endpoint-management-ux 工单 06 完成 |
+| `50d473c95` | fix(api-endpoints): 模板评审一轮（接口管理好用性工单 06） |
+| `7e600ffa1` | feat(api-endpoints): 模板——厂商与中转服务（接口管理好用性工单 06） |
+| `c355141f0` | chore(task): 10-16-endpoint-management-ux 工单 05 完成 |
+| `b75b1c719` | fix(api-endpoints): 复制与读回 key 评审一轮（接口管理好用性工单 05） |
+| `e778a11e1` | test(api-endpoints): 列表带上 slug 后改为只断言 key 不外发；spec 同步（接口管理好用性工单 04） |
+| `1f41236f1` | feat(api-endpoints): 复制一家与读回 key（接口管理好用性工单 05） |
+| `76f7349c5` | chore(task): 10-16-endpoint-management-ux 工单 04 完成 |
+| `6bb5c9728` | fix(api-endpoints): 列表搜索与行信息评审一轮（接口管理好用性工单 04） |
+| `b654b8d3a` | feat(api-endpoints): 列表搜索与行信息（接口管理好用性工单 04） |
+| `671f9eb5c` | chore(task): 10-16-endpoint-management-ux 工单 03 完成；state-management 规范补乐观排序的序号保护 |
+| `97c88bb89` | fix(api-endpoints): 接口顺序评审一轮——右键菜单、连续挪动、拖动落点（接口管理好用性工单 03） |
+| `9b104a4bc` | feat(api-endpoints): 接口顺序——拖动、行菜单与 Alt+↑/↓（接口管理好用性工单 03） |
+| `41d9a6ea9` | chore(task): 10-16-endpoint-management-ux 工单 02 完成；persistence 规范补「给接口加字段要登记进存储格式」 |
+| `760069ce6` | fix(api-endpoints): key 选填时的说明文字与详情页（接口管理好用性工单 02 评审） |
+| `df70f4ca9` | feat(api-endpoints): key 选填与 apiEndpointManagement 能力位（接口管理好用性工单 02） |
+| `cf36045e8` | chore(task): 10-16-endpoint-management-ux 工单 01 完成；prd 第 30 条改为照 magpie codexSign 生成 Codex 请求头（用户 10-19 定） |
+| `1fe850790` | docs(api-endpoints): 工单 01 评审——ADR 0007 标出「只用这种格式」改掉的选格式两处、接口顺序注记链术语表并补上行上默认模型；ADR 0008 上游模型名补不含 * 的写法、拉清单只带请求头、开头改指向新小节；ADR 0013 补用户自设请求头除外、最多 200 个模型、样本去掉 Cookie；总任务第 15 条两条注记合一（接口管理好用性工单 01） |
+| `366eeb831` | docs(api-endpoints): ADR 0007 裸模型名改按接口顺序；ADR 0008 新增「What the user sets on an endpoint」——请求头、key 头、附加请求体、上游模型名、只用这种格式也改请求，用户认证头盖过 Osuna 的且不触发双认证头重发；新 ADR 0013 写明读别的软件配置、导入链接、按 CLI 的样子测是总任务第 15 条的例外；总任务第 15 条注记链到新 ADR（接口管理好用性工单 01） |
+| `b5371c704` | chore(task): 10-16-endpoint-management-ux 规划完成——需求、31 张工单、调研与术语表词条 |
+| `a5ed6d02f` | chore(task): 新建 10-19-codex-agent-load-failed-move——续不上的 Codex Agent 在加载失败页给说明和挪动按钮（10-16-cli-wiring-web-search 14 号留下的缺口），切成 1 张工单 |
 | `14b4e251d` | feat(logic-map): 08 Osuna 工具不可用时开关旁说明原因并给去开启入口，daemon 不再发逻辑图说明块 |
 | `638f84614` | fix(logic-map): 08 评审修正——提示收成警告图标加去开启，不挤压左侧控件；复用草稿判定，命名参数类型 |
 | `c269075f9` | feat(logic-map): 09 update_logic_map 逐个列出缺文档的节点，说明块要求每个节点都有文档；图上缺文档的节点带"没有文档"标签，点它提示还没有文档 |

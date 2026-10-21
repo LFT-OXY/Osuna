@@ -17,6 +17,9 @@ import {
   type ShapeRefusals,
 } from "./refusals.js";
 import { failedBySelf, type FailedAttempt } from "./upstream-call.js";
+import { NO_REQUEST_EXTRAS } from "../request-extras.js";
+
+const RELAY = "https://relay.example";
 
 /*
  * 上游不收的写法：effort none、关掉思考、这个格式的地址、两个认证头一起带。错误原文照 magpie 的
@@ -96,21 +99,44 @@ describe("an endpoint refusing thinking turned off", () => {
 });
 
 describe("remembering a refusal", () => {
-  test("holds for that endpoint's model and that shape only", () => {
+  test("holds for that endpoint's model, that format and that shape only", () => {
     const refused = new RefusedShapes();
-    refused.add("ep_a", "gpt-6.1-sol", "none");
+    const at = (input: {
+      endpointId?: string;
+      model?: string;
+      format?: "openai_chat" | "openai_responses";
+      shape?: "none" | "thinkingOff" | "cacheKey";
+    }) => ({
+      endpointId: input.endpointId ?? "ep_a",
+      model: input.model ?? "gpt-6.1-sol",
+      format: input.format ?? "openai_chat",
+      shape: input.shape ?? "none",
+    });
+    refused.add(at({}));
+    refused.add(at({ shape: "cacheKey" }));
 
-    expect(refused.has("ep_a", "gpt-6.1-sol", "none")).toBe(true);
-    expect(refused.has("ep_a", "gpt-6.1-sol", "thinkingOff")).toBe(false);
-    expect(refused.has("ep_a", "gpt-5.5", "none")).toBe(false);
-    expect(refused.has("ep_b", "gpt-6.1-sol", "none")).toBe(false);
+    expect(refused.has(at({}))).toBe(true);
+    expect(refused.has(at({ shape: "thinkingOff" }))).toBe(false);
+    expect(refused.has(at({ model: "gpt-5.5" }))).toBe(false);
+    expect(refused.has(at({ endpointId: "ep_b" }))).toBe(false);
+    // 在 Chat 上不收的字段，同一家同一模型的 Responses 照常发（magpie 的 fits 按协议记）。
+    expect(refused.has(at({ format: "openai_responses", shape: "cacheKey" }))).toBe(false);
+  });
+
+  test("a format's own refusal is kept for the endpoint's model whatever format asks", () => {
+    const refused = new RefusedShapes();
+    const shape = "format:openai_chat" as const;
+    refused.add({ endpointId: "ep_a", model: "glm-5", format: "openai_chat", shape });
+    expect(refused.has({ endpointId: "ep_a", model: "glm-5", format: null, shape })).toBe(true);
+    refused.forget({ endpointId: "ep_a", model: "glm-5", shapes: [shape] });
+    expect(refused.has({ endpointId: "ep_a", model: "glm-5", format: null, shape })).toBe(false);
   });
 
   test("a refused prefill can be looked up for that endpoint's model only", () => {
     const refused = new RefusedShapes();
     const of = (endpointId: string, model: string): ShapeRefusals => ({
-      has: (shape) => refused.has(endpointId, model, shape),
-      add: (shape) => refused.add(endpointId, model, shape),
+      has: (shape) => refused.has({ endpointId, model, format: "openai_chat", shape }),
+      add: (shape) => refused.add({ endpointId, model, format: "openai_chat", shape }),
     });
     const body = {
       messages: [
@@ -237,6 +263,7 @@ describe("asking again with the key in one header", () => {
     const outcome = await askWithOneKeyHeader({
       refusals,
       sent: "both",
+      extras: NO_REQUEST_EXTRAS,
       failed: failed(401, BOTH_REFUSED_ZH),
       ask: upstream.ask,
     });
@@ -244,7 +271,15 @@ describe("asking again with the key in one header", () => {
     expect(outcome.kind).toBe("opened");
     expect(upstream.asked).toEqual(["xApiKey"]);
     expect(refusals.added).toEqual(["bothKeyHeaders"]);
-    expect(keyHeadersFor({ format: "anthropic_messages", refusals })).toBe("xApiKey");
+    expect(
+      keyHeadersFor({
+        format: "anthropic_messages",
+        templateId: undefined,
+        baseUrl: RELAY,
+        extras: NO_REQUEST_EXTRAS,
+        refusals,
+      }),
+    ).toBe("xApiKey");
   });
 
   test("goes on to Bearer alone when x-api-key alone is refused too, and remembers that", async () => {
@@ -253,13 +288,22 @@ describe("asking again with the key in one header", () => {
     await askWithOneKeyHeader({
       refusals,
       sent: "both",
+      extras: NO_REQUEST_EXTRAS,
       failed: failed(401, BOTH_REFUSED_ZH),
       ask: upstream.ask,
     });
 
     expect(upstream.asked).toEqual(["xApiKey", "bearer"]);
     expect(refusals.added).toEqual(["xApiKeyAlone"]);
-    expect(keyHeadersFor({ format: "anthropic_messages", refusals })).toBe("bearer");
+    expect(
+      keyHeadersFor({
+        format: "anthropic_messages",
+        templateId: undefined,
+        baseUrl: RELAY,
+        extras: NO_REQUEST_EXTRAS,
+        refusals,
+      }),
+    ).toBe("bearer");
   });
 
   test("hands the failure back as it came for another 401, or when one header was sent already", async () => {
@@ -269,6 +313,7 @@ describe("asking again with the key in one header", () => {
     const once = await askWithOneKeyHeader({
       refusals,
       sent: "both",
+      extras: NO_REQUEST_EXTRAS,
       failed: invalid,
       ask: upstream.ask,
     });
@@ -276,6 +321,7 @@ describe("asking again with the key in one header", () => {
     const narrowed = await askWithOneKeyHeader({
       refusals,
       sent: "xApiKey",
+      extras: NO_REQUEST_EXTRAS,
       failed: refusedAgain,
       ask: upstream.ask,
     });
@@ -287,9 +333,60 @@ describe("asking again with the key in one header", () => {
   });
 
   test("only an Anthropic address gets both headers; OpenAI formats send Bearer", () => {
-    expect(keyHeadersFor({ format: "anthropic_messages", refusals: memory() })).toBe("both");
-    expect(keyHeadersFor({ format: "openai_chat", refusals: memory() })).toBe("bearer");
-    expect(keyHeadersFor({ format: "openai_responses", refusals: undefined })).toBe("bearer");
+    expect(
+      keyHeadersFor({
+        format: "anthropic_messages",
+        templateId: undefined,
+        baseUrl: RELAY,
+        extras: NO_REQUEST_EXTRAS,
+        refusals: memory(),
+      }),
+    ).toBe("both");
+    expect(
+      keyHeadersFor({
+        format: "openai_chat",
+        templateId: undefined,
+        baseUrl: RELAY,
+        extras: NO_REQUEST_EXTRAS,
+        refusals: memory(),
+      }),
+    ).toBe("bearer");
+    expect(
+      keyHeadersFor({
+        format: "openai_responses",
+        templateId: undefined,
+        baseUrl: RELAY,
+        extras: NO_REQUEST_EXTRAS,
+        refusals: undefined,
+      }),
+    ).toBe("bearer");
+  });
+
+  test("a key header the user picked wins on a third-party Anthropic address only", () => {
+    const refusals = memory();
+    refusals.add("bothKeyHeaders");
+    const bearer = { ...NO_REQUEST_EXTRAS, keyHeader: "bearer" as const };
+    const anthropic = { format: "anthropic_messages" as const, templateId: undefined, refusals };
+    expect(keyHeadersFor({ ...anthropic, baseUrl: RELAY, extras: bearer })).toBe("bearer");
+    // Anthropic 自己的地址不看这一项，照通常的规则。
+    expect(
+      keyHeadersFor({ ...anthropic, baseUrl: "https://api.anthropic.com", extras: bearer }),
+    ).toBe("xApiKey");
+  });
+
+  test("does not ask again with one header when the user wrote an auth header of their own", async () => {
+    const refusals = memory();
+    const upstream = oneHeaderOnly("xApiKey");
+    const own = failed(401, BOTH_REFUSED_ZH);
+    const outcome = await askWithOneKeyHeader({
+      refusals,
+      sent: "both",
+      extras: { ...NO_REQUEST_EXTRAS, headers: { "X-Api-Key": "mine" } },
+      failed: own,
+      ask: upstream.ask,
+    });
+    expect(outcome).toBe(own);
+    expect(upstream.asked).toEqual([]);
   });
 });
 

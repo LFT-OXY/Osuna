@@ -15,6 +15,8 @@ interface SettingsInfoTipProps {
   title: string;
   info: ReactNode;
   testID?: string;
+  /** Which side of the icon the tip opens on; below for a field's label, so it never covers the row above. */
+  side?: "top" | "bottom";
 }
 
 /**
@@ -22,7 +24,7 @@ interface SettingsInfoTipProps {
  * header that opens a tooltip. Never a paragraph under the header — see
  * docs/design.md §7.
  */
-export function SettingsInfoTip({ title, info, testID }: SettingsInfoTipProps) {
+export function SettingsInfoTip({ title, info, testID, side = "top" }: SettingsInfoTipProps) {
   const { t } = useTranslation();
   return (
     <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile>
@@ -37,7 +39,7 @@ export function SettingsInfoTip({ title, info, testID }: SettingsInfoTipProps) {
           <ThemedInfo size={ICON_SIZE.sm} uniProps={mutedIconMapping} />
         </Pressable>
       </TooltipTrigger>
-      <TooltipContent side="top" align="start" offset={8}>
+      <TooltipContent side={side} align="start" offset={8}>
         <Text style={styles.tooltipText}>{info}</Text>
       </TooltipContent>
     </Tooltip>

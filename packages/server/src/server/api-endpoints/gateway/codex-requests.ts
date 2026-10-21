@@ -5,6 +5,7 @@
 import type { IncomingHttpHeaders } from "node:http";
 import type pino from "pino";
 import { applyEdits, modify } from "jsonc-parser";
+import { namedCodexEndpointEntries } from "../codex-model-catalog.js";
 import { codexOwnModels, readCodexModelsCache } from "../codex-models-cache.js";
 import { usableModels } from "../host-endpoints.js";
 import type { ApiEndpointState } from "../store.js";
@@ -105,8 +106,12 @@ export function shapeCodexChatGptRequest(input: {
   const isLeadSealing = !listing.marksAgentsV1 && !isEndpointModel(picked.model);
   const choices: SpawnChoice[] = own.map((model) => ({ slug: model.slug, name: model.label }));
   if (!isLeadSealing) {
-    for (const entry of listing.entries)
-      choices.push({ slug: entry.slug, name: entry.display_name });
+    const named = namedCodexEndpointEntries({
+      listing: listing.endpoints,
+      display: listing.nameDisplay,
+      ownNames: own.map((model) => model.label),
+    });
+    for (const entry of named) choices.push({ slug: entry.slug, name: entry.display_name });
   }
   const text = withSpawnAgentModels({ text: picked.text, choices });
   return { text, model: picked.model, goesTo: destination };

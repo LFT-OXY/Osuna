@@ -298,6 +298,16 @@ experimental_bearer_token = "${token}"
     await expect.poll(codexModels, { timeout: 10_000 }).toEqual(["gpt-5.4-mini *"]);
   });
 
+  test("Codex on an API key is named as out of reach of Endpoint name in model lists: its /model lists bare names", async () => {
+    const unreached = async () => (await client.apiEndpointList("codex")).endpointNamesUnreached;
+    expect(await unreached()).toEqual([]);
+    const endpointId = await createEndpoint();
+    await client.apiEndpointSetActive("codex", endpointId);
+    expect(await unreached()).toEqual(["codex"]);
+    await client.apiEndpointSetActive("codex", null);
+    expect(await unreached()).toEqual([]);
+  });
+
   test("deleting the last endpoint switches back to Official and puts the owned keys back", async () => {
     const endpointId = await createEndpoint();
     await client.apiEndpointSetActive("codex", endpointId);
@@ -780,6 +790,7 @@ describe("Codex's model catalog carries what the endpoint models can do", () => 
 
   interface Entry {
     slug: string;
+    display_name: string;
     context_window: number;
     max_context_window?: number;
     default_reasoning_level: string | null;
@@ -812,7 +823,7 @@ describe("Codex's model catalog carries what the endpoint models can do", () => 
     input: undefined,
   };
 
-  test("the endpoint's own list first, models.dev next, and today's entry for a model neither knows", async () => {
+  test("saving a new endpoint fetches its list at once: its own facts first, models.dev next, today's entry for a model neither knows", async () => {
     await start({ modelsDevCache: MODELS_DEV_CACHE });
     upstream = createServer((request, response) => {
       if (request.url !== "/api/v1/models") {
@@ -837,27 +848,11 @@ describe("Codex's model catalog carries what the endpoint models can do", () => 
     });
     await new Promise<void>((resolve) => upstream?.listen(0, "127.0.0.1", resolve));
     const baseUrl = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}/api`;
+    // 照 magpie：新建一家时保存当场拉一次清单，保存完 Codex 的模型目录就用上清单给的资料，不用再点「拉取」。
     const endpointId = await switchOn(baseUrl, ["glm-5", "kimi-k2", "mystery"]);
+    const [saved] = (await client.apiEndpointList("codex")).endpoints;
+    expect(saved?.catalog?.models.map((model) => model.id)).toEqual(["glm-5", "kimi-k2"]);
 
-    const before = await entries();
-    expect(facts(before["glm-5"])).toEqual(UNKNOWN);
-    expect(facts(before["kimi-k2"])).toEqual({
-      context: 262_144,
-      max: undefined,
-      levels: ["low", "high", "max"],
-      start: "high",
-      input: ["text", "image"],
-    });
-
-    const fetched = await client.apiEndpointFetchModels({
-      provider: "codex",
-      endpointId,
-      baseUrl,
-      format: "openai_responses",
-    });
-    expect(fetched.error).toBeNull();
-
-    const after = await entries();
     const glm = {
       context: 200_000,
       max: undefined,
@@ -865,16 +860,345 @@ describe("Codex's model catalog carries what the endpoint models can do", () => 
       start: "high",
       input: ["text"],
     };
-    expect(facts(after["glm-5"])).toEqual(glm);
-    expect(facts(after["relay/glm-5"])).toEqual(glm);
-    expect(facts(after["kimi-k2"])).toEqual({
+    // 清单说的看图在 models.dev 的前面，没说的上下文与档位由 models.dev 补上。
+    const kimi = {
       context: 262_144,
       max: undefined,
       levels: ["low", "high", "max"],
       start: "high",
       input: ["text"],
+    };
+    const checkAfterSave = async () => {
+      const after = await entries();
+      expect(facts(after["glm-5"])).toEqual(glm);
+      expect(facts(after["relay/glm-5"])).toEqual(glm);
+      expect(facts(after["kimi-k2"])).toEqual(kimi);
+      expect(facts(after.mystery)).toEqual(UNKNOWN);
+    };
+    await checkAfterSave();
+
+    // 再拉一次资料不变。
+    const fetched = await client.apiEndpointFetchModels({
+      provider: "codex",
+      endpointId,
+      baseUrl,
+      format: "openai_responses",
     });
-    expect(facts(after.mystery)).toEqual(UNKNOWN);
+    expect(fetched.error).toBeNull();
+    await checkAfterSave();
+  });
+
+  // 接口管理好用性工单 13：模型设置写进 Codex 的模型清单（照 magpie codexcat entriesAt）。
+  test("model settings: the model's own over the endpoint's defaults over the list and models.dev; reset goes back", async () => {
+    await start({
+      modelsDevCache: {
+        ...MODELS_DEV_CACHE,
+        models: { "kimi-k2": { ...MODELS_DEV_CACHE.models["kimi-k2"], name: "Kimi K2" } },
+      },
+    });
+    upstream = createServer((request, response) => {
+      if (request.url !== "/api/v1/models") {
+        response.writeHead(404).end();
+        return;
+      }
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          data: [
+            {
+              id: "glm-5",
+              context_length: 200_000,
+              supported_reasoning_levels: ["high", "max"],
+              modalities: { input: ["text"] },
+            },
+            { id: "kimi-k2", modalities: { input: ["text"] } },
+          ],
+        }),
+      );
+    });
+    await new Promise<void>((resolve) => upstream?.listen(0, "127.0.0.1", resolve));
+    const baseUrl = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}/api`;
+    const endpointId = await switchOn(baseUrl, ["glm-5", "kimi-k2"]);
+    const [stored] = (await client.apiEndpointList("codex")).endpoints;
+    const saveSettings = async (modelSettings: object) => {
+      const saved = await client.apiEndpointSave({
+        provider: "codex",
+        endpointId,
+        name: "Relay",
+        baseUrls: stored?.baseUrls ?? [],
+        models: [{ id: "glm-5" }, { id: "kimi-k2" }],
+        modelSettings,
+      });
+      expect(saved.error).toBeNull();
+      return saved.endpoint;
+    };
+    const named = async () =>
+      Object.fromEntries(
+        Object.values(await entries()).map((entry) => [entry.slug, entry.display_name]),
+      );
+
+    // 没设时：显示名由 models.dev 补上，查不到的就是模型 id。
+    expect(await named()).toMatchObject({ "glm-5": "glm-5", "kimi-k2": "Kimi K2" });
+
+    const saved = await saveSettings({
+      defaults: { context: 150_000, compact: 100_000 },
+      models: {
+        "glm-5": {
+          name: "  GLM   Five ",
+          context: 180_000,
+          efforts: ["max"],
+          images: true,
+          compact: 120_000,
+        },
+      },
+    });
+    // 显示名的空白照 magpie 收拢；整家默认的上下文不超过模型自己已知的窗口。
+    expect(saved?.modelSettings?.models?.["glm-5"]?.name).toBe("GLM Five");
+    const after = await entries();
+    expect(after["glm-5"]?.display_name).toBe("GLM Five");
+    expect(after["relay/glm-5"]?.display_name).toBe("GLM Five");
+    // 有压缩阈值时窗口取二者较小，整个窗口另写 max_context_window。
+    expect(facts(after["glm-5"])).toEqual({
+      context: 120_000,
+      max: 180_000,
+      levels: ["max"],
+      start: "max",
+      input: ["text", "image"],
+    });
+    // 单个模型没设的项用整家默认，再没有用清单与 models.dev 的。
+    expect(facts(after["kimi-k2"])).toEqual({
+      context: 100_000,
+      max: 150_000,
+      levels: ["low", "high", "max"],
+      start: "high",
+      input: ["text"],
+    });
+
+    // 一档不留：Codex 的清单里这个模型没有档位。
+    await saveSettings({ models: { "glm-5": { efforts: [] } } });
+    expect(facts((await entries())["glm-5"])).toMatchObject({ levels: [], start: null });
+
+    // 恢复默认：回到自动取到的值。
+    const reset = await saveSettings({});
+    expect(reset?.modelSettings).toBeUndefined();
+    expect(facts((await entries())["glm-5"])).toEqual({
+      context: 200_000,
+      max: undefined,
+      levels: ["high", "max"],
+      start: "high",
+      input: ["text"],
+    });
+    expect(await named()).toMatchObject({ "glm-5": "glm-5" });
+  });
+
+  // magpie settings.Working 与 CompactFor（#1809）：比 272K 大的窗口告诉 Codex 272K，整个窗口写进 max_context_window；
+  // 用户手填的上下文（这个模型的或整家默认）照写整个。
+  test("a window over 272K is told as 272K with the whole window beside it, unless the user typed the context", async () => {
+    await start({
+      modelsDevCache: {
+        ...MODELS_DEV_CACHE,
+        models: { ...MODELS_DEV_CACHE.models, "big-model": { context: 1_000_000, efforts: [] } },
+      },
+    });
+    const endpointId = await switchOn("https://relay.example/api", ["big-model", "kimi-k2"]);
+    const [stored] = (await client.apiEndpointList("codex")).endpoints;
+    const save = async (modelSettings: object) => {
+      const saved = await client.apiEndpointSave({
+        provider: "codex",
+        endpointId,
+        name: "Relay",
+        baseUrls: stored?.baseUrls ?? [],
+        models: [{ id: "big-model" }, { id: "kimi-k2" }],
+        modelSettings,
+      });
+      expect(saved.error).toBeNull();
+    };
+    const windows = async () => {
+      const all = await entries();
+      return ["big-model", "kimi-k2"].map((slug) => {
+        const entry = all[slug];
+        return [entry?.context_window, entry?.max_context_window];
+      });
+    };
+
+    // 262K 的照写，不另写整个窗口。
+    expect(await windows()).toEqual([
+      [272_000, 1_000_000],
+      [262_144, undefined],
+    ]);
+    await save({ models: { "big-model": { context: 500_000 } } });
+    expect(await windows()).toEqual([
+      [500_000, undefined],
+      [262_144, undefined],
+    ]);
+    // 整家默认的上下文也算手填；它不超过模型自己的窗口。
+    await save({ defaults: { context: 400_000 } });
+    expect(await windows()).toEqual([
+      [400_000, undefined],
+      [262_144, undefined],
+    ]);
+    // 压缩阈值仍在前面。
+    await save({ defaults: { context: 400_000 }, models: { "big-model": { compact: 300_000 } } });
+    expect((await windows())[0]).toEqual([300_000, 400_000]);
+  });
+
+  // magpie FullContext 与 CompactAt：整台主机的长对话设置。
+  test("the host's Full window tells the whole window; its Compact at replaces 272K, a typed window's too", async () => {
+    await start({
+      modelsDevCache: {
+        ...MODELS_DEV_CACHE,
+        models: { ...MODELS_DEV_CACHE.models, "big-model": { context: 1_000_000, efforts: [] } },
+      },
+    });
+    const endpointId = await switchOn("https://relay.example/api", ["big-model"]);
+    const told = async () => {
+      const entry = (await entries())["big-model"];
+      return [entry?.context_window, entry?.max_context_window];
+    };
+    expect(await told()).toEqual([272_000, 1_000_000]);
+    await client.apiEndpointSetLongConversations({ fullContext: true });
+    expect(await told()).toEqual([1_000_000, undefined]);
+    await client.apiEndpointSetLongConversations({ fullContext: false, compactAt: 500_000 });
+    expect(await told()).toEqual([500_000, 1_000_000]);
+    const [stored] = (await client.apiEndpointList("codex")).endpoints;
+    const saved = await client.apiEndpointSave({
+      provider: "codex",
+      endpointId,
+      name: "Relay",
+      baseUrls: stored?.baseUrls ?? [],
+      models: [{ id: "big-model" }],
+      modelSettings: { models: { "big-model": { context: 800_000 } } },
+    });
+    expect(saved.error).toBeNull();
+    expect(await told()).toEqual([500_000, 800_000]);
+    await client.apiEndpointSetLongConversations({ fullContext: false, compactAt: null });
+    expect(await told()).toEqual([800_000, undefined]);
+  });
+
+  test("an image answer is kept unless the endpoint's own list says the same; levels alone need no model of the endpoint", async () => {
+    await start({ modelsDevCache: MODELS_DEV_CACHE });
+    upstream = createServer((_request, response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ data: [{ id: "glm-5", modalities: { input: ["text"] } }] }));
+    });
+    await new Promise<void>((resolve) => upstream?.listen(0, "127.0.0.1", resolve));
+    const baseUrl = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}/api`;
+    const endpointId = await switchOn(baseUrl, ["glm-5", "kimi-k2"]);
+    const [stored] = (await client.apiEndpointList("codex")).endpoints;
+    const saved = await client.apiEndpointSave({
+      provider: "codex",
+      endpointId,
+      name: "Relay",
+      baseUrls: stored?.baseUrls ?? [],
+      models: [{ id: "glm-5" }, { id: "kimi-k2" }],
+      modelSettings: {
+        models: {
+          // 清单明说不看图：一样的不记。
+          "glm-5": { images: false },
+          // 只有 models.dev 说看图、清单没说：用户的话照记（magpie vendorSees）。
+          "kimi-k2": { images: true },
+          // 只设档位，不要求这家列着它（magpie setModelEfforts）。
+          "not-served": { efforts: ["high"] },
+        },
+      },
+    });
+    expect(saved.error).toBeNull();
+    expect(saved.endpoint?.modelSettings).toEqual({
+      models: { "kimi-k2": { images: true }, "not-served": { efforts: ["high"] } },
+    });
+  });
+
+  test("two models one picker would call the same are shown by their ids", async () => {
+    await start({});
+    const endpointId = await switchOn("https://relay.example/api", ["glm-5", "glm-5-air", "kimi"]);
+    const [stored] = (await client.apiEndpointList("codex")).endpoints;
+    const saved = await client.apiEndpointSave({
+      provider: "codex",
+      endpointId,
+      name: "Relay",
+      baseUrls: stored?.baseUrls ?? [],
+      models: [{ id: "glm-5" }, { id: "glm-5-air" }, { id: "kimi" }],
+      modelSettings: { models: { "glm-5": { name: "GLM" }, "glm-5-air": { name: "glm" } } },
+    });
+    expect(saved.error).toBeNull();
+    const names = Object.fromEntries(
+      Object.values(await entries()).map((entry) => [entry.slug, entry.display_name]),
+    );
+    expect(names).toMatchObject({ "glm-5": "glm-5", "glm-5-air": "glm-5-air", kimi: "kimi" });
+  });
+
+  test("a setting no model of the endpoint has, a level the model lacks, or a name too long is refused", async () => {
+    await start({ modelsDevCache: MODELS_DEV_CACHE });
+    const endpointId = await switchOn("https://relay.example/api", ["kimi-k2"]);
+    const [stored] = (await client.apiEndpointList("codex")).endpoints;
+    const save = (modelSettings: object) =>
+      client.apiEndpointSave({
+        provider: "codex",
+        endpointId,
+        name: "Relay",
+        baseUrls: stored?.baseUrls ?? [],
+        models: [{ id: "kimi-k2" }],
+        modelSettings,
+      });
+    for (const modelSettings of [
+      { models: { "kimi-k2": { efforts: ["medium"] } } },
+      { models: { "kimi-k2": { name: "x".repeat(81) } } },
+      { models: { "kimi-k2": { context: 0 } } },
+      { defaults: { compact: 1.5 } },
+      { models: { "not-served": { name: "Nope" } } },
+    ]) {
+      expect((await save(modelSettings)).error?.code).toBe("invalid_model_settings");
+    }
+    expect((await client.apiEndpointList("codex")).endpoints[0]?.modelSettings).toBeUndefined();
+  });
+
+  // 接口管理好用性工单 15：上游模型名去掉首尾空白存下；只用这种格式要有那种地址（magpie setModelAPI），地址后来删了设置照留、作废。
+  test("an upstream name is kept trimmed; a format is kept only with its URL, and stays once that URL goes", async () => {
+    await start({});
+    const endpointId = await switchOn("https://relay.example/api", ["kimi-k2"]);
+    const [stored] = (await client.apiEndpointList("codex")).endpoints;
+    const responses = stored?.baseUrls ?? [];
+    const chat = { format: "openai_chat", url: "https://relay.example/chat" };
+    const save = (input: { baseUrls: { format: string; url: string }[]; modelSettings: object }) =>
+      client.apiEndpointSave({
+        provider: "codex",
+        endpointId,
+        name: "Relay",
+        models: [{ id: "kimi-k2" }],
+        ...input,
+      });
+
+    const noUrl = await save({
+      baseUrls: responses,
+      modelSettings: { models: { "kimi-k2": { format: "openai_chat" } } },
+    });
+    expect(noUrl.error?.code).toBe("invalid_model_settings");
+    const notFormat = await save({
+      baseUrls: [...responses, chat],
+      modelSettings: { models: { "kimi-k2": { format: "gemini" } } },
+    });
+    expect(notFormat.error?.code).toBe("invalid_model_settings");
+
+    const pinned = { upstreamName: "moonshot/kimi-k2", format: "openai_chat" };
+    const saved = await save({
+      baseUrls: [...responses, chat],
+      modelSettings: {
+        defaults: { upstreamName: " vendor/* " },
+        models: { "kimi-k2": { ...pinned, upstreamName: "  moonshot/kimi-k2 " } },
+      },
+    });
+    expect(saved.error).toBeNull();
+    expect(saved.endpoint?.modelSettings).toEqual({
+      defaults: { upstreamName: "vendor/*" },
+      models: { "kimi-k2": pinned },
+    });
+
+    const urlGone = await save({
+      baseUrls: responses,
+      modelSettings: { defaults: { upstreamName: "vendor/*" }, models: { "kimi-k2": pinned } },
+    });
+    expect(urlGone.error).toBeNull();
+    expect(urlGone.endpoint?.modelSettings?.models?.["kimi-k2"]).toEqual(pinned);
   });
 
   test("models.dev is not downloaded with both switches off; Codex alone allows it and the catalog follows", async () => {
@@ -925,8 +1249,9 @@ describe("Codex's model catalog carries what the endpoint models can do", () => 
     await expect
       .poll(async () => facts((await entries()).mystery))
       .toEqual({
-        context: 400_000,
-        max: undefined,
+        // 比 272K 大的窗口告诉 Codex 272K，整个窗口另写（magpie settings.Working）。
+        context: 272_000,
+        max: 400_000,
         levels: ["minimal", "low"],
         start: "minimal",
         input: ["text", "image"],

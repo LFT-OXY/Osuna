@@ -1,12 +1,25 @@
+// 冷却设置里读不懂的每天时刻当没设移植自 magpie（https://github.com/yetone/magpie，internal/provider/concurrency.go 的 ParseResetAt 与 internal/provider/provider.go 的 normalize）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+import type { CliTestClient } from "./test-as.js";
+import { randomBytes } from "node:crypto";
 import { readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import type pino from "pino";
 import { z } from "zod";
 import {
+  apiEndpointNameDisplayOf,
+  type ApiEndpointNameDisplay,
+} from "@getpaseo/protocol/api-endpoint/endpoint-names";
+import { parseResetAt } from "@getpaseo/protocol/api-endpoint/cooldown-settings";
+import {
   API_ENDPOINT_REQUEST_FORMATS,
   ApiEndpointAgentSettingsSchema,
+  ApiEndpointCooldownSettingsSchema,
+  ApiEndpointLongConversationsSchema,
   ApiEndpointModelMappingSchema,
+  ApiEndpointModelSettingsSchema,
   type ApiEndpointAgentSettings,
+  type ApiEndpointLongConversations,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import {
   AGENT_REQUEST_FORMAT,
@@ -34,6 +47,8 @@ import { ModelFactsSchema } from "./model-facts.js";
  * - cli-rewrites.json：每个 Agent 最近一次改写 CLI 配置（含「重新应用」）的时刻，这之前 CLI 的使用不算「被绕过」（cli-bypass.ts）；
  * - cli-start-reads.json：每个 Agent 启动时读、Osuna 替它写的那部分的摘要与它变成这样的时刻，这之前启动的副本要重开（reopen-hints.ts）；
  * - gateway-seen.json：中转站最近一次收到每个 Agent 请求的时刻，重启后还在（cli-bypass.ts 的 GatewaySightings 读写）；
+ * - import-fingerprint-key.json：导入指纹的 HMAC 密钥，第一次扫描时随机取，重启后指纹不变、已忽略的发现照样认得（import-apps.ts）；
+ * - icons/：「自定义」加的接口自选的图片，按内容起名，没有接口用就删（endpoint-icons.ts）；
  * - backups/：首次改写前的完整副本，只供手动找回。
  * endpoints.json、keys.json、gateway-tokens.json 写坏时用上一份好的 .bak（last-good.ts）；
  * 接管记录不这样做：拿旧记录去恢复 CLI 配置可能恢复错值，读不懂照旧报错。
@@ -43,14 +58,30 @@ import { ModelFactsSchema } from "./model-facts.js";
 export const API_ENDPOINT_PROVIDERS = ["claude", "codex"] as const;
 export type ApiEndpointProvider = (typeof API_ENDPOINT_PROVIDERS)[number];
 
+// 存下的 key 头：两个都放（缺省）不存。
+const STORED_KEY_HEADERS = ["x-api-key", "bearer"] as const;
+
 const StoredModelSchema = z.object({ id: z.string(), label: z.string().optional() });
 
-// 上游清单里的模型多带列表给的上下文、回复上限与思考档位；只留在 daemon 里，投影给客户端时去掉。
-const StoredCatalogModelSchema = StoredModelSchema.extend({ facts: ModelFactsSchema.optional() });
+// 上游清单里的模型多带列表给的上下文、回复上限与思考档位，以及哪些格式列过它（catalog-merge.ts）；
+// 只留在 daemon 里，投影给客户端时去掉。
+const StoredCatalogModelSchema = StoredModelSchema.extend({
+  facts: ModelFactsSchema.optional(),
+  formats: z.array(z.enum(API_ENDPOINT_REQUEST_FORMATS)).optional(),
+});
 
 const StoredBaseUrlSchema = z.object({
   format: z.enum(API_ENDPOINT_REQUEST_FORMATS),
   url: z.string(),
+});
+
+// 手改成读不懂的每天时刻当没设（照 magpie normalize 清掉 QuotaResetAt），别的项照留。
+const StoredCooldownSettingsSchema = ApiEndpointCooldownSettingsSchema.extend({
+  quotaResetAt: z
+    .string()
+    .refine((text) => parseResetAt(text).kind === "ok")
+    .optional()
+    .catch(undefined),
 });
 
 const StoredApiEndpointSchema = z.object({
@@ -73,17 +104,47 @@ const StoredApiEndpointSchema = z.object({
     .optional(),
   // 用户手动添加的模型名，开没开都留着。
   manualModels: z.array(StoredModelSchema).optional(),
+  // 服务范围：vendor「跟随接口清单」时 models 由 model-scope.ts 按清单算好写回；没有或别的值都当 picked。
+  // 存成字符串：以后加了范围再降级时整个文件仍读得懂。
+  modelScope: z.string().optional(),
+  // 自动勾选规则（model-scope.ts），只在 picked 时起作用；没有即没有规则。
+  autoPick: z.array(z.string()).optional(),
+  // 模型设置（Model settings）：按模型 id 与整家默认手改的资料，取值顺序见 protocol 的 model-settings.ts；没有即都用自动取到的。
+  modelSettings: ApiEndpointModelSettingsSchema.optional(),
   // 「自己能联网搜索」：只写 true；没有或手改成 false 都是关（ADR 0009）。
   searchesWeb: z.boolean().optional(),
+  // 从哪个模板加的（templates.ts 的 id）、选的哪个区域或套餐；「自定义」加的都没有。
+  templateId: z.string().optional(),
+  region: z.string().optional(),
+  // 「自定义」加的接口自选的图标：内置图标名，或 `file:<名字>` 指 icons/ 里的图片副本（endpoint-icons.ts）。
+  icon: z.string().optional(),
+  // 用户加给这家每个请求的请求头（名字照用户写的，值可能是密钥，不写日志）、附加请求体（JSON 对象）、
+  // key 放哪个头（x-api-key、bearer；两个都放不存）。都没有即不加（request-extras.ts）。
+  headers: z.record(z.string(), z.string()).optional(),
+  extraBody: z.record(z.string(), z.unknown()).optional(),
+  // 手改成别的值时当两个都放（照 magpie normalize），不让整个文件读不懂。
+  keyHeader: z.enum(STORED_KEY_HEADERS).optional().catch(undefined),
+  // 不校验证书（insecure-tls.ts）：只写 true；只对「自定义」加的接口自己的 https 主机起作用，模板接口手改成 true 也不算。
+  insecureTls: z.boolean().optional().catch(undefined),
+  // 冷却设置（gateway/cooldown.ts）：分钟数，0 不存；手改成别的类型时当没设，不让整个文件读不懂，越界的用时按 0 到八天算。
+  cooldownSettings: StoredCooldownSettingsSchema.optional().catch(undefined),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
 export type StoredApiEndpoint = z.infer<typeof StoredApiEndpointSchema>;
 
 const EndpointsFileSchema = z.object({
-  // 数组顺序即创建顺序。
+  // 数组顺序即接口顺序（Endpoint order）：用户可整体改写（set_order），新建的追加在最后。
   endpoints: z.array(StoredApiEndpointSchema),
   agents: z.record(z.string(), ApiEndpointAgentSettingsSchema),
+  // 整台主机的长对话设置（完整窗口、全局压缩阈值）；没有即关着、272K。
+  longConversations: ApiEndpointLongConversationsSchema.optional(),
+  // 已禁用的模型（完整 id 或 glob，不分大小写）；没有即一个都没禁。
+  disabledModels: z.array(z.string()).optional(),
+  // 接口名显示方式（clash、never；always 不存）；没有即一直显示。
+  endpointNameDisplay: z.string().optional(),
+  // 发现提示里点了「忽略」的那几条的指纹（HMAC，不含 key 原文）；没有即一条都没忽略。
+  ignoredImports: z.array(z.string()).optional(),
 });
 
 /** v0.15.0 及以前：接口按提供方各存一份，每个提供方一家「当前启用」。读时换算，写时升级。 */
@@ -121,6 +182,23 @@ function parseEndpointsFile(filePath: string, raw: unknown): EndpointsFileConten
 export interface ApiEndpointState {
   endpoints: StoredApiEndpoint[];
   agents: Record<ApiEndpointProvider, ApiEndpointAgentSettings>;
+  longConversations?: ApiEndpointLongConversations;
+  disabledModels?: string[];
+  // 接口名显示方式；always 不存。
+  endpointNameDisplay?: Exclude<ApiEndpointNameDisplay, "always">;
+  ignoredImports?: string[];
+}
+
+/** 文件里的接口名显示方式：没有或认不出的当 always，always 不放进状态。 */
+function storedNameDisplay(raw: string | undefined): Pick<ApiEndpointState, "endpointNameDisplay"> {
+  if (raw === undefined) return {};
+  const display = apiEndpointNameDisplayOf(raw);
+  return display === "always" ? {} : { endpointNameDisplay: display };
+}
+
+/** 主机的接口名显示方式：没存即 always。 */
+export function endpointNameDisplayOf(state: ApiEndpointState): ApiEndpointNameDisplay {
+  return state.endpointNameDisplay ?? "always";
 }
 
 const OFFICIAL_AGENT: ApiEndpointAgentSettings = { enabled: false, defaultModelId: null };
@@ -138,6 +216,10 @@ export class ApiEndpointsFileUnparsableError extends Error {
 
 const KeysFileSchema = z.object({ keys: z.record(z.string(), z.string()) });
 type KeysFile = z.infer<typeof KeysFileSchema>;
+
+// 导入指纹的 HMAC 密钥（import-apps.ts）。
+const IMPORT_FINGERPRINT_KEY_FILE = "import-fingerprint-key.json";
+const ImportFingerprintKeyFileSchema = z.object({ secret: z.string().regex(/^[0-9a-f]{64}$/) });
 
 // 上次关掉开关时的默认模型与关掉后 CLI 配置里留下的模型；再打开时 CLI 的模型没变过就放回（default-model-pick.ts 的 again）。
 // 下一次接管时随整份记录重写而去掉。
@@ -190,7 +272,17 @@ export interface CliStartRead {
   at: Date;
 }
 
+// CLI 请求头样本：头名小写，只有表明 CLI 身份的头，不含认证、会话与请求体（cli-header-samples.ts）。
+const CliHeaderSampleSchema = z.record(z.string(), z.string());
+export type CliHeaderSample = z.infer<typeof CliHeaderSampleSchema>;
+const CliHeaderSamplesFileSchema = z.object({
+  claude_code: CliHeaderSampleSchema.optional(),
+  codex: CliHeaderSampleSchema.optional(),
+});
+type CliHeaderSamplesFile = z.infer<typeof CliHeaderSamplesFileSchema>;
+
 const ENDPOINTS_FILE = "endpoints.json";
+const CLI_HEADER_SAMPLES_FILE = "cli-header-samples.json";
 const CLI_START_READS_FILE = "cli-start-reads.json";
 const CLI_REWRITES_FILE = "cli-rewrites.json";
 const CODEX_MODEL_CATALOG_FILE = "codex-models.json";
@@ -209,12 +301,14 @@ export interface ApiEndpointStoreOptions {
 
 export class ApiEndpointStore {
   private readonly root: string;
+  private readonly logger: pino.Logger;
   private readonly endpointsFile: LastGoodFile<EndpointsFileContent>;
   private readonly keysFile: LastGoodFile<KeysFile>;
   private readonly gatewayTokensFile: LastGoodFile<GatewayTokensFile>;
 
   constructor(options: ApiEndpointStoreOptions) {
     this.root = path.join(options.paseoHome, "api-endpoints");
+    this.logger = options.logger;
     const shared = {
       logger: options.logger,
       now: options.now ?? (() => new Date()),
@@ -236,6 +330,11 @@ export class ApiEndpointStore {
       filePath: path.join(this.root, "gateway-tokens.json"),
       parse: (raw) => GatewayTokensFileSchema.parse(raw),
     });
+  }
+
+  /** $PASEO_HOME/api-endpoints/。 */
+  get endpointsDir(): string {
+    return this.root;
   }
 
   /** 把首次改写前的字节原样存一份，返回副本路径；文件不存在时返回 null。 */
@@ -269,19 +368,49 @@ export class ApiEndpointStore {
       return { endpoints: [], agents: { claude: OFFICIAL_AGENT, codex: OFFICIAL_AGENT } };
     }
     if (content.kind === "legacy") return upgradeLegacyFile(content.file);
-    const { agents } = content.file;
+    const { agents, longConversations, disabledModels, endpointNameDisplay, ignoredImports } =
+      content.file;
     return {
       endpoints: content.file.endpoints,
       agents: {
         claude: agents.claude ?? OFFICIAL_AGENT,
         codex: agents.codex ?? OFFICIAL_AGENT,
       },
+      ...(longConversations === undefined ? {} : { longConversations }),
+      ...(disabledModels === undefined ? {} : { disabledModels }),
+      ...storedNameDisplay(endpointNameDisplay),
+      ...(ignoredImports === undefined ? {} : { ignoredImports }),
     };
   }
 
   /** 每次都整份写新格式；旧格式的文件第一次写入后即升级。 */
   writeState(state: ApiEndpointState): void {
     this.endpointsFile.write(EndpointsFileSchema.parse(state));
+  }
+
+  /**
+   * 导入指纹的 HMAC 密钥；还没有、或读不懂时随机取一把存下（0600），之前忽略的发现随之不再认得（再提示）。
+   * 读不了（没权限等）照样抛出。
+   */
+  readImportFingerprintSecret(): Buffer {
+    let raw: unknown = null;
+    try {
+      raw = this.readJson(IMPORT_FINGERPRINT_KEY_FILE);
+    } catch (error) {
+      if (!(error instanceof SyntaxError)) throw error;
+      raw = undefined;
+    }
+    const parsed = ImportFingerprintKeyFileSchema.safeParse(raw);
+    if (parsed.success) return Buffer.from(parsed.data.secret, "hex");
+    if (raw !== null) {
+      this.logger.warn(
+        { file: IMPORT_FINGERPRINT_KEY_FILE },
+        "Import fingerprint key file could not be parsed; a new key replaces it and ignored entries come back",
+      );
+    }
+    const secret = randomBytes(32);
+    this.writeJson(IMPORT_FINGERPRINT_KEY_FILE, { secret: secret.toString("hex") });
+    return secret;
   }
 
   setApiKey(id: string, apiKey: string): void {
@@ -333,6 +462,16 @@ export class ApiEndpointStore {
     const entry = { digest: input.read.digest, at: input.read.at.toISOString() };
     const next = { ...this.readCliStartReads(), [input.provider]: entry };
     this.writeJson(CLI_START_READS_FILE, CliStartReadsFileSchema.parse(next));
+  }
+
+  /** 这个 CLI 最近一次经过中转站时记下的请求头；还没经过、或文件读不懂为 null。 */
+  readCliHeaderSample(client: CliTestClient): CliHeaderSample | null {
+    return this.readCliHeaderSamples()[client] ?? null;
+  }
+
+  writeCliHeaderSample(input: { client: CliTestClient; sample: CliHeaderSample }): void {
+    const next = { ...this.readCliHeaderSamples(), [input.client]: input.sample };
+    this.writeJson(CLI_HEADER_SAMPLES_FILE, CliHeaderSamplesFileSchema.parse(next));
   }
 
   readClaudeTakeover(): ClaudeTakeoverFile {
@@ -413,6 +552,19 @@ export class ApiEndpointStore {
       throw error;
     }
     const parsed = CliRewritesFileSchema.safeParse(raw ?? {});
+    if (!parsed.success) return {};
+    return parsed.data;
+  }
+
+  private readCliHeaderSamples(): CliHeaderSamplesFile {
+    let raw: unknown;
+    try {
+      raw = this.readJson(CLI_HEADER_SAMPLES_FILE);
+    } catch (error) {
+      if (error instanceof SyntaxError) return {};
+      throw error;
+    }
+    const parsed = CliHeaderSamplesFileSchema.safeParse(raw ?? {});
     if (!parsed.success) return {};
     return parsed.data;
   }

@@ -24,6 +24,7 @@ import {
   type LockedThinkingLookup,
   type SubagentThinkingLookup,
   type SideModelOptionsLookup,
+  type ApiEndpointNameDisplayLookup,
   type ProviderCatalog as DiscoveredProviderCatalog,
   type ProviderModelOverride,
   type ProviderSnapshotEntry,
@@ -145,6 +146,7 @@ export interface ProviderSnapshotManagerOptions {
   lockedThinking?: LockedThinkingLookup;
   subagentThinking?: SubagentThinkingLookup;
   sideModelOptions?: SideModelOptionsLookup;
+  apiEndpointNameDisplay?: ApiEndpointNameDisplayLookup;
 }
 
 type ApiEndpointSnapshotFields = Pick<
@@ -154,6 +156,7 @@ type ApiEndpointSnapshotFields = Pick<
   | "lockedThinkingOptionId"
   | "subagentThinkingOptions"
   | "sideModelOptions"
+  | "apiEndpointNameDisplay"
 >;
 
 interface ProviderSnapshotRefreshOptions {
@@ -287,6 +290,7 @@ export class ProviderSnapshotManager {
   private readonly lockedThinking?: LockedThinkingLookup;
   private readonly subagentThinking?: SubagentThinkingLookup;
   private readonly sideModelOptions?: SideModelOptionsLookup;
+  private readonly apiEndpointNameDisplay?: ApiEndpointNameDisplayLookup;
   private runtimeSettings: AgentProviderRuntimeSettingsMap | undefined;
   private providerOverrides: Record<string, ProviderOverride> | undefined;
   private baseProviderOverrides: Record<string, ProviderOverride> | undefined;
@@ -317,6 +321,7 @@ export class ProviderSnapshotManager {
     this.lockedThinking = options.lockedThinking;
     this.subagentThinking = options.subagentThinking;
     this.sideModelOptions = options.sideModelOptions;
+    this.apiEndpointNameDisplay = options.apiEndpointNameDisplay;
     this.runtimeSettings = options.runtimeSettings;
     this.providerOverrides = options.providerOverrides;
     this.baseProviderOverrides = options.providerOverrides;
@@ -956,6 +961,7 @@ export class ProviderSnapshotManager {
       lockedThinkingOptionId: this.lockedThinking?.(provider) ?? undefined,
       subagentThinkingOptions: this.subagentThinking?.(provider) ?? undefined,
       sideModelOptions: this.sideModelOptions?.(provider) ?? undefined,
+      apiEndpointNameDisplay: this.apiEndpointNameDisplay?.(provider) ?? undefined,
     };
   }
 

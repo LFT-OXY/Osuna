@@ -1,8 +1,14 @@
-// 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/gateway/routing.go、fallback.go）
+// 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/gateway/routing.go、fallback.go；
+// 每家的冷却设置照 internal/provider/concurrency.go 的 QuotaRestFor、OwnQuotaRest、NoFailRest、RestCapOr）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import type { IncomingHttpHeaders } from "node:http";
 import type pino from "pino";
+import {
+  API_ENDPOINT_COOLDOWN_MAX_MINUTES,
+  nextResetAt,
+} from "@getpaseo/protocol/api-endpoint/cooldown-settings";
+import type { ApiEndpointCooldownSettings } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { hostOf } from "../model-facts.js";
 import { isRecord, parseJson } from "../upstream-http.js";
 import {
@@ -33,7 +39,7 @@ export const COOLDOWN = {
   // 厂商的 Retry-After 最多信这么久。
   longestWait: 60 * MINUTE,
   // 额度用完最多冷却这么久：一周的窗口再多一天。
-  longestQuota: 8 * 24 * 60 * MINUTE,
+  longestQuota: API_ENDPOINT_COOLDOWN_MAX_MINUTES * MINUTE,
   longestRetry: 10 * MINUTE,
   longestRateRest: 30 * MINUTE,
   // 上次限流冷却结束超过这么久再被限流，算新的一次，从一分钟重来。
@@ -73,9 +79,9 @@ export interface EndpointRest {
   said: string;
 }
 
-/** 一次失败交给冷却记录的样子：哪家、哪个模型、问的哪个地址、上游怎么答的。 */
+/** 一次失败交给冷却记录的样子：哪家（带它的冷却设置）、哪个模型、问的哪个地址、上游怎么答的。 */
 export interface FailureReport {
-  endpoint: { id: string; name: string };
+  endpoint: { id: string; name: string; cooldownSettings?: ApiEndpointCooldownSettings };
   model: string;
   baseUrl: string;
   status: number;
@@ -344,13 +350,51 @@ function modelOwnQuota(attempt: FailureReport): boolean {
   return otherModelsServe || clineModelLimited(attempt);
 }
 
-/** 额度用完：错误里写的重置时间（Cline 免费模型说的「再过多久」也算），其次 Retry-After，都没有就一刻钟；最多八天。 */
+/** 设置里的分钟数换成毫秒：手改的坏值按 0 到八天算，0 即用中转站自己的（magpie 的 min(max(n, 0), MaxQuotaRest)）。 */
+function settingMs(minutes: number | undefined): number {
+  const held = Math.min(Math.max(minutes ?? 0, 0), API_ENDPOINT_COOLDOWN_MAX_MINUTES);
+  return Number.isFinite(held) ? held * MINUTE : 0;
+}
+
+/**
+ * 这家自己的额度冷却（magpie OwnQuotaRest）：设了每天几点恢复就冷却到下一个那个时刻，否则是设的分钟数；
+ * 都没设（或手改的时刻读不懂）为 0，用中转站自己的。
+ */
+function ownQuotaRest(attempt: FailureReport, now: number): number {
+  const settings = attempt.endpoint.cooldownSettings;
+  const resetAt = nextResetAt({ text: settings?.quotaResetAt ?? "", now });
+  if (resetAt !== null) return resetAt - now;
+  return settingMs(settings?.quotaRestMinutes);
+}
+
+/**
+ * 额度用完：错误里写的重置时间（Cline 免费模型说的「再过多久」也算），其次 Retry-After，都没有就这家自己的、没设就一刻钟；
+ * 最多八天。Retry-After 被截到一小时、这家自己的又更长时用这家的（magpie #2008）。
+ */
 function quotaRest(attempt: FailureReport, now: number): { duration: number; by: RestBy } {
+  const own = ownQuotaRest(attempt, now);
   const resets = resetsAt(attempt.body, now) || clineBackIn(attempt);
   const said = retryAfter(attempt.headers, now);
   if (resets > 0) return { duration: Math.min(resets, COOLDOWN.longestQuota), by: "resets" };
-  if (said > 0) return { duration: said, by: "retry-after" };
-  return { duration: COOLDOWN.quotaRest, by: "quota" };
+  const saidStands = said > 0 && (said < COOLDOWN.longestWait || own <= said);
+  if (saidStands) return { duration: said, by: "retry-after" };
+  return { duration: own > 0 ? own : COOLDOWN.quotaRest, by: "quota" };
+}
+
+/** 接连失败或被限流时最长冷却多久：这家设的，没设用中转站自己的 `fallback`（magpie RestCapOr）。 */
+function restCapOr(input: { attempt: FailureReport; fallback: number }): number {
+  const own = settingMs(input.attempt.endpoint.cooldownSettings?.restCapMinutes);
+  return own > 0 ? own : input.fallback;
+}
+
+/**
+ * 这家设了「原因不明的失败不冷却」，这次正是这种失败（magpie NoFailRest 那一支）：不提供这个模型、key 被拒（401、403）
+ * 说明了原因，照样冷却。
+ */
+function skipsUnknownFailure(input: { attempt: FailureReport; unserved: boolean }): boolean {
+  const { attempt } = input;
+  const isKeyRefusal = attempt.status === 401 || attempt.status === 403;
+  return attempt.endpoint.cooldownSettings?.noFailRest === true && !input.unserved && !isKeyRefusal;
 }
 
 /** 一分钟起，每多失败一次翻倍，到 `longest` 为止。 */
@@ -388,7 +432,10 @@ export class EndpointCooldowns {
     return this.active(endpointId);
   }
 
-  /** 照 magpie 的 restAfterMarked 定冷却；代理没连上、请求本身被拒都不怪这家，返回 null。 */
+  /**
+   * 照 magpie 的 restAfterMarked 定冷却；代理没连上、请求本身被拒都不怪这家，这家设了不冷却的原因不明的失败也不冷却，
+   * 都返回 null。
+   */
   markFailed(attempt: FailureReport): EndpointRest | null {
     const now = this.now();
     const why = endpointFailure(attempt.status, attempt.body);
@@ -418,8 +465,10 @@ export class EndpointCooldowns {
         by = "auth";
         break;
       case "other":
+        // 不冷却、也不记这次失败，下一个请求照常问它（magpie RestCapOff）。
+        if (skipsUnknownFailure({ attempt, unserved })) return null;
         ({ failures, key } = this.backoff({ key, modelKey, unserved }));
-        duration = doubled(failures, COOLDOWN.longestRetry);
+        duration = doubled(failures, restCapOr({ attempt, fallback: COOLDOWN.longestRetry }));
         by = "backoff";
         break;
     }
@@ -512,7 +561,10 @@ export class EndpointCooldowns {
         failures = Math.max(previous.failures, 1) + 1;
       }
     }
-    let duration = doubled(failures, COOLDOWN.longestRateRest);
+    let duration = doubled(
+      failures,
+      restCapOr({ attempt: input.attempt, fallback: COOLDOWN.longestRateRest }),
+    );
     let by: RestBy = failures > 1 ? "backoff" : "cooldown";
     let said = retryAfter(input.attempt.headers, now);
     let saidBy: RestBy = "retry-after";

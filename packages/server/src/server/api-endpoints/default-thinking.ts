@@ -2,7 +2,7 @@
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import type { AgentSelectOption } from "../agent/agent-sdk-types.js";
-import { CLAUDE_ULTRA_CODE, claudeModelName } from "./claude-model-name.js";
+import { CLAUDE_EFFORTS, CLAUDE_ULTRA_CODE, claudeEffortsFor } from "./claude-model-name.js";
 import { codexDefaultLevel, codexModelLevels } from "./codex-model-catalog.js";
 import type { ModelFacts } from "./model-facts.js";
 import type { ApiEndpointProvider } from "./store.js";
@@ -13,9 +13,6 @@ import type { ApiEndpointProvider } from "./store.js";
  * 只在显示时按 claudeClamp 取模型跑得到的那一档（Claude Code 自己也这样降）；Ultra Code 是另一个开关（ultracode 字段），
  * 只在模型支持 xhigh 时提供。Codex 照 magpie 的 settle：选项是模型收的档位，新模型不收时改到 ModelDefault。
  */
-
-// Claude Code 收的档位，由弱到强：settings.json 存得下前四档，max 只能写进 CLAUDE_CODE_EFFORT_LEVEL。
-const CLAUDE_EFFORTS: readonly string[] = ["low", "medium", "high", "xhigh", "max"];
 
 // 档位的显示名，两个 CLI 一致；与 Osuna 对话里 Claude 模型的显示名相同（agent/providers/claude/model-manifest.ts）。
 const LEVEL_LABELS: Record<string, string> = {
@@ -46,31 +43,6 @@ export function defaultThinkingLevels(input: DefaultThinkingLevelsInput): string
 /** 模型支持 xhigh 才有 Ultra Code（Claude Code 2.1.284 起的门槛）。 */
 export function takesUltraCode(levels: readonly string[]): boolean {
   return levels.includes("xhigh");
-}
-
-/**
- * magpie claudeEffortsFor：Claude Code 2.1.285 发给这个模型的档位。Opus 4.5 到 high，Opus / Sonnet 4.6 没有 xhigh，
- * Haiku 和更老的 Claude 没有档位；它不认识的模型（经中转站的别家模型、比它新的 Claude）五档都给，照设的发。
- */
-function claudeEffortsFor(modelId: string): string[] {
-  switch (claudeModelName(modelId)) {
-    case "claude-opus-4-5":
-      return ["low", "medium", "high"];
-    case "claude-opus-4-6":
-    case "claude-sonnet-4-6":
-      return ["low", "medium", "high", "max"];
-    case "claude-haiku-4-5":
-    case "claude-sonnet-4-5":
-    case "claude-opus-4":
-    case "claude-sonnet-4":
-      return [];
-    case "":
-      break;
-    default:
-      return [...CLAUDE_EFFORTS];
-  }
-  if (modelId.toLowerCase().includes("claude-3")) return [];
-  return [...CLAUDE_EFFORTS];
 }
 
 /**

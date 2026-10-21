@@ -1,6 +1,14 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import { reopenSeenKey, useReopenSeenStore } from "@/stores/reopen-seen-store";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useIsFocused } from "@react-navigation/native";
@@ -10,25 +18,53 @@ import type {
   ApiEndpointAgentSettings,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { ScreenTitle } from "@/components/headers/screen-title";
-import { Alert } from "@/components/ui/alert";
+import { PrimaryTextAlert } from "./primary-text-alert";
 import { Button } from "@/components/ui/button";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { useHostFeature, useHostFeatureAvailability } from "@/runtime/host-features";
 import { useHostRuntimeClient } from "@/runtime/host-runtime";
-import { buildApiEndpointSettingsRoute, buildSettingsHostSectionRoute } from "@/utils/host-routes";
+import { resolveProviderLabel } from "@/utils/provider-definitions";
+import {
+  buildApiEndpointSettingsRoute,
+  buildProviderSettingsRoute,
+  buildSettingsHostSectionRoute,
+} from "@/utils/host-routes";
 import { ApiEndpointConnectionSheet } from "./connection-form-sheet";
 import { ApiEndpointConnectionSection } from "./connection-section";
 import { ApiEndpointDetailHeader } from "./detail-header";
-import { ApiEndpointsListSection, NoticeCard } from "./host-list-section";
+import { ApiEndpointsListSection, NoticeCard, type ListManagement } from "./host-list-section";
+import { endpointVendorNotices } from "./internal/vendor-status";
+import { useVendorStatus } from "./use-vendor-status";
 import { AgentApiEndpointsFrame, AgentApiEndpointsSection } from "./agent-section";
 import { selectAgentApiEndpointsView, type AgentIssueAction } from "./internal/agent-settings";
 import type { ConnectionFormSeed, ConnectionSaveResult } from "./internal/connection-form-model";
 import { findHostEndpoint } from "./internal/host-list";
+import { ApiEndpointDisabledModelsSection } from "./disabled-models-section";
+import {
+  ApiEndpointNameDisplayRow,
+  ApiEndpointNameDisplaySection,
+} from "./endpoint-name-display-section";
+import { ApiEndpointLongConversationsSection } from "./long-conversations-section";
 import { ApiEndpointMappingSection } from "./mapping-section";
-import { ApiEndpointModelsSection } from "./models-section";
+import { ApiEndpointModelDefaultsSection } from "./model-defaults-section";
+import { ApiEndpointModelScopeSection } from "./model-scope-section";
+import { ApiEndpointModelSettingsSheet } from "./model-settings-sheet";
+import { resolveModelFacts } from "@getpaseo/protocol/api-endpoint/model-settings";
+import { ApiEndpointModelsSection, type ModelTestsControl } from "./models-section";
 import { useEndpointDetail } from "./use-endpoint-detail";
+import { useModelTests } from "./use-model-tests";
+import { offeredCliTests } from "./internal/model-tests";
+import { useFormatPins } from "./use-format-pins";
 import { SwitchOffSheet } from "./switch-off-sheet";
 import { ApiEndpointWebSearchSection } from "./web-search-section";
+import { EndpointIconHostProvider } from "./endpoint-icon";
+import { TemplatePickerSheet } from "./template-picker-sheet";
+import { ImportAppsSheet } from "./import-apps-sheet";
+import { useImportApps } from "./use-import-apps";
+import type { OfferedFingerprints } from "./internal/import-picks";
+import { ImportDiscoveryBanner } from "./import-discovery-banner";
+import { useImportDiscovery } from "./use-import-discovery";
+import { useEndpointTemplates } from "./use-endpoint-templates";
 import { useHostEndpoints, type UseHostEndpointsResult } from "./use-host-endpoints";
 
 /*
@@ -312,53 +348,185 @@ function GatewayGate({
   return children;
 }
 
-type ConnectionSheetState = { seed: ConnectionFormSeed } | null;
+// picker：「+」先出的模板列表；form 从列表进来时 backToPicker 为 true，表单的返回键回到列表。
+type ConnectionSheetState =
+  | { kind: "picker" }
+  | { kind: "form"; seed: ConnectionFormSeed; backToPicker: boolean }
+  | null;
 
 function ConnectionSheet({
+  serverId,
   sheet,
   endpoints,
+  setSheet,
   onSaved,
-  onClose,
+  onOpenEndpoint,
 }: {
+  serverId: string;
   sheet: ConnectionSheetState;
-  endpoints: Pick<UseHostEndpointsResult, "save" | "detect">;
+  endpoints: Pick<
+    UseHostEndpointsResult,
+    | "state"
+    | "save"
+    | "detect"
+    | "revealKey"
+    | "storeIcon"
+    | "fetchSiteIcon"
+    | "fetchModels"
+    | "testConnection"
+  >;
+  setSheet: Dispatch<SetStateAction<ConnectionSheetState>>;
   onSaved: (result: Extract<ConnectionSaveResult, { status: "saved" }>) => void;
-  onClose: () => void;
+  // 模板列表里点了已加过的模板：打开已有那家。
+  onOpenEndpoint: (endpointId: string) => void;
 }) {
+  // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机新建时要求 key，也读不回 key，没有模板，
+  // 也不认请求头、附加请求体与 key 放哪个头。
+  const hasManagement = useHostFeature(serverId, "apiEndpointManagement");
+  const templates = useEndpointTemplates({ serverId, enabled: hasManagement });
+  const handlePick = useCallback(
+    (templateId: string | null) =>
+      setSheet({ kind: "form", seed: { mode: "create", templateId }, backToPicker: true }),
+    [setSheet],
+  );
+  const handleBack = useCallback(() => setSheet({ kind: "picker" }), [setSheet]);
+  // 窄屏底部弹层换成另一个时，被换下的那个收起后还会报一次关闭：只关掉仍是它自己的那一层。
+  const closePicker = useCallback(
+    () => setSheet((current) => (current?.kind === "picker" ? null : current)),
+    [setSheet],
+  );
+  const handleOpenEndpoint = useCallback(
+    (endpointId: string) => {
+      setSheet(null);
+      onOpenEndpoint(endpointId);
+    },
+    [onOpenEndpoint, setSheet],
+  );
+  const closeForm = useCallback(
+    () => setSheet((current) => (current?.kind === "form" ? null : current)),
+    [setSheet],
+  );
   if (!sheet) return null;
+  if (sheet.kind === "picker") {
+    return (
+      <TemplatePickerSheet
+        templates={templates}
+        endpoints={endpoints.state.status === "ready" ? endpoints.state.endpoints : []}
+        onRetry={templates.retry}
+        onAdd={handlePick}
+        onOpenEndpoint={handleOpenEndpoint}
+        onClose={closePicker}
+      />
+    );
+  }
   const { seed } = sheet;
   return (
     <ApiEndpointConnectionSheet
-      key={seed.mode === "edit" ? `edit-${seed.endpoint.id}` : "create"}
+      key={sheetKey(seed)}
       seed={seed}
+      isKeyOptional={hasManagement}
+      canRevealKey={hasManagement}
+      canPickIcon={hasManagement}
+      canPasteCurl={hasManagement}
+      canCheckBeforeSave={hasManagement}
+      followsListWhenNew={hasManagement}
+      canSetRequestExtras={hasManagement}
+      templates={templates.status === "ready" ? templates.templates : []}
+      onBack={sheet.backToPicker ? handleBack : null}
       onSave={endpoints.save}
       onDetect={endpoints.detect}
+      onRevealKey={endpoints.revealKey}
+      onStoreIcon={endpoints.storeIcon}
+      onFetchSiteIcon={endpoints.fetchSiteIcon}
+      onFetchModels={endpoints.fetchModels}
+      onTestConnection={endpoints.testConnection}
       onSaved={onSaved}
-      onClose={onClose}
+      onClose={closeForm}
     />
   );
+}
+
+/** 「复制」：以原来那家开添加窗口，名称「原名 副本」，重名由 daemon 避让。 */
+function duplicateSeed(endpoint: ApiEndpoint, t: TFunction): ConnectionFormSeed {
+  const name = t("settings.apiEndpoints.form.duplicateName", { name: endpoint.name });
+  return { mode: "duplicate", source: endpoint, name };
+}
+
+function sheetKey(seed: ConnectionFormSeed): string {
+  if (seed.mode === "edit") return `edit-${seed.endpoint.id}`;
+  if (seed.mode === "duplicate") return `duplicate-${seed.source.id}`;
+  return `create-${seed.templateId ?? "custom"}`;
 }
 
 /** 设置 › 主机 › 第三方接口：整台主机共用的接口列表。 */
 export function ApiEndpointsPage({ serverId }: { serverId: string }) {
   return (
     <GatewayGate serverId={serverId}>
-      <ApiEndpointsListPage serverId={serverId} />
+      <EndpointIconHostProvider serverId={serverId}>
+        <ApiEndpointsListPage serverId={serverId} />
+      </EndpointIconHostProvider>
     </GatewayGate>
   );
 }
 
 function ApiEndpointsListPage({ serverId }: { serverId: string }) {
+  const { t } = useTranslation();
   const router = useRouter();
   const now = useClock();
   const endpoints = useHostEndpoints(serverId);
+  // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机没有 set_order、长对话设置、已禁用的模型与接口名显示方式。
+  const hasManagement = useHostFeature(serverId, "apiEndpointManagement");
   const [sheet, setSheet] = useState<ConnectionSheetState>(null);
+  // 导入窗口：null 关着；从发现提示「查看」打开时带提示里的那几条，只选上它们。
+  const [importOpen, setImportOpen] = useState<ImportOpen | null>(null);
+  const closeImport = useCallback(() => setImportOpen(null), []);
+  // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机没有发现提示。
+  const discovery = useImportDiscovery({ serverId, enabled: hasManagement });
+  const reviewDiscovery = useCallback(
+    () =>
+      setImportOpen({
+        offered: new Set(discovery.candidates.map((candidate) => candidate.fingerprint)),
+      }),
+    [discovery.candidates],
+  );
+  const { entries: providerEntries } = useProvidersSnapshot(serverId);
+  // 这一页开着时每 5 分钟问一次厂商官方状态页；问不到只是不出提示。
+  const vendorStatus = useVendorStatus({ serverId });
+  const vendorNotices = useMemo(() => endpointVendorNotices(vendorStatus), [vendorStatus]);
+  // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机不发 key 打码与默认模型落在哪家。
+  const management = useMemo<ListManagement | undefined>(
+    () =>
+      hasManagement
+        ? {
+            vendorNotices,
+            providerLabel: (provider) => resolveProviderLabel(provider, providerEntries),
+            onOpenProvider: (provider) =>
+              router.push(buildProviderSettingsRoute(serverId, provider)),
+            onDuplicate: (endpoint) =>
+              setSheet({ kind: "form", seed: duplicateSeed(endpoint, t), backToPicker: false }),
+            onImport: () => setImportOpen({ offered: null }),
+          }
+        : undefined,
+    [hasManagement, providerEntries, router, serverId, t, vendorNotices],
+  );
 
-  const handleAdd = useCallback(() => setSheet({ seed: { mode: "create" } }), []);
-  const handleClose = useCallback(() => setSheet(null), []);
-  const handleOpen = useCallback(
-    (endpoint: ApiEndpoint) => router.push(buildApiEndpointSettingsRoute(serverId, endpoint.id)),
+  // 主机声明了 apiEndpointManagement 时「+」先出模板列表，否则直接打开「自定义」表单。
+  const handleAdd = useCallback(
+    () =>
+      setSheet(
+        hasManagement
+          ? { kind: "picker" }
+          : { kind: "form", seed: { mode: "create", templateId: null }, backToPicker: false },
+      ),
+    [hasManagement],
+  );
+  const handleOpenById = useCallback(
+    (openedId: string) => router.push(buildApiEndpointSettingsRoute(serverId, openedId)),
     [router, serverId],
+  );
+  const handleOpen = useCallback(
+    (endpoint: ApiEndpoint) => handleOpenById(endpoint.id),
+    [handleOpenById],
   );
   // 新建的接口保存后直接进它的详情页拉模型。
   const handleSaved = useCallback(
@@ -369,8 +537,20 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
     [router, serverId],
   );
 
+  const hasNoEndpointsYet =
+    endpoints.state.status === "ready" && endpoints.state.endpoints.length === 0;
+
   return (
     <>
+      {hasManagement ? (
+        <ImportDiscoveryBanner
+          candidates={discovery.candidates}
+          ignoreState={discovery.ignoreState}
+          hasNoEndpointsYet={hasNoEndpointsYet}
+          onReview={reviewDiscovery}
+          onIgnore={discovery.ignore}
+        />
+      ) : null}
       <ApiEndpointsListSection
         state={endpoints.state}
         now={now}
@@ -381,14 +561,82 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
         onOpen={handleOpen}
         onToggle={endpoints.setEnabled}
         onResume={endpoints.resume}
+        onArrange={hasManagement ? endpoints.arrange : undefined}
+        management={management}
       />
+      {hasManagement && endpoints.state.status === "ready" ? (
+        <ApiEndpointLongConversationsSection
+          initial={endpoints.state.longConversations}
+          onSave={endpoints.setLongConversations}
+        />
+      ) : null}
+      {hasManagement && endpoints.state.status === "ready" ? (
+        <ApiEndpointDisabledModelsSection
+          initial={endpoints.state.disabledModels}
+          endpoints={endpoints.state.endpoints}
+          onSave={endpoints.setDisabledModels}
+        />
+      ) : null}
+      {hasManagement && endpoints.state.status === "ready" ? (
+        <ApiEndpointNameDisplaySection
+          value={endpoints.state.endpointNameDisplay}
+          onSave={endpoints.setEndpointNameDisplay}
+          unreachedAgents={endpoints.state.endpointNamesUnreached.map((provider) =>
+            resolveProviderLabel(provider, providerEntries),
+          )}
+          previewEndpoint={null}
+          allEndpoints={endpoints.state.endpoints}
+          disabledModels={endpoints.state.disabledModels}
+          testID="api-endpoints-endpoint-names"
+        />
+      ) : null}
       <ConnectionSheet
+        serverId={serverId}
         sheet={sheet}
         endpoints={endpoints}
+        setSheet={setSheet}
         onSaved={handleSaved}
-        onClose={handleClose}
+        onOpenEndpoint={handleOpenById}
       />
+      {importOpen ? (
+        <ImportSheet serverId={serverId} offered={importOpen.offered} onClose={closeImport} />
+      ) : null}
     </>
+  );
+}
+
+interface ImportOpen {
+  // 发现提示里的那几条；从「导入」按钮打开时为 null，照常默认选择。
+  offered: OfferedFingerprints;
+}
+
+/** 从别的软件导入：开着时扫一次（含 OpenCode），导入成功就关上。 */
+function ImportSheet({
+  serverId,
+  offered,
+  onClose,
+}: {
+  serverId: string;
+  offered: OfferedFingerprints;
+  onClose: () => void;
+}) {
+  const { scan, retryScan, importPicked } = useImportApps({ serverId });
+  const handleImport = useCallback(
+    async (picks: Parameters<typeof importPicked>[0]) => {
+      const result = await importPicked(picks);
+      if (result.status === "imported") onClose();
+      return result;
+    },
+    [importPicked, onClose],
+  );
+  return (
+    <ImportAppsSheet
+      scan={scan}
+      offered={offered}
+      onRetry={retryScan}
+      onImport={handleImport}
+      onClose={onClose}
+    />
   );
 }
 
@@ -402,7 +650,9 @@ export function ApiEndpointDetailPage({
 }) {
   return (
     <GatewayGate serverId={serverId}>
-      <ApiEndpointDetailContent serverId={serverId} endpointId={endpointId} />
+      <EndpointIconHostProvider serverId={serverId}>
+        <ApiEndpointDetailContent serverId={serverId} endpointId={endpointId} />
+      </EndpointIconHostProvider>
     </GatewayGate>
   );
 }
@@ -429,10 +679,40 @@ function ApiEndpointDetailContent({
     router.replace(buildSettingsHostSectionRoute(serverId, "api-endpoints"));
   }, [isFocused, isMissing, router, serverId]);
 
+  // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机不认 copyOf。
+  const canDuplicate = useHostFeature(serverId, "apiEndpointManagement");
+  const templates = useEndpointTemplates({ serverId, enabled: canDuplicate });
   const handleEdit = useCallback(() => {
-    if (endpoint) setSheet({ seed: { mode: "edit", endpoint } });
+    if (endpoint) setSheet({ kind: "form", seed: { mode: "edit", endpoint }, backToPicker: false });
   }, [endpoint]);
-  const handleClose = useCallback(() => setSheet(null), []);
+  const handleDuplicate = useCallback(() => {
+    if (endpoint) {
+      setSheet({ kind: "form", seed: duplicateSeed(endpoint, t), backToPicker: false });
+    }
+  }, [endpoint, t]);
+  // 「再加一家」：用这家的模板开新表单；模板清单里没有它（「自定义」加的、主机已不认识的模板）就没有这一项。
+  const templateId = endpoint?.templateId ?? null;
+  const hasKnownTemplate =
+    templateId !== null &&
+    templates.status === "ready" &&
+    templates.templates.some((candidate) => candidate.id === templateId);
+  const handleAddAnother = useCallback(() => {
+    if (templateId === null) return;
+    setSheet({ kind: "form", seed: { mode: "create", templateId }, backToPicker: false });
+  }, [templateId]);
+  // 编辑只关掉弹窗；复制出的、再加的新接口保存后进它的详情页。
+  const handleOpenById = useCallback(
+    (openedId: string) => router.push(buildApiEndpointSettingsRoute(serverId, openedId)),
+    [router, serverId],
+  );
+  const handleSaved = useCallback(
+    (result: Extract<ConnectionSaveResult, { status: "saved" }>) => {
+      const opensCopy = sheet?.kind === "form" && sheet.seed.mode !== "edit";
+      setSheet(null);
+      if (opensCopy) router.push(buildApiEndpointSettingsRoute(serverId, result.endpointId));
+    },
+    [router, serverId, sheet],
+  );
 
   if (state.status === "error") {
     return <NoticeCard text={state.message} testID="api-endpoint-detail-error" />;
@@ -453,12 +733,16 @@ function ApiEndpointDetailContent({
         agents={state.agents}
         hostEndpoints={endpoints}
         onEdit={handleEdit}
+        onDuplicate={canDuplicate ? handleDuplicate : null}
+        onAddAnother={hasKnownTemplate ? handleAddAnother : null}
       />
       <ConnectionSheet
+        serverId={serverId}
         sheet={sheet}
         endpoints={endpoints}
-        onSaved={handleClose}
-        onClose={handleClose}
+        setSheet={setSheet}
+        onSaved={handleSaved}
+        onOpenEndpoint={handleOpenById}
       />
     </View>
   );
@@ -471,6 +755,8 @@ function ApiEndpointDetailSections({
   agents,
   hostEndpoints,
   onEdit,
+  onDuplicate,
+  onAddAnother,
 }: {
   serverId: string;
   endpoint: ApiEndpoint;
@@ -478,10 +764,79 @@ function ApiEndpointDetailSections({
   agents: Record<string, ApiEndpointAgentSettings>;
   hostEndpoints: UseHostEndpointsResult;
   onEdit: () => void;
+  // 主机声明了 apiEndpointManagement 才有「复制」。
+  onDuplicate: (() => void) | null;
+  // 从主机认得的模板加的才有「再加一家」。
+  onAddAnother: (() => void) | null;
 }) {
   const { t } = useTranslation();
   const now = useClock();
-  const detail = useEndpointDetail({ serverId, endpoint, endpoints: allEndpoints, agents });
+  // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机上没 key 是缺失，
+  // 也不认合并拉取与丢掉清单。
+  const hasManagement = useHostFeature(serverId, "apiEndpointManagement");
+  const detail = useEndpointDetail({
+    serverId,
+    endpoint,
+    endpoints: allEndpoints,
+    agents,
+    hasManagement,
+  });
+  const { entries: providerEntries } = useProvidersSnapshot(serverId);
+  // 「接口名显示方式」的预览：这家第一个模型在选单里叫什么（magpie 的 Agents’ lists show）。
+  const hostState = hostEndpoints.state;
+  const nameDisplayRow = useMemo(() => {
+    if (!hasManagement || hostState.status !== "ready") return null;
+    const unreachedAgents = hostState.endpointNamesUnreached.map((provider) =>
+      resolveProviderLabel(provider, providerEntries),
+    );
+    return (
+      <ApiEndpointNameDisplayRow
+        label={t("settings.apiEndpoints.endpointNames.title")}
+        value={hostState.endpointNameDisplay}
+        onSave={hostEndpoints.setEndpointNameDisplay}
+        unreachedAgents={unreachedAgents}
+        previewEndpoint={endpoint}
+        allEndpoints={allEndpoints}
+        disabledModels={hostState.disabledModels}
+        testID="api-endpoint-endpoint-names"
+      />
+    );
+  }, [
+    allEndpoints,
+    endpoint,
+    hasManagement,
+    hostEndpoints.setEndpointNameDisplay,
+    hostState,
+    providerEntries,
+    t,
+  ]);
+  // 开着「模型设置」窗口的模型；关着为 null。
+  const [settingsModelId, setSettingsModelId] = useState<string | null>(null);
+  const closeModelSettings = useCallback(() => setSettingsModelId(null), []);
+  const formatPins = useFormatPins({
+    endpoint,
+    hasManagement,
+    save: detail.saveModelSettings,
+  });
+  const modelTestsState = useModelTests({ serverId, endpointId: endpoint.id });
+  const modelTests = useMemo<ModelTestsControl | null>(() => {
+    // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机不认 test_models。
+    if (!hasManagement) return null;
+    return {
+      tests: modelTestsState.tests,
+      run: modelTestsState.run,
+      onTestAll: modelTestsState.testAll,
+      onTestOne: modelTestsState.testOne,
+      onTestOneAs: modelTestsState.testOneAs,
+      testsAs: offeredCliTests(endpoint.testsAs),
+      onCancel: modelTestsState.cancel,
+      factsOf: (modelId) => {
+        const auto = endpoint.modelFacts?.[modelId] ?? {};
+        const facts = resolveModelFacts({ settings: endpoint.modelSettings, modelId, auto });
+        return { name: facts.name, context: facts.context };
+      },
+    };
+  }, [endpoint, hasManagement, modelTestsState]);
   // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove gate after 2027-04-18.
   const hasCliWiring = useHostFeature(serverId, "apiEndpointCliWiring");
   // 「自己能联网搜索」只在有 Anthropic 或 Responses 地址时算数（ADR 0009）。
@@ -497,6 +852,11 @@ function ApiEndpointDetailSections({
     };
   } else if (detail.saveError !== null) {
     pageError = { title: t("settings.apiEndpoints.detail.saveFailed"), message: detail.saveError };
+  } else if (formatPins.error !== null) {
+    pageError = {
+      title: t("settings.apiEndpoints.modelSettings.formatPinFailed"),
+      message: formatPins.error,
+    };
   } else if (hostEndpoints.actionError !== null) {
     pageError = { title: hostEndpoints.actionError, message: "" };
   }
@@ -512,21 +872,23 @@ function ApiEndpointDetailSections({
         onResume={hostEndpoints.resume}
         onTest={detail.testConnection}
         onEdit={onEdit}
+        onDuplicate={onDuplicate}
+        onAddAnother={onAddAnother}
         onDelete={detail.remove}
       />
       {pageError ? (
         <View style={styles.pageError}>
-          <Alert
+          <PrimaryTextAlert
             variant="error"
-            size="sm"
             title={pageError.title}
-            description={pageError.message || undefined}
+            description={pageError.message}
             testID="api-endpoint-detail-error-alert"
           />
         </View>
       ) : null}
       <ApiEndpointConnectionSection
         endpoint={endpoint}
+        isKeyOptional={hasManagement}
         testResults={detail.testResults}
         onEdit={onEdit}
       />
@@ -537,14 +899,47 @@ function ApiEndpointDetailSections({
           onChange={detail.setSearchesWeb}
         />
       ) : null}
+      {hasManagement ? (
+        <ApiEndpointModelScopeSection
+          scope={detail.modelScope}
+          rules={detail.autoPick}
+          ruleError={detail.ruleError}
+          onChangeScope={detail.changeScope}
+          onAddRule={detail.addRule}
+          onRemoveRule={detail.removeRule}
+        />
+      ) : null}
       <ApiEndpointModelsSection
         source={detail.source}
         fetchState={detail.fetchState}
+        forgetState={detail.forgetState}
         now={now}
         onFetch={detail.fetchModels}
+        onForget={detail.canForgetCatalog ? detail.forgetCatalog : null}
         onChange={detail.changeModels}
-        onAdd={detail.addModel}
+        onAdd={detail.addModels}
+        onOpenSettings={hasManagement ? setSettingsModelId : null}
+        formatPins={formatPins.pins}
+        header={nameDisplayRow}
+        modelTests={modelTests}
       />
+      {hasManagement ? (
+        <ApiEndpointModelDefaultsSection
+          key={endpoint.id}
+          endpoint={endpoint}
+          onSave={detail.saveModelSettings}
+        />
+      ) : null}
+
+      {settingsModelId !== null ? (
+        <ApiEndpointModelSettingsSheet
+          key={`${endpoint.id}:${settingsModelId}`}
+          endpoint={endpoint}
+          modelId={settingsModelId}
+          onSave={detail.saveModelSettings}
+          onClose={closeModelSettings}
+        />
+      ) : null}
       <ApiEndpointMappingSection
         models={detail.source.models}
         mapping={detail.modelMapping}

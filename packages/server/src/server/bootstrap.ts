@@ -282,7 +282,12 @@ function createAgentMcpBaseUrl(listenTarget: ListenTarget | null): string | null
   ).toString();
 }
 
-/** 第三方接口中转站的地址，写进 CLI 配置；非 TCP 监听时没有。 */
+/** 中转站冷却的失败接口；测试可注入时钟。 */
+function createCooldowns(input: { config: PaseoDaemonConfig; logger: Logger }): EndpointCooldowns {
+  const overrides = input.config.apiEndpoints ?? {};
+  return new EndpointCooldowns({ logger: input.logger, now: overrides.cooldownsNow });
+}
+
 /** 已下线模型的记录；测试可注入时钟与到期定时器。 */
 function createRetiredModels(input: {
   config: PaseoDaemonConfig;
@@ -300,6 +305,7 @@ function createRetiredModels(input: {
   });
 }
 
+/** 第三方接口中转站的地址，写进 CLI 配置；非 TCP 监听时没有。 */
 function createApiEndpointGatewayUrl(listenTarget: ListenTarget | null): string | null {
   if (!listenTarget || listenTarget.type !== "tcp") {
     return null;
@@ -787,7 +793,7 @@ export async function createPaseoDaemon(
   // so it sits before the host allowlist, CORS and daemon auth, and it reads request bodies
   // itself (no 100 kb JSON limit).
   // The gateway rests failing endpoints; the endpoint list reads and clears the same rests.
-  const apiEndpointCooldowns = new EndpointCooldowns({ logger });
+  const apiEndpointCooldowns = createCooldowns({ config, logger });
   // 中转站记下每个提供方最近一次收到请求的时刻；接口服务据此判断「被绕过」。
   const apiEndpointSightings = new GatewaySightings({
     now: apiEndpointClock(config),
@@ -815,6 +821,8 @@ export async function createPaseoDaemon(
       modelFacts: (endpoint, modelId) => apiEndpointService.modelFacts(endpoint, modelId),
       chatGptListing: () => apiEndpointService.chatGptListing(),
       sightings: apiEndpointSightings,
+      // apiEndpointService 在下面创建；只在 daemon 启动后收到请求时才记。
+      noteCliVersion: (headers) => apiEndpointService.noteCliVersion(headers),
       daemonVersion,
       overrides: config.apiEndpoints,
     }),
@@ -1067,6 +1075,7 @@ export async function createPaseoDaemon(
       lockedThinking: (provider) => apiEndpointService.lockedThinkingOptionId(provider),
       subagentThinking: (provider) => apiEndpointService.subagentThinkingOptions(provider),
       sideModelOptions: (provider) => apiEndpointService.sideModelOptions(provider),
+      apiEndpointNameDisplay: (provider) => apiEndpointService.endpointNameDisplay(provider),
     },
   });
   const providerSnapshotManager = agentProviderRuntime.snapshotManager;

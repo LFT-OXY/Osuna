@@ -157,6 +157,8 @@ const zhCNRetiredTermExemptKeys = [
   "settings.apiEndpoints.agent.reopen.appServer",
   "settings.apiEndpoints.agent.reopen.appServerRestarted",
   "settings.apiEndpoints.agent.reopen.appServerRestartedLine",
+  // 请求头名 anthropic-beta 照原样写。
+  "settings.apiEndpoints.form.extras.headersInfo",
 ];
 
 function findRetiredZhCNTerms(): string[] {
@@ -481,8 +483,10 @@ describe("translation resources", () => {
     expect(apiEndpoints.agent.useSwitch).toBe("使用第三方接口");
     expect(apiEndpoints.agent.defaultModel).toBe("默认模型");
     expect(apiEndpoints.form.addressHint).toBe(
-      "填好 key 后点「自动检测」，Osuna 会用三种请求格式各试一次，把能用的地址填到下面。",
+      "填好 key 后点「自动检测」，Osuna 会用三种请求格式各试一次，逐行列出结果；点「采用这些」把能用的地址填到下面。",
     );
+    expect(apiEndpoints.form.detected.useThese).toBe("采用这些");
+    expect(apiEndpoints.form.fetch.button).toBe("拉取模型");
     expect(zhCN.settings.hostSections.apiEndpoints).toBe("第三方接口");
   });
 

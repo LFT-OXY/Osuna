@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 39
-- **Last Active**: 2026-10-20
+- **Total Sessions**: 40
+- **Last Active**: 2026-10-21
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1195 | Active |
+| `journal-1.md` | ~1336 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -30,6 +30,7 @@
 
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 40 | 2026-10-21 | 接口管理好用性：31 张工单实现、验收与归档 | `9f8c11a40`, `efb611594`, `1aa46d72c`, `97b46f095`, `59b9771dc`, `83fcfad8a`, `90e1d6297`, `8e37a14fc`, `ab9c0d400`, `e4ac72cda`, `e6653fce4`, `ef009e31d`, `6dd878981`, `6744e677d`, `770712c1d`, `0043d1ece`, `99a358367`, `3c0d6277d`, `754f16650`, `e000b6815`, `e033aeae6`, `059b6f14d`, `4ae966979`, `af16c3dcb`, `276f983b4`, `f4a30aad3`, `1dbab6b91`, `b7b4cc800`, `5246fc802`, `f7ad7d02d`, `6ec3a308c`, `cd7c5df1c`, `14ba0a10a`, `9a94fbf57`, `629f4eb03`, `daecd342d`, `6244efa3f`, `1a3b57a48`, `4f18aa417`, `949b43707`, `d79694a21`, `c2aa0d83e`, `229389bc7`, `66d74242b`, `fe0cd47f6`, `6668eca7f`, `0dfb3f3fa`, `6803df2cf`, `e04e3289c`, `a82e94644`, `0cb34d170`, `2d5d38b50`, `fe94aa563`, `005f4f4bd`, `58575dfb0`, `029ab4a2f`, `da79c5eaa`, `3273c7748`, `9500574bf`, `4833afab2`, `f702a283e`, `8275457f7`, `5d2576490`, `4bada6cea`, `2488186ec`, `a64da3b5d`, `9731a77b7`, `c26908fa1`, `3fd8fec62`, `fc5e6f6d8`, `1a74e08d2`, `d4f15a784`, `b7f6ef4db`, `7b5d5dbc5`, `aa2791a30`, `cd4a7f066`, `df1920464`, `a3ccab9a6`, `db9a2a962`, `6aea3b7b6`, `524c9bedb`, `d48187ab1`, `b6c032fd1`, `ff9eb9f2d`, `32976c7a2`, `9ee46c657`, `c15c5df97`, `dffd9b285`, `dd7657f50`, `c8fa5c942`, `3ae9af541`, `f1e5c8ac9`, `1cc9fe820`, `2b3db4aad`, `e569eaafd`, `0c5d864b2`, `58b02fd7c`, `ffeaca07c`, `66e2250fa`, `26fba3a84`, `93ea221f8`, `998cdf309`, `0840929bc`, `81e9eb84d`, `2a5ba2f88`, `25d17c7a8`, `4eeb024b0`, `a458d9833`, `b8c8534eb`, `d9d331456`, `50d473c95`, `7e600ffa1`, `c355141f0`, `b75b1c719`, `e778a11e1`, `1f41236f1`, `76f7349c5`, `6bb5c9728`, `b654b8d3a`, `671f9eb5c`, `97c88bb89`, `9b104a4bc`, `41d9a6ea9`, `760069ce6`, `df70f4ca9`, `cf36045e8`, `1fe850790`, `366eeb831`, `b5371c704`, `a5ed6d02f` | `start-magpie-osuna-gaps-subtask-3-api-usability` |
 | 39 | 2026-10-20 | 逻辑图工单 08–10 收尾与任务归档 | `14b4e251d`, `638f84614`, `c269075f9`, `2912407c2` | `feat-requirement-logic-graph-docs` |
 | 38 | 2026-10-20 | Diff 面板大改动卡顿第一期：工单 03–10 实现、验收与归档 | `9232915e8`, `5dbd792c4`, `c17968601`, `8531f8193`, `259859884`, `1c4d4aa30`, `983d4c599`, `9acf5b2f0`, `8463e4807`, `f10c0ead2`, `23c53b313`, `0dfac4d9c`, `09af62627`, `d36968c2c`, `9644a74f9`, `fc95c82a7` | `perf-osuna-diff-view-large-changesets` |
 | 37 | 2026-10-19 | CLI 接线与联网搜索：真实 CLI 验收、32 号显示名、整体验收与归档 | `763a57758`, `b57a3d8f9`, `a0b6e0eca`, `1090f99d2` | `main` |

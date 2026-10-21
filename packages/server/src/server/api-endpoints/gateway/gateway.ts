@@ -11,20 +11,31 @@ import type { Request, RequestHandler, Response } from "express";
 import type pino from "pino";
 import { applyEdits, modify } from "jsonc-parser";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
-import { AGENT_REQUEST_FORMAT, isDefaultModelChoice, usableModels } from "../host-endpoints.js";
+import { pinnedFormat } from "@getpaseo/protocol/api-endpoint/model-settings";
+import { AGENT_REQUEST_FORMAT, isDefaultModelChoice } from "../host-endpoints.js";
 import {
   ApiEndpointStore,
   ApiEndpointsFileUnparsableError,
   type ApiEndpointProvider,
   type ApiEndpointState,
-  type StoredApiEndpoint,
 } from "../store.js";
-import type { ModelFacts } from "../model-facts.js";
+import { servedFormats, translationOrderAt } from "../templates.js";
+import type { ModelFactsLookup } from "../model-facts.js";
 import type { RetiredModels } from "../retired-models.js";
+import {
+  askedDisabledBy,
+  codexOwnDisabledBy,
+  disabledMessage,
+  disabledPatterns,
+  endpointDisabledBy,
+  withoutDisabledModels,
+} from "../disabled-models.js";
 import { isRecord, parseJson } from "../upstream-http.js";
 import { sendAgentError, sendRefusal, type AgentWire } from "./agent-errors.js";
 import { ConversationSticks, conversationId, turnOf } from "./affinity.js";
+import { extraBodySession } from "../request-extras.js";
 import { judgeCaller } from "./callers.js";
+import { CliHeaderSamples, isFromClaudeCode, isFromCodex } from "../cli-header-samples.js";
 import type { GatewaySightings } from "../cli-bypass.js";
 import { isClaudeSignIn, keepClaudeSignIn } from "./claude-signin.js";
 import {
@@ -44,6 +55,7 @@ import {
 } from "./chatgpt-models.js";
 import { answerCodexCompaction, type CompactionAnswer } from "./codex-compaction-answer.js";
 import { CompactionFailures } from "./codex-compaction-fallback.js";
+import { modelIdOf, modelList, singleModel } from "./model-list.js";
 import { codexCompactionInput, localCompactionTurn } from "./codex-compaction.js";
 import {
   chatgptTurnDestination,
@@ -121,7 +133,7 @@ import { GATEWAY_INFO_NAME } from "../gateway-reach.js";
  * 每家接口按 chooseRequestFormat 挑格式：有 Agent 自己格式的地址就直通，否则经中间格式翻译过去。
  *
  * 自动切换：用户选的那家在开口（回复里出现第一段内容）前失败（额度、欠费、限流、服务器错误、超时）时，
- * 按创建顺序换到下一家有同名模型的接口，失败的那家冷却；开口之后不再换家。冷却与「上次谁答的」只记在内存里。
+ * 按接口顺序换到下一家有同名模型的接口，失败的那家冷却；开口之后不再换家。冷却与「上次谁答的」只记在内存里。
  * 空回复先在同一家再问一次，还空就换下一家；空回复怪不到这家，不冷却（magpie #1221）。
  * 拒答（安全过滤不肯回答，safety-filter.ts）也怪不到这家：不冷却、不标「需要检查」，问遍剩下的同名候选。
  * 换家之前先看是不是拒收（不思考的写法、这个格式的地址没有这个模型、两个认证头不能同时带）：
@@ -157,10 +169,9 @@ export interface ApiEndpointGatewayOverrides {
   gatewayOpenAiApiBaseUrl?: string;
   // 只给测试缩短等 ChatGPT 模型清单的时间（缺省 3 秒）。
   gatewayChatGptModelsWaitMs?: number;
+  // 只给测试换冷却用的时钟，冷却时长算出来是确定的。
+  cooldownsNow?: () => number;
 }
-
-/** 一家接口的一个模型（按这家的写法）的资料：这家上游清单给的在前，models.dev 补上没给的。 */
-export type ModelFactsLookup = (endpoint: StoredApiEndpoint, modelId: string) => ModelFacts;
 
 /** 每种 Agent 自己说的请求格式，按请求路径认；口令与 User-Agent 都认不出是谁时，路径也说明是哪个 Agent。 */
 const AGENT_PATHS = {
@@ -181,6 +192,8 @@ export function createApiEndpointGateway(options: {
   chatGptListing: () => ChatGptModelsListing;
   // 每个提供方最近一次收到请求的时刻，接口服务据此判断「被绕过」。
   sightings: GatewaySightings;
+  // 记下经中转站来过的 Codex 的版本（magpie codexSeen），没有 Codex 样本时「按 Codex 的样子测」用。
+  noteCliVersion: (headers: IncomingHttpHeaders) => void;
   overrides?: ApiEndpointGatewayOverrides;
 }): RequestHandler {
   const logger = options.logger.child({ module: "api-endpoint-gateway" });
@@ -199,6 +212,7 @@ export function createApiEndpointGateway(options: {
     keepAliveQuietMs: options.overrides?.gatewayKeepAliveQuietMs ?? KEEPALIVE_QUIET_MOST_MS,
     bodyLimitBytes: options.overrides?.gatewayBodyLimitBytes ?? MAX_REQUEST_BODY_BYTES,
     ownUserAgent: `Osuna/${options.daemonVersion}`,
+    cliSamples: new CliHeaderSamples({ store, logger }),
   };
   const chatgpt: ChatGptBackend = {
     bases: {
@@ -228,6 +242,7 @@ export function createApiEndpointGateway(options: {
     const chatgptRest = chatgptBackendRest(req.path);
     if (chatgptRest !== null) {
       options.sightings.saw("codex");
+      options.noteCliVersion(req.headers);
       const served = serveChatGptBackend({
         req,
         res,
@@ -261,11 +276,7 @@ export function createApiEndpointGateway(options: {
       res.status(200).json({ name: GATEWAY_INFO_NAME });
       return;
     }
-    if (req.path === "/v1/models" && req.method === "GET") {
-      const state = readState({ res, wire, store, logger });
-      if (state) res.status(200).json(modelList(failover.retired.listed(state)));
-      return;
-    }
+    if (serveModels({ req, res, wire, store, logger, failover })) return;
     const target = req.method === "POST" ? agentPath(req.path) : null;
     const counting = req.method === "POST" && req.path === COUNT_TOKENS_PATH;
     if (!target && !counting) {
@@ -367,6 +378,15 @@ async function serveChatGptBackend(input: {
   const shaped = shapeChatGptTurn({ ...input, text: sentText, model: sentModel });
   const { text, model } = shaped;
   if (shaped.goesTo === "chatgpt") {
+    // Codex 自己的模型被禁了：不转给 ChatGPT（magpie codexNativeOff）。
+    const state = stateForShaping(input);
+    const patterns = state === null ? [] : disabledPatterns(state);
+    const pattern = codexOwnDisabledBy({ patterns, model });
+    if (pattern !== null) {
+      const message = disabledMessage({ model, pattern });
+      sendAgentError({ res: input.res, wire: "openai", error: { status: 403, message } });
+      return;
+    }
     const isShaped = text !== sentText;
     relayChatGpt({ ...input, sent: chatgptBodyFor({ rest, raw: raw.body, text, isShaped }) });
     return;
@@ -399,7 +419,7 @@ function shapeChatGptTurn(input: {
   if (input.rest !== "/responses") return { text, model, goesTo: chatgptTurnDestination(model) };
   const state = stateForShaping(input);
   let listed: ApiEndpointState | null = null;
-  if (state !== null) listed = input.failover.retired.listed(state);
+  if (state !== null) listed = servedOf({ failover: input.failover, state });
   return shapeCodexChatGptRequest({
     headers: input.req.headers,
     text,
@@ -588,6 +608,8 @@ interface Failover {
   bodyLimitBytes: number;
   // CLI 没带 User-Agent 时发给上游的。
   ownUserAgent: string;
+  // 「按 Claude Code / Codex 的样子测」用的 CLI 请求头样本（ADR 0013）。
+  cliSamples: CliHeaderSamples;
 }
 
 /** 读出 Agent 的请求体与模型名，按模型名找到候选；读不了或找不到时已按 Agent 协议回了错误，返回 null。 */
@@ -619,6 +641,12 @@ async function routeAgentRequest(input: {
     reply(400, "The request has no model");
     return null;
   }
+  // 读出模型名就记下 Claude Code 的头，在选路之前：被禁、找不到路、读不了状态的请求也算它来过
+  // （magpie 同样不管最后去哪家：去订阅、Chat 或翻译过的那家的请求都不带它的头）。
+  const isClaudeCodeTurn = wire === "anthropic" && isFromClaudeCode(input.req.headers);
+  if (isClaudeCodeTurn) {
+    input.failover.cliSamples.saw({ client: "claude_code", headers: input.req.headers });
+  }
   const state = readState({ res, wire, store: input.store, logger: input.logger });
   if (!state) return null;
   const codexed = codexApiRequest({
@@ -629,9 +657,17 @@ async function routeAgentRequest(input: {
     state,
   });
   const { body, parsed, model, fixedEffort } = withoutAskedEffort({ ...codexed, state });
+  // 被禁的模型在问任何一家之前拒收（magpie idOff）：名字本身命中，或只剩被禁的那几家提供它。
+  const askedOff = askedDisabledBy({ state, model });
+  if (askedOff !== null) {
+    reply(403, disabledMessage({ model, pattern: askedOff }));
+    return null;
+  }
   const route = routeModel({ ...input, state, model });
   if (!route.ok) {
-    reply(404, route.message);
+    const servedOff = disabledServerOf({ ...input, state, model });
+    if (servedOff !== null) reply(403, disabledMessage({ model, pattern: servedOff }));
+    else reply(404, route.message);
     return null;
   }
   if (input.wire === "anthropic" && asksAnthropicWebSearch(parsed)) {
@@ -700,7 +736,7 @@ function codexApiRequest(
     text: sentText,
     model,
     state,
-    listed: input.failover.retired.listed(state),
+    listed: servedOf({ failover: input.failover, state }),
     logger: input.logger,
   });
   if (shaped.text === sentText) return { body, parsed, model };
@@ -780,6 +816,70 @@ function noWebSearchMessage(model: string): string {
   );
 }
 
+/** 中转站的模型清单 GET /v1/models 与单个模型 GET /v1/models/{id}；不是这两条路径为 false。 */
+function serveModels(input: {
+  req: Request;
+  res: Response;
+  wire: AgentWire;
+  store: ApiEndpointStore;
+  logger: pino.Logger;
+  failover: Failover;
+}): boolean {
+  const { req, res, failover } = input;
+  if (req.method !== "GET") return false;
+  const isList = req.path === "/v1/models";
+  const askedId = isList ? null : modelIdOf(req.path);
+  if (!isList && askedId === null) return false;
+  const state = readState(input);
+  if (!state) return true;
+  const served = servedOf({ failover, state });
+  const factsFor = failover.modelFacts;
+  if (askedId === null) {
+    res.status(200).json(modelList({ state: served, factsFor }));
+    return true;
+  }
+  const found = singleModel({ state: served, id: askedId, factsFor });
+  // 找不到（含已禁用的）照 magpie 按 OpenAI 的写法回 404。
+  if (found) res.status(200).json(found);
+  else
+    sendAgentError({
+      res,
+      wire: "openai",
+      error: { status: 404, message: `unknown model ${askedId}` },
+    });
+  return true;
+}
+
+/** 在服务的模型：去掉一周内下线的与已禁用的。选路、模型清单都按它。 */
+function servedOf(input: { failover: Failover; state: ApiEndpointState }): ApiEndpointState {
+  return withoutDisabledModels(input.failover.retired.listed(input.state));
+}
+
+/**
+ * 在服务的模型里找不到它，不算被禁时却找得到：回禁掉它的那条（magpie BareDisabled、modelOff）；不是这样为 null。
+ */
+function disabledServerOf(input: {
+  agent: ApiEndpointProvider;
+  state: ApiEndpointState;
+  model: string;
+  failover: Failover;
+}): string | null {
+  const { state } = input;
+  if (disabledPatterns(state).length === 0) return null;
+  const listed = input.failover.retired.listed(state);
+  const route = resolveGatewayRoute({ state, listed, agent: input.agent, model: input.model });
+  if (!route.ok) return null;
+  for (const candidate of route.candidates) {
+    const pattern = endpointDisabledBy({
+      state,
+      endpoint: candidate.endpoint,
+      model: candidate.upstreamModel,
+    });
+    if (pattern !== null) return pattern;
+  }
+  return null;
+}
+
 /**
  * 按模型名找候选。Codex 的记忆整理与 auto-review 找不到模型时，改用 Codex 上一轮对话用的模型找；
  * 找得到的 Codex 对话轮记下它问的模型。请求里的模型名不变，发给每家时照常换成候选的写法。
@@ -793,8 +893,8 @@ function routeModel(input: {
   failover: Failover;
 }): GatewayRoute {
   const { req, agent, state, model } = input;
-  const { codexTurns, retired } = input.failover;
-  const listed = retired.listed(state);
+  const { codexTurns } = input.failover;
+  const listed = servedOf({ failover: input.failover, state });
   const route = resolveGatewayRoute({ state, listed, agent, model });
   if (route.ok) {
     if (agent === "codex") codexTurns.asked(req.headers, model);
@@ -860,8 +960,9 @@ async function countOnEndpoint(input: {
 }): Promise<boolean> {
   const { endpoint } = input.counter;
   const baseUrl = endpoint.baseUrls.find((entry) => entry.format === "anthropic_messages")?.url;
+  if (baseUrl === undefined) return false;
+  // 没 key 的接口为 null：不带认证头。
   const apiKey = input.store.getApiKey(endpoint.id);
-  if (baseUrl === undefined || apiKey === null) return false;
   const outcome = await attemptEndpoint({
     req: input.req,
     res: input.res,
@@ -886,13 +987,13 @@ async function countOnEndpoint(input: {
 }
 
 /**
- * 能问的候选：这次用哪种格式问它、那个格式的地址与 key。Agent 自己的格式即直通；
+ * 能问的候选：这次用哪种格式问它、那个格式的地址与 key（没 key 为 null）。Agent 自己的格式即直通；
  * 别的格式带上读成中间格式的请求，翻译过去。
  */
 interface AskableCandidate extends GatewayCandidate {
   format: ApiEndpointRequestFormat;
   baseUrl: string;
-  apiKey: string;
+  apiKey: string | null;
   translated: GatewayRequest | null;
 }
 
@@ -1022,6 +1123,7 @@ function askableFormat(input: {
   return chooseRequestFormat({
     agentFormat: input.agentFormat,
     model: candidate.upstreamModel,
+    formatOrder: formatOrderOf(candidate),
     formats: formatsToSearchOn({
       endpoint: candidate.endpoint,
       formats: offered,
@@ -1030,8 +1132,28 @@ function askableFormat(input: {
   });
 }
 
+function formatOrderOf(candidate: GatewayCandidate): ApiEndpointRequestFormat[] | null {
+  const { templateId } = candidate.endpoint;
+  return translationOrderAt({ templateId, model: candidate.upstreamModel });
+}
+
+/**
+ * 这家有地址、又给这个模型的格式（Bedrock 每个模型只在某几种格式上）；模型设置了「只用这种格式」且这家还有那种地址时只有它
+ * （magpie ModelAPI、APIs）。
+ */
 function formatsOf(candidate: GatewayCandidate): ApiEndpointRequestFormat[] {
-  return candidate.endpoint.baseUrls.map((entry) => entry.format);
+  const { endpoint, upstreamModel } = candidate;
+  const served = servedFormats({
+    templateId: endpoint.templateId,
+    baseUrls: endpoint.baseUrls,
+    model: upstreamModel,
+  });
+  const pin = pinnedFormat({
+    settings: endpoint.modelSettings,
+    modelId: upstreamModel,
+    baseUrls: endpoint.baseUrls,
+  });
+  return pin.kind === "pinned" ? [pin.format] : served;
 }
 
 /** 这家还没说过不提供这个模型的格式。 */
@@ -1042,12 +1164,13 @@ function formatsLeft(input: {
   const { id } = input.candidate.endpoint;
   const model = input.candidate.upstreamModel;
   return formatsOf(input.candidate).filter(
-    (format) => !input.refusals.has(id, model, formatShape(format)),
+    (format) =>
+      !input.refusals.has({ endpointId: id, model, format: null, shape: formatShape(format) }),
   );
 }
 
 /**
- * 有地址、有 key、有能用的格式的候选；要翻译时把 Agent 的请求读成中间格式。
+ * 有地址、有能用的格式的候选（没 key 的也算）；要翻译时把 Agent 的请求读成中间格式。
  * 读不懂（或翻不过去，如只给 file_id 的图片）的只跳过要翻译的候选；没有一家能问时抛出那个 RequestShapeError。
  */
 function askableCandidates(input: {
@@ -1062,8 +1185,9 @@ function askableCandidates(input: {
   const reachable = input.candidates.flatMap((candidate) => {
     const format = askableFormat({ candidate, agentFormat: input.format, refusals, asksSearch });
     const baseUrl = candidate.endpoint.baseUrls.find((entry) => entry.format === format)?.url;
+    if (format === null || baseUrl === undefined) return [];
+    // 没 key 的接口照样能问，不带认证头。
     const apiKey = input.store.getApiKey(candidate.endpoint.id);
-    if (format === null || baseUrl === undefined || apiKey === null) return [];
     return [{ ...candidate, format, baseUrl, apiKey }];
   });
   const translating = reachable.some((candidate) => candidate.format !== input.format);
@@ -1468,6 +1592,7 @@ function nextFormat(input: EndpointAsk): AskableCandidate | null {
     agentFormat: input.format,
     model: candidate.upstreamModel,
     formats,
+    formatOrder: formatOrderOf(candidate),
   });
   const baseUrl = candidate.endpoint.baseUrls.find((entry) => entry.format === format)?.url;
   if (format === null || baseUrl === undefined) return null;
@@ -1483,16 +1608,19 @@ function shapeRefusals(input: EndpointAsk): ShapeRefusals {
   const { refusals } = input.failover;
   const endpointId = candidate.endpoint.id;
   const model = candidate.upstreamModel;
+  // 拒收按这次发去的格式记：在 Chat 上不收的字段，Responses 照常发。
+  const { format } = candidate;
   const foldsRoots = foldsRootsUpFront(candidate.baseUrl);
   return {
     has: (shape) => {
       const foldedUpFront = shape === "rootUnion" && foldsRoots;
-      return foldedUpFront || refusals.has(endpointId, model, shape);
+      return foldedUpFront || refusals.has({ endpointId, model, format, shape });
     },
     add: (shape) => {
       // 并发的请求可能都按旧写法发出、都被拒：日志只在第一次记住时写。
-      if (refusals.has(endpointId, model, shape)) return;
-      refusals.add(endpointId, model, shape);
+      const refusal = { endpointId, model, format, shape };
+      if (refusals.has(refusal)) return;
+      refusals.add(refusal);
       input.logger.info(
         { endpoint: candidate.endpoint.name, model, refused: shape },
         refusalNote(shape),
@@ -1504,6 +1632,7 @@ function shapeRefusals(input: EndpointAsk): ShapeRefusals {
 /** 问一次：这家用 Agent 自己的格式就直通，否则翻译。 */
 function askOnce(input: EndpointAsk): Promise<AttemptOutcome> {
   const { candidate } = input;
+  const clientIdentity = codexIdentityFor(input);
   const refused = shapeRefusals(input);
   const target = {
     res: input.res,
@@ -1516,6 +1645,7 @@ function askOnce(input: EndpointAsk): Promise<AttemptOutcome> {
     userAgent: userAgentFor(input),
     refusals: refused,
     keepAlive: input.keepAlive,
+    sessionId: sessionForExtraBody(input),
   };
   if (candidate.translated === null) {
     return attemptEndpoint({
@@ -1535,17 +1665,52 @@ function askOnce(input: EndpointAsk): Promise<AttemptOutcome> {
     from: input.format,
     to: candidate.format,
     request: withWebSearchFor({ request: candidate.translated, searches }),
+    clientIdentity,
     facts: input.failover.modelFacts(candidate.endpoint, candidate.upstreamModel),
     retryPauseMs: input.failover.retryPauseMs,
   });
 }
 
-/** 直通时固定的档位按这家这个模型自己的档位落定（magpie fitLevel）；没固定时不带。 */
-function passedEffort(input: EndpointAsk): { fixedEffort?: FixedEffort } {
-  if (input.fixedEffort === null) return {};
+/** 附加请求体里 ${sessionId} 换成的对话标识；这家没设附加请求体时不用算。 */
+function sessionForExtraBody(input: EndpointAsk): string {
+  const { extraBody } = input.candidate.endpoint;
+  const hasExtraBody = extraBody !== undefined && Object.keys(extraBody).length > 0;
+  if (!hasExtraBody) return "";
+  return extraBodySession(input.forwardedHeaders ?? input.req.headers, input.parsed);
+}
+
+/**
+ * Codex 的请求发往一家的 Responses 或 Chat 地址时：记下它表明身份的头（「按 Codex 的样子测」用），翻译过去的请求也照原样
+ * 带上这些头（magpie：只放行 Codex 的中转服务认 User-Agent、originator 与 x-codex-* 头，key 从不带）。
+ * 直通的请求本来就带着 Agent 的头。返回翻译时要带的身份头；不是 Codex 发往这两种格式的为空。
+ */
+function codexIdentityFor(input: EndpointAsk): Record<string, string> {
+  const headers = input.forwardedHeaders ?? input.req.headers;
+  const toOpenAi =
+    input.candidate.format === "openai_responses" || input.candidate.format === "openai_chat";
+  if (!toOpenAi || !isFromCodex(headers)) return {};
+  input.failover.cliSamples.saw({ client: "codex", headers });
+  const identity: Record<string, string> = {};
+  for (const [name, value] of Object.entries(codexIdentityHeaders(headers))) {
+    // 请求体的格式由翻译定，不用 Codex 原来的。
+    const describesBody = name === "content-type" || name === "accept";
+    if (describesBody || value === undefined) continue;
+    identity[name] = Array.isArray(value) ? value.join(", ") : value;
+  }
+  return identity;
+}
+
+/**
+ * 直通时固定的档位按这家这个模型自己的档位落定（magpie fitLevel）；没固定时不带。
+ * 模型设置里一档思考都不留的模型什么思考参数都不带，固定了也一样（magpie Reasonless）。
+ */
+function passedEffort(input: EndpointAsk): { fixedEffort?: FixedEffort; noThinking?: boolean } {
   const { candidate } = input;
   const facts = input.failover.modelFacts(candidate.endpoint, candidate.upstreamModel);
-  return { fixedEffort: fitFixedEffort({ effort: input.fixedEffort, levels: facts.efforts }) };
+  if (facts.noThinking === true) return { noThinking: true };
+  if (input.fixedEffort === null) return {};
+  const levels = facts.vendorEfforts ?? facts.efforts;
+  return { fixedEffort: fitFixedEffort({ effort: input.fixedEffort, levels }) };
 }
 
 /** 发给上游的 User-Agent：直通与翻译都用 CLI 自己的，CLI 没带时用 Osuna/<版本>。 */
@@ -1671,24 +1836,4 @@ function readState(input: {
     });
     return null;
   }
-}
-
-/** OpenAI 与 Anthropic 两种列表写法合在一份里：开着的接口的已选模型，去重后的光秃秃名字。 */
-function modelList(state: ApiEndpointState) {
-  const data = usableModels(state).map((model) => ({
-    id: model.id,
-    object: "model",
-    type: "model",
-    display_name: model.label ?? model.id,
-    created: 0,
-    created_at: "1970-01-01T00:00:00Z",
-    owned_by: "osuna",
-  }));
-  return {
-    object: "list",
-    data,
-    has_more: false,
-    first_id: data[0]?.id ?? null,
-    last_id: data.at(-1)?.id ?? null,
-  };
 }

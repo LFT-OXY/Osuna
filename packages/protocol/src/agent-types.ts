@@ -161,6 +161,8 @@ export interface ProviderSnapshotEntry {
   subagentThinkingOptions?: AgentSelectOption[];
   // Codex 的默认 Subagent 模型与记忆模型的选项（用 ChatGPT 登录时 Codex 自己的模型在前，同名的光秃秃名字指它）；总开关开着才有。
   sideModelOptions?: ApiEndpointSideModelOption[];
+  // 接口名显示方式（always、clash、never）：选择器里模型后面带不带接口名；总开关开着才有。
+  apiEndpointNameDisplay?: string;
   // 已装 CLI 的版本号（纯 x.y.z），只有启用的内置提供方才有；取不到时省略。
   version?: string;
 }

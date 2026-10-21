@@ -1,6 +1,7 @@
 // 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/provider/detect.go、test.go）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import {
+  API_ENDPOINT_DETECT_MAX_MODELS,
   API_ENDPOINT_REQUEST_FORMATS,
   type ApiEndpointFormatDetection,
   type ApiEndpointRequestFormat,
@@ -14,11 +15,27 @@ import {
   isRecord,
   parseJson,
   redactKey,
+  type Secrets,
 } from "./upstream-http.js";
+import { signedHeaders, type KeyHeaders } from "./gateway/refusals.js";
+import {
+  keyHeadersAt,
+  secretsOf,
+  testSession,
+  unsendableHeader,
+  unsendableHeaderMessage,
+  withExtraBody,
+  type RequestExtras,
+} from "./request-extras.js";
+import { upstreamFetch, type UpstreamResponse } from "./insecure-tls.js";
+import { asCompletionTokens, takesCompletionTokens } from "./gateway/template-rewrites.js";
+import type { CliHeaderSample } from "./store.js";
+import { asCliBody, type CliTestClient } from "./test-as.js";
 
 /*
  * 自动检测请求格式（照 magpie internal/provider/detect.go）：从用户填的一个地址推出每种格式的地址，
- * 先向上游列一次模型挑人选（列模型不花钱），再每种格式各发一条最小对话请求，回应正常的就算这家支持。
+ * 每种格式各发一条最小对话请求，回应正常的就算这家支持。问哪个模型：用户填的试用模型每种格式都问它；
+ * 没填时按格式从表单里已选的模型挑，也没有才向上游列一次模型挑人选（列模型不花钱）。
  * 列模型就被拒（401 / 403）时三种都算 key 无效，不再发对话请求。
  */
 
@@ -29,7 +46,9 @@ export type DetectOutcome =
 interface FormatProbe {
   // 接在这种格式的地址后面。
   path: string;
-  headers(apiKey: string): Record<string, string>;
+  // key 放哪（模板另有规定的除外）与这种格式另要的头。
+  keys: KeyHeaders;
+  headers: Record<string, string>;
   body(modelId: string): Record<string, unknown>;
   // 2xx 的响应体确实是这种格式的结果；否则地址背后是别的东西。
   matches(body: unknown): boolean;
@@ -39,11 +58,8 @@ interface FormatProbe {
 const FORMAT_PROBES: Record<ApiEndpointRequestFormat, FormatProbe> = {
   anthropic_messages: {
     path: "/v1/messages",
-    headers: (apiKey) => ({
-      authorization: `Bearer ${apiKey}`,
-      "x-api-key": apiKey,
-      "anthropic-version": ANTHROPIC_VERSION,
-    }),
+    keys: "both",
+    headers: { "anthropic-version": ANTHROPIC_VERSION },
     body: (modelId) => ({
       model: modelId,
       max_tokens: 16,
@@ -53,7 +69,8 @@ const FORMAT_PROBES: Record<ApiEndpointRequestFormat, FormatProbe> = {
   },
   openai_chat: {
     path: "/chat/completions",
-    headers: (apiKey) => ({ authorization: `Bearer ${apiKey}` }),
+    keys: "bearer",
+    headers: {},
     body: (modelId) => ({
       model: modelId,
       messages: [{ role: "user", content: "hi" }],
@@ -63,7 +80,8 @@ const FORMAT_PROBES: Record<ApiEndpointRequestFormat, FormatProbe> = {
   },
   openai_responses: {
     path: "/responses",
-    headers: (apiKey) => ({ authorization: `Bearer ${apiKey}` }),
+    keys: "bearer",
+    headers: {},
     // 不带 max_output_tokens：Codex 自己不发它，有的中转站会拒绝这个参数。
     body: (modelId) => ({
       model: modelId,
@@ -92,18 +110,38 @@ export function suggestedBaseUrls(baseUrl: string): Record<ApiEndpointRequestFor
 
 export async function detectUpstreamFormats(input: {
   baseUrl: string;
-  apiKey: string;
+  // 没 key 的接口为 null，不带认证头。
+  apiKey: string | null;
+  // 用户填的试用模型：每种格式都问它；没填为 null。
+  modelId: string | null;
+  // 表单里已选、还没保存的模型：没填试用模型时按格式从它们里挑，空的才向上游列。
+  pickedModelIds: string[];
+  // 发给上游时模型叫什么（已保存那家的上游模型名，magpie detect.go 的 UpstreamName）；新加的是模型 id 本身。
+  sentNameOf: (modelId: string) => string;
+  // 这家的请求头、附加请求体与 key 放哪个头（request-extras.ts）。
+  extras: RequestExtras;
   // 调用方取消（客户端取消或断开）。
   signal: AbortSignal;
   modelsTimeoutMs: number;
   probeTimeoutMs: number;
 }): Promise<DetectOutcome> {
   const urls = suggestedBaseUrls(input.baseUrl);
+  const picked = modelsToAsk(input.pickedModelIds);
+  if (input.modelId !== null || picked.length > 0) {
+    return probeAll({
+      input,
+      urls,
+      modelFor: (format) => input.modelId ?? pickProbeModel(picked, format),
+    });
+  }
   const listed = await fetchUpstreamModels({
     // claude 的请求头两种认证都带，也认 Anthropic 的分页。
     provider: "claude",
     baseUrl: urls.anthropic_messages,
     apiKey: input.apiKey,
+    // 自动检测只给「自定义」用。
+    templateId: undefined,
+    extras: input.extras,
     signal: input.signal,
     timeoutMs: input.modelsTimeoutMs,
   });
@@ -112,13 +150,19 @@ export async function detectUpstreamFormats(input: {
     const httpStatus = listed.error.status ?? null;
     const rejected = httpStatus === 401 || httpStatus === 403;
     // 列模型就被拒：三种格式都是这把 key 的问题；其余失败是没有模型可问。
-    const outcome: Pick<ApiEndpointFormatDetection, "status" | "httpStatus" | "message"> = rejected
-      ? { status: "auth_failed", httpStatus, message: listed.error.message }
-      : {
-          status: "not_detected",
-          httpStatus: null,
-          message: `Could not list models to try: ${listed.error.message}`,
-        };
+    const rejectedOutcome: ListingOutcome = {
+      status: "auth_failed",
+      httpStatus,
+      message: listed.error.message,
+    };
+    const unlistedOutcome: ListingOutcome = {
+      status: "not_detected",
+      httpStatus: null,
+      message: `Could not list models to try: ${listed.error.message}`,
+      code: "models_list_failed",
+      params: { detail: listed.error.message },
+    };
+    const outcome = rejected ? rejectedOutcome : unlistedOutcome;
     return {
       kind: "result",
       results: API_ENDPOINT_REQUEST_FORMATS.map((format) => ({
@@ -129,17 +173,50 @@ export async function detectUpstreamFormats(input: {
     };
   }
   const modelIds = listed.models.map((model) => model.id);
+  return probeAll({ input, urls, modelFor: (format) => pickProbeModel(modelIds, format) });
+}
+
+type ListingOutcome = Pick<
+  ApiEndpointFormatDetection,
+  "status" | "httpStatus" | "message" | "code" | "params"
+>;
+
+/** 去掉空白与重复，取前 API_ENDPOINT_DETECT_MAX_MODELS 个（单次检测挑模型与逐个模型识别共用）。 */
+export function modelsToAsk(modelIds: string[]): string[] {
+  const trimmed = modelIds.map((id) => id.trim());
+  const unique = new Set(trimmed.filter((id) => id !== ""));
+  return [...unique].slice(0, API_ENDPOINT_DETECT_MAX_MODELS);
+}
+
+/** 每种格式同时问一次，各用 modelFor 给它挑的模型。 */
+async function probeAll(args: {
+  input: {
+    apiKey: string | null;
+    signal: AbortSignal;
+    probeTimeoutMs: number;
+    sentNameOf: (modelId: string) => string;
+    extras: RequestExtras;
+  };
+  urls: Record<ApiEndpointRequestFormat, string>;
+  modelFor: (format: ApiEndpointRequestFormat) => string | null;
+}): Promise<DetectOutcome> {
+  const { input, urls, modelFor } = args;
   const results = await Promise.all(
-    API_ENDPOINT_REQUEST_FORMATS.map((format) =>
-      probeUpstreamFormat({
+    API_ENDPOINT_REQUEST_FORMATS.map((format) => {
+      const modelId = modelFor(format);
+      return probeUpstreamFormat({
         format,
         baseUrl: urls[format],
         apiKey: input.apiKey,
-        modelId: pickProbeModel(modelIds, format),
+        // 自动检测只给「自定义」用。
+        templateId: undefined,
+        modelId,
+        sentModel: modelId === null ? null : input.sentNameOf(modelId),
+        extras: input.extras,
         signal: input.signal,
         timeoutMs: input.probeTimeoutMs,
-      }),
-    ),
+      });
+    }),
   );
   if (input.signal.aborted) return { kind: "cancelled" };
   return { kind: "result", results };
@@ -149,59 +226,258 @@ export async function detectUpstreamFormats(input: {
 export async function probeUpstreamFormat(input: {
   format: ApiEndpointRequestFormat;
   baseUrl: string;
-  apiKey: string;
+  // 没 key 的接口为 null，不带认证头。
+  apiKey: string | null;
+  // Bedrock、Azure 的认证头与 Chat 的回复上限字段由模板定；「自定义」的没有。
+  templateId: string | undefined;
   modelId: string | null;
+  // 请求体里的模型名（上游模型名）；没有模型时为 null。
+  sentModel: string | null;
+  // 测试模型时 Responses 也限回复 16（照 magpie tinyBody）；检测与测试连接不带，照 Codex 自己的样子。
+  capsReply?: boolean;
+  // 按 CLI 的样子测（ADR 0013）：带这些请求头、流式发；缺省是 Osuna 自己的样子。
+  asCli?: { client: CliTestClient; headers: CliHeaderSample };
+  // 这家的请求头、附加请求体与 key 放哪个头（request-extras.ts）。
+  extras: RequestExtras;
   signal: AbortSignal;
   timeoutMs: number;
 }): Promise<ApiEndpointFormatDetection> {
   const { format, baseUrl } = input;
+  const startedAt = performance.now();
+  const secrets = secretsOf(input);
+  // daemon 自己写的原因另带 code 与 params，界面按语言说；message 是英文原文（测试连接、测试模型照登）。
   const result = (
     status: ApiEndpointFormatDetection["status"],
     httpStatus: number | null,
     message: string | null,
-  ): ApiEndpointFormatDetection => ({
-    format,
-    url: baseUrl,
-    status,
-    httpStatus,
-    message: message === null ? null : redactKey(message, input.apiKey),
-  });
+    reason: DaemonReason | null = null,
+  ): ApiEndpointFormatDetection => {
+    let redacted: string | null = null;
+    if (message !== null) redacted = redactKey(message, secrets);
+    const detection: ApiEndpointFormatDetection = {
+      format,
+      url: baseUrl,
+      status,
+      httpStatus,
+      message: redacted,
+      durationMs: Math.round(performance.now() - startedAt),
+    };
+    if (input.modelId !== null) detection.modelId = input.modelId;
+    if (reason !== null) Object.assign(detection, reasonPartOf(reason, secrets));
+    return detection;
+  };
   if (input.modelId === null) {
-    return result("not_detected", null, "The upstream listed no models to try");
+    return result("not_detected", null, "The upstream listed no models to try", {
+      code: "no_model_to_try",
+    });
+  }
+  const unsendable = unsendableHeader(input.extras);
+  if (unsendable !== null) {
+    return result("not_detected", null, unsendableHeaderMessage(unsendable), {
+      code: "invalid_header",
+      params: { ...unsendable },
+    });
   }
   const probe = FORMAT_PROBES[format];
   const url = `${baseUrl}${probe.path}`;
+  const request = probeRequest({ ...input, modelId: input.modelId, probe });
   const timeout = AbortSignal.timeout(input.timeoutMs);
   let status: number;
-  let text: string;
+  let reply: ProbeReply;
   try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        accept: "application/json",
-        "content-type": "application/json",
-        ...probe.headers(input.apiKey),
+    const response = await upstreamFetch({
+      url,
+      init: {
+        method: "POST",
+        headers: request.headers,
+        body: JSON.stringify(request.body),
+        signal: AbortSignal.any([input.signal, timeout]),
       },
-      body: JSON.stringify(probe.body(input.modelId)),
-      signal: AbortSignal.any([input.signal, timeout]),
+      uncheckedHosts: input.extras.uncheckedHosts,
     });
     status = response.status;
-    text = await response.text();
+    const isStreamed = input.asCli !== undefined && isSuccess(status);
+    reply = await readProbeReply({ response, isStreamed });
   } catch (error) {
     if (timeout.aborted && !input.signal.aborted) {
-      const seconds = Math.round(input.timeoutMs / 1000);
-      return result("not_detected", null, `No response from ${url} within ${seconds}s`);
+      const seconds = String(Math.round(input.timeoutMs / 1000));
+      return result("not_detected", null, `No response from ${url} within ${seconds}s`, {
+        code: "upstream_timeout",
+        params: { seconds },
+      });
     }
-    return result("not_detected", null, `POST ${url}: ${describeNetworkError(error)}`);
+    const detail = describeNetworkError(error);
+    return result("not_detected", null, `POST ${url}: ${detail}`, {
+      code: "upstream_unreachable",
+      params: { detail },
+    });
   }
   const prefix = `POST ${url}: HTTP ${status}`;
-  if (status >= 200 && status < 300) {
-    if (probe.matches(parseJson(text))) return result("ok", status, null);
-    return result("not_detected", status, `${prefix}: not a ${format} response`);
+  if (reply.kind === "streamed") {
+    if (reply.failure === null) return result("ok", status, null);
+    return result("not_detected", status, `${prefix}: ${reply.failure}`);
   }
-  const detail = extractErrorDetail(text, input.apiKey);
+  const { text } = reply;
+  if (isSuccess(status)) {
+    if (probe.matches(parseJson(text))) return result("ok", status, null);
+    return result("not_detected", status, `${prefix}: not a ${format} response`, {
+      code: "wrong_shape",
+      params: { format },
+    });
+  }
+  const detail = extractErrorDetail(text, secrets);
   const message = detail ? `${prefix}: ${detail}` : prefix;
   return result(status === 401 || status === 403 ? "auth_failed" : "not_detected", status, message);
+}
+
+/** daemon 自己写的检测原因（ApiEndpointFormatDetectionSchema 的 code 与 params）。 */
+interface DaemonReason {
+  code:
+    | "no_model_to_try"
+    | "upstream_timeout"
+    | "upstream_unreachable"
+    | "wrong_shape"
+    | "invalid_header";
+  params?: Record<string, string>;
+}
+
+function reasonPartOf(
+  reason: DaemonReason,
+  secrets: Secrets,
+): Pick<ApiEndpointFormatDetection, "code" | "params"> {
+  if (reason.params === undefined) return { code: reason.code };
+  const params: Record<string, string> = {};
+  for (const [key, value] of Object.entries(reason.params)) params[key] = redactKey(value, secrets);
+  return { code: reason.code, params };
+}
+
+function isSuccess(status: number): boolean {
+  return status >= 200 && status < 300;
+}
+
+/** 发出去的请求体与请求头。 */
+function probeRequest(input: {
+  format: ApiEndpointRequestFormat;
+  probe: FormatProbe;
+  apiKey: string | null;
+  templateId: string | undefined;
+  modelId: string;
+  sentModel: string | null;
+  capsReply?: boolean;
+  asCli?: { client: CliTestClient; headers: CliHeaderSample };
+  baseUrl: string;
+  extras: RequestExtras;
+}): { body: Record<string, unknown>; headers: Record<string, string> } {
+  const { format, probe, templateId, asCli, extras } = input;
+  const keyHeader = extras.keyHeader;
+  const keys = keyHeadersAt({ ...input, keyHeader, anthropicDefault: probe.keys });
+  const tiny = probe.body(input.sentModel ?? input.modelId);
+  if (input.capsReply === true && format === "openai_responses") tiny.max_output_tokens = 16;
+  // 附加请求体在测试自己的一段对话上也带（magpie tested），再按模板改。
+  const session = testSession();
+  const asked = withExtraBody({ body: tiny, extraBody: extras.extraBody, session });
+  // Bedrock、Azure 的 Chat 不收 max_tokens（照 magpie tinyBody）。
+  const completionTokens = format === "openai_chat" && takesCompletionTokens(templateId);
+  const capped = completionTokens ? asCompletionTokens(asked) : asked;
+  let body = capped;
+  // 按 CLI 的样子测：它的请求头在 Osuna 的之上，认证头仍是这家的 key（magpie clientHeaders）。
+  let cliHeaders: Record<string, string> = {};
+  if (asCli) {
+    body = asCliBody({ client: asCli.client, format, body: capped });
+    cliHeaders = { ...asCli.headers, accept: "application/json, text/event-stream" };
+  }
+  const ownHeaders = {
+    accept: "application/json",
+    "content-type": "application/json",
+    ...probe.headers,
+    ...cliHeaders,
+  };
+  const headers = signedHeaders({ headers: ownHeaders, apiKey: input.apiKey, keys, extras });
+  return { body, headers };
+}
+
+/** 读回来的：流式的读到第一段内容或错误为止（failure 为 null 即答上了），其余整份读成文字。 */
+type ProbeReply = { kind: "streamed"; failure: string | null } | { kind: "whole"; text: string };
+
+async function readProbeReply(input: {
+  response: UpstreamResponse;
+  isStreamed: boolean;
+}): Promise<ProbeReply> {
+  if (input.isStreamed) return { kind: "streamed", failure: await streamAnswer(input.response) };
+  return { kind: "whole", text: await input.response.text() };
+}
+
+// 流式回答最多读这么多字节（magpie streamAnswer 的 1 MB）。
+const STREAM_READ_LIMIT = 1 << 20;
+
+/** 这一行事件说明模型开口了：一段文字、一段思考或一次工具调用（Chat、Responses、Anthropic 的事件）。 */
+function saysSomething(event: Record<string, unknown>): boolean {
+  const type = typeof event.type === "string" ? event.type : "";
+  const isContentEvent =
+    type === "content_block_start" ||
+    type === "content_block_delta" ||
+    type === "response.output_item.added" ||
+    (type.startsWith("response.") && type.endsWith(".delta"));
+  if (isContentEvent) return true;
+  const choices = Array.isArray(event.choices) ? event.choices : [];
+  return choices.some((choice) => {
+    const delta = isRecord(choice) && isRecord(choice.delta) ? choice.delta : {};
+    return ["content", "reasoning", "reasoning_content", "tool_calls"].some((key) => {
+      const value = delta[key];
+      return value !== undefined && value !== null && value !== "";
+    });
+  });
+}
+
+/** 这一行事件是流里的错误时，它的原因；不是为 null。 */
+function streamError(event: Record<string, unknown>, data: string): string | null {
+  const hasError = event.error !== undefined && event.error !== null;
+  if (event.type === "error" || hasError)
+    return extractErrorDetail(data, null) || "error in the stream";
+  if (event.type !== "response.failed") return null;
+  const response = isRecord(event.response) ? event.response : {};
+  const failed = response.error;
+  if (failed === undefined || failed === null) return "response failed";
+  return extractErrorDetail(JSON.stringify({ error: failed }), null) || "response failed";
+}
+
+/**
+ * 流式请求先回 200，模型还可能在流里失败：读到它第一次开口或报错为止（magpie streamAnswer）。
+ * 流读完了两样都没有也算答上，和整份回答的 200 一样。返回失败的原因，答上为 null。
+ */
+async function streamAnswer(response: UpstreamResponse): Promise<string | null> {
+  const decoder = new TextDecoder();
+  let pending = "";
+  let read = 0;
+  // 提前 return 时 for await 关掉迭代器，流随之取消。
+  for await (const chunk of response.chunks()) {
+    read += chunk.byteLength;
+    pending += decoder.decode(chunk, { stream: true });
+    const lines = pending.split("\n");
+    pending = lines.pop() ?? "";
+    for (const line of lines) {
+      const verdict = lineVerdict(line);
+      if (verdict?.kind === "answered") return null;
+      if (verdict?.kind === "failed") return verdict.reason;
+    }
+    if (read >= STREAM_READ_LIMIT) return null;
+  }
+  return null;
+}
+
+type StreamVerdict = { kind: "answered" } | { kind: "failed"; reason: string };
+
+/** 一行流说明了什么；还说不准为 null。 */
+function lineVerdict(line: string): StreamVerdict | null {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("data:")) return null;
+  const data = trimmed.slice("data:".length).trim();
+  if (data === "" || data === "[DONE]") return null;
+  const event = parseJson(data);
+  if (!isRecord(event)) return null;
+  const reason = streamError(event, data);
+  if (reason !== null) return { kind: "failed", reason };
+  return saysSomething(event) ? { kind: "answered" } : null;
 }
 
 // OpenAI 自家模型名的前缀（magpie internal/agent/icons.go 的 gpt 家族）。

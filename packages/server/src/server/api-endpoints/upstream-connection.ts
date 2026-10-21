@@ -1,5 +1,7 @@
 import {
   apiEndpointProtocolName,
+  type ApiEndpointError,
+  type ApiEndpointRequestFormat,
   type ApiEndpointTestConnectionResult,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { ApiEndpointProvider } from "./store.js";
@@ -12,6 +14,17 @@ import {
   structuredErrorMessage,
   redactKey,
 } from "./upstream-http.js";
+import { signedHeaders, type KeyHeaders } from "./gateway/refusals.js";
+import {
+  keyHeadersAt,
+  secretsOf,
+  testSession,
+  unsendableHeader,
+  unsendableHeaderMessage,
+  withExtraBody,
+  type RequestExtras,
+} from "./request-extras.js";
+import { upstreamFetch } from "./insecure-tls.js";
 
 /*
  * 测试连接：daemon 在主机上用 CLI 实际使用的协议发一条最小对话请求，只验证接口本身。
@@ -23,7 +36,9 @@ export type UpstreamConnectionFailureCode =
   | "upstream_error"
   | "upstream_unreachable"
   | "upstream_timeout"
-  | "protocol_unsupported";
+  | "protocol_unsupported"
+  // 这家的请求头发不出去（params.name）。
+  | "invalid_header";
 
 export type UpstreamConnectionOutcome =
   | { kind: "result"; result: ApiEndpointTestConnectionResult }
@@ -31,7 +46,10 @@ export type UpstreamConnectionOutcome =
 
 interface ProtocolSpec {
   path: string;
-  headers(apiKey: string): Record<string, string>;
+  format: ApiEndpointRequestFormat;
+  // key 放哪（Bedrock、Azure 由模板另定）与这个协议另要的头。
+  keys: KeyHeaders;
+  headers: Record<string, string>;
   body(modelId: string): Record<string, unknown>;
   // 200 的响应体确实是这个协议的结果；否则地址背后是别的协议（比如只有 Chat Completions）。
   matches(body: unknown): boolean;
@@ -41,11 +59,10 @@ const PROTOCOLS: Record<ApiEndpointProvider, ProtocolSpec> = {
   claude: {
     // Claude Code 把 ANTHROPIC_BASE_URL 拼上 /v1/messages。
     path: "/v1/messages",
+    format: "anthropic_messages",
     // 和 Claude Code 用 ANTHROPIC_AUTH_TOKEN 时一样只带 Bearer：只认 x-api-key 的网关 CLI 也用不了。
-    headers: (apiKey) => ({
-      authorization: `Bearer ${apiKey}`,
-      "anthropic-version": ANTHROPIC_VERSION,
-    }),
+    keys: "bearer",
+    headers: { "anthropic-version": ANTHROPIC_VERSION },
     body: (modelId) => ({
       model: modelId,
       max_tokens: 1,
@@ -56,7 +73,9 @@ const PROTOCOLS: Record<ApiEndpointProvider, ProtocolSpec> = {
   codex: {
     // base 已按 Codex 的规则以 /v1 结尾。
     path: "/responses",
-    headers: (apiKey) => ({ authorization: `Bearer ${apiKey}` }),
+    format: "openai_responses",
+    keys: "bearer",
+    headers: {},
     // 不带 max_output_tokens：Codex 自己不发它，有的中转站会拒绝这个参数。
     body: (modelId) => ({
       model: modelId,
@@ -69,13 +88,29 @@ const PROTOCOLS: Record<ApiEndpointProvider, ProtocolSpec> = {
 export async function testUpstreamConnection(input: {
   provider: ApiEndpointProvider;
   baseUrl: string;
-  apiKey: string;
+  // 没 key 的接口为 null，不带认证头。
+  apiKey: string | null;
+  // Bedrock、Azure 的认证头由模板定；「自定义」的没有。
+  templateId: string | undefined;
   modelId: string;
+  // 请求体里的模型名（已保存那家的上游模型名，magpie test.go）；新加的就是 modelId。
+  sentModel: string;
+  // 这家的请求头、附加请求体与 key 放哪个头（request-extras.ts）。
+  extras: RequestExtras;
   // 调用方取消（客户端取消或断开）。
   signal: AbortSignal;
   timeoutMs: number;
 }): Promise<UpstreamConnectionOutcome> {
   const protocol = PROTOCOLS[input.provider];
+  const { extras } = input;
+  const keys = keyHeadersAt({
+    format: protocol.format,
+    templateId: input.templateId,
+    baseUrl: input.baseUrl,
+    keyHeader: extras.keyHeader,
+    anthropicDefault: protocol.keys,
+  });
+  const secrets = secretsOf(input);
   const timeout = AbortSignal.timeout(input.timeoutMs);
   const signal = AbortSignal.any([input.signal, timeout]);
   const url = `${input.baseUrl.trim().replace(/\/+$/, "")}${protocol.path}`;
@@ -85,28 +120,40 @@ export async function testUpstreamConnection(input: {
     status: number | null,
     code: UpstreamConnectionFailureCode,
     message: string,
-  ): UpstreamConnectionOutcome => ({
-    kind: "result",
-    result: {
-      ok: false,
-      status,
-      durationMs: elapsed(),
-      error: { code, message: redactKey(message, input.apiKey) },
+    params?: Record<string, string>,
+  ): UpstreamConnectionOutcome => {
+    const error: ApiEndpointError = { code, message: redactKey(message, secrets) };
+    if (params !== undefined) error.params = params;
+    return { kind: "result", result: { ok: false, status, durationMs: elapsed(), error } };
+  };
+  const unsendable = unsendableHeader(extras);
+  if (unsendable !== null) {
+    return fail(null, "invalid_header", unsendableHeaderMessage(unsendable), { ...unsendable });
+  }
+  const headers = signedHeaders({
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      ...protocol.headers,
     },
+    apiKey: input.apiKey,
+    keys,
+    extras,
+  });
+  // 测试自己的一段对话（magpie tested）。
+  const asked = withExtraBody({
+    body: protocol.body(input.sentModel),
+    extraBody: extras.extraBody,
+    session: testSession(),
   });
 
   let status: number;
   let text: string;
   try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        accept: "application/json",
-        "content-type": "application/json",
-        ...protocol.headers(input.apiKey),
-      },
-      body: JSON.stringify(protocol.body(input.modelId)),
-      signal,
+    const response = await upstreamFetch({
+      url,
+      init: { method: "POST", headers, body: JSON.stringify(asked), signal },
+      uncheckedHosts: extras.uncheckedHosts,
     });
     status = response.status;
     text = await response.text();
@@ -124,7 +171,7 @@ export async function testUpstreamConnection(input: {
 
   const prefix = `POST ${url}: HTTP ${status}`;
   if (status < 200 || status >= 300) {
-    const detail = extractErrorDetail(text, input.apiKey);
+    const detail = extractErrorDetail(text, secrets);
     const message = detail ? `${prefix}: ${detail}` : prefix;
     const code = isPathMissing(status, text) ? "protocol_unsupported" : "upstream_error";
     return fail(status, code, message);

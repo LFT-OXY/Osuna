@@ -18,9 +18,11 @@ import { CLAUDE_CLOUD_SWITCH_KEYS, isClaudeSwitchOn } from "./claude-cloud-switc
 import {
   CLAUDE_HINT_ENV_KEYS,
   ONE_MILLION_MARK,
+  withoutOneMillionMark,
   type ClaudeHintEnv,
 } from "./claude-model-hints.js";
 import { claudeModelName } from "./claude-model-name.js";
+import { claudeDashed } from "./claude-spelling.js";
 import { CliModelHoldSchema, type CliModelHold, type CliPicks } from "./cli-model-hold.js";
 
 /*
@@ -41,8 +43,9 @@ import { CliModelHoldSchema, type CliModelHold, type CliPicks } from "./cli-mode
  *   有了就拿掉自己写的那条（ADR 0009）。用户自己写的同名规则不归 Osuna 所有。
  * - 顶层 modelPicker：终端 /model 列出各家接口的已选模型（Claude Code v2.1.242 起，只读用户设置）。
  *   用户自己写的完全不碰，没有可列的模型就不写；Osuna 写过之后被手改的那份仍归 Osuna，下次重写会盖掉。
- * - env 下的模型提示 CLAUDE_CODE_MAX_CONTEXT_TOKENS / _MAX_OUTPUT_TOKENS / _MODEL_CAPABILITIES（见 claude-model-hints.ts）：
- *   键不在或还是 Osuna 上次写的值时才写；用户设的、或 Osuna 写过后被用户改了的，归用户，不碰也不删。
+ * - env 下的模型提示 CLAUDE_CODE_MAX_CONTEXT_TOKENS / _MAX_OUTPUT_TOKENS / _MODEL_CAPABILITIES / _AUTO_COMPACT_WINDOW
+ *   （见 claude-model-hints.ts）：键不在或还是 Osuna 上次写的值时才写；用户设的、或 Osuna 写过后被用户改了的，归用户，
+ *   不碰也不删。压缩阈值是 Osuna 默认的 272K 时，还让给用户在 Claude Code 里设的 autoCompactWindow（magpie #876）。
  * - env 下的 CLAUDE_CODE_AUTO_MODE_SERVER=0：经中转站能到的模型都不会被 Anthropic 审查时写，免得 Claude Code
  *   先请服务器审查、拿不到再弹「这个会话不符合条件」的提示（ADR 0012）。归属规则同模型提示，记在同一份记录里。
  * - env 下开着的云平台开关（见 claude-cloud-switches.ts）：接管与每次重写时拿掉、原样记下，切回官方时放回，
@@ -184,6 +187,8 @@ export interface ClaudeGatewayWiring {
   model: string;
   modelPicker: ClaudeModelPickerOption[];
   hintEnv: ClaudeHintEnv;
+  // hintEnv 的压缩阈值是 Osuna 的默认：用户在 Claude Code 里给主模型设了 autoCompactWindow 时不写（magpie #876）。省略为 false。
+  compactYieldsToOwn?: boolean;
   allowWebSearch: boolean;
   isAutoModeReviewed: boolean;
   defaultThinking: string | null;
@@ -275,7 +280,12 @@ export function applyClaudeApiEndpoint(input: {
     text,
     envObject,
     hints: {
-      ...input.wiring.hintEnv,
+      ...hintsBesideOwnCompact({
+        hints: input.wiring.hintEnv,
+        yields: input.wiring.compactYieldsToOwn === true,
+        settings: parsed.settings,
+        mainModel,
+      }),
       ...autoModeServerEnv({ isReviewed: input.wiring.isAutoModeReviewed }),
     },
     takeover: input.takeover,
@@ -541,6 +551,40 @@ function dropClouds(input: {
     text = edit(text, ["env", key], undefined, input.formatting);
   }
   return { text, record };
+}
+
+/** Osuna 默认的压缩阈值让给用户在 Claude Code 里给主模型设的 autoCompactWindow（它比 env 排得后，env 会盖过它）。 */
+function hintsBesideOwnCompact(input: {
+  hints: ClaudeHintEnv;
+  yields: boolean;
+  settings: ParsedSettings;
+  mainModel: string | null;
+}): ClaudeHintEnv {
+  if (!input.yields || !hasOwnAutoCompact(input.settings, input.mainModel)) return input.hints;
+  const { CLAUDE_CODE_AUTO_COMPACT_WINDOW: _given, ...rest } = input.hints;
+  return rest;
+}
+
+/**
+ * magpie claudeOwnCompact：顶层 autoCompactWindow，或 modelSettings 里这个模型的（/autocompact 存在那里），数或 "auto" 都算。
+ * modelSettings 按 Claude Code 拿到的模型名记：去掉 [1m]、带点的 Claude 版本换成连字符、不分大小写。
+ */
+function hasOwnAutoCompact(settings: ParsedSettings, mainModel: string | null): boolean {
+  if (Object.hasOwn(settings, "autoCompactWindow")) return true;
+  const { modelSettings } = settings;
+  if (mainModel === null || !isRecord(modelSettings)) return false;
+  const model = compactKey(mainModel);
+  return Object.entries(modelSettings).some(
+    ([key, entry]) =>
+      isRecord(entry) &&
+      entry.autoCompactWindow !== undefined &&
+      entry.autoCompactWindow !== null &&
+      compactKey(key) === model,
+  );
+}
+
+function compactKey(model: string): string {
+  return claudeDashed(withoutOneMillionMark(model)).toLowerCase();
 }
 
 /** 能到的模型都不会被审查时让 Claude Code 只在本地分类；有一个会被审查就不写。 */
@@ -942,6 +986,7 @@ interface ParsedSettings {
   modelSettings?: unknown;
   effortLevel?: unknown;
   ultracode?: unknown;
+  autoCompactWindow?: unknown;
   permissions?: { deny?: unknown[] };
 }
 

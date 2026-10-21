@@ -248,6 +248,12 @@ async function prepareTestDaemonConfig(
       probeThroughProxy: async () => {
         throw new Error("The test daemon never probes a proxy: pass probeThroughProxy");
       },
+      // 绝不上网取网站图标：关心「从网站取图标」的用例自己传本机假站点。
+      fetchSite: async ({ url }) => {
+        throw new Error(`The test daemon never fetches ${url}: pass fetchSite`);
+      },
+      // daemon 自己拉清单（保存后当场、每天刷新）只去本机的假上游，绝不上网（真实厂商地址、relay.example 都跳过）。
+      reachesUnasked: (baseUrl) => isLoopbackUrl(baseUrl),
       // 绝不读真实的进程表、不跑真的 codex：缺省一个什么都没在跑的假适配器，关心它的用例自己传。
       hostProcesses: new FakeHostProcesses(),
       ...(options.apiEndpoints ?? {
@@ -257,6 +263,22 @@ async function prepareTestDaemonConfig(
         },
         homeDir: paseoHomeRoot,
       }),
+      // 厂商状态页一律指到本机一个没人听的端口：开着自动更新的用例也绝不读真的状态页。
+      // 关心它的用例指到本机假页面；只换了一家时，其余几家照样留在本机。
+      vendorStatusUrls: {
+        anthropic: "http://127.0.0.1:9/anthropic/api/v2/summary.json",
+        openai: "http://127.0.0.1:9/openai/api/v2/summary.json",
+        moonshot: "http://127.0.0.1:9/moonshot/api/v2/summary.json",
+        ...options.apiEndpoints?.vendorStatusUrls,
+      },
+      // 从别的软件导入：CC Switch、Alma、OpenCode 一律读临时目录（多半不存在），绝不读开发者真实的配置；
+      // Claude Code、Codex 跟着上面的 env 与 homeDir。关心导入的用例自己放假配置。
+      importSourcePaths: {
+        ccSwitchDir: path.join(paseoHomeRoot, "import-sources", "cc-switch"),
+        almaDatabase: path.join(paseoHomeRoot, "import-sources", "alma", "chat_threads.db"),
+        openCodeAuth: path.join(paseoHomeRoot, "import-sources", "opencode", "auth.json"),
+        ...options.apiEndpoints?.importSourcePaths,
+      },
     },
     // 测试 daemon 绝不去 npm registry 查最新版本；关心这件事的测试注入自己的桩。
     providerVersions: {
@@ -299,4 +321,11 @@ function isStartupTimeoutError(error: unknown): boolean {
   }
   const record = error as { code?: string };
   return record.code === "TEST_DAEMON_START_TIMEOUT";
+}
+
+/** 本机地址：127.0.0.1、::1 与 localhost。 */
+function isLoopbackUrl(baseUrl: string): boolean {
+  if (!URL.canParse(baseUrl)) return false;
+  const host = new URL(baseUrl).hostname;
+  return host === "127.0.0.1" || host === "localhost" || host === "[::1]";
 }

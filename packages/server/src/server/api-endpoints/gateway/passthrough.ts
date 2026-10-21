@@ -10,8 +10,9 @@ import { Transform, type Writable } from "node:stream";
 import type { Request, Response } from "express";
 import { applyEdits, modify } from "jsonc-parser";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import { upstreamModelName } from "@getpaseo/protocol/api-endpoint/model-settings";
 import type { StoredApiEndpoint } from "../store.js";
-import { isRecord, parseJson } from "../upstream-http.js";
+import { isRecord, parseJson, type Secrets } from "../upstream-http.js";
 import {
   adaptiveThinkingAsTaken,
   isAnthropicModel,
@@ -35,8 +36,8 @@ import {
   askRefitted,
   askWithOneKeyHeader,
   askWithoutField,
-  keyHeaderValues,
   keyHeadersFor,
+  signedHeaders,
   type KeyHeaders,
   type RefusedShape,
   type ShapeRefusals,
@@ -50,11 +51,23 @@ import {
   withoutSampling,
 } from "./refused-fields.js";
 import { isGrokReply, WholeArgsTidy } from "./grok-integral.js";
+import { chainedTidy, ReplyModelName, type ReplyTidy } from "./reply-tidy.js";
 import type { ReplyTap } from "./reply-tap.js";
 import { refusedAfterOpening } from "./safety-filter.js";
 import { withFixedEffort, type FixedEffort } from "./fixed-effort.js";
+import { withoutAnyReasoning } from "./no-thinking.js";
 import { sseEvent } from "./translation/sse.js";
 import { hasVendorRewrites, withVendorRewrites } from "./vendor-rewrites.js";
+import { withTemplatePassthroughRewrites } from "./template-rewrites.js";
+import { BEDROCK_TEMPLATE_ID } from "../templates.js";
+import {
+  secretsOf,
+  storedRequestExtras,
+  unsendableHeader,
+  unsendableHeaderMessage,
+  withExtraBody,
+  type RequestExtras,
+} from "../request-extras.js";
 import { searchesWebItself, withoutResponsesWebSearch } from "./web-search.js";
 import { wholeEvents } from "./whole-stream.js";
 import {
@@ -64,6 +77,7 @@ import {
   openUpstream,
   readLimited,
   answerUnlessRefused,
+  failedBySelf,
   upstreamUrl,
   type AnswerEnd,
   type AttemptOutcome,
@@ -114,6 +128,8 @@ const DROPPED_REQUEST_HEADERS = new Set([
 export async function attemptEndpoint(input: {
   // 「模型名:档位」固定的档位，已按这家这个模型落定。
   fixedEffort?: FixedEffort;
+  // 模型设置里一档思考都不留：不带任何思考参数（no-thinking.ts）。
+  noThinking?: boolean;
   req: Request;
   res: Response;
   format: ApiEndpointRequestFormat;
@@ -121,7 +137,8 @@ export async function attemptEndpoint(input: {
   pathSuffix?: string;
   endpoint: StoredApiEndpoint;
   baseUrl: string;
-  apiKey: string;
+  // 没 key 的接口为 null，不带认证头。
+  apiKey: string | null;
   body: Buffer;
   requestedModel: string;
   upstreamModel: string;
@@ -134,8 +151,17 @@ export async function attemptEndpoint(input: {
   keepAlive?: AgentKeepAlive;
   // 只把这些 Agent 的请求头转给上游（ChatGPT 登录的 Codex 只带表明身份的头）；缺省是 Agent 的全部请求头。
   forwardedHeaders?: IncomingHttpHeaders;
+  // 附加请求体里 ${sessionId} 换成的对话标识（request-extras.ts 的 extraBodySession）；count_tokens 不带附加请求体。
+  sessionId?: string;
 }): Promise<AttemptOutcome> {
   const { res, apiKey, refusals } = input;
+  const extras = storedRequestExtras(input.endpoint);
+  const secrets = secretsOf({ apiKey, extras });
+  // 这家的请求头发不出去：这一个请求当作连不上，照常换家（magpie 里 Go 发请求时报错也是这样）。
+  const unsendable = unsendableHeader(extras);
+  if (unsendable !== null) {
+    return failedBySelf({ status: 502, detail: unsendableHeaderMessage(unsendable) });
+  }
   const { originalUrl } = input.req;
   const url = upstreamUrl({
     baseUrl: input.baseUrl,
@@ -143,9 +169,18 @@ export async function attemptEndpoint(input: {
     suffix: input.pathSuffix,
     query: originalUrl.includes("?") ? originalUrl.slice(originalUrl.indexOf("?")) : "",
   });
-  const sends = () => keyHeadersFor({ format: input.format, refusals });
+  const sends = () =>
+    keyHeadersFor({
+      format: input.format,
+      templateId: input.endpoint.templateId,
+      baseUrl: input.baseUrl,
+      extras,
+      refusals,
+    });
   const anthropic = input.format === "anthropic_messages";
-  const dropsReviewBeta = anthropic && !isAnthropicModel(input.upstreamModel);
+  const sent = sentModelOf(input);
+  const isClaude = isAnthropicModel(input.upstreamModel) || isAnthropicModel(sent);
+  const dropsReviewBeta = anthropic && !isClaude;
   const open = (body: Buffer, keys: KeyHeaders = sends()) =>
     openUpstream({
       res,
@@ -154,11 +189,14 @@ export async function attemptEndpoint(input: {
         headers: input.forwardedHeaders ?? input.req.headers,
         apiKey,
         keys,
+        extras,
         dropsReviewBeta,
+        forBedrock: input.endpoint.templateId === BEDROCK_TEMPLATE_ID,
         userAgent: input.userAgent,
       }),
       body,
-      apiKey,
+      secrets,
+      uncheckedHosts: extras.uncheckedHosts,
       headerTimeoutMs: input.headerTimeoutMs,
       reads: input.pathSuffix === undefined ? input.format : null,
       onHeard: () => input.keepAlive?.heard(),
@@ -166,10 +204,12 @@ export async function attemptEndpoint(input: {
   const body = upstreamBody(input);
   const keys = sends();
   let opened = await open(body, keys);
-  if (opened.kind === "failed" && refusals) {
+  // 没 key 时没带认证头，401 与「两个头不能同时带」无关。
+  if (opened.kind === "failed" && refusals && apiKey !== null) {
     opened = await askWithOneKeyHeader({
       refusals,
       sent: keys,
+      extras,
       failed: opened,
       ask: (alone) => open(body, alone),
     });
@@ -198,7 +238,7 @@ export async function attemptEndpoint(input: {
   return answerUnlessRefused({
     opened,
     format: input.format,
-    answer: (ready) => answerOpened({ ...input, url, opened: ready }),
+    answer: (ready) => answerOpened({ ...input, url, secrets, opened: ready }),
   });
 }
 
@@ -208,7 +248,7 @@ async function answerOpened(input: {
   format: ApiEndpointRequestFormat;
   pathSuffix?: string;
   endpoint: StoredApiEndpoint;
-  apiKey: string;
+  secrets: Secrets;
   requestedModel: string;
   upstreamModel: string;
   url: URL;
@@ -237,25 +277,47 @@ async function answerOpened(input: {
   return { kind: "answered", finished };
 }
 
-/** Grok 的对话回复要去掉调用参数里的零小数（grok-integral.ts）；别的回复原样转，为 null。 */
+/** 发给这家的模型名：这个模型的上游模型名（protocol 的 upstreamModelName），没设就是这家列出的写法。 */
+function sentModelOf(input: {
+  endpoint: Pick<StoredApiEndpoint, "modelSettings">;
+  upstreamModel: string;
+}): string {
+  return upstreamModelName({
+    settings: input.endpoint.modelSettings,
+    modelId: input.upstreamModel,
+  });
+}
+
+/**
+ * 要改的回复：Grok 的对话回复去掉调用参数里的零小数（grok-integral.ts）；按上游模型名发的，回复里的模型名换回这家列出的写法
+ * （reply-model-name.ts），CLI 看到的模型名不随上游模型名变。别的回复原样转，为 null。
+ */
 function replyTidy(input: {
   format: ApiEndpointRequestFormat;
   pathSuffix?: string;
   requestedModel: string;
   upstreamModel: string;
+  endpoint: Pick<StoredApiEndpoint, "modelSettings">;
   opened: OpenedUpstream;
-}): WholeArgsTidy | null {
+}): ReplyTidy | null {
   const { format, opened } = input;
   const conversation = input.pathSuffix === undefined;
   // 直通只有 Agent 说的两种格式，Chat 不会来。
-  if (format === "openai_chat") return null;
-  const grokConversation = conversation && isGrokReply(input);
-  if (!grokConversation) return null;
-  return new WholeArgsTidy({ format, stream: isEventStream(opened.response, opened.held) });
+  if (format === "openai_chat" || !conversation) return null;
+  const stream = isEventStream(opened.response, opened.held);
+  const tidies: ReplyTidy[] = [];
+  const sent = sentModelOf(input);
+  if (isGrokReply({ ...input, sentModel: sent })) {
+    tidies.push(new WholeArgsTidy({ format, stream }));
+  }
+  if (sent !== input.upstreamModel) {
+    tidies.push(new ReplyModelName({ format, stream, sent, shown: input.upstreamModel }));
+  }
+  return chainedTidy(tidies);
 }
 
 /** 交给 Agent 的那一路：要改的回复先经 tidy，按 UTF-8 接好字符再改；别的直接写给 Agent。 */
-function agentSink(input: { res: Response; tidy: WholeArgsTidy | null }): Writable {
+function agentSink(input: { res: Response; tidy: ReplyTidy | null }): Writable {
   const { tidy } = input;
   if (tidy === null) return input.res;
   const utf8 = new StringDecoder("utf8");
@@ -279,9 +341,9 @@ async function wholeAsStream(input: {
   res: Response;
   format: ApiEndpointRequestFormat;
   url: URL;
-  apiKey: string;
+  secrets: Secrets;
   opened: OpenedUpstream;
-  tidy: WholeArgsTidy | null;
+  tidy: ReplyTidy | null;
   keepAlive?: AgentKeepAlive;
 }): Promise<AttemptOutcome> {
   const { res, tidy } = input;
@@ -289,7 +351,7 @@ async function wholeAsStream(input: {
   let text = raw;
   if (tidy !== null) text = tidy.write(raw) + tidy.end();
   const events = wholeEvents(input.format, parseJson(text));
-  if (events === null) return notAStream({ url: input.url, text: raw, apiKey: input.apiKey });
+  if (events === null) return notAStream({ url: input.url, text: raw, secrets: input.secrets });
   input.keepAlive?.stop();
   for (const event of events) res.write(sseEvent(event.name, event.data));
   res.end();
@@ -300,7 +362,7 @@ async function wholeAsStream(input: {
 function relay(input: {
   opened: OpenedUpstream;
   res: Response;
-  tidy: WholeArgsTidy | null;
+  tidy: ReplyTidy | null;
   format: ApiEndpointRequestFormat;
   endpointName: string;
 }): Promise<AnswerEnd> {
@@ -406,10 +468,15 @@ export interface PassthroughBodyInput {
   body: Buffer;
   requestedModel: string;
   upstreamModel: string;
-  endpoint: AdvisorEndpoint & Pick<StoredApiEndpoint, "searchesWeb" | "baseUrls">;
+  endpoint: AdvisorEndpoint &
+    Pick<StoredApiEndpoint, "searchesWeb" | "baseUrls" | "templateId" | "extraBody">;
   refusals?: ShapeRefusals;
+  // 附加请求体里 ${sessionId} 换成的对话标识；没有为空。
+  sessionId?: string;
   // 「模型名:档位」固定的档位，已按这家这个模型落定；没有为省略。
   fixedEffort?: FixedEffort;
+  // 模型设置里一档思考都不留：对话请求不带任何思考参数，固定的档位也不发（magpie Reasonless）。
+  noThinking?: boolean;
 }
 
 /**
@@ -420,23 +487,27 @@ export function upstreamBody(input: PassthroughBodyInput): Buffer {
   const conversation = input.pathSuffix === undefined;
   const anthropic = input.format === "anthropic_messages";
   const fits = (anthropic || input.format === "openai_responses") && conversation;
+  const sent = sentModelOf(input);
+  // 要回放推理的模型按原名或上游模型名认出一个就算（magpie replaysReasoning(model) || replaysReasoning(upstream)）。
+  const replayModel = replaysThinking(input.upstreamModel) ? input.upstreamModel : sent;
+  const replays = replaysThinking(replayModel);
   let text = input.body.toString("utf8");
-  if (input.upstreamModel !== input.requestedModel) text = replaceModel(text, input.upstreamModel);
+  if (sent !== input.requestedModel) text = replaceModel(text, sent);
   if (anthropic) {
-    text = fitClaudeCodeBody({ text, model: input.upstreamModel, endpoint: input.endpoint });
+    text = fitClaudeCodeBody({ text, model: input.upstreamModel, sent, endpoint: input.endpoint });
   }
-  const { fixedEffort } = input;
+  const fixedEffort = fixedEffortOf(input);
   const isEffortFixed = fixedEffort !== undefined && conversation;
   if (isEffortFixed) text = withFixedEffort({ format: input.format, text, effort: fixedEffort });
   if (fits && anthropic) {
-    text = fitAnthropicBody({ text, model: input.upstreamModel, isEffortFixed });
+    text = fitAnthropicBody({ text, model: replayModel, isEffortFixed });
     text = fitThinkingOff({
       text,
       model: input.upstreamModel,
       leftOn: input.refusals?.has("thinkingOff") ?? false,
     });
   } else if (fits) {
-    if (replaysThinking(input.upstreamModel)) text = fitResponsesBody(text, input.upstreamModel);
+    if (replays) text = fitResponsesBody(text, replayModel);
     else text = withoutBareReasoning(text);
     if (input.refusals?.has("none")) text = noneAsLow(text);
     if (!searchesWebItself(input.endpoint, "openai_responses")) text = withoutWebSearchText(text);
@@ -444,8 +515,74 @@ export function upstreamBody(input: PassthroughBodyInput): Buffer {
   // count_tokens 不带 refusals。
   const refusals = conversation ? input.refusals : undefined;
   if (refusals) text = withoutRefusedText({ text, format: input.format, refusals });
+  if (conversation) text = withExtraBodyText({ text, input });
   text = withVendorText({ ...input, text });
-  return Buffer.from(text);
+  text = withTemplateText({ ...input, text, replaysReasoning: replays });
+  return Buffer.from(withoutReasoningText({ text, input, conversation }));
+}
+
+/**
+ * 用户的附加请求体（request-extras.ts）：只改补上或覆盖的顶层字段，其余字节原样。补进来的思考预算照样按模型改成 adaptive、
+ * 这家这个模型不收的字段照样去掉（magpie forwardOnce 的 adaptiveThinking、withoutRefusedShapes）。
+ */
+function withExtraBodyText(args: { text: string; input: PassthroughBodyInput }): string {
+  const { text, input } = args;
+  const extraBody = input.endpoint.extraBody ?? {};
+  const hasExtraBody = Object.keys(extraBody).length > 0;
+  if (!hasExtraBody) return text;
+  const body = parseJson(text);
+  if (!isRecord(body)) return text;
+  const session = input.sessionId ?? "";
+  const added = withExtraBody({ body, extraBody, session });
+  const isUnchanged = added === body;
+  if (isUnchanged) return text;
+  let fitted = added;
+  if (input.format === "anthropic_messages") {
+    fitted = adaptiveThinkingAsTaken(fitted, input.upstreamModel);
+  }
+  const out = withChangedKeys({ text, body, fitted });
+  if (!input.refusals) return out;
+  return withoutRefusedText({ text: out, format: input.format, refusals: input.refusals });
+}
+
+/** 模型设置里一档思考都不留的模型，固定的档位也不发（magpie Reasonless）。 */
+function fixedEffortOf(input: PassthroughBodyInput): FixedEffort | undefined {
+  return input.noThinking === true ? undefined : input.fixedEffort;
+}
+
+/** 一档思考都不留的模型的对话请求不带任何思考参数（no-thinking.ts）：只改变了的顶层字段，其余字节原样。 */
+function withoutReasoningText(input: {
+  text: string;
+  input: PassthroughBodyInput;
+  conversation: boolean;
+}): string {
+  const { text, conversation } = input;
+  const { noThinking, format } = input.input;
+  const stripsReasoning = noThinking === true && conversation;
+  if (!stripsReasoning) return text;
+  const body = parseJson(text);
+  if (!isRecord(body)) return text;
+  return withChangedKeys({ text, body, fitted: withoutAnyReasoning(format, body) });
+}
+
+/** 按模板的改写（template-rewrites.ts，Bedrock 与 Azure）：只改变了的顶层字段，其余字节原样。 */
+function withTemplateText(input: {
+  text: string;
+  format: ApiEndpointRequestFormat;
+  endpoint: Pick<StoredApiEndpoint, "templateId">;
+  replaysReasoning: boolean;
+}): string {
+  const { templateId } = input.endpoint;
+  if (templateId === undefined) return input.text;
+  const body = parseJson(input.text);
+  if (!isRecord(body)) return input.text;
+  const fitted = withTemplatePassthroughRewrites({
+    templateId,
+    format: input.format,
+    body,
+    replaysReasoning: input.replaysReasoning,
+  });
+  return withChangedKeys({ text: input.text, body, fitted });
 }
 
 /** 不会搜的那家收不到 Codex 的 web_search（ADR 0009）：只改变了的顶层字段，其余字节原样。 */
@@ -507,13 +644,17 @@ function withChangedKeys(input: {
 function fitClaudeCodeBody(input: {
   text: string;
   model: string;
+  // 发给这家的名字（上游模型名）。
+  sent: string;
   endpoint: AdvisorEndpoint;
 }): string {
-  const { text, model } = input;
+  const { text, model, sent } = input;
   const body = parseJson(text);
   if (!isRecord(body)) return text;
-  let fitted = withAdvisorFitted({ body, model, endpoint: input.endpoint });
-  if (!isAnthropicModel(model)) fitted = withoutSafeguards(withoutBillingLine(fitted));
+  let fitted = withAdvisorFitted({ body, model: sent, endpoint: input.endpoint });
+  // 计费行与审查只给 Claude：原名或上游模型名是 Claude 都算（magpie keepsBillingLine）。
+  const isClaude = isAnthropicModel(model) || isAnthropicModel(sent);
+  if (!isClaude) fitted = withoutSafeguards(withoutBillingLine(fitted));
   fitted = adaptiveThinkingAsTaken(fitted, model);
   if (refusesSampling(model)) fitted = withoutSampling(fitted);
   return withChangedKeys({ text, body, fitted });
@@ -633,10 +774,13 @@ export function fitResponsesBody(text: string, model: string): string {
 
 function upstreamHeaders(input: {
   headers: IncomingHttpHeaders;
-  apiKey: string;
+  apiKey: string | null;
   keys: KeyHeaders;
+  extras: RequestExtras;
   // 发给 Anthropic 地址上的非 Claude 模型：anthropic-beta 去掉自动模式审查的 beta。
   dropsReviewBeta: boolean;
+  // 发给从 Bedrock 模板加的接口：anthropic-beta 照 Bedrock 的叫法改。
+  forBedrock: boolean;
   userAgent: string;
 }): Record<string, string | string[]> {
   const out: Record<string, string | string[]> = {};
@@ -645,14 +789,18 @@ function upstreamHeaders(input: {
   }
   const betas = out["anthropic-beta"];
   if (betas !== undefined) {
-    const kept = fittedBetas({ value: betas, dropsReviewBeta: input.dropsReviewBeta });
+    const kept = fittedBetas({
+      value: betas,
+      dropsReviewBeta: input.dropsReviewBeta,
+      forBedrock: input.forBedrock,
+    });
     if (kept === null) delete out["anthropic-beta"];
     else out["anthropic-beta"] = kept;
   }
   // 要上游不压缩：错误体要读出原文，回复原样转给 Agent。
   out["accept-encoding"] = "identity";
   out["user-agent"] = input.userAgent;
-  return { ...out, ...keyHeaderValues({ apiKey: input.apiKey, keys: input.keys }) };
+  return signedHeaders({ ...input, headers: out });
 }
 
 function responseHeaders(headers: IncomingHttpHeaders): Record<string, string | string[]> {

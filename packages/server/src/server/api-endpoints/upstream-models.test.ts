@@ -2,6 +2,7 @@ import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, test } from "vitest";
 import { fetchUpstreamModels } from "./upstream-models.js";
+import { NO_REQUEST_EXTRAS } from "./request-extras.js";
 
 // 本地假上游：按路径返回预设的响应，记下每次请求的路径和请求头。
 type Route = { status: number; body: unknown } | "hang";
@@ -57,6 +58,8 @@ function run(input: {
     provider: input.provider,
     baseUrl: input.baseUrl,
     apiKey: KEY,
+    templateId: undefined,
+    extras: NO_REQUEST_EXTRAS,
     signal: input.signal ?? new AbortController().signal,
     timeoutMs: input.timeoutMs ?? 2000,
   });

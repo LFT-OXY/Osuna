@@ -1,5 +1,10 @@
 import React, { useCallback, useRef, useState, type ReactElement } from "react";
-import { Pressable, View } from "react-native";
+import {
+  Pressable,
+  View,
+  type NativeSyntheticEvent,
+  type TextInputKeyPressEventData,
+} from "react-native";
 import { Search, X } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import type { Theme } from "@/styles/theme";
@@ -27,6 +32,8 @@ export interface SearchFieldProps {
   clearAccessibilityLabel: string;
   testID?: string;
   clearTestID?: string;
+  /** Escape empties the box (web and desktop keyboards). */
+  clearsOnEscape?: boolean;
 }
 
 /**
@@ -44,6 +51,7 @@ export function SearchField({
   clearAccessibilityLabel,
   testID,
   clearTestID,
+  clearsOnEscape = false,
 }: SearchFieldProps): ReactElement {
   const [isFocused, setIsFocused] = useState(false);
   const inputRef = useRef<EditingTextInputHandle>(null);
@@ -53,6 +61,15 @@ export function SearchField({
     inputRef.current?.replaceText("");
     onChangeText("");
   }, [onChangeText]);
+  const handleKeyPress = useCallback(
+    (event: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
+      if (!clearsOnEscape || event.nativeEvent.key !== "Escape" || value.length === 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      handleClear();
+    },
+    [clearsOnEscape, handleClear, value.length],
+  );
 
   return (
     <View style={[styles.field, isFocused && styles.fieldFocused]}>
@@ -64,6 +81,7 @@ export function SearchField({
         onChangeText={onChangeText}
         onFocus={handleFocus}
         onBlur={handleBlur}
+        onKeyPress={handleKeyPress}
         placeholder={placeholder}
         accessibilityLabel={accessibilityLabel ?? placeholder}
         autoCapitalize="none"

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { ApiEndpointModel } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import {
-  addManualModel,
+  addManualModels,
+  typedModelIds,
   buildModelEntries,
   familySelectAllState,
   groupModelEntries,
@@ -152,13 +153,26 @@ describe("selecting models", () => {
     ]);
   });
 
-  it("adding a model by hand keeps it as hand-added and turns it on", () => {
-    const added = addManualModel({ models: [{ id: "gpt-5" }], manualModels: [] }, "  secret-1 ");
+  it("adding models by hand keeps them as hand-added and turns them on", () => {
+    const added = addManualModels({ models: [{ id: "gpt-5" }], manualModels: [{ id: "old" }] }, [
+      "secret-1",
+      "gpt-5",
+      "old",
+    ]);
 
     expect(added).toEqual({
-      models: [{ id: "gpt-5" }, { id: "secret-1" }],
-      manualModels: [{ id: "secret-1" }],
+      models: [{ id: "gpt-5" }, { id: "secret-1" }, { id: "old" }],
+      manualModels: [{ id: "old" }, { id: "secret-1" }, { id: "gpt-5" }],
     });
+  });
+
+  it("the add box takes several ids split at commas and line breaks, a space kept inside an id", () => {
+    expect(typedModelIds(" kimi-k2, glm-5 ,\nOpus 5.5,, kimi-k2 ")).toEqual([
+      "kimi-k2",
+      "glm-5",
+      "Opus 5.5",
+    ]);
+    expect(typedModelIds(" , ")).toEqual([]);
   });
 
   it("a mapping keeps only tiers that point at a selected model", () => {

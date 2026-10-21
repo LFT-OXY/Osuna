@@ -2,6 +2,7 @@
 // claude_subscription.go 的 billingHeader，automode.go 的 serverReview，betas.go 的 askedBetas，advisor.go 的 advisorTools、advisorModel、advisorGoneIn、withoutAdvisor、advisorRefName）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
+import { upstreamModelName } from "@getpaseo/protocol/api-endpoint/model-settings";
 import type { StoredApiEndpoint } from "../store.js";
 import { isRecord } from "../upstream-http.js";
 import { isDeferredBlock, withoutKeys } from "./refused-fields.js";
@@ -15,8 +16,8 @@ import { isAnthropicModel } from "./translation/anthropic.js";
 
 type Body = Record<string, unknown>;
 
-/** advisor 工具要看的这家接口：标识与已选模型。 */
-export type AdvisorEndpoint = Pick<StoredApiEndpoint, "slug" | "models">;
+/** advisor 工具要看的这家接口：标识、已选模型与模型设置（上游模型名）。 */
+export type AdvisorEndpoint = Pick<StoredApiEndpoint, "slug" | "models" | "modelSettings">;
 
 // 只有计费行的 system 块；system 开头的计费行（后面直接接提示词，中间没有换行）。
 const BILLING_LINE = /^x-anthropic-billing-header:(\s*[A-Za-z_]+=[^;\s]*;)*\s*$/;
@@ -69,11 +70,13 @@ export function withoutBillingLine(body: Body): Body {
 /**
  * 转给上游的 anthropic-beta：claude.ai 登录的 beta 一律去掉，接口收到的就像带 Osuna 口令的 Claude Code 发的那样
  * （magpie askedBetas）；发给非 Claude 模型时再去掉自动模式审查的 beta：只有 Claude 会审查，别家看到不认识的 beta
- * 可能整个请求都拒（magpie serverReview）。没有要去掉的原样交回；什么都不剩时为 null（这个请求头不发）。
+ * 可能整个请求都拒（magpie serverReview）。发给 Bedrock 时照它的叫法改名、去掉它拒过的（magpie betas），重复的只留一个。
+ * 没有要改的原样交回；什么都不剩时为 null（这个请求头不发）。
  */
 export function fittedBetas(input: {
   value: string | string[];
   dropsReviewBeta: boolean;
+  forBedrock: boolean;
 }): string | string[] | null {
   const named = [input.value]
     .flat()
@@ -81,12 +84,27 @@ export function fittedBetas(input: {
     .map((beta) => beta.trim())
     .filter((beta) => beta !== "");
   const isDropped = (beta: string) =>
-    beta.startsWith(SIGN_IN_BETA) || (input.dropsReviewBeta && beta.startsWith(REVIEW_BETA));
-  const kept = named.filter((beta) => !isDropped(beta));
-  if (kept.length === named.length) return input.value;
+    beta.startsWith(SIGN_IN_BETA) ||
+    (input.dropsReviewBeta && beta.startsWith(REVIEW_BETA)) ||
+    (input.forBedrock && BEDROCK_REFUSED_BETAS.has(beta));
+  const renamed = input.forBedrock ? named.map((beta) => BEDROCK_BETAS[beta] ?? beta) : named;
+  const kept = [...new Set(renamed.filter((beta) => !isDropped(beta)))];
+  const unchanged = kept.length === named.length && kept.every((beta, i) => beta === named[i]);
+  if (unchanged) return input.value;
   if (kept.length === 0) return null;
   return kept.join(",");
 }
+
+// Bedrock 换了叫法的 beta：Claude Code 按 Anthropic 的叫法要工具搜索，Bedrock 与 Vertex 叫 tool-search-tool-2025-10-19。
+const BEDROCK_BETAS: Readonly<Record<string, string>> = {
+  "advanced-tool-use-2025-11-20": "tool-search-tool-2025-10-19",
+};
+
+// Bedrock 拒过的 beta（magpie #176）：一开始就不发，不等它拒。
+const BEDROCK_REFUSED_BETAS: ReadonlySet<string> = new Set([
+  "prompt-caching-scope-2026-01-05",
+  "redact-thinking-2026-02-12",
+]);
 
 /**
  * Claude Code 的 advisor 服务端工具（{"type":"advisor_20260301","name":"advisor","model":…}）按它给自己的模型起名的写法
@@ -97,6 +115,7 @@ export function fittedBetas(input: {
  */
 export function withAdvisorFitted(input: {
   body: Body;
+  // 发给上游的名字（上游模型名）：是不是 Claude 按它认（magpie advisorTools）。
   model: string;
   endpoint: AdvisorEndpoint;
 }): Body {
@@ -140,11 +159,13 @@ function advisorModel(input: { endpoint: AdvisorEndpoint; model: unknown }): str
   if (model === "") return null;
   const slash = model.indexOf("/");
   const own = `${input.endpoint.slug}/`;
-  let name: string | null = model;
-  if (model.startsWith(own)) name = listedAs(input.endpoint, model.slice(own.length));
-  else if (slash !== -1) name = null;
-  if (name === null || !isAnthropicModel(name)) return null;
-  return name;
+  // 不带斜杠的是 Claude 自己的 id：原样用，也按它认是不是 Claude（magpie advisorModel 的最后两步）。
+  if (!model.startsWith(own)) return slash === -1 && isAnthropicModel(model) ? model : null;
+  const listed = listedAs(input.endpoint, model.slice(own.length));
+  if (listed === null) return null;
+  // 点名这家的模型按它的上游模型名问，是不是 Claude 也按这个名字认（magpie advisorModel 的 UpstreamNameIn）。
+  const sent = upstreamModelName({ settings: input.endpoint.modelSettings, modelId: listed });
+  return isAnthropicModel(sent) ? sent : null;
 }
 
 /**

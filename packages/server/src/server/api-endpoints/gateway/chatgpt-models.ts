@@ -7,7 +7,8 @@ import https from "node:https";
 import type { Request, Response } from "express";
 import type pino from "pino";
 import { isErrnoException } from "../../../utils/errno.js";
-import type { CodexModelEntry } from "../codex-model-catalog.js";
+import type { ApiEndpointNameDisplay } from "@getpaseo/protocol/api-endpoint/endpoint-names";
+import { namedCodexEndpointEntries, type CodexEndpointListing } from "../codex-model-catalog.js";
 import {
   isAgentsV1Marked,
   markedAgentsV1,
@@ -16,11 +17,13 @@ import {
 } from "../codex-agent-versions.js";
 import {
   codexCachedModels,
+  codexModelLabel,
   codexModelsCacheEtag,
   readCodexModelsCache,
   withListTag,
 } from "../codex-models-cache.js";
 import { isRecord, parseJson } from "../upstream-http.js";
+import { codexOwnDisabledBy } from "../disabled-models.js";
 import { relayedHeaders, type ChatGptBases } from "./chatgpt-backend.js";
 
 /*
@@ -42,11 +45,15 @@ const ENDPOINT_PRIORITY_GAP = 100;
  * 「Codex Subagent 可用任意模型」开着没有（ChatGPT 自带模型也标成 V1），以及记 ChatGPT 原来给的多 Agent 版本的文件。
  */
 export interface ChatGptModelsListing {
-  entries: CodexModelEntry[];
+  // 接口模型，显示名只有模型名；带不带接口名按 nameDisplay，和 ChatGPT 自带的模型一起算（namedCodexEndpointEntries）。
+  endpoints: CodexEndpointListing;
+  nameDisplay: ApiEndpointNameDisplay;
   tag: string;
   codexHome: string;
   marksAgentsV1: boolean;
   agentVersionsPath: string;
+  // 已禁用的模型：ChatGPT 自带的模型命中了就不列（magpie codexModels 用 codexNativeOff 去掉）。
+  disabledModels: string[];
 }
 
 /** ChatGPT 自带模型原样在前，接口模型排在它们后面。 */
@@ -93,11 +100,31 @@ export async function answerChatGptModels(input: {
     own = codexLastOwnModels({ listing, logger: input.logger });
   }
   if (asked.kind === "list") rememberVersions({ listing, models: own, logger: input.logger });
+  own = withoutDisabledOwn({ own, patterns: listing.disabledModels });
   if (listing.marksAgentsV1) own = markedAgentsV1(own);
   res
     .status(200)
     .set("etag", withListTag(etag, listing.tag))
-    .json({ models: mergeChatGptModels({ own, endpoints: listing.entries }) });
+    .json({
+      models: mergeChatGptModels({
+        own,
+        endpoints: namedCodexEndpointEntries({
+          listing: listing.endpoints,
+          display: listing.nameDisplay,
+          ownNames: own.map(codexModelLabel),
+        }),
+      }),
+    });
+}
+
+/** 去掉被禁的 ChatGPT 自带模型（按 slug 认）。 */
+function withoutDisabledOwn(input: { own: unknown[]; patterns: readonly string[] }): unknown[] {
+  const { patterns } = input;
+  if (patterns.length === 0) return input.own;
+  return input.own.filter((entry) => {
+    const slug = isRecord(entry) && typeof entry.slug === "string" ? entry.slug : "";
+    return codexOwnDisabledBy({ patterns, model: slug }) === null;
+  });
 }
 
 /**

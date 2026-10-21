@@ -7,6 +7,11 @@ import type {
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { ApiEndpointModelGroup } from "@getpaseo/protocol/agent-types";
 import {
+  showsEndpointNames,
+  type ApiEndpointNameDisplay,
+} from "@getpaseo/protocol/api-endpoint/endpoint-names";
+import { withoutDisabledEndpointModels } from "./disabled-models-list";
+import {
   endpointRowStatus,
   type CooldownRemaining,
   type HostEndpointsLoadState,
@@ -206,8 +211,8 @@ function toReopenView(hint: ApiEndpointReopenHint): ReopenHintView {
 }
 
 /**
- * 默认模型的一个选项（ADR 0012）：光秃秃的模型名（endpointName 为 null，哪家提供都行），
- * 或「接口标识/模型名」（指定这一家，显示成「模型名（接口名）」）。
+ * 默认模型的一个选项（ADR 0012）：光秃秃的模型名（哪家提供都行），或「接口标识/模型名」（指定这一家）。
+ * endpointName 是显示在模型名后面的接口名（「模型名（接口名）」）：光秃秃的名字、或接口名显示方式说不带时为 null。
  */
 export interface DefaultModelOption {
   id: string;
@@ -275,7 +280,7 @@ export interface AgentApiEndpointsView {
   defaultModelId: string | null;
   // 当前默认模型的显示；对不上任何选项时照原样（endpointName 为 null）。
   defaultModel: DefaultModelOption | null;
-  // 先是开着的接口的已选模型，按创建顺序合并去重的光秃秃名字；再是聊天模型选择器里每家的「接口标识/模型名」。
+  // 先是开着的接口的已选模型，按接口顺序合并去重的光秃秃名字；再是聊天模型选择器里每家的「接口标识/模型名」。
   modelOptions: DefaultModelOption[];
   summary: AgentEndpointsSummary;
   // 提示区，按主机给的顺序。
@@ -308,9 +313,16 @@ export function selectAgentApiEndpointsView(input: {
   const { state, provider, now } = input;
   const agent = state.agents[provider] ?? { enabled: false, defaultModelId: null };
   const enabledEndpoints = state.endpoints.filter((endpoint) => endpoint.enabled !== false);
-  const modelOptions = defaultModelOptions({
-    enabledEndpoints,
-    groups: input.endpointModelGroups ?? [],
+  // 被禁的模型不在服务：默认模型候选不列（分组由主机按在服务的模型给，已经去掉）。
+  const modelOptions = withEndpointNamesShown({
+    options: defaultModelOptions({
+      enabledEndpoints: withoutDisabledEndpointModels({
+        endpoints: enabledEndpoints,
+        patterns: state.disabledModels,
+      }),
+      groups: input.endpointModelGroups ?? [],
+    }),
+    display: state.endpointNameDisplay,
   });
 
   let enableBlockedBy: AgentSwitchBlock | null = null;
@@ -359,7 +371,10 @@ export function selectAgentApiEndpointsView(input: {
     provider,
     agent,
     subagentThinkingOptions: input.subagentThinkingOptions,
-    sideModelOptions: input.sideModelOptions,
+    sideModelOptions: withEndpointNamesShown({
+      options: input.sideModelOptions,
+      display: state.endpointNameDisplay,
+    }),
   });
 
   return {
@@ -466,7 +481,7 @@ function levelsWithoutUltraCode(options: DefaultThinkingOption[]): DefaultThinki
     .map((option) => ({ id: option.id, label: option.label }));
 }
 
-/** 光秃秃的名字在前（按创建顺序去重），再是聊天模型选择器里每家的「接口标识/模型名」。 */
+/** 光秃秃的名字在前（按接口顺序去重），再是聊天模型选择器里每家的「接口标识/模型名」。 */
 function defaultModelOptions(input: {
   enabledEndpoints: ApiEndpoint[];
   groups: ApiEndpointModelGroup[];
@@ -489,6 +504,23 @@ function defaultModelOptions(input: {
     }
   }
   return options;
+}
+
+/**
+ * 按接口名显示方式去掉不显示的接口名。同名在整个下拉里按每项显示的名字算（magpie Labels 的 same）：
+ * 光秃秃的 glm-5 和 relay-a/glm-5 都叫 glm-5，算撞名。
+ */
+function withEndpointNamesShown(input: {
+  options: DefaultModelOption[];
+  display: ApiEndpointNameDisplay;
+}): DefaultModelOption[] {
+  const shows = showsEndpointNames({
+    display: input.display,
+    names: input.options.map((option) => option.model),
+  });
+  return input.options.map((option, index) =>
+    shows[index] || option.endpointName === null ? option : { ...option, endpointName: null },
+  );
 }
 
 function displayedDefaultModel(

@@ -2543,6 +2543,94 @@ describe("reasoning turned off, sent the way each model takes it", () => {
   });
 });
 
+// 接口管理好用性工单 13：模型设置里一档思考都不留，中转站不发任何思考参数（magpie Reasonless 的 withoutAnyReasoning）。
+describe("a model with no thinking level kept", () => {
+  async function keepNoLevels(endpointsDir: string, models: Record<string, string[]>) {
+    const endpointsPath = path.join(endpointsDir, "endpoints.json");
+    const file = JSON.parse(await readFile(endpointsPath, "utf8")) as {
+      endpoints: { id: string; modelSettings?: unknown }[];
+    };
+    for (const endpoint of file.endpoints) {
+      const ids = models[endpoint.id];
+      if (!ids) continue;
+      endpoint.modelSettings = {
+        models: Object.fromEntries(ids.map((id) => [id, { efforts: [] }])),
+      };
+    }
+    await writeFile(endpointsPath, JSON.stringify(file));
+  }
+
+  test("is sent no thinking field, passed through or translated; another model still is", async () => {
+    const responses = await startUpstream();
+    responses.respond = (_request, res) => answerResponsesWhole(res);
+    const anthropic = await startUpstream();
+    anthropic.respond = (_request, res) => anthropicStream(res);
+    const chat = await startUpstream();
+    chat.respond = (_request, res) => chatStream(res);
+    const { gateway, endpointsDir } = await start({
+      upstreamA: responses,
+      upstreamB: anthropic,
+      chatUpstream: chat,
+    });
+    await keepNoLevels(endpointsDir, {
+      ep_a: ["gpt-5.5"],
+      ep_b: ["glm-4.6"],
+      ep_c: ["deepseek-v3"],
+    });
+    const codexAsk = async (model: string) => {
+      const response = await fetch(
+        `${gateway}/v1/responses`,
+        codexRequest({
+          model,
+          input: "hi",
+          stream: false,
+          reasoning: { effort: "high", summary: "auto" },
+          include: ["reasoning.encrypted_content"],
+        }),
+      );
+      expect(response.status).toBe(200);
+      await response.text();
+    };
+    const claudeAsk = async (model: string) => {
+      const response = await fetch(
+        `${gateway}/v1/messages`,
+        claudeRequest({
+          model,
+          max_tokens: 64,
+          thinking: { type: "enabled", budget_tokens: 2048 },
+          output_config: { effort: "high" },
+          messages: [{ role: "user", content: "hi" }],
+        }),
+      );
+      expect(response.status).toBe(200);
+      await response.text();
+    };
+
+    // 直通 Responses：reasoning 与要封存推理的 include 都去掉。
+    await codexAsk("gpt-5.5");
+    const passed = receivedBody(responses.requests.splice(0)[0]);
+    expect(passed.reasoning).toBeUndefined();
+    expect(passed.include).toEqual([]);
+    // 直通 Anthropic：thinking 与 output_config.effort 都去掉。
+    await claudeAsk("relay-b/glm-4.6");
+    const claudePassed = receivedBody(anthropic.requests.splice(0)[0]);
+    expect(claudePassed.thinking).toBeUndefined();
+    expect(claudePassed.output_config).toBeUndefined();
+    // 翻成 Chat：不带 reasoning_effort。
+    await codexAsk("deepseek-v3");
+    await claudeAsk("relay-c/deepseek-v3");
+    const translated = chat.requests.splice(0).map(receivedBody);
+    expect(translated.map((body) => body.reasoning_effort)).toEqual([undefined, undefined]);
+    // 别的模型照常带。
+    await codexAsk("qwen3-coder");
+    expect(receivedBody(chat.requests.splice(0)[0]).reasoning_effort).toBe("high");
+    await claudeAsk("relay-b/kimi-k2");
+    expect(receivedBody(anthropic.requests.splice(0)[0]).thinking).toMatchObject({
+      type: "enabled",
+    });
+  });
+});
+
 async function setBaseUrls(
   endpointsDir: string,
   baseUrls: Record<string, { format: string; url: string }[]>,
@@ -3725,6 +3813,24 @@ describe("switching to another endpoint when one fails", () => {
       expect(typeof switched?.until).toBe("string");
     },
   );
+
+  test("after the endpoint order changes, a bare model name goes to the new first endpoint and fails over to the next", async () => {
+    const { upstreamA, upstreamB, ask, daemon } = await twoRelays();
+    upstreamA.respond = (_request, res) => streamReply(res, { text: "from A" });
+    const client = await connectTo(daemon);
+    expect((await client.apiEndpointSetOrder({ endpointIds: ["ep_b", "ep_a"] })).error).toBeNull();
+
+    const first = await ask();
+    expect(first.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    expect(await first.text()).toContain("from B");
+    expect(upstreamA.requests).toHaveLength(0);
+
+    upstreamB.respond = (_request, res) => failWith(res, { status: 503, message: "upstream busy" });
+    const second = await ask();
+    expect(second.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
+    expect(await second.text()).toContain("from A");
+    expect(upstreamB.requests).toHaveLength(2);
+  });
 
   test("no response headers in time is a server error and goes to the next endpoint", async () => {
     const { upstreamA, upstreamB, ask } = await twoRelays({ headerTimeoutMs: 300 });
@@ -5005,6 +5111,151 @@ describe("model list and warm-up", () => {
     expect(list.data.map((model) => model.id)).toEqual(["kimi-k2", "gpt-5.5", "glm-4.6"]);
     expect(hello.status).toBe(200);
   });
+
+  // 接口管理好用性工单 17：每条带模型资料（magpie gateway.go 的 modelObject），按模型设置改过；已禁用的不列。
+  test("/v1/models gives each model's facts as the model settings leave them, and lists no disabled model", async () => {
+    const { gateway, endpointsDir } = await start({
+      modelsA: ["kimi-k2", "gpt-5.5", "qwen3-coder"],
+      modelsDev: {
+        "kimi-k2": {
+          name: "Kimi K2",
+          context: 262_144,
+          output: 32_768,
+          efforts: ["low", "medium", "high"],
+          images: false,
+        },
+        "glm-4.6": { name: "GLM-4.6", context: 200_000, output: 131_072, images: false },
+        "qwen3-coder": { name: "Qwen3 Coder", context: 262_144 },
+      },
+      catalogB: { "glm-4.6": { efforts: ["low", "high"] } },
+    });
+    const endpointsPath = path.join(endpointsDir, "endpoints.json");
+    const file = JSON.parse(await readFile(endpointsPath, "utf8")) as {
+      endpoints: { id: string; modelSettings?: unknown }[];
+      disabledModels?: string[];
+    };
+    // 回复上限手填得比窗口大：照 magpie PublishedOutput 收在窗口以内。
+    file.endpoints[0].modelSettings = {
+      models: { "kimi-k2": { name: "My Kimi", output: 500_000, efforts: ["high"], images: true } },
+    };
+    file.disabledModels = ["qwen3-*"];
+    await writeFile(endpointsPath, JSON.stringify(file));
+
+    const models = await fetch(`${gateway}/v1/models`, {
+      headers: { authorization: `Bearer ${CODEX_TOKEN}` },
+    });
+
+    expect(models.status).toBe(200);
+    const list = (await models.json()) as { data: Record<string, unknown>[] };
+    const shared = { object: "model", type: "model", created: 0 };
+    expect(list.data.map(({ created_at: _at, owned_by: _by, ...model }) => model)).toEqual([
+      {
+        ...shared,
+        id: "kimi-k2",
+        display_name: "My Kimi",
+        reasoning: true,
+        supported_reasoning_levels: [{ effort: "high" }],
+        context_window: 262_144,
+        context_length: 262_144,
+        max_input_tokens: 262_144,
+        max_output_tokens: 262_144,
+        modalities: { input: ["text", "image"] },
+      },
+      {
+        ...shared,
+        id: "gpt-5.5",
+        display_name: "gpt-5.5",
+        reasoning: false,
+        supported_reasoning_levels: [],
+      },
+      {
+        ...shared,
+        id: "glm-4.6",
+        display_name: "GLM-4.6",
+        reasoning: true,
+        supported_reasoning_levels: [{ effort: "low" }, { effort: "high" }],
+        context_window: 200_000,
+        context_length: 200_000,
+        max_input_tokens: 200_000,
+        max_output_tokens: 131_072,
+        modalities: { input: ["text"] },
+      },
+    ]);
+  });
+
+  // 照 magpie gateway.go 的 model：按 `标识/模型名` 或光秃秃的名字给一条，和列表里的那条一样。
+  test("/v1/models/{id} answers a model by its endpoint's slug or by its bare name, as the list gives it", async () => {
+    const { gateway } = await start({
+      modelsDev: {
+        "kimi-k2": { name: "Kimi K2", context: 262_144, output: 32_768, images: false },
+      },
+      catalogB: { "kimi-k2": { name: "Kimi on B", efforts: ["low", "high"] } },
+    });
+    const headers = { authorization: `Bearer ${CODEX_TOKEN}` };
+    const listed = await fetch(`${gateway}/v1/models`, { headers });
+    const list = (await listed.json()) as { data: { id: string }[] };
+
+    const bare = await fetch(`${gateway}/v1/models/kimi-k2`, { headers });
+    const onB = await fetch(`${gateway}/v1/models/relay-b/kimi-k2`, { headers });
+
+    expect(bare.status).toBe(200);
+    expect(await bare.json()).toEqual(list.data.find((model) => model.id === "kimi-k2"));
+    expect(onB.status).toBe(200);
+    const {
+      created_at: _at,
+      owned_by: _by,
+      ...model
+    } = (await onB.json()) as Record<string, unknown>;
+    expect(model).toEqual({
+      id: "relay-b/kimi-k2",
+      object: "model",
+      type: "model",
+      created: 0,
+      display_name: "Kimi on B",
+      reasoning: true,
+      supported_reasoning_levels: [{ effort: "low" }, { effort: "high" }],
+      context_window: 262_144,
+      context_length: 262_144,
+      max_input_tokens: 262_144,
+      max_output_tokens: 32_768,
+      modalities: { input: ["text"] },
+    });
+  });
+
+  test("/v1/models/{id} answers 404 unknown model for a model it doesn't serve or one disabled", async () => {
+    const { gateway, endpointsDir } = await start({
+      modelsA: ["kimi-k2", "gpt-5.5", "qwen3-coder"],
+    });
+    const endpointsPath = path.join(endpointsDir, "endpoints.json");
+    const file = JSON.parse(await readFile(endpointsPath, "utf8")) as {
+      disabledModels?: string[];
+    };
+    file.disabledModels = ["qwen3-*"];
+    await writeFile(endpointsPath, JSON.stringify(file));
+    const headers = { authorization: `Bearer ${CODEX_TOKEN}` };
+
+    const asked = ["nothing-here", "qwen3-coder", "relay-a/qwen3-coder", "%E0%A4%A"];
+    const answers = await Promise.all(
+      asked.map(async (id) => {
+        const answer = await fetch(`${gateway}/v1/models/${id}`, { headers });
+        return { status: answer.status, body: await answer.json() };
+      }),
+    );
+
+    expect(answers).toEqual(
+      asked.map((id) => ({
+        status: 404,
+        body: {
+          error: {
+            message: `unknown model ${id}`,
+            type: "not_found_error",
+            code: null,
+            param: null,
+          },
+        },
+      })),
+    );
+  });
 });
 
 describe("the CLI configs follow the gateway across daemon starts", () => {
@@ -5213,7 +5464,7 @@ experimental_bearer_token = "${token}"
     // 工单 17 以前的样子：settings.json 与接管记录里都没有 modelPicker。
     const settings = JSON.parse(settingsBefore);
     expect(settings.modelPicker).toEqual({
-      options: [{ model: "relay-a/kimi-k2", label: "kimi-k2", description: "Relay A" }],
+      options: [{ model: "relay-a/kimi-k2", label: "kimi-k2 (Relay A)", description: "via Osuna" }],
     });
     delete settings.modelPicker;
     await writeFile(home.settingsPath, `${JSON.stringify(settings, null, 2)}\n`);
@@ -5261,12 +5512,15 @@ experimental_bearer_token = "${token}"
         ANTHROPIC_BASE_URL: gateway,
         ANTHROPIC_AUTH_TOKEN: claude,
         ANTHROPIC_API_KEY: "",
+        CLAUDE_CODE_AUTO_COMPACT_WINDOW: "272000",
         CLAUDE_CODE_AUTO_MODE_SERVER: "0",
       },
       permissions: { deny: ["WebSearch"] },
       model: "kimi-k2",
       modelPicker: {
-        options: [{ model: "relay-a/kimi-k2", label: "kimi-k2", description: "Relay A" }],
+        options: [
+          { model: "relay-a/kimi-k2", label: "kimi-k2 (Relay A)", description: "via Osuna" },
+        ],
       },
     });
     const config = await readFile(home.configPath, "utf8");
@@ -8787,5 +9041,900 @@ describe("a model asked for at an effort of its own, as the Subagent model is wr
     await fetch(`${gateway}/v1/messages?beta=true`, claudeRequest(askedAt("kimi-k2:high")));
 
     expect(receivedBody(upstreamA.requests[0]).model).toBe("kimi-k2:high");
+  });
+});
+
+/*
+ * Bedrock 与 Azure 模板（接口管理好用性工单 07，照 magpie authheader.go 的 AuthHeaders、account.go 的 Bedrock 一段）：
+ * key 放哪个头、每个模型走哪种格式由模板定。A 换成从模板加的，三个格式的地址都在同一个假上游上。
+ */
+describe("Amazon Bedrock and Azure OpenAI endpoints, by their template", () => {
+  // openai：只有 Chat 与 Responses 地址（Azure 资源常见的样子），Claude Code 的请求要翻译过去。
+  async function startTemplated(input: {
+    templateId: string;
+    models: string[];
+    formats?: "all" | "openai";
+  }) {
+    const upstream = await startUpstream();
+    upstream.respond = (request, res) => {
+      if (request.url.endsWith("/responses")) return answerResponsesWhole(res);
+      if (request.url.endsWith("/chat/completions")) {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            object: "chat.completion",
+            choices: [
+              { index: 0, message: { role: "assistant", content: "ok" }, finish_reason: "stop" },
+            ],
+            usage: { prompt_tokens: 1, completion_tokens: 1 },
+          }),
+        );
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          type: "message",
+          role: "assistant",
+          content: [{ type: "text", text: "ok" }],
+          stop_reason: "end_turn",
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+      );
+    };
+    const harness = await start();
+    const endpointsPath = path.join(harness.endpointsDir, "endpoints.json");
+    const file = JSON.parse(await readFile(endpointsPath, "utf8")) as {
+      endpoints: Record<string, unknown>[];
+    };
+    file.endpoints[0] = {
+      ...file.endpoints[0],
+      templateId: input.templateId,
+      baseUrls: [
+        ...(input.formats === "openai"
+          ? []
+          : [{ format: "anthropic_messages", url: upstream.url }]),
+        { format: "openai_chat", url: `${upstream.url}/v1` },
+        { format: "openai_responses", url: `${upstream.url}/v1` },
+      ],
+      models: input.models.map((id) => ({ id })),
+    };
+    await writeFile(endpointsPath, JSON.stringify(file));
+    return { upstream, gateway: harness.gateway };
+  }
+
+  const BEDROCK_MODELS = [
+    "global.anthropic.claude-sonnet-5",
+    "global.openai.gpt-6-luna",
+    "deepseek.v3.2",
+  ];
+
+  test("Bedrock's Claude goes to its Anthropic address with the key in x-api-key alone, from either CLI", async () => {
+    const { upstream, gateway } = await startTemplated({
+      templateId: "bedrock",
+      models: BEDROCK_MODELS,
+    });
+
+    const fromClaude = await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest({
+        model: "relay-a/global.anthropic.claude-sonnet-5",
+        max_tokens: 32,
+        messages: [{ role: "user", content: "hi" }],
+      }),
+    );
+    const fromCodex = await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest({ model: "global.anthropic.claude-sonnet-5", input: "hi", stream: false }),
+    );
+
+    expect(fromClaude.status).toBe(200);
+    expect(fromCodex.status).toBe(200);
+    expect(upstream.requests.map((request) => request.url)).toEqual([
+      "/v1/messages",
+      "/v1/messages",
+    ]);
+    for (const request of upstream.requests) {
+      expect(request.headers["x-api-key"]).toBe(KEY_A);
+      expect(request.headers.authorization).toBeUndefined();
+    }
+  });
+
+  test("Bedrock's other models go to Chat with a Bearer, and OpenAI's GPT to Responses first", async () => {
+    const { upstream, gateway } = await startTemplated({
+      templateId: "bedrock",
+      models: BEDROCK_MODELS,
+    });
+
+    const deepseek = await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest({ model: "deepseek.v3.2", input: "hi", stream: false }),
+    );
+    const gptFromClaude = await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest({
+        model: "relay-a/global.openai.gpt-6-luna",
+        max_tokens: 32,
+        messages: [{ role: "user", content: "hi" }],
+      }),
+    );
+
+    expect(deepseek.status).toBe(200);
+    expect(gptFromClaude.status).toBe(200);
+    expect(upstream.requests.map((request) => request.url)).toEqual([
+      "/v1/chat/completions",
+      "/v1/responses",
+    ]);
+    for (const request of upstream.requests) {
+      expect(request.headers.authorization).toBe(`Bearer ${KEY_A}`);
+      expect(request.headers["x-api-key"]).toBeUndefined();
+    }
+  });
+
+  test("Azure gets the key in api-key alone on its OpenAI formats, and in x-api-key on Anthropic's", async () => {
+    const { upstream, gateway } = await startTemplated({
+      templateId: "azure",
+      models: ["my-gpt-deployment", "claude-sonnet-5"],
+    });
+
+    const responses = await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest({ model: "my-gpt-deployment", input: "hi", stream: false }),
+    );
+    const anthropic = await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest({
+        model: "relay-a/claude-sonnet-5",
+        max_tokens: 32,
+        messages: [{ role: "user", content: "hi" }],
+      }),
+    );
+
+    expect(responses.status).toBe(200);
+    expect(anthropic.status).toBe(200);
+    const [toResponses, toAnthropic] = upstream.requests;
+    expect(toResponses?.url).toBe("/v1/responses");
+    expect(toResponses?.headers["api-key"]).toBe(KEY_A);
+    expect(toResponses?.headers.authorization).toBeUndefined();
+    expect(toAnthropic?.url).toBe("/v1/messages");
+    expect(toAnthropic?.headers["x-api-key"]).toBe(KEY_A);
+    expect(toAnthropic?.headers["api-key"]).toBeUndefined();
+    expect(toAnthropic?.headers.authorization).toBeUndefined();
+  });
+
+  /*
+   * 按模板改请求体（ADR 0008，2026-10-19 用户定，照 magpie gateway.go 的 passthrough 与翻译后 build、betas.go、codex_backend.go）。
+   */
+  test("to Bedrock's Anthropic address Claude Code's metadata goes, and its betas are named as Bedrock names them", async () => {
+    const { upstream, gateway } = await startTemplated({
+      templateId: "bedrock",
+      models: BEDROCK_MODELS,
+    });
+    const asked = claudeRequest({
+      model: "relay-a/global.anthropic.claude-sonnet-5",
+      max_tokens: 32,
+      metadata: { user_id: '{"device_id":"d","session_id":"s"}' },
+      messages: [{ role: "user", content: "hi" }],
+    });
+    asked.headers = {
+      ...(asked.headers as Record<string, string>),
+      "anthropic-beta":
+        "claude-code-20250219,advanced-tool-use-2025-11-20,prompt-caching-scope-2026-01-05,redact-thinking-2026-02-12",
+    };
+
+    const response = await fetch(`${gateway}/v1/messages`, asked);
+
+    expect(response.status).toBe(200);
+    const [received] = upstream.requests;
+    expect(receivedBody(received)).not.toHaveProperty("metadata");
+    expect(received?.headers["anthropic-beta"]).toBe(
+      "claude-code-20250219,tool-search-tool-2025-10-19",
+    );
+  });
+
+  test("Bedrock's and Azure's Chat get max_completion_tokens in place of max_tokens", async () => {
+    const bedrock = await startTemplated({ templateId: "bedrock", models: BEDROCK_MODELS });
+    const azure = await startTemplated({
+      templateId: "azure",
+      models: ["my-kimi"],
+      formats: "openai",
+    });
+
+    await fetch(
+      `${bedrock.gateway}/v1/responses`,
+      codexRequest({ model: "deepseek.v3.2", input: "hi", max_output_tokens: 64, stream: false }),
+    );
+    await fetch(
+      `${azure.gateway}/v1/messages`,
+      claudeRequest({
+        model: "relay-a/my-kimi",
+        max_tokens: 64,
+        messages: [{ role: "user", content: "hi" }],
+      }),
+    );
+
+    for (const { upstream } of [bedrock, azure]) {
+      const [received] = upstream.requests;
+      expect(received?.url).toBe("/v1/chat/completions");
+      expect(receivedBody(received)).toMatchObject({ max_completion_tokens: 64 });
+      expect(receivedBody(received)).not.toHaveProperty("max_tokens");
+    }
+  });
+
+  test("on Azure a deployment named for an OpenAI model is translated to Responses first", async () => {
+    const { upstream, gateway } = await startTemplated({
+      templateId: "azure",
+      models: ["gpt-5.5", "my-kimi"],
+      formats: "openai",
+    });
+
+    await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest({
+        model: "relay-a/gpt-5.5",
+        max_tokens: 32,
+        messages: [{ role: "user", content: "hi" }],
+      }),
+    );
+
+    expect(upstream.requests[0]?.url).toBe("/v1/responses");
+  });
+
+  test("to Azure's Responses, reasoning it can't take goes and item ids keep only the characters it takes", async () => {
+    const { upstream, gateway } = await startTemplated({
+      templateId: "azure",
+      models: ["my-gpt-deployment"],
+    });
+    const input = [
+      { type: "message", role: "user", content: [{ type: "input_text", text: "hi" }] },
+      // 中转站翻译回复时造的、没有封存内容的推理。
+      { type: "reasoning", id: "rs_bare", summary: [] },
+      // 别家模型写的、带文字的推理。
+      {
+        type: "reasoning",
+        id: "rs_text",
+        summary: [],
+        content: [{ type: "reasoning_text", text: "thinking" }],
+        encrypted_content: "sealed",
+      },
+      // Muse Spark 的推理 id 是两个用冒号连起来的。
+      { type: "reasoning", id: "rs_a:rs_b", summary: [], encrypted_content: "sealed" },
+      {
+        type: "message",
+        id: "msg_a:b",
+        role: "assistant",
+        content: [{ type: "output_text", text: "ok" }],
+      },
+      { type: "message", role: "user", content: [{ type: "input_text", text: "again" }] },
+    ];
+
+    await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest({ model: "my-gpt-deployment", input, store: false, stream: false }),
+    );
+
+    const sent = receivedBody(upstream.requests[0]).input as Record<string, unknown>[];
+    expect(sent.map((item) => [item.type, item.id])).toEqual([
+      ["message", undefined],
+      ["message", "msg_a_b"],
+      ["message", undefined],
+    ]);
+  });
+
+  test("a Chat-only model refusing tools with a reasoning effort is asked again with effort none", async () => {
+    const { upstream, gateway } = await startTemplated({
+      templateId: "bedrock",
+      models: BEDROCK_MODELS,
+    });
+    const answer = upstream.respond;
+    upstream.respond = (request, res) => {
+      if (upstream.requests.length === 1) {
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            error: {
+              message:
+                "Function tools with reasoning_effort are not supported for deepseek.v3.2 in /v1/chat/completions. Please set reasoning_effort to none.",
+            },
+          }),
+        );
+        return;
+      }
+      answer(request, res);
+    };
+
+    const response = await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest({
+        model: "deepseek.v3.2",
+        input: "hi",
+        reasoning: { effort: "high" },
+        tools: [{ type: "function", name: "lookup", parameters: { type: "object" } }],
+        stream: false,
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(upstream.requests.map((request) => receivedBody(request).reasoning_effort)).toEqual([
+      "high",
+      "none",
+    ]);
+  });
+});
+
+// 接口管理好用性工单 15：上游模型名与只用这种格式（magpie modelprefs.go 的 UpstreamNameIn、SetModelAPI 与 ModelAPI）。
+describe("an upstream name and a model's one format", () => {
+  async function setModelSettings(endpointsDir: string, settings: Record<string, unknown>) {
+    const endpointsPath = path.join(endpointsDir, "endpoints.json");
+    const file = JSON.parse(await readFile(endpointsPath, "utf8")) as {
+      endpoints: { id: string; modelSettings?: unknown }[];
+    };
+    for (const endpoint of file.endpoints) {
+      if (endpoint.id in settings) endpoint.modelSettings = settings[endpoint.id];
+    }
+    await writeFile(endpointsPath, JSON.stringify(file));
+  }
+
+  async function dropBaseUrl(endpointsDir: string, input: { id: string; format: string }) {
+    const endpointsPath = path.join(endpointsDir, "endpoints.json");
+    const file = JSON.parse(await readFile(endpointsPath, "utf8")) as {
+      endpoints: { id: string; baseUrls: { format: string }[] }[];
+    };
+    for (const endpoint of file.endpoints) {
+      if (endpoint.id !== input.id) continue;
+      endpoint.baseUrls = endpoint.baseUrls.filter((entry) => entry.format !== input.format);
+    }
+    await writeFile(endpointsPath, JSON.stringify(file));
+  }
+
+  /** Anthropic 回复里写上收到的模型名，像上游那样。 */
+  function echoAnthropic(request: RecordedRequest, res: ServerResponse) {
+    const model = receivedModel(request);
+    if (receivedBody(request).stream === true) {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      const opening = { type: "message_start", message: { model, usage: { input_tokens: 1 } } };
+      res.write(`event: message_start\ndata: ${JSON.stringify(opening)}\n\n`);
+      res.end(`event: message_stop\ndata: {"type":"message_stop"}\n\n`);
+      return;
+    }
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(
+      JSON.stringify({
+        type: "message",
+        role: "assistant",
+        model,
+        content: [{ type: "text", text: "ok" }],
+        stop_reason: "end_turn",
+        usage: { input_tokens: 1, output_tokens: 1 },
+      }),
+    );
+  }
+
+  const claudeAsk = (gateway: string, input: { model: string; stream: boolean }) =>
+    fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest({
+        model: input.model,
+        stream: input.stream,
+        max_tokens: 32,
+        messages: [{ role: "user", content: "hi" }],
+      }),
+    );
+
+  test("the endpoint is sent the upstream name, a * template for every model, while the CLI's reply keeps the model's name", async () => {
+    const upstreamA = await startUpstream();
+    upstreamA.respond = echoAnthropic;
+    const { gateway, endpointsDir } = await start({ upstreamA, modelsA: ["kimi-k2", "glm-4.6"] });
+    await setModelSettings(endpointsDir, {
+      ep_a: {
+        defaults: { upstreamName: "zhipu/*" },
+        models: { "glm-4.6": { upstreamName: "vendor/glm-4.6-pro" } },
+      },
+    });
+
+    const whole = await claudeAsk(gateway, { model: "kimi-k2", stream: false });
+    expect(whole.status).toBe(200);
+    expect(((await whole.json()) as { model?: string }).model).toBe("kimi-k2");
+    const streamed = await claudeAsk(gateway, { model: "glm-4.6", stream: true });
+    expect(streamed.status).toBe(200);
+    const events = sseData(await streamed.text()) as { message?: { model?: string } }[];
+    expect(events[0]?.message?.model).toBe("glm-4.6");
+
+    expect(upstreamA.requests.map(receivedModel)).toEqual(["zhipu/kimi-k2", "vendor/glm-4.6-pro"]);
+  });
+
+  test("a translated request goes out under the upstream name and comes back under the model's", async () => {
+    const chat = await startUpstream();
+    chat.respond = (_request, res) => chatStream(res);
+    const { gateway, endpointsDir } = await start({ chatUpstream: chat });
+    await setModelSettings(endpointsDir, { ep_c: { defaults: { upstreamName: "router-model" } } });
+
+    const response = await claudeAsk(gateway, { model: "deepseek-v3", stream: false });
+
+    expect(response.status).toBe(200);
+    expect(((await response.json()) as { model?: string }).model).toBe("deepseek-v3");
+    expect(chat.requests.map(receivedModel)).toEqual(["router-model"]);
+  });
+
+  test("two endpoints with one model are still the same model when one of them renames it", async () => {
+    const upstreamA = await startUpstream();
+    const upstreamB = await startUpstream();
+    upstreamA.respond = (_request, res) => failWith(res, { status: 503, message: "upstream busy" });
+    upstreamB.respond = echoAnthropic;
+    const { gateway, endpointsDir } = await start({ upstreamA, upstreamB });
+    await setModelSettings(endpointsDir, {
+      ep_a: { models: { "kimi-k2": { upstreamName: "moonshot/kimi-k2-turbo" } } },
+    });
+
+    const response = await claudeAsk(gateway, { model: "kimi-k2", stream: false });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    expect(upstreamA.requests.map(receivedModel)).toEqual(["moonshot/kimi-k2-turbo"]);
+    expect(upstreamB.requests.map(receivedModel)).toEqual(["kimi-k2"]);
+  });
+
+  test("a model whose upstream name is Claude keeps Claude Code's billing line and review, as a Claude model does", async () => {
+    const upstream = await startUpstream();
+    upstream.respond = (_request, res) => streamReply(res);
+    const { gateway, endpointsDir } = await start({ upstreamA: upstream });
+    await selectModels(endpointsDir, { ep_a: ["my-opus"] });
+    await setModelSettings(endpointsDir, {
+      ep_a: { models: { "my-opus": { upstreamName: "claude-opus-4-8" } } },
+    });
+    const init = claudeRequest(CLAUDE_CODE_TURN("my-opus"));
+    const headers = { ...(init.headers as Record<string, string>) };
+    headers["anthropic-beta"] = CLAUDE_CODE_BETAS;
+
+    const response = await fetch(`${gateway}/v1/messages?beta=true`, { ...init, headers });
+
+    expect(response.status).toBe(200);
+    await response.text();
+    expect(upstream.requests[0]!.body.toString()).toBe(CLAUDE_CODE_TURN("claude-opus-4-8"));
+    expect(upstream.requests[0]!.headers["anthropic-beta"]).toBe(CLAUDE_CODE_BETAS);
+  });
+
+  test("the advisor is asked for under this endpoint's upstream name, which is what says it is Claude", async () => {
+    const upstream = await startUpstream();
+    upstream.respond = (_request, res) => streamReply(res);
+    const { gateway, endpointsDir } = await start({ upstreamA: upstream });
+    await selectModels(endpointsDir, { ep_a: ["my-opus", "my-advisor"] });
+    await setModelSettings(endpointsDir, {
+      ep_a: {
+        models: {
+          "my-opus": { upstreamName: "claude-opus-4-8" },
+          "my-advisor": { upstreamName: "claude-opus-5-5" },
+        },
+      },
+    });
+    const advisor = { type: "advisor_20260301", name: "advisor", model: "relay-a/my-advisor" };
+
+    const response = await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest({
+        model: "my-opus",
+        stream: true,
+        max_tokens: 32,
+        messages: [{ role: "user", content: "hi" }],
+        tools: [advisor],
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await response.text();
+    expect(receivedBody(upstream.requests[0]).tools).toEqual([
+      { ...advisor, model: "claude-opus-5-5" },
+    ]);
+  });
+
+  test("a Claude id the advisor names without this endpoint's prefix goes as it is, not under an upstream name", async () => {
+    const upstream = await startUpstream();
+    upstream.respond = (_request, res) => streamReply(res);
+    const { gateway, endpointsDir } = await start({ upstreamA: upstream });
+    await selectModels(endpointsDir, { ep_a: ["claude-opus-4-8", "claude-opus-5-5"] });
+    await setModelSettings(endpointsDir, {
+      ep_a: { models: { "claude-opus-5-5": { upstreamName: "vendor/opus-5-5" } } },
+    });
+    const advisor = { type: "advisor_20260301", name: "advisor", model: "claude-opus-5-5" };
+
+    const response = await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest({
+        model: "relay-a/claude-opus-4-8",
+        stream: true,
+        max_tokens: 32,
+        messages: [{ role: "user", content: "hi" }],
+        tools: [advisor],
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await response.text();
+    expect(receivedBody(upstream.requests[0]).tools).toEqual([advisor]);
+  });
+
+  test("a DeepSeek model's reasoning is replayed when either its own name or its upstream name says DeepSeek", async () => {
+    const upstream = await startUpstream();
+    upstream.respond = (_request, res) => answerResponsesWhole(res);
+    const { gateway, endpointsDir } = await start({
+      upstreamA: upstream,
+      modelsA: ["ds-alias", "deepseek-v4", "plain"],
+    });
+    await setModelSettings(endpointsDir, {
+      ep_a: {
+        models: {
+          "ds-alias": { upstreamName: "deepseek-v4-flash" },
+          "deepseek-v4": { upstreamName: "vendor/v4" },
+        },
+      },
+    });
+    const input = [
+      { type: "message", role: "user", content: [{ type: "input_text", text: "hi" }] },
+      { type: "reasoning", id: "rs_bare", summary: [] },
+      { type: "message", role: "user", content: [{ type: "input_text", text: "again" }] },
+    ];
+    const keepsReasoning = async (model: string) => {
+      const response = await fetch(
+        `${gateway}/v1/responses`,
+        codexRequest({ model, input, store: false, stream: false }),
+      );
+      expect(response.status).toBe(200);
+      await response.text();
+      const sent = receivedBody(upstream.requests.at(-1)).input as { type: string }[];
+      return sent.some((item) => item.type === "reasoning");
+    };
+
+    expect(await keepsReasoning("ds-alias")).toBe(true);
+    expect(await keepsReasoning("deepseek-v4")).toBe(true);
+    expect(await keepsReasoning("plain")).toBe(false);
+  });
+
+  test("a Grok reply's whole numbers are fixed when either its own name or its upstream name says Grok", async () => {
+    const upstream = await startUpstream();
+    upstream.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(grokResponsesWhole(GROK_ARGS_PIECES.join(""))));
+    };
+    const { gateway, endpointsDir } = await start({
+      upstreamA: upstream,
+      modelsA: ["fast-alias", "grok-4.6"],
+    });
+    await setModelSettings(endpointsDir, {
+      ep_a: {
+        models: {
+          "fast-alias": { upstreamName: "grok-4.6-fast" },
+          "grok-4.6": { upstreamName: "vendor/fast" },
+        },
+      },
+    });
+    const argsOf = async (model: string) => {
+      const response = await fetch(
+        `${gateway}/v1/responses`,
+        codexRequest({ ...codexConversation(model, false), stream: false }),
+      );
+      expect(response.status).toBe(200);
+      const reply = (await response.json()) as { output: { arguments?: string }[] };
+      return reply.output[0]?.arguments;
+    };
+
+    expect(await argsOf("fast-alias")).toBe(GROK_WHOLE_ARGS);
+    expect(await argsOf("grok-4.6")).toBe(GROK_WHOLE_ARGS);
+  });
+
+  test("a model pinned to one format is asked only in it, and asked as before once that URL is gone", async () => {
+    const upstreamA = await startUpstream();
+    upstreamA.respond = (request, res) => {
+      if (request.url.startsWith("/v1/responses")) answerResponsesWhole(res);
+      else echoAnthropic(request, res);
+    };
+    const { gateway, endpointsDir } = await start({ upstreamA });
+    await setModelSettings(endpointsDir, {
+      ep_a: { models: { "kimi-k2": { format: "openai_responses" } } },
+    });
+
+    const pinned = await claudeAsk(gateway, { model: "kimi-k2", stream: false });
+    expect(pinned.status).toBe(200);
+    await pinned.text();
+    expect(upstreamA.requests.splice(0).map((request) => request.url)).toEqual(["/v1/responses"]);
+
+    await dropBaseUrl(endpointsDir, { id: "ep_a", format: "openai_responses" });
+    const unpinned = await claudeAsk(gateway, { model: "kimi-k2", stream: false });
+    expect(unpinned.status).toBe(200);
+    await unpinned.text();
+    expect(upstreamA.requests.map((request) => request.url)).toEqual(["/v1/messages"]);
+  });
+});
+
+describe("an endpoint's own headers, extra body and key header (magpie Sign, extrabody.go, authheader.go)", () => {
+  async function setExtras(endpointsDir: string, extras: Record<string, Record<string, unknown>>) {
+    const endpointsPath = path.join(endpointsDir, "endpoints.json");
+    const file = JSON.parse(await readFile(endpointsPath, "utf8")) as {
+      endpoints: Record<string, unknown>[];
+    };
+    file.endpoints = file.endpoints.map((endpoint) => {
+      const { headers: _h, extraBody: _e, keyHeader: _k, ...rest } = endpoint;
+      const id = String(endpoint.id);
+      return id in extras ? { ...rest, ...extras[id] } : rest;
+    });
+    await writeFile(endpointsPath, JSON.stringify(file));
+  }
+
+  const SECRET_HEADER = "relay-secret-value-0001";
+
+  function turn(input: { gateway: string; messages: unknown[]; session?: string }) {
+    const headers: Record<string, string> = {
+      authorization: `Bearer ${CLAUDE_TOKEN}`,
+      "content-type": "application/json",
+      "anthropic-version": "2023-06-01",
+      "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14",
+    };
+    if (input.session) headers["x-claude-code-session-id"] = input.session;
+    return fetch(`${input.gateway}/v1/messages`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ model: "kimi-k2", max_tokens: 32, messages: input.messages }),
+    });
+  }
+
+  test("the user's headers come after Osuna's, win in any case, merge anthropic-beta, and reach count_tokens and translated requests", async () => {
+    const upstreamA = await startUpstream();
+    const chat = await startUpstream();
+    chat.respond = (_request, res) => chatStream(res);
+    const { gateway, endpointsDir, logLines } = await start({ upstreamA, chatUpstream: chat });
+    await setExtras(endpointsDir, {
+      ep_a: {
+        headers: {
+          "X-Api-Key": "sk-relay-own",
+          "Anthropic-Beta": "relay-beta,claude-code-20250219",
+          "X-Relay-Secret": SECRET_HEADER,
+          "User-Agent": "relay-app/1.0",
+        },
+      },
+      ep_c: { headers: { "X-Relay-Secret": SECRET_HEADER } },
+    });
+
+    const answered = await turn({ gateway, messages: [{ role: "user", content: "hi" }] });
+    expect(answered.status).toBe(200);
+    await answered.text();
+    const counted = await fetch(
+      `${gateway}/v1/messages/count_tokens`,
+      claudeRequest({ model: "kimi-k2", messages: [{ role: "user", content: "hi" }] }),
+    );
+    expect(counted.status).toBe(200);
+    await counted.text();
+    const translated = await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest(claudeConversation(false)),
+    );
+    expect(translated.status).toBe(200);
+    await translated.text();
+
+    for (const request of upstreamA.requests) {
+      // 用户的 x-api-key 换掉了 Osuna 填的那个，Bearer 仍是这家的 key。
+      expect(request.headers["x-api-key"]).toBe("sk-relay-own");
+      expect(request.headers.authorization).toBe(`Bearer ${KEY_A}`);
+      expect(request.headers["x-relay-secret"]).toBe(SECRET_HEADER);
+      expect(request.headers["user-agent"]).toBe("relay-app/1.0");
+    }
+    expect(upstreamA.requests.map((request) => request.url)).toEqual([
+      "/v1/messages",
+      "/v1/messages/count_tokens",
+    ]);
+    expect(upstreamA.requests[0]?.headers["anthropic-beta"]).toBe(
+      "claude-code-20250219,interleaved-thinking-2025-05-14,relay-beta",
+    );
+    expect(chat.requests).toHaveLength(1);
+    expect(chat.requests[0]?.headers["x-relay-secret"]).toBe(SECRET_HEADER);
+    expect(chat.requests[0]?.headers.authorization).toBe(`Bearer ${KEY_C}`);
+    expect(logLines.join("\n")).not.toContain(SECRET_HEADER);
+  });
+
+  test("the extra body fills in what a request lacks, forces a ! field, keeps ${sessionId} per conversation, and skips count_tokens", async () => {
+    const upstreamA = await startUpstream();
+    const chat = await startUpstream();
+    chat.respond = (_request, res) => chatStream(res);
+    const { gateway, endpointsDir } = await start({ upstreamA, chatUpstream: chat });
+    const extraBody = {
+      metadata: { user_id: "team-${sessionId}" },
+      "!max_tokens": 64,
+      temperature: 0.5,
+    };
+    await setExtras(endpointsDir, {
+      ep_a: { extraBody },
+      ep_c: { extraBody: { prompt_cache_key: "${sessionId}" } },
+    });
+    const first = [{ role: "user", content: "fix the bug" }];
+    const second = [
+      ...first,
+      { role: "assistant", content: "done" },
+      { role: "user", content: "thanks" },
+    ];
+    for (const messages of [first, second]) {
+      const response = await turn({ gateway, messages });
+      expect(response.status).toBe(200);
+      await response.text();
+    }
+    const named = await turn({ gateway, messages: first, session: "cc-session-7" });
+    await named.text();
+    const counted = await fetch(
+      `${gateway}/v1/messages/count_tokens`,
+      claudeRequest({ model: "kimi-k2", messages: first }),
+    );
+    await counted.text();
+    const translated = await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest(claudeConversation(false)),
+    );
+    expect(translated.status).toBe(200);
+    await translated.text();
+
+    const bodies = upstreamA.requests.map(receivedBody);
+    const [one, two, three, count] = bodies;
+    expect(one?.max_tokens).toBe(64);
+    expect(one?.temperature).toBe(0.5);
+    const userIdOf = (body: Record<string, unknown> | undefined) =>
+      (body?.metadata as { user_id?: string } | undefined)?.user_id;
+    const conversation = userIdOf(one);
+    expect(conversation).toMatch(/^team-osuna-[0-9a-f]{24}$/);
+    // 同一段对话每轮相同；带会话头的用会话头。
+    expect(userIdOf(two)).toBe(conversation);
+    expect(userIdOf(three)).toBe("team-cc-session-7");
+    expect(count).not.toHaveProperty("metadata");
+    expect(count).not.toHaveProperty("temperature");
+    // 补上的字段之外逐字节原样：消息还是 CLI 发的。
+    expect(one?.messages).toEqual(first);
+    // 翻译后的请求也补；claudeRequest 带着会话头 session-1。
+    expect(receivedBody(chat.requests[0]).prompt_cache_key).toBe("session-1");
+  });
+
+  test("the key goes in the header the user picked on a third-party Anthropic address", async () => {
+    const upstreamA = await startUpstream();
+    const { gateway, endpointsDir } = await start({ upstreamA });
+    const messages = [{ role: "user", content: "hi" }];
+    const sent: { xApiKey: unknown; authorization: unknown }[] = [];
+    for (const keyHeader of ["x-api-key", "bearer", "both"]) {
+      await setExtras(endpointsDir, { ep_a: { keyHeader } });
+      const response = await turn({ gateway, messages });
+      expect(response.status).toBe(200);
+      await response.text();
+      const headers = upstreamA.requests.at(-1)?.headers ?? {};
+      sent.push({ xApiKey: headers["x-api-key"], authorization: headers.authorization });
+    }
+    expect(sent).toEqual([
+      { xApiKey: KEY_A, authorization: undefined },
+      { xApiKey: undefined, authorization: `Bearer ${KEY_A}` },
+      { xApiKey: KEY_A, authorization: `Bearer ${KEY_A}` },
+    ]);
+  });
+
+  test("a refusal of both key headers is not asked again with one when the user wrote an auth header", async () => {
+    const { upstreamA, upstreamB, ask, endpointsDir } = await twoRelays();
+    upstreamA.respond = (_request, res) => {
+      res.writeHead(401, { "content-type": "application/json" });
+      res.end(BOTH_KEY_HEADERS_REFUSED);
+    };
+    await setExtras(endpointsDir, { ep_a: { headers: { Authorization: "Bearer sk-user-own" } } });
+
+    const response = await ask();
+
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    await response.text();
+    expect(upstreamA.requests).toHaveLength(1);
+    expect(upstreamA.requests[0]?.headers.authorization).toBe("Bearer sk-user-own");
+    expect(upstreamB.requests).toHaveLength(1);
+  });
+
+  test("a header that can't be sent fails that endpoint's request with a reason, and the next endpoint answers", async () => {
+    const { upstreamA, upstreamB, ask, endpointsDir, logLines } = await twoRelays();
+    await setExtras(endpointsDir, { ep_a: { headers: { "X Team": "a" } } });
+
+    const response = await ask();
+
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    await response.text();
+    expect(upstreamA.requests).toHaveLength(0);
+    expect(upstreamB.requests).toHaveLength(1);
+    expect(logLines.join("\n")).toContain("is not a valid header name");
+  });
+
+  test("a user's auth header value echoed back by the endpoint never reaches the agent", async () => {
+    const upstreamA = await startUpstream();
+    upstreamA.respond = (request, res) =>
+      failWith(res, {
+        status: 400,
+        message: `bad token: ${String(request.headers.authorization)}`,
+      });
+    const { gateway, endpointsDir } = await start({ upstreamA });
+    await setExtras(endpointsDir, {
+      ep_a: { headers: { Authorization: `Bearer ${SECRET_HEADER}` } },
+    });
+
+    const response = await turn({ gateway, messages: [{ role: "user", content: "hi" }] });
+
+    expect(response.status).toBe(400);
+    const text = await response.text();
+    expect(text).toContain("bad token: ***");
+    expect(text).not.toContain(SECRET_HEADER);
+  });
+
+  test("the extra body goes on a request translated to Responses too", async () => {
+    const responses = await startUpstream();
+    responses.respond = (_request, res) => responsesStream(res);
+    const { gateway, endpointsDir } = await start({ responsesUpstream: responses });
+    await setExtras(endpointsDir, {
+      ep_d: { extraBody: { prompt_cache_key: "${sessionId}", "!service_tier": "flex" } },
+    });
+
+    const response = await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest({
+        model: "grok-4",
+        max_tokens: 32,
+        messages: [{ role: "user", content: "hi" }],
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await response.text();
+    expect(responses.requests[0]?.url).toBe("/v1/responses");
+    expect(receivedBody(responses.requests[0])).toMatchObject({
+      prompt_cache_key: "session-1",
+      service_tier: "flex",
+    });
+  });
+
+  test("a save keeps the headers, extra body and key header, an older client's save leaves them, and one naming a reserved field is refused", async () => {
+    const upstreamA = await startUpstream();
+    const { daemon } = await start({ upstreamA });
+    const client = await connectTo(daemon);
+    const form = {
+      provider: "claude",
+      endpointId: "ep_a",
+      name: "Relay A",
+      baseUrls: [{ format: "anthropic_messages", url: upstreamA.url }],
+      models: [{ id: "kimi-k2" }],
+    };
+
+    const saved = await client.apiEndpointSave({
+      ...form,
+      headers: { " anthropic-workspace-id ": " wrkspc_1 ", Empty: " " },
+      extraBody: { "!service_tier": "flex", prompt_cache_key: "${sessionId}" },
+      keyHeader: "bearer",
+    });
+    expect(saved.error).toBeNull();
+    expect(saved.endpoint).toMatchObject({
+      // 值空的头照 magpie cleanHeaders 照存。
+      headers: { "anthropic-workspace-id": "wrkspc_1", Empty: "" },
+      extraBody: { "!service_tier": "flex", prompt_cache_key: "${sessionId}" },
+      keyHeader: "bearer",
+    });
+    // 老客户端的保存不带这三项：原样留着。
+    const older = await client.apiEndpointSave(form);
+    expect(older.endpoint).toMatchObject({ keyHeader: "bearer" });
+    expect(older.endpoint?.headers).toEqual({ "anthropic-workspace-id": "wrkspc_1", Empty: "" });
+
+    const reserved = await client.apiEndpointSave({ ...form, extraBody: { "!messages": [] } });
+    expect(reserved.endpoint).toBeNull();
+    expect(reserved.error).toMatchObject({
+      code: "invalid_extra_body",
+      params: { reason: "reserved", field: "messages" },
+    });
+    // 发不出去的头照 magpie 照存（发时每个请求报错），值空的头也照存。
+    const badHeader = await client.apiEndpointSave({
+      ...form,
+      headers: { "X Team": "a", "X-Empty": "" },
+    });
+    expect(badHeader.error).toBeNull();
+    expect(badHeader.endpoint?.headers).toEqual({ "X Team": "a", "X-Empty": "" });
+    // 清掉时空的与 both 都不存。
+    const cleared = await client.apiEndpointSave({
+      ...form,
+      headers: {},
+      extraBody: {},
+      keyHeader: "both",
+    });
+    expect(cleared.endpoint).not.toHaveProperty("headers");
+    expect(cleared.endpoint).not.toHaveProperty("extraBody");
+    expect(cleared.endpoint).not.toHaveProperty("keyHeader");
   });
 });

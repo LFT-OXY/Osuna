@@ -76,6 +76,7 @@ import { registerWorkspaceRouteNavigationRef } from "@/navigation/workspace-rout
 import { ThemedStack } from "@/navigation/themed-stack";
 import { shouldUseDesktopDaemon } from "@/desktop/daemon/desktop-daemon";
 import { AgentNavigationListener } from "@/desktop/agent-navigation";
+import { ImportLinkListener } from "@/desktop/import-link";
 import { LegacyAgentSkillsMigration } from "@/agent-skills/legacy-migration";
 import { legacyFavoriteProfileMigration } from "@/agent-profiles/migration";
 import { listenToDesktopEvent } from "@/desktop/electron/events";
@@ -930,6 +931,7 @@ function AppShell() {
       <HorizontalScrollProvider>
         <OpenProjectListener />
         <AgentNavigationListener />
+        <ImportLinkListener />
         <AppWithSidebar>
           <WorkspaceRouteNavigationBridge />
           <RootStack />

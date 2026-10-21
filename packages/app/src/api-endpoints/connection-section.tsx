@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -19,10 +20,13 @@ import type { FormatTestOutcome, FormatTestResults } from "./use-endpoint-detail
  */
 export function ApiEndpointConnectionSection({
   endpoint,
+  isKeyOptional,
   testResults = {},
   onEdit,
 }: {
   endpoint: ApiEndpoint;
+  // 主机声明了 apiEndpointManagement：没 key 是用户没填，不是缺失。
+  isKeyOptional: boolean;
   testResults?: FormatTestResults;
   onEdit: () => void;
 }) {
@@ -90,11 +94,20 @@ export function ApiEndpointConnectionSection({
         <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
           <Text style={settingsStyles.rowTitle}>{t("settings.apiEndpoints.form.apiKey")}</Text>
           <Text style={settingsStyles.rowValue}>
-            {endpoint.hasApiKey ? MASKED_KEY : t("settings.apiEndpoints.detail.noKey")}
+            {keyValue({ hasApiKey: endpoint.hasApiKey, isKeyOptional, t })}
           </Text>
         </View>
       </View>
     </SettingsSection>
+  );
+}
+
+function keyValue(input: { hasApiKey: boolean; isKeyOptional: boolean; t: TFunction }): string {
+  if (input.hasApiKey) return MASKED_KEY;
+  return input.t(
+    input.isKeyOptional
+      ? "settings.apiEndpoints.detail.keyNotSet"
+      : "settings.apiEndpoints.detail.noKey",
   );
 }
 

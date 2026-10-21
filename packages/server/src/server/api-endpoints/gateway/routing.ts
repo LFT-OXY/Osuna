@@ -10,6 +10,7 @@ import {
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { ONE_MILLION_MARK } from "../claude-model-hints.js";
 import type { ApiEndpointProvider, ApiEndpointState, StoredApiEndpoint } from "../store.js";
+import { isBedrockClaude } from "../templates.js";
 
 /*
  * Claude Code 的开关开着时，Claude Code 内置的档位 id（claude-haiku-4-5-20251001 这类，照 magpie 的 claudeFamily）
@@ -24,8 +25,8 @@ import type { ApiEndpointProvider, ApiEndpointState, StoredApiEndpoint } from ".
  * 5. Claude 档位名（含 opus / sonnet / haiku / fable）：第一家映射了该档位的接口，换成映射到的模型；
  * 6. Claude Code 的开关开着时，档位名（opus 等）与 claude- 开头的 id（对不上档位的，如 claude-mythos-5-1）
  *    都没找到，改按 Claude Code 的默认模型找，不回 404。
- * 都按创建顺序（数组顺序）找，只看开着的接口；一家要发的名字取它自己列出的写法，写法完全相同的优先。
- * 用户选的那家排第一，后面跟着其他开着、选了同一个模型的接口（创建顺序），供失败时自动切换。
+ * 都按接口顺序（数组顺序）找，只看开着的接口；一家要发的名字取它自己列出的写法，写法完全相同的优先。
+ * 用户选的那家排第一，后面跟着其他开着、选了同一个模型的接口（接口顺序），供失败时自动切换。
  * 厂商说已下线的模型（retired-models.ts）只有第 1 步照发，其余各步、后面跟着的接口与相近名字都按 listed 找。
  */
 
@@ -277,28 +278,30 @@ const TRANSLATION_ORDER: ApiEndpointRequestFormat[] = [
   "anthropic_messages",
 ];
 
-/** 斜杠后的名字以 claude 开头（magpie 的 claudeModel）。 */
+/** 斜杠后的名字以 claude 开头，或是 Bedrock 的 Claude id（magpie 的 claudeModel）。 */
 export function isClaudeModel(model: string): boolean {
-  return model
-    .slice(model.lastIndexOf("/") + 1)
-    .toLowerCase()
-    .startsWith("claude");
+  const bare = model.slice(model.lastIndexOf("/") + 1).toLowerCase();
+  return bare.startsWith("claude") || isBedrockClaude(bare);
 }
 
 /**
  * 这次向这家接口用哪种格式请求（照 magpie 的 usable + MessagesFirst）：
  * Claude 模型且有 Anthropic 地址一律走 Anthropic，保住缓存标记与思考；
  * 否则有 Agent 自己格式的地址就直通；再否则按 Chat → Responses → Anthropic 取第一个翻译过去。
+ * `formatOrder` 是这家这个模型翻译时先试的格式（translationOrderAt，如 Bedrock 与 Azure 上的 GPT 先 Responses，照 magpie ResponsesFirst），
+ * 翻译时按它取；null 即按上面的顺序。
  */
 export function chooseRequestFormat(input: {
   agentFormat: ApiEndpointRequestFormat;
   model: string;
   formats: readonly ApiEndpointRequestFormat[];
+  formatOrder: readonly ApiEndpointRequestFormat[] | null;
 }): ApiEndpointRequestFormat | null {
   const { formats } = input;
   if (isClaudeModel(input.model) && formats.includes("anthropic_messages")) {
     return "anthropic_messages";
   }
   if (formats.includes(input.agentFormat)) return input.agentFormat;
-  return TRANSLATION_ORDER.find((format) => formats.includes(format)) ?? null;
+  const order = input.formatOrder ?? TRANSLATION_ORDER;
+  return order.find((format) => formats.includes(format)) ?? null;
 }

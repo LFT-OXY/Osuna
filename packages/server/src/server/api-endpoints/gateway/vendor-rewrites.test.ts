@@ -9,6 +9,7 @@ import type { ShapeRefusals } from "./refusals.js";
 import { translatedBody } from "./translated.js";
 import { parseAnthropicRequest } from "./translation/anthropic.js";
 import { withVendorRewrites } from "./vendor-rewrites.js";
+import { withTemplatePassthroughRewrites } from "./template-rewrites.js";
 
 /*
  * 翻译的请求按厂商改：Kimi、MiniMax、DeepSeek 只认官方地址，Grok 按模型名认；别的地址、别家的模型，翻出的请求体照旧。
@@ -58,7 +59,10 @@ function translated(input: {
 }): Record<string, unknown> {
   const text = translatedBody({
     ...input,
+    sentModel: input.model,
     request: claudeCodeTurn,
+    templateId: undefined,
+    chatOnly: false,
     from: "anthropic_messages",
     facts: {},
     refusals: NO_REFUSALS,
@@ -362,9 +366,12 @@ describe("the search sources asked of a Responses address", () => {
     const text = translatedBody({
       request: search,
       baseUrl,
+      templateId: undefined,
+      chatOnly: false,
       from: "anthropic_messages",
       to: "openai_responses",
       model: "grok-4",
+      sentModel: "grok-4",
       facts: {},
       refusals: NO_REFUSALS,
       continuation: null,
@@ -375,5 +382,73 @@ describe("the search sources asked of a Responses address", () => {
   test("a relay is asked for them; xAI's own address is not", () => {
     expect(includeFor(RELAY_URL)).toEqual(["web_search_call.action.sources"]);
     expect(includeFor("https://api.x.ai/v1")).toBeUndefined();
+  });
+});
+
+describe("rewrites by template: Amazon Bedrock and Azure OpenAI", () => {
+  test("a request translated to Bedrock's Anthropic format goes without the client's metadata", () => {
+    const request = parseAnthropicRequest({
+      model: "global.anthropic.claude-sonnet-5",
+      max_tokens: 32,
+      metadata: { user_id: '{"device_id":"d"}' },
+      messages: [{ role: "user", content: "hi" }],
+    });
+    const bodyFor = (templateId: string | undefined) =>
+      JSON.parse(
+        translatedBody({
+          request,
+          baseUrl: RELAY_URL,
+          templateId,
+          chatOnly: false,
+          from: "openai_responses",
+          to: "anthropic_messages",
+          model: "global.anthropic.claude-sonnet-5",
+          sentModel: "global.anthropic.claude-sonnet-5",
+          facts: {},
+          refusals: NO_REFUSALS,
+          continuation: null,
+        }),
+      ) as Record<string, unknown>;
+
+    expect(bodyFor("bedrock")).not.toHaveProperty("metadata");
+    expect(bodyFor(undefined)).toHaveProperty("metadata");
+  });
+
+  test("Chat sent as it came to Azure goes without Qwen's and Kimi Code's thinking switches", () => {
+    const body = {
+      model: "my-qwen",
+      enable_thinking: true,
+      thinking: { type: "enabled" },
+      messages: [],
+    };
+
+    const azure = withTemplatePassthroughRewrites({
+      templateId: "azure",
+      format: "openai_chat",
+      body,
+      replaysReasoning: false,
+    });
+    const elsewhere = withTemplatePassthroughRewrites({
+      templateId: "deepseek",
+      format: "openai_chat",
+      body,
+      replaysReasoning: false,
+    });
+
+    expect(azure).toEqual({ model: "my-qwen", messages: [] });
+    expect(elsewhere).toBe(body);
+  });
+
+  test("Azure keeps the reasoning text of a model that replays it", () => {
+    const body = {
+      input: [{ type: "reasoning", id: "rs_1", content: [{ type: "reasoning_text", text: "t" }] }],
+    };
+    const kept = withTemplatePassthroughRewrites({
+      templateId: "azure",
+      format: "openai_responses",
+      body,
+      replaysReasoning: true,
+    });
+    expect(kept).toBe(body);
   });
 });

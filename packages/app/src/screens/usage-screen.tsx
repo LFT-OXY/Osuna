@@ -203,17 +203,18 @@ const styles = StyleSheet.create((theme) => {
       alignItems: "stretch",
       gap: theme.spacing[4],
     },
+    // 只在并排（md）时按 4:8 分宽；窄窗口里上下排，高度跟着内容，否则 flexBasis 0 会把卡片压扁叠在一起。
     sideColumn: {
-      flexGrow: 4,
+      flexGrow: { xs: 0, md: 4 },
       flexShrink: 1,
-      flexBasis: 0,
+      flexBasis: { xs: "auto", md: 0 },
       minWidth: 0,
       gap: theme.spacing[4],
     },
     mainColumn: {
-      flexGrow: 8,
+      flexGrow: { xs: 0, md: 8 },
       flexShrink: 1,
-      flexBasis: 0,
+      flexBasis: { xs: "auto", md: 0 },
       minWidth: 0,
       gap: theme.spacing[4],
     },

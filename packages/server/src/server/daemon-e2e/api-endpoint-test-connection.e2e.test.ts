@@ -45,6 +45,12 @@ async function startUpstream(): Promise<FakeUpstream> {
       >;
       upstream.requests.push({ url: request.url ?? "", headers: request.headers, body });
       if (upstream.hang) return;
+      // /echo 把收到的认证头写进报错里（有的中转站就是这样回的）。
+      if ((request.url ?? "").startsWith("/echo/")) {
+        const message = `bad token: ${String(request.headers.authorization)}`;
+        sendJson(response, 400, { error: { message } });
+        return;
+      }
       const authorized =
         request.headers.authorization === `Bearer ${TYPED_KEY}` ||
         request.headers.authorization === `Bearer ${SAVED_KEY}`;
@@ -130,6 +136,8 @@ describe("API endpoint connection test over the daemon RPC", () => {
       defaultModelId: "relay/sonnet",
     });
     if (!saved.endpoint) throw new Error("Expected a saved endpoint");
+    // 新建时保存当场拉过一次清单（照 magpie）；只看测试发的。
+    upstream.requests.length = 0;
 
     const tested = await client.apiEndpointTestConnection({
       provider: "claude",
@@ -144,6 +152,32 @@ describe("API endpoint connection test over the daemon RPC", () => {
     expect(upstream.requests[0]?.headers.authorization).toBe(`Bearer ${SAVED_KEY}`);
     expect(upstream.requests[0]?.body).toMatchObject({ model: "relay/sonnet", max_tokens: 1 });
     expect(JSON.stringify(tested)).not.toContain(SAVED_KEY);
+  });
+
+  test("an older client's test of a saved endpoint carries its headers and extra body", async () => {
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Relay",
+      baseUrl: `${upstream.origin}/claude`,
+      apiKey: SAVED_KEY,
+      models: [{ id: "relay/sonnet" }],
+      defaultModelId: "relay/sonnet",
+      headers: { "X-Relay-Team": "team-1" },
+      extraBody: { prompt_cache_key: "${sessionId}" },
+    });
+    if (!saved.endpoint) throw new Error("Expected a saved endpoint");
+    upstream.requests.length = 0;
+
+    const tested = await client.apiEndpointTestConnection({
+      provider: "claude",
+      endpointId: saved.endpoint.id,
+      baseUrl: `${upstream.origin}/claude`,
+      modelId: "relay/sonnet",
+    });
+
+    expect(tested.result?.ok).toBe(true);
+    expect(upstream.requests[0]?.headers["x-relay-team"]).toBe("team-1");
+    expect(String(upstream.requests[0]?.body.prompt_cache_key)).toMatch(/^osuna-test-/);
   });
 
   test("reports a rejected key and an unknown model with the status and upstream message", async () => {
@@ -194,14 +228,21 @@ describe("API endpoint connection test over the daemon RPC", () => {
     });
   });
 
-  test("rejects a request without a key or a model before calling upstream", async () => {
+  test("a request without a key carries no key header", async () => {
     const noKey = await client.apiEndpointTestConnection({
       provider: "claude",
       baseUrl: `${upstream.origin}/claude`,
       modelId: "relay/sonnet",
     });
-    expect(noKey).toMatchObject({ result: null, error: { code: "invalid_input" } });
 
+    // 这个假上游要 key：没 key 的请求被 401 拒，结论照常回给用户。
+    expect(noKey).toMatchObject({ error: null, result: { ok: false, status: 401 } });
+    expect(upstream.requests).toHaveLength(1);
+    expect(upstream.requests[0]?.headers.authorization).toBeUndefined();
+    expect(upstream.requests[0]?.headers["x-api-key"]).toBeUndefined();
+  });
+
+  test("rejects a request without a model before calling upstream", async () => {
     const noModel = await client.apiEndpointTestConnection({
       provider: "claude",
       baseUrl: `${upstream.origin}/claude`,
@@ -268,6 +309,8 @@ describe("API endpoint connection test by base URL and request format", () => {
       models: models.map((id) => ({ id })),
     });
     if (!saved.endpoint) throw new Error(`Expected a saved endpoint: ${saved.error?.message}`);
+    // 新建时保存当场拉过一次清单（照 magpie）；只看测试发的。
+    upstream.requests.length = 0;
     return saved.endpoint.id;
   }
 
@@ -295,6 +338,62 @@ describe("API endpoint connection test by base URL and request format", () => {
     ]);
   });
 
+  // 接口管理好用性工单 15：测试发的是这家的上游模型名（magpie test.go 的 UpstreamName），结果仍按模型 id 说。
+  test("a saved endpoint is asked for a model under its upstream name", async () => {
+    const endpointId = await saveHostEndpoint(["claude-sonnet-4-5"]);
+    const [stored] = (await client.apiEndpointList("claude")).endpoints;
+    const resaved = await client.apiEndpointSave({
+      provider: "claude",
+      endpointId,
+      name: "Relay",
+      baseUrls: stored?.baseUrls ?? [],
+      models: [{ id: "claude-sonnet-4-5" }],
+      modelSettings: { defaults: { upstreamName: "anthropic/*" } },
+    });
+    expect(resaved.error).toBeNull();
+    upstream.requests.length = 0;
+
+    const tested = await client.apiEndpointTestConnection({
+      provider: "claude",
+      endpointId,
+      baseUrl: `${upstream.origin}/claude`,
+      format: "anthropic_messages",
+    });
+
+    expect(tested).toMatchObject({ error: null, result: { ok: true, status: 200 } });
+    expect(upstream.requests.map((request) => request.body.model)).toEqual([
+      "anthropic/claude-sonnet-4-5",
+    ]);
+  });
+
+  test("editing with a newly typed key asks with that key, under the endpoint's upstream name", async () => {
+    const endpointId = await saveHostEndpoint(["claude-sonnet-4-5"]);
+    const [stored] = (await client.apiEndpointList("claude")).endpoints;
+    const resaved = await client.apiEndpointSave({
+      provider: "claude",
+      endpointId,
+      name: "Relay",
+      baseUrls: stored?.baseUrls ?? [],
+      models: [{ id: "claude-sonnet-4-5" }],
+      modelSettings: { models: { "claude-sonnet-4-5": { upstreamName: "vendor/sonnet" } } },
+    });
+    expect(resaved.error).toBeNull();
+    upstream.requests.length = 0;
+
+    const tested = await client.apiEndpointTestConnection({
+      provider: "claude",
+      endpointId,
+      apiKey: TYPED_KEY,
+      baseUrl: `${upstream.origin}/claude`,
+      format: "anthropic_messages",
+    });
+
+    expect(tested).toMatchObject({ error: null, result: { ok: true, status: 200 } });
+    expect(
+      upstream.requests.map((request) => [request.headers.authorization, request.body.model]),
+    ).toEqual([[`Bearer ${TYPED_KEY}`, "vendor/sonnet"]]);
+  });
+
   test("a rejected key is told apart as auth_failed", async () => {
     const tested = await client.apiEndpointTestConnection({
       provider: "claude",
@@ -311,13 +410,26 @@ describe("API endpoint connection test by base URL and request format", () => {
     expect(JSON.stringify(tested)).not.toContain("sk-wrong");
   });
 
-  test("with no model selected it lists the upstream models first and asks with one of them", async () => {
+  test("with no model selected it asks with one from the list fetched when it was saved", async () => {
     const endpointId = await saveHostEndpoint([]);
 
     const tested = await client.apiEndpointTestConnection({
       provider: "claude",
       endpointId,
       baseUrl: `${upstream.origin}/claude`,
+      format: "anthropic_messages",
+    });
+
+    expect(tested.result?.ok).toBe(true);
+    expect(upstream.requests.map((request) => request.url)).toEqual(["/claude/v1/messages"]);
+    expect(upstream.requests[0]?.body.model).toBe("claude-opus-4");
+  });
+
+  test("with no model selected and no list kept it lists the upstream models first", async () => {
+    const tested = await client.apiEndpointTestConnection({
+      provider: "claude",
+      baseUrl: `${upstream.origin}/claude`,
+      apiKey: TYPED_KEY,
       format: "anthropic_messages",
     });
 
@@ -342,5 +454,257 @@ describe("API endpoint connection test by base URL and request format", () => {
       error: null,
       result: { ok: false, status: 404, error: { code: "upstream_error" } },
     });
+  });
+
+  test("a Bedrock endpoint is asked per format with a model served there, its key in the header that format takes", async () => {
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Amazon Bedrock",
+      baseUrls: [
+        { format: "anthropic_messages", url: `${upstream.origin}/claude` },
+        { format: "openai_chat", url: `${upstream.origin}/chat-only/v1` },
+      ],
+      apiKey: SAVED_KEY,
+      models: [{ id: "global.anthropic.claude-sonnet-5" }, { id: "deepseek.v3.2" }],
+      templateId: "bedrock",
+      region: "us-east-1",
+    });
+    const endpointId = saved.endpoint?.id ?? "";
+
+    await client.apiEndpointTestConnection({
+      provider: "claude",
+      endpointId,
+      baseUrl: `${upstream.origin}/claude`,
+      format: "anthropic_messages",
+    });
+    await client.apiEndpointTestConnection({
+      provider: "claude",
+      endpointId,
+      baseUrl: `${upstream.origin}/chat-only/v1`,
+      format: "openai_chat",
+    });
+
+    const [anthropic, chat] = upstream.requests;
+    expect(anthropic?.body.model).toBe("global.anthropic.claude-sonnet-5");
+    expect(anthropic?.headers["x-api-key"]).toBe(SAVED_KEY);
+    expect(anthropic?.headers.authorization).toBeUndefined();
+    expect(chat?.url).toBe("/chat-only/v1/chat/completions");
+    expect(chat?.body).toMatchObject({ model: "deepseek.v3.2", max_completion_tokens: 16 });
+    expect(chat?.body.max_tokens).toBeUndefined();
+    expect(chat?.headers.authorization).toBe(`Bearer ${SAVED_KEY}`);
+    expect(chat?.headers["x-api-key"]).toBeUndefined();
+  });
+
+  test("an unsaved Bedrock form is asked with a built-in model served there, without listing", async () => {
+    const tested = await client.apiEndpointTestConnection({
+      provider: "claude",
+      baseUrl: `${upstream.origin}/claude`,
+      apiKey: TYPED_KEY,
+      format: "anthropic_messages",
+      templateId: "bedrock",
+      region: "us-east-1",
+    });
+
+    // 假上游只认 Bearer：Bedrock 的 Anthropic 地址只带 x-api-key，这里只看发了什么。
+    expect(tested.error).toBeNull();
+    expect(upstream.requests.map((request) => request.url)).toEqual(["/claude/v1/messages"]);
+    expect(upstream.requests[0]?.body.model).toBe("global.anthropic.claude-opus-5-5");
+    expect(upstream.requests[0]?.headers["x-api-key"]).toBe(TYPED_KEY);
+    expect(upstream.requests[0]?.headers.authorization).toBeUndefined();
+  });
+
+  test("an unsaved form's models are tried before the saved endpoint's", async () => {
+    const endpointId = await saveHostEndpoint(["claude-sonnet-4-5"]);
+
+    const tested = await client.apiEndpointTestConnection({
+      provider: "claude",
+      endpointId,
+      baseUrl: `${upstream.origin}/claude`,
+      format: "anthropic_messages",
+      modelIds: ["gpt-5", "claude-from-form"],
+    });
+
+    expect(tested.result?.ok).toBe(true);
+    expect(upstream.requests.map((request) => [request.url, request.body.model])).toEqual([
+      ["/claude/v1/messages", "claude-from-form"],
+    ]);
+    expect(upstream.requests[0]?.headers.authorization).toBe(`Bearer ${SAVED_KEY}`);
+  });
+
+  // 接口管理好用性工单 22：请求头、附加请求体与 key 头对测试连接也生效，测试有自己的会话（magpie tested）。
+  test("a saved endpoint's headers, extra body and key header go with the test, on a session of its own", async () => {
+    const endpointId = await saveHostEndpoint(["claude-sonnet-4-5", "gpt-5"]);
+    const [stored] = (await client.apiEndpointList("claude")).endpoints;
+    const resaved = await client.apiEndpointSave({
+      provider: "claude",
+      endpointId,
+      name: "Relay",
+      baseUrls: stored?.baseUrls ?? [],
+      models: [{ id: "claude-sonnet-4-5" }, { id: "gpt-5" }],
+      headers: { "X-Relay-Team": "team-1", "Anthropic-Beta": "relay-beta" },
+      extraBody: { prompt_cache_key: "${sessionId}", "!max_tokens": 8 },
+      keyHeader: "bearer",
+    });
+    expect(resaved.error).toBeNull();
+    upstream.requests.length = 0;
+
+    for (const [format, url] of [
+      ["anthropic_messages", `${upstream.origin}/claude`],
+      ["openai_responses", `${upstream.origin}/codex/v1`],
+    ] as const) {
+      const tested = await client.apiEndpointTestConnection({
+        provider: "claude",
+        endpointId,
+        baseUrl: url,
+        format,
+      });
+      expect(tested.result?.ok).toBe(true);
+    }
+
+    const [anthropic, responses] = upstream.requests;
+    expect(anthropic?.headers["x-relay-team"]).toBe("team-1");
+    expect(anthropic?.headers["anthropic-beta"]).toBe("relay-beta");
+    // 只放 Bearer：第三方 Anthropic 地址照用户选的。
+    expect(anthropic?.headers["x-api-key"]).toBeUndefined();
+    expect(anthropic?.headers.authorization).toBe(`Bearer ${SAVED_KEY}`);
+    expect(anthropic?.body.max_tokens).toBe(8);
+    expect(String(anthropic?.body.prompt_cache_key)).toMatch(/^osuna-test-[0-9a-f]{12}$/);
+    expect(responses?.headers["x-relay-team"]).toBe("team-1");
+    expect(String(responses?.body.prompt_cache_key)).toMatch(/^osuna-test-/);
+  });
+
+  test("an unsaved form's headers, extra body and key header are used instead of the saved ones", async () => {
+    const endpointId = await saveHostEndpoint(["claude-sonnet-4-5"]);
+    const [stored] = (await client.apiEndpointList("claude")).endpoints;
+    await client.apiEndpointSave({
+      provider: "claude",
+      endpointId,
+      name: "Relay",
+      baseUrls: stored?.baseUrls ?? [],
+      models: [{ id: "claude-sonnet-4-5" }],
+      headers: { "X-Relay-Team": "saved" },
+      extraBody: { service_tier: "saved" },
+    });
+    upstream.requests.length = 0;
+
+    const tested = await client.apiEndpointTestConnection({
+      provider: "claude",
+      endpointId,
+      baseUrl: `${upstream.origin}/claude`,
+      format: "anthropic_messages",
+      headers: { "X-Relay-Team": "typed" },
+      extraBody: { service_tier: "typed" },
+      keyHeader: "bearer",
+    });
+
+    expect(tested.result?.ok).toBe(true);
+    expect(upstream.requests[0]?.headers["x-relay-team"]).toBe("typed");
+    expect(upstream.requests[0]?.headers["x-api-key"]).toBeUndefined();
+    expect(upstream.requests[0]?.body.service_tier).toBe("typed");
+  });
+
+  // 接口管理好用性工单 22 复查：用户填的认证头值和 key 一样打码；发不出去的头每个请求报 invalid_header。
+  test("an endpoint echoing the user's Authorization never gets it back to the client, in a test, a listing or a detection", async () => {
+    const own = "Bearer sk-user-own-secret-42";
+    const headers = { Authorization: own };
+    const tested = await client.apiEndpointTestConnection({
+      provider: "claude",
+      baseUrl: `${upstream.origin}/echo`,
+      format: "anthropic_messages",
+      modelId: "claude-sonnet-4-5",
+      headers,
+    });
+    const listed = await client.apiEndpointFetchModels({
+      provider: "claude",
+      baseUrl: `${upstream.origin}/echo`,
+      format: "anthropic_messages",
+      preview: true,
+      headers,
+    });
+    const detected = await client.apiEndpointDetectFormats({
+      baseUrl: `${upstream.origin}/echo`,
+      modelId: "claude-sonnet-4-5",
+      headers,
+    });
+
+    expect(upstream.requests[0]?.headers.authorization).toBe(own);
+    expect(tested.result?.error?.message).toContain("bad token: ***");
+    expect(listed.error?.message).toContain("bad token: ***");
+    for (const answer of [tested, listed, detected]) {
+      expect(JSON.stringify(answer)).not.toContain("sk-user-own-secret-42");
+    }
+  });
+
+  test("a header that can't be sent fails each check with invalid_header and its name, and nothing is sent", async () => {
+    const headers = { "X Team": "a" };
+    const tested = await client.apiEndpointTestConnection({
+      provider: "claude",
+      baseUrl: `${upstream.origin}/claude`,
+      apiKey: TYPED_KEY,
+      format: "anthropic_messages",
+      modelId: "claude-sonnet-4-5",
+      headers,
+    });
+    const listed = await client.apiEndpointFetchModels({
+      provider: "claude",
+      baseUrl: `${upstream.origin}/claude`,
+      apiKey: TYPED_KEY,
+      format: "anthropic_messages",
+      preview: true,
+      headers,
+    });
+    const detected = await client.apiEndpointDetectFormats({
+      baseUrl: `${upstream.origin}/claude`,
+      apiKey: TYPED_KEY,
+      modelId: "claude-sonnet-4-5",
+      headers,
+    });
+
+    expect(tested.result?.error).toMatchObject({
+      code: "invalid_header",
+      params: { name: "X Team" },
+    });
+    expect(listed.error).toMatchObject({ code: "invalid_header", params: { name: "X Team" } });
+    expect(detected.results.map((result) => result.code)).toEqual([
+      "invalid_header",
+      "invalid_header",
+      "invalid_header",
+    ]);
+    expect(upstream.requests).toEqual([]);
+  });
+
+  test("an unsaved Azure form is asked with the key in api-key alone", async () => {
+    await client.apiEndpointTestConnection({
+      provider: "claude",
+      baseUrl: `${upstream.origin}/codex/v1`,
+      apiKey: TYPED_KEY,
+      format: "openai_responses",
+      modelId: "my-gpt-deployment",
+      templateId: "azure",
+    });
+
+    expect(upstream.requests[0]?.headers["api-key"]).toBe(TYPED_KEY);
+    expect(upstream.requests[0]?.headers.authorization).toBeUndefined();
+  });
+
+  test("an Azure endpoint is asked with the key in api-key alone", async () => {
+    const saved = await client.apiEndpointSave({
+      provider: "codex",
+      name: "Azure OpenAI",
+      baseUrls: [{ format: "openai_responses", url: `${upstream.origin}/codex/v1` }],
+      apiKey: SAVED_KEY,
+      models: [{ id: "my-gpt-deployment" }],
+      templateId: "azure",
+    });
+
+    await client.apiEndpointTestConnection({
+      provider: "codex",
+      endpointId: saved.endpoint?.id ?? "",
+      baseUrl: `${upstream.origin}/codex/v1`,
+      format: "openai_responses",
+    });
+
+    expect(upstream.requests[0]?.headers["api-key"]).toBe(SAVED_KEY);
+    expect(upstream.requests[0]?.headers.authorization).toBeUndefined();
   });
 });

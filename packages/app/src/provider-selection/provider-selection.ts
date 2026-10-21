@@ -5,6 +5,11 @@ import type {
   ApiEndpointModelGroup,
   ProviderSnapshotEntry,
 } from "@getpaseo/protocol/agent-types";
+import {
+  apiEndpointNameDisplayOf,
+  showsEndpointNames,
+  type ApiEndpointNameDisplay,
+} from "@getpaseo/protocol/api-endpoint/endpoint-names";
 import type { AgentProviderDefinition } from "@getpaseo/protocol/provider-manifest";
 import type { DraftCommandTarget } from "@/hooks/use-agent-commands-query";
 import { i18n } from "@/i18n/i18next";
@@ -24,13 +29,16 @@ export interface ProviderSelectionModelRow {
   modelLabel: string;
   description?: string;
   isDefault?: boolean;
-  // 第三方接口启用时这一行所属的接口：组标题是接口名，index 是创建顺序。
+  // 第三方接口启用时这一行所属的接口：组标题是接口名，index 是接口顺序。
   apiEndpointGroup?: ApiEndpointRowGroup;
 }
 
 export interface ApiEndpointRowGroup {
   name: string;
   index: number;
+  // 接口名怎么显示（主机的接口名显示方式）：heading 每家一个组标题（一直显示）；inline 写在这一行模型名后面
+  // （同名时显示，这一行和别家撞名）；none 不写。
+  nameShown: "heading" | "inline" | "none";
 }
 
 function buildModelRowKey(provider: string, modelId: string): string {
@@ -120,24 +128,35 @@ export function selectableEntryModels(
   return filterSelectableModels(groupedModels ?? entry.models ?? null);
 }
 
-function buildApiEndpointGroupRows(
-  provider: string,
-  providerLabel: string,
-  groups: ApiEndpointModelGroup[],
-): ProviderSelectionModelRow[] {
-  return groups.flatMap((group, index) => {
-    const models = filterSelectableModels(group.models) ?? [];
-    return models.map((model) => ({
+function buildApiEndpointGroupRows(input: {
+  provider: string;
+  providerLabel: string;
+  groups: ApiEndpointModelGroup[];
+  nameDisplay: ApiEndpointNameDisplay;
+}): ProviderSelectionModelRow[] {
+  const { provider, providerLabel } = input;
+  const listed = input.groups.flatMap((group, index) =>
+    (filterSelectableModels(group.models) ?? []).map((model) => ({ group, index, model })),
+  );
+  const isHeading = input.nameDisplay === "always";
+  const shows = showsEndpointNames({
+    display: input.nameDisplay,
+    names: listed.map(({ model }) => model.label),
+  });
+  return listed.map(({ group, index, model }, position) => {
+    let nameShown: ApiEndpointRowGroup["nameShown"] = "heading";
+    if (!isHeading) nameShown = shows[position] ? "inline" : "none";
+    return {
       favoriteKey: buildModelRowKey(provider, model.id),
       provider,
       providerLabel,
       modelId: model.id,
       modelLabel: model.label,
-      // 不显示 id：它带着接口标识。
-      description: model.description,
+      // 不显示 id：它带着接口标识。撞名的这一行在模型名后面写接口名。
+      description: nameShown === "inline" ? group.name : model.description,
       isDefault: model.isDefault,
-      apiEndpointGroup: { name: group.name, index },
-    }));
+      apiEndpointGroup: { name: group.name, index, nameShown },
+    };
   });
 }
 
@@ -147,7 +166,20 @@ function buildEntryModelSelection(
 ): ProviderModelSelection {
   const groups = entry.apiEndpointModelGroups;
   if (groups && groups.length > 0) {
-    return { kind: "models", rows: buildApiEndpointGroupRows(entry.provider, label, groups) };
+    return {
+      kind: "models",
+      rows: buildApiEndpointGroupRows({
+        provider: entry.provider,
+        providerLabel: label,
+        groups,
+        nameDisplay:
+          // COMPAT(apiEndpointNameDisplay): added in v0.17.0, remove fallback after 2027-04-20. 老主机不发，当一直显示。
+          entry.apiEndpointNameDisplay === undefined
+            ? "always"
+            : // 认不出的方式（以后加的）当一直显示，长久保留。
+              apiEndpointNameDisplayOf(entry.apiEndpointNameDisplay),
+      }),
+    };
   }
   if ((entry.models?.length ?? 0) > 0) {
     return buildModelSelection(entry.provider, label, entry.models ?? null);
@@ -304,7 +336,8 @@ export function buildSelectedTriggerLabel(modelLabel: string): string {
  * label ships on several providers at once.
  */
 export function buildProviderQualifiedDescription(row: ProviderSelectionModelRow): string {
-  const detail = row.apiEndpointGroup?.name ?? row.description;
+  const group = row.apiEndpointGroup;
+  const detail = group && group.nameShown !== "none" ? group.name : row.description;
   return detail ? `${row.providerLabel} · ${detail}` : row.providerLabel;
 }
 

@@ -5,7 +5,7 @@
 
 import { randomBytes } from "node:crypto";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
-import type { ModelFacts } from "../../model-facts.js";
+import { publishedOutput, type EndpointModelFacts } from "../../model-facts.js";
 import { isRecord, parseJson } from "../../upstream-http.js";
 
 /*
@@ -554,11 +554,12 @@ export function nearestEffort(want: Effort, levels: string[]): Effort {
 export function requestForModel(input: {
   request: GatewayRequest;
   to: ApiEndpointRequestFormat;
-  facts: ModelFacts;
+  facts: EndpointModelFacts;
 }): GatewayRequest {
   const { request, facts } = input;
   const messages = input.to === "anthropic_messages";
-  const levels = facts.efforts;
+  // 用户在模型设置里只列几档不妨碍 Agent 要别的：挑档位按模型自己的（magpie Efforts）。
+  const levels = facts.vendorEfforts ?? facts.efforts;
   const nearest = nearestEffort(request.effort, levels ?? []);
   const levelless = levels !== undefined && levels.length === 0;
   const aboveHigh = EFFORT_RANK.indexOf(nearest) > EFFORT_RANK.indexOf("high");
@@ -572,12 +573,9 @@ export function requestForModel(input: {
   return { ...request, effort, maxTokens, temperature, topP };
 }
 
-/** 模型公布的回复上限，不超过它的窗口；不知道是 0（magpie OutputWithin）。 */
-function publishedOutput(facts: ModelFacts): number {
-  const output = facts.output ?? 0;
-  const context = facts.context ?? 0;
-  const pastWindow = context > 0 && output > context;
-  return pastWindow ? context : output;
+/** 关掉推理：OpenAI 格式发 effort none（openAIEffort），照 magpie 的 withBodyEffort(…, "none")。 */
+export function reasoningOff(request: GatewayRequest): GatewayRequest {
+  return { ...request, thinkOff: true, effort: request.effort === "" ? "low" : request.effort };
 }
 
 /** 上游不让关推理：打开推理、用最低档重问（magpie thinkingBackOn）。 */

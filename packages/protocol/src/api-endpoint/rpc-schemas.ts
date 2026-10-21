@@ -108,12 +108,115 @@ export const ApiEndpointCooldownSchema = z.object({
 });
 export type ApiEndpointCooldown = z.infer<typeof ApiEndpointCooldownSchema>;
 
+/**
+ * 服务范围（Model scope）：vendor「跟随接口清单」——在服务的模型是上游清单去掉没有对应地址的模型后的前 24 个，
+ * 加上手动添加的；picked「只用挑选的」——用户勾的那些。线上是字符串，以后加范围时老客户端照常解析；缺省当 picked。
+ */
+export const API_ENDPOINT_MODEL_SCOPES = ["vendor", "picked"] as const;
+export type ApiEndpointModelScope = (typeof API_ENDPOINT_MODEL_SCOPES)[number];
+
+/**
+ * 模型设置（Model settings）：用户给这家某个模型手改的资料，按模型 id 记，外加一份整家默认（Defaults for all models）。
+ * 取值顺序：单个模型 → 整家默认 → 上游清单 → models.dev → 内置默认（model-settings.ts 的 resolveModelFacts）。
+ * name：显示名；context、output、compact：上下文、回复上限、压缩阈值，都按 token 数；images：能不能看图；
+ * efforts：留下的思考档位，空数组是一档不留——中转站不发任何思考参数。没有的项用自动取到的值。
+ * upstreamName：上游模型名，中转站发往这家时换成它，`*` 换成模型 id（model-settings.ts 的 upstreamModelName）；
+ * format：只用这种格式（请求格式），这家没有这种格式的地址时作废（pinnedFormat）。老 daemon 不发也不认。
+ */
+export const ApiEndpointModelSettingSchema = z.object({
+  name: z.string().optional(),
+  context: z.number().optional(),
+  output: z.number().optional(),
+  efforts: z.array(z.string()).optional(),
+  images: z.boolean().optional(),
+  compact: z.number().optional(),
+  upstreamName: z.string().optional(),
+  format: z.string().optional(),
+});
+export type ApiEndpointModelSetting = z.infer<typeof ApiEndpointModelSettingSchema>;
+
+export const ApiEndpointModelDefaultsSchema = ApiEndpointModelSettingSchema.pick({
+  context: true,
+  output: true,
+  compact: true,
+  upstreamName: true,
+});
+export type ApiEndpointModelDefaults = z.infer<typeof ApiEndpointModelDefaultsSchema>;
+
+export const ApiEndpointModelSettingsSchema = z.object({
+  defaults: ApiEndpointModelDefaultsSchema.optional(),
+  models: z.record(z.string(), ApiEndpointModelSettingSchema).optional(),
+});
+export type ApiEndpointModelSettings = z.infer<typeof ApiEndpointModelSettingsSchema>;
+
+/**
+ * 长对话（Long conversations，整台主机共用，照 magpie 的 FullContext 与 CompactAt）：告诉 Codex、Claude Code 的窗口。
+ * fullContext 为 true 时告诉模型的整个窗口；否则比压缩阈值大的窗口说成压缩阈值——compactAt，没有就是 272K。
+ * 单个模型或整家默认的压缩阈值在它之前。都没有即关着、272K。老 daemon 不发。
+ */
+export const ApiEndpointLongConversationsSchema = z.object({
+  fullContext: z.boolean().optional(),
+  compactAt: z.number().optional(),
+});
+export type ApiEndpointLongConversations = z.infer<typeof ApiEndpointLongConversationsSchema>;
+
+/** Osuna 自动取到的模型资料（上游清单在前，models.dev 补上）：不含用户的模型设置，模型设置窗口拿它当「默认」。 */
+export const ApiEndpointModelFactsSchema = z.object({
+  name: z.string().optional(),
+  context: z.number().optional(),
+  output: z.number().optional(),
+  efforts: z.array(z.string()).optional(),
+  images: z.boolean().optional(),
+});
+export type ApiEndpointModelFacts = z.infer<typeof ApiEndpointModelFactsSchema>;
+
 /** daemon 上次向上游列出的模型（详情页按格式拉取后记下）；只用来挑选，不等于已选。 */
 export const ApiEndpointModelCatalogSchema = z.object({
   fetchedAt: z.string(),
   models: z.array(ApiEndpointModelSchema),
 });
 export type ApiEndpointModelCatalog = z.infer<typeof ApiEndpointModelCatalogSchema>;
+
+/**
+ * 用户加给这家每个请求的（Headers，ADR 0008）：请求头（名字照用户写的）、附加请求体（JSON 对象，名字前 `!` 是强制覆盖）、
+ * key 放哪个头（API_ENDPOINT_KEY_HEADERS 之一，线上是字符串，不认识的当 both），
+ * 以及不校验证书（insecureTls：只对这家自己各格式地址的 https 主机起作用，只有「自定义」加的接口能开，见 takesInsecureTls）。
+ * 接口、保存与保存前的检查共用这几项。
+ */
+export const ApiEndpointRequestExtrasSchema = z.object({
+  headers: z.record(z.string(), z.string()).optional(),
+  extraBody: z.record(z.string(), z.unknown()).optional(),
+  keyHeader: z.string().optional(),
+  insecureTls: z.boolean().optional(),
+});
+export type ApiEndpointRequestExtras = z.infer<typeof ApiEndpointRequestExtrasSchema>;
+
+/**
+ * 冷却设置（Cooldown settings，照 magpie 的 QuotaRest、RestCap，见 cooldown-settings.ts）：都以分钟计，0 或没有即用中转站自己的。
+ * quotaRestMinutes：额度用完、厂商没说何时恢复时冷却多久（缺省 15 分钟；厂商给的时间仍优先）。
+ * quotaResetAt：或者冷却到每天的这个时刻（magpie QuotaResetAt）：「08:00」按 daemon 所在机器的时钟，「00:00+08:00」按厂商的时差，
+ * 「16:00Z」按 UTC（读法见 parseResetAt）；与 quotaRestMinutes 二选一，两个都给时它说了算。
+ * restCapMinutes：接连失败或接连被限流时冷却最长多久（缺省失败 10 分钟、限流 30 分钟；厂商说的「多久后再试」仍优先）。
+ * noFailRest：原因不明的失败不冷却（magpie RestCapOff），开着时 restCapMinutes 不存、限流仍按缺省。老 daemon 不发、忽略。
+ */
+export const ApiEndpointCooldownSettingsSchema = z.object({
+  quotaRestMinutes: z.number().optional(),
+  quotaResetAt: z.string().optional(),
+  restCapMinutes: z.number().optional(),
+  noFailRest: z.boolean().optional(),
+});
+export type ApiEndpointCooldownSettings = z.infer<typeof ApiEndpointCooldownSettingsSchema>;
+
+/**
+ * 这家能用的一种 CLI 测法（ADR 0013）：`method` 是 test_models 的测法（claude_code、codex）。只列这家提供的：
+ * 按 Claude Code 测只给有 Anthropic 地址的中转服务（模板分组是 relay，或「自定义」加的），按 Codex 测给有 Responses 或 Chat 地址的。
+ * `unavailable` 为 null 即现在就能测；否则是现在测不了的原因（cli_sample_missing：还没有 Claude Code 请求经过中转站）。
+ */
+export const ApiEndpointTestAsSchema = z.object({
+  method: z.string(),
+  unavailable: z.object({ code: z.string(), message: z.string() }).nullable(),
+});
+export type ApiEndpointTestAs = z.infer<typeof ApiEndpointTestAsSchema>;
 
 export const ApiEndpointSchema = z.object({
   id: z.string(),
@@ -134,8 +237,34 @@ export const ApiEndpointSchema = z.object({
   catalog: ApiEndpointModelCatalogSchema.optional(),
   // 用户手动添加的模型名，不管开没开都留在清单里。
   manualModels: z.array(ApiEndpointModelSchema).optional(),
+  // 服务范围（API_ENDPOINT_MODEL_SCOPES）；没有即 picked。models 总是在服务的模型。老 daemon 不发。
+  modelScope: z.string().optional(),
+  // 自动勾选规则：glob（* 任意字符，不分大小写）或 `re:` 开头的整名正则；只在 picked 时起作用。老 daemon 不发。
+  autoPick: z.array(z.string()).optional(),
   // 「自己能联网搜索」（ADR 0009）：只在这家有 Anthropic 或 OpenAI Responses 地址时算数；老 daemon 不发即为关。
   searchesWeb: z.boolean().optional(),
+  // 接口标识：默认模型写「接口标识/模型名」时用的那段；列表搜索也按它找。老 daemon 不发。
+  slug: z.string().optional(),
+  // 列表行上的 key 打码（头尾各 4 个字符）；没有 key 时不发，老 daemon 不发。
+  apiKeyMask: z.string().optional(),
+  // 默认模型先去这家的 Agent（provider）：默认模型指定了这家，或光秃秃的名字在接口顺序里最先由这家提供；老 daemon 不发。
+  defaultModelProviders: z.array(z.string()).optional(),
+  // 从哪个模板（Template）加的、选的哪个区域或套餐；「自定义」加的没有。老 daemon 不发。
+  templateId: z.string().optional(),
+  region: z.string().optional(),
+  // 「自定义」加的接口自己选的图标：内置图标的名字（如 deepseek-color），或 `file:<名字>`——daemon 存的图片副本，
+  // 经 read_icon 取回（照 magpie）。没有就按模板或名称首字画。老 daemon 不发。
+  icon: z.string().optional(),
+  // 模型设置；没有即都用自动取到的值。老 daemon 不发。
+  modelSettings: ApiEndpointModelSettingsSchema.optional(),
+  // 在服务的、上游清单里的与手动添加的模型各自自动取到的资料，按模型 id；老 daemon 不发。
+  modelFacts: z.record(z.string(), ApiEndpointModelFactsSchema).optional(),
+  // 「按 Claude Code / Codex 的样子测」这家提供哪几种；老 daemon 不发，即都不提供。
+  testsAs: z.array(ApiEndpointTestAsSchema).optional(),
+  // 请求头、附加请求体、key 放哪个头与不校验证书（ApiEndpointRequestExtrasSchema）；都只在设了时发，老 daemon 不发。
+  ...ApiEndpointRequestExtrasSchema.shape,
+  // 冷却设置（cooldown 是正在冷却的状态，这是用户设的时长）；设了才发，老 daemon 不发。
+  cooldownSettings: ApiEndpointCooldownSettingsSchema.optional(),
 });
 export type ApiEndpoint = z.infer<typeof ApiEndpointSchema>;
 
@@ -258,19 +387,60 @@ export const ApiEndpointListResponseSchema = z.object({
     agentIssues: z.record(z.string(), z.array(ApiEndpointAgentIssueSchema)).optional(),
     // 每个 Agent 要重开的副本，按 provider 索引，与请求的 provider 无关；老 daemon 不发。
     reopenHints: z.record(z.string(), z.array(ApiEndpointReopenHintSchema)).optional(),
+    // 整台主机的长对话设置，与请求的 provider 无关；老 daemon 不发。
+    longConversations: ApiEndpointLongConversationsSchema.optional(),
+    // 已禁用的模型（整台主机共用，照存的样子）：完整 id 或 glob，不分大小写；老 daemon 不发。
+    disabledModels: z.array(z.string()).optional(),
+    // 接口名显示方式（endpoint-names.ts 的 API_ENDPOINT_NAME_DISPLAYS），整台主机共用；没设为 always，老 daemon 不发。
+    endpointNameDisplay: z.string().optional(),
+    // 接口名显示方式管不到的 Agent（provider）：它的模型列表里本来就没有 Osuna 给的接口名
+    // （用 API key 接的 Codex 只列光秃秃的名字）。老 daemon 不发。
+    endpointNamesUnreached: z.array(z.string()).optional(),
     error: ApiEndpointErrorSchema.nullable(),
   }),
 });
 export type ApiEndpointListResponse = z.infer<typeof ApiEndpointListResponseSchema>;
 
 /**
- * 没有 endpointId 是新建，有则更新。更新时省略 apiKey 表示保留原 key；
- * 新建时 apiKey 必填。modelMapping 每次都整份提交，省略即不映射。
+ * 没有 endpointId 是新建，有则更新。更新时省略 apiKey 表示保留原 key。
+ * 新建时省略 apiKey 即这家没有 key，发请求时不带认证头；老 daemon（没有 apiEndpointManagement）新建时要求 apiKey。
+ * modelMapping 每次都整份提交，省略即不映射；其余省略的字段保留这家原来的值。
  *
  * 新客户端带 baseUrls，不带 baseUrl / defaultModelId，models 可以为空；接口开关不在这里改。
  * 老客户端带 baseUrl（按 provider 落进对应格式）与 defaultModelId。
  * manualModels 省略即保留这家已有的手动添加模型；拉回来的上游清单只由 fetch_models 改。
  * searchesWeb 省略即保留这家原来的「自己能联网搜索」，老客户端保存时不会把它关掉。
+ *
+ * copyOf（复制，Duplicate）：新建时从这家起步——请求没给的字段（上游清单、手动添加的模型、联网搜索开关与以后加的设置）
+ * 取它的，apiKey 留空就用它的 key；名称、标识重了 daemon 自动避让。与 endpointId 一起给时拒收。老 daemon 忽略它。
+ *
+ * templateId、region：从哪个模板加的、选的哪个区域或套餐（地址由客户端按模板填好放进 baseUrls）。
+ * 不认识的模板、不属于它的区域拒收；省略即保留这家原来的。老 daemon 忽略它们。
+ *
+ * icon：「自定义」加的接口的图标（取值见 ApiEndpointSchema.icon）；null 去掉，省略即保留。`file:` 的要先经 store_icon 存过；
+ * 从模板加的接口带图标拒收。老 daemon 忽略它。
+ *
+ * modelScope：服务范围，省略即保留这家原来的（新建时为 picked）；vendor 时 models 由 daemon 按清单算，请求里的忽略。
+ * 不认识的范围拒收。autoPick：自动勾选规则，整份替换，空数组清掉；改了规则时当前清单里匹配的也勾上（照 magpie）。
+ * 不是规则的（没有 *、不以 re: 开头）或读不懂的拒收。老 daemon 忽略这两项。
+ *
+ * modelSettings：模型设置，整份替换（ApiEndpointModelSettingsSchema）；省略即保留这家原来的。数不是正整数、档位不是这个模型的、
+ * 显示名超过 80 个字符的拒收。老 daemon 忽略它。
+ *
+ * catalog：添加窗口里保存前拉到的上游清单，随保存记作这家的上游清单（拉取时间记为保存时刻）；省略即保留这家原来的
+ * （复制时是原来那家的）。老 daemon 忽略它。
+ *
+ * headers、extraBody、keyHeader：请求头、附加请求体、key 放哪个头，各自整份替换（空对象、both 清掉），省略即保留。
+ * 请求头照存（头名不合法的请求发不出去，发时每个请求报 invalid_header）；附加请求体字段没名字、是保留字段（EXTRA_BODY_RESERVED）
+ * 或同名写了两次的拒收（invalid_extra_body，params.reason 为 unnamed / reserved / duplicate，params.field）。
+ * 不认识的 keyHeader 当 both。老 daemon 忽略它们。
+ *
+ * insecureTls：不校验证书，省略即保留、false 关掉。从模板加的接口打开拒收（insecure_tls_template，params.template）。
+ * 老 daemon 忽略它。
+ *
+ * cooldownSettings：冷却设置，整份替换（空对象清掉），省略即保留（复制时是原来那家的）。分钟数不是 0 到八天
+ * （API_ENDPOINT_COOLDOWN_MAX_MINUTES）的整数、时刻读不懂的拒收（invalid_cooldown_settings，params.field 为 quotaRestMinutes /
+ * restCapMinutes / quotaResetAt，params.max）。老 daemon 忽略它。
  */
 export const ApiEndpointSaveRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.save.request"),
@@ -286,6 +456,16 @@ export const ApiEndpointSaveRequestSchema = z.object({
   modelMapping: ApiEndpointModelMappingSchema.optional(),
   manualModels: z.array(ApiEndpointModelSchema).optional(),
   searchesWeb: z.boolean().optional(),
+  copyOf: z.string().optional(),
+  templateId: z.string().optional(),
+  region: z.string().optional(),
+  icon: z.string().nullable().optional(),
+  catalog: z.array(ApiEndpointModelSchema).optional(),
+  modelScope: z.string().optional(),
+  autoPick: z.array(z.string()).optional(),
+  modelSettings: ApiEndpointModelSettingsSchema.optional(),
+  cooldownSettings: ApiEndpointCooldownSettingsSchema.optional(),
+  ...ApiEndpointRequestExtrasSchema.shape,
 });
 export type ApiEndpointSaveRequest = z.infer<typeof ApiEndpointSaveRequestSchema>;
 
@@ -521,12 +701,283 @@ export type ApiEndpointSetEndpointStateResponse = z.infer<
 >;
 
 /**
+ * 接口顺序（Endpoint order）：整体改写，`endpointIds` 是新的顺序。同一个 id 出现两次或不是接口时拒收；
+ * 没列出的接口按现在的先后接在后面（照 magpie SetOrder）。自动切换先后、只写模型名时归哪家都按它。
+ */
+export const ApiEndpointSetOrderRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.set_order.request"),
+  requestId: z.string(),
+  endpointIds: z.array(z.string()),
+});
+export type ApiEndpointSetOrderRequest = z.infer<typeof ApiEndpointSetOrderRequestSchema>;
+
+export const ApiEndpointSetOrderResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.set_order.response"),
+  payload: z.object({
+    requestId: z.string(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointSetOrderResponse = z.infer<typeof ApiEndpointSetOrderResponseSchema>;
+
+/**
+ * 设长对话（照 magpie settings/full-context）：fullContext 开关「完整窗口」；compactAt 为正整数时设全局压缩阈值，
+ * null 回到 272K，省略即不变。设成 272K 等于不设。数不是正整数时拒收。只有声明了 apiEndpointManagement 的 daemon 认它。
+ */
+export const ApiEndpointSetLongConversationsRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.set_long_conversations.request"),
+  requestId: z.string(),
+  fullContext: z.boolean(),
+  compactAt: z.number().nullable().optional(),
+});
+export type ApiEndpointSetLongConversationsRequest = z.infer<
+  typeof ApiEndpointSetLongConversationsRequestSchema
+>;
+
+export const ApiEndpointSetLongConversationsResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.set_long_conversations.response"),
+  payload: z.object({
+    requestId: z.string(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointSetLongConversationsResponse = z.infer<
+  typeof ApiEndpointSetLongConversationsResponseSchema
+>;
+
+/**
+ * 设已禁用的模型（照 magpie settings/disabled-models）：整份名单一起发，daemon 去掉首尾空白、空的与只差大小写的重复后存下。
+ * 命中的模型从每家接口在服务的模型里去掉，中转站拒收对它的请求。只有声明了 apiEndpointManagement 的 daemon 认它。
+ */
+export const ApiEndpointSetDisabledModelsRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.set_disabled_models.request"),
+  requestId: z.string(),
+  models: z.array(z.string()),
+});
+export type ApiEndpointSetDisabledModelsRequest = z.infer<
+  typeof ApiEndpointSetDisabledModelsRequestSchema
+>;
+
+export const ApiEndpointSetDisabledModelsResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.set_disabled_models.response"),
+  payload: z.object({
+    requestId: z.string(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointSetDisabledModelsResponse = z.infer<
+  typeof ApiEndpointSetDisabledModelsResponseSchema
+>;
+
+/**
+ * 设接口名显示方式（照 magpie settings/plain-names）：display 是 always、clash 或 never，别的拒收。
+ * 作用于聊天模型选择器、默认模型选项和写给 Codex 的显示名。只有声明了 apiEndpointManagement 的 daemon 认它。
+ */
+export const ApiEndpointSetEndpointNameDisplayRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.set_endpoint_name_display.request"),
+  requestId: z.string(),
+  display: z.string(),
+});
+export type ApiEndpointSetEndpointNameDisplayRequest = z.infer<
+  typeof ApiEndpointSetEndpointNameDisplayRequestSchema
+>;
+
+export const ApiEndpointSetEndpointNameDisplayResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.set_endpoint_name_display.response"),
+  payload: z.object({
+    requestId: z.string(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointSetEndpointNameDisplayResponse = z.infer<
+  typeof ApiEndpointSetEndpointNameDisplayResponseSchema
+>;
+
+/**
+ * 读回一家接口已保存的 key 原文（编辑窗口的「显示」）；没有 key 时 apiKey 为 null。照 magpie 不确认、不限次数。
+ * 只有声明了 apiEndpointManagement 的 daemon 认它。
+ */
+export const ApiEndpointRevealKeyRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.reveal_key.request"),
+  requestId: z.string(),
+  endpointId: z.string(),
+});
+export type ApiEndpointRevealKeyRequest = z.infer<typeof ApiEndpointRevealKeyRequestSchema>;
+
+export const ApiEndpointRevealKeyResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.reveal_key.response"),
+  payload: z.object({
+    requestId: z.string(),
+    apiKey: z.string().nullable(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointRevealKeyResponse = z.infer<typeof ApiEndpointRevealKeyResponseSchema>;
+
+/** 图标图片最多 1 MB：base64 写出来最长这么多字，更长的在解码前就拒收。 */
+export const API_ENDPOINT_ICON_MAX_BASE64_LENGTH = 4 * Math.ceil((1 << 20) / 3);
+
+/**
+ * 存一张图片给接口当图标（照 magpie 的 `file:` 图标）：data 是 base64 的原始字节，PNG、JPEG、GIF、WebP、ICO 或 SVG，
+ * 不超过 1 MB。按内容起名，同一张只存一份；返回保存时要带的 icon 值。没有接口再用它时 daemon 删掉副本。
+ * 失败的 code：icon_too_large、icon_not_image。只有声明了 apiEndpointManagement 的 daemon 认它。
+ */
+export const ApiEndpointStoreIconRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.store_icon.request"),
+  requestId: z.string(),
+  data: z.string().max(API_ENDPOINT_ICON_MAX_BASE64_LENGTH),
+});
+export type ApiEndpointStoreIconRequest = z.infer<typeof ApiEndpointStoreIconRequestSchema>;
+
+export const ApiEndpointStoreIconResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.store_icon.response"),
+  payload: z.object({
+    requestId: z.string(),
+    icon: z.string().nullable(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointStoreIconResponse = z.infer<typeof ApiEndpointStoreIconResponseSchema>;
+
+/**
+ * 从网站取图标（照 magpie FaviconFor）：daemon 按 baseUrl 找它所在网站的图标，像 store_icon 一样存下，返回 icon 值；
+ * new-api / one-api 面板没有自己的 logo 时用 name 的首字画一块。只连公网 https 主机，只在用户点按钮时发。
+ * 可以用 cancel 按 requestId 取消。失败的 code：site_icon_no_address（地址不是网址）、site_icon_local（地址在本机或局域网）、
+ * site_icon_not_found（message 写明问过哪些站点与最后的原因）。只有声明了 apiEndpointManagement 的 daemon 认它。
+ */
+export const ApiEndpointFetchSiteIconRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.fetch_site_icon.request"),
+  requestId: z.string(),
+  baseUrl: z.string(),
+  name: z.string(),
+});
+export type ApiEndpointFetchSiteIconRequest = z.infer<typeof ApiEndpointFetchSiteIconRequestSchema>;
+
+export const ApiEndpointFetchSiteIconResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.fetch_site_icon.response"),
+  payload: z.object({
+    requestId: z.string(),
+    icon: z.string().nullable(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointFetchSiteIconResponse = z.infer<
+  typeof ApiEndpointFetchSiteIconResponseSchema
+>;
+
+/** 取回 store_icon 存下的图片（icon 是 `file:<名字>`）：base64 与 MIME 类型；不在了为 not_found。 */
+export const ApiEndpointReadIconRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.read_icon.request"),
+  requestId: z.string(),
+  icon: z.string(),
+});
+export type ApiEndpointReadIconRequest = z.infer<typeof ApiEndpointReadIconRequestSchema>;
+
+export const ApiEndpointIconImageSchema = z.object({
+  data: z.string(),
+  mimeType: z.string(),
+});
+export type ApiEndpointIconImage = z.infer<typeof ApiEndpointIconImageSchema>;
+
+export const ApiEndpointReadIconResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.read_icon.response"),
+  payload: z.object({
+    requestId: z.string(),
+    icon: ApiEndpointIconImageSchema.nullable(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointReadIconResponse = z.infer<typeof ApiEndpointReadIconResponseSchema>;
+
+/**
+ * 模板（Template）的一个区域或套餐：自己的一套各格式地址；keysUrl、website、modelsDevIds 只在和模板的不同时给。
+ * models 是这个套餐的内置模型清单；listsModels 是模板整体没有清单接口（noModelList）时这里却有。
+ */
+export const ApiEndpointTemplateRegionSchema = z.object({
+  id: z.string(),
+  // 英文原名；客户端认得的按界面语言显示，认不出的照原文。
+  name: z.string(),
+  baseUrls: z.array(ApiEndpointBaseUrlSchema),
+  keysUrl: z.string().optional(),
+  website: z.string().optional(),
+  modelsDevIds: z.array(z.string()).optional(),
+  models: z.array(z.string()).optional(),
+  listsModels: z.boolean().optional(),
+});
+export type ApiEndpointTemplateRegion = z.infer<typeof ApiEndpointTemplateRegionSchema>;
+
+/**
+ * 内置模板，随 daemon 版本走、不联网下载（照 magpie presets.go）。`group` 是字符串：vendor（厂商）、relay（中转服务）、
+ * local（本机），以后可能加新的。国际站与中国站各是一个模板，中国站的 id 是国际站的加 `-cn`（照 magpie），客户端合成一行。
+ * regions 的第一个是默认；`regionLabel` 说它们是 region（区域）还是 plan（套餐），没有即 region。
+ * keyOptional：不填 key 也能用（本机服务、免费模型）；keyHint 是 key 框里的英文提示。
+ * modelsDevIds 是 models.dev 里的 id（补模型资料用）；models 是内置模型清单，noModelList 时它就是清单；
+ * modelIdPrefix：这家的清单里只有以它开头的模型属于这个模板（照 magpie Only）。headerHints 是厂商文档里可加的请求头名。
+ * endpointExample：要填用户自己资源地址的厂商（Azure OpenAI）没有 baseUrls，表单按这个示例要一个地址，endpointHint 是框下的英文说明
+ * （照 magpie Endpoint、EndpointHint）。
+ */
+export const ApiEndpointTemplateSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  shortName: z.string().optional(),
+  group: z.string(),
+  note: z.string().optional(),
+  baseUrls: z.array(ApiEndpointBaseUrlSchema),
+  website: z.string().optional(),
+  keysUrl: z.string().optional(),
+  keyOptional: z.boolean().optional(),
+  keyHint: z.string().optional(),
+  modelsDevIds: z.array(z.string()),
+  regionLabel: z.string().optional(),
+  regions: z.array(ApiEndpointTemplateRegionSchema).optional(),
+  headerHints: z.array(z.string()).optional(),
+  models: z.array(z.string()).optional(),
+  noModelList: z.boolean().optional(),
+  modelIdPrefix: z.string().optional(),
+  endpointExample: z.string().optional(),
+  endpointHint: z.string().optional(),
+});
+export type ApiEndpointTemplate = z.infer<typeof ApiEndpointTemplateSchema>;
+
+/** 模板清单（「+」先出的列表）。只有声明了 apiEndpointManagement 的 daemon 认它。 */
+export const ApiEndpointListTemplatesRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.list_templates.request"),
+  requestId: z.string(),
+});
+export type ApiEndpointListTemplatesRequest = z.infer<typeof ApiEndpointListTemplatesRequestSchema>;
+
+export const ApiEndpointListTemplatesResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.list_templates.response"),
+  payload: z.object({
+    requestId: z.string(),
+    templates: z.array(ApiEndpointTemplateSchema),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointListTemplatesResponse = z.infer<
+  typeof ApiEndpointListTemplatesResponseSchema
+>;
+
+/**
  * daemon 在主机上向上游列出模型，key 不经过客户端。编辑已保存的接口时带 endpointId、
- * 省略 apiKey（或留空），就用已保存的 key。可以用 cancel 按 requestId 取消。
+ * 省略 apiKey（或留空），就用已保存的 key；没有已保存的 key 时不带认证头（老 daemon 拒绝）。可以用 cancel 按 requestId 取消。
  *
  * 新客户端带 `format`：baseUrl 是这种请求格式的地址，认证头按格式给，provider 不再起作用；
- * 同时带 endpointId 时，列出的模型记作这家的上游清单（列表里的 `catalog`）。
+ * 同时带 endpointId 时，列出的模型记作这家的上游清单（列表里的 `catalog`），除非带 `preview: true`：
+ * 添加窗口保存前拉的只看不记，endpointId 只为借那家已保存的 key（复制时 key 框留空）。
  * 老客户端不带 format，按 provider 走 CLI 自己的格式，只读不记。
+ *
+ * templateId、region：表单当前的模板与区域或套餐（同 save）。给了就按它们定认证头、Azure 的地址与列法、
+ * 没有清单接口时的内置清单，不看 endpointId 那家记下的；省略时用那家的，没有 endpointId 即「自定义」。
+ * 不认识的模板拒收。老 daemon 忽略这三个字段。
+ *
+ * baseUrls：这家的全部格式地址。给了就每种格式各拉一次、按模型 id 合并（照 magpie）：顺序以先列出的为准，
+ * 显示名与模型资料先列出的格式说了算，没说的由后面的补；baseUrl、format 不再起作用（照旧要带，给老 daemon）。
+ * 有一种格式答上就算成功；记作上游清单时，这次没答上的格式上次列过的模型留着。只有声明了 apiEndpointManagement 的 daemon 认它。
+ *
+ * headers、extraBody、keyHeader、insecureTls：表单里还没保存的请求头、附加请求体、key 放哪个头与不校验证书（同 save），
+ * 给了就用它们，不看 endpointId 那家存的；省略时用那家存的。拉模型、测试连接、自动检测都这样。
+ * 只有声明了 apiEndpointManagement 的 daemon 认它们。
  */
 export const ApiEndpointFetchModelsRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.fetch_models.request"),
@@ -536,6 +987,11 @@ export const ApiEndpointFetchModelsRequestSchema = z.object({
   baseUrl: z.string(),
   apiKey: z.string().optional(),
   format: z.string().optional(),
+  preview: z.boolean().optional(),
+  templateId: z.string().optional(),
+  region: z.string().optional(),
+  baseUrls: z.array(ApiEndpointBaseUrlSchema).optional(),
+  ...ApiEndpointRequestExtrasSchema.shape,
 });
 export type ApiEndpointFetchModelsRequest = z.infer<typeof ApiEndpointFetchModelsRequestSchema>;
 
@@ -550,8 +1006,38 @@ export const ApiEndpointFetchModelsResponseSchema = z.object({
 export type ApiEndpointFetchModelsResponse = z.infer<typeof ApiEndpointFetchModelsResponseSchema>;
 
 /**
- * 自动检测：daemon 从用户填的一个地址推出三种请求格式各自的地址，先向上游列出模型挑一个，
- * 再按每种格式各发一条最小对话请求。key 的规则和 fetch_models 相同；可以用 cancel 按 requestId 取消。
+ * 丢掉拉回的清单：清空这家的上游清单与拉取时间（照 magpie unfetch），已选与手动添加的模型不动，下次拉取再有。
+ * 只有声明了 apiEndpointManagement 的 daemon 认它。
+ */
+export const ApiEndpointForgetCatalogRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.forget_catalog.request"),
+  requestId: z.string(),
+  endpointId: z.string(),
+});
+export type ApiEndpointForgetCatalogRequest = z.infer<typeof ApiEndpointForgetCatalogRequestSchema>;
+
+export const ApiEndpointForgetCatalogResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.forget_catalog.response"),
+  payload: z.object({
+    requestId: z.string(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointForgetCatalogResponse = z.infer<
+  typeof ApiEndpointForgetCatalogResponseSchema
+>;
+
+/** 一次自动检测最多问这么多个表单里的模型（照 magpie DetectMax）；daemon 截断、界面说明都用它。 */
+export const API_ENDPOINT_DETECT_MAX_MODELS = 30;
+
+/**
+ * 自动检测：daemon 从用户填的一个地址推出三种请求格式各自的地址，按每种格式各发一条最小对话请求（照 magpie Detect）。
+ * 问哪个模型：`modelId`（用户填的试用模型）每种格式都问它；没填时按格式从 `modelIds`（表单里已选、还没保存的模型，
+ * 最多取前 API_ENDPOINT_DETECT_MAX_MODELS 个）挑，也没有才向上游列出模型挑。key 的规则和 fetch_models 相同；可以用 cancel 按 requestId 取消。
+ * 老 daemon 忽略 modelId、modelIds，总是先列模型。
+ * `eachModel`（逐个模型，照 magpie Detect 的 Each picked model）：`modelIds` 的前 API_ENDPOINT_DETECT_MAX_MODELS 个
+ * 每个在每种格式上各问一次，回应里 `models` 逐个模型列出，`results` 是每种格式第一个答上的（都没答上为第一个模型的）。
+ * apiEndpointManagement 能力位与 eachModel 在同一个版本里加入（还没发布过声明它的 daemon），所以声明了它的 daemon 都认 eachModel。
  */
 export const ApiEndpointDetectFormatsRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.detect_formats.request"),
@@ -559,12 +1045,23 @@ export const ApiEndpointDetectFormatsRequestSchema = z.object({
   endpointId: z.string().optional(),
   baseUrl: z.string(),
   apiKey: z.string().optional(),
+  modelId: z.string().optional(),
+  modelIds: z.array(z.string()).optional(),
+  eachModel: z.boolean().optional(),
+  // 表单里还没保存的请求头、附加请求体、key 放哪个头与不校验证书（同 fetch_models）。
+  ...ApiEndpointRequestExtrasSchema.shape,
 });
 export type ApiEndpointDetectFormatsRequest = z.infer<typeof ApiEndpointDetectFormatsRequestSchema>;
 
 /**
  * 一种格式的检测结果。`status` 是字符串：ok（检测通过）、auth_failed（上游回 401 / 403，key 无效）、
  * not_detected（其余失败，原因在 `message`）。`url` 是这种格式的建议地址；`httpStatus` 没收到响应时为 null。
+ * `durationMs` 是这一问的耗时，`modelId` 是问的模型（没有模型可问时没有）；老 daemon 都不发。
+ * `code`、`params`：逐个模型识别时 daemon 自己定的原因（界面按语言说，`message` 是英文原文）：
+ * upstream_timeout（params.seconds 秒内没回）、batch_timeout（问了，整次识别到点还没回）、not_asked（整次识别到点，没轮到问）、
+ * image_model（生图模型，不问）、no_model_to_try（没有模型可问）、models_list_failed（列模型失败，params.detail 是列模型的原因）、
+ * upstream_unreachable（没连上，params.detail 是网络库的原话）、wrong_shape（2xx 但不是 params.format 这种格式的回答）。
+ * 上游给的失败没有 code。
  */
 export const ApiEndpointFormatDetectionSchema = z.object({
   format: z.string(),
@@ -572,15 +1069,30 @@ export const ApiEndpointFormatDetectionSchema = z.object({
   status: z.string(),
   httpStatus: z.number().nullable(),
   message: z.string().nullable(),
+  durationMs: z.number().optional(),
+  modelId: z.string().optional(),
+  code: z.string().optional(),
+  params: z.record(z.string(), z.string()).optional(),
 });
 export type ApiEndpointFormatDetection = z.infer<typeof ApiEndpointFormatDetectionSchema>;
 
-/** 请求本身被拒（缺 key、地址无效、找不到接口、被取消）时 `results` 为空，原因在 `error`。 */
+/** 逐个模型识别的一个模型：每种格式一条结论，按 Anthropic、Chat、Responses。 */
+export const ApiEndpointModelDetectionSchema = z.object({
+  modelId: z.string(),
+  results: z.array(ApiEndpointFormatDetectionSchema),
+});
+export type ApiEndpointModelDetection = z.infer<typeof ApiEndpointModelDetectionSchema>;
+
+/**
+ * 请求本身被拒（地址无效、找不到接口、被取消；老 daemon 还有缺 key）时 `results` 为空，原因在 `error`。
+ * `models` 只在逐个模型识别（eachModel）时有。
+ */
 export const ApiEndpointDetectFormatsResponseSchema = z.object({
   type: z.literal("provider.api_endpoint.detect_formats.response"),
   payload: z.object({
     requestId: z.string(),
     results: z.array(ApiEndpointFormatDetectionSchema),
+    models: z.array(ApiEndpointModelDetectionSchema).optional(),
     error: ApiEndpointErrorSchema.nullable(),
   }),
 });
@@ -615,6 +1127,10 @@ export type ApiEndpointCancelResponse = z.infer<typeof ApiEndpointCancelResponse
  * 新客户端带 `format`：按这种请求格式向 baseUrl 发最小请求，provider 不再起作用；
  * 省略 modelId 时 daemon 从这家已选的模型、上游清单里挑一个适合该格式的，都没有就先向上游列一次。
  * 上游回 401 / 403 时结果的 error.code 是 auth_failed（key 无效）。老客户端不带 format，modelId 必填。
+ *
+ * 添加 / 编辑窗口保存前测试时带上表单的值：templateId、region 同 fetch_models；`modelIds` 是表单里的模型（已选的在前、
+ * 拉到的清单在后），给了就从它们里挑，不看 endpointId 那家的；挑不到时照常列一次（没有清单接口的模板用内置清单）。
+ * 老 daemon 忽略这三个字段。
  */
 export const ApiEndpointTestConnectionRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.test_connection.request"),
@@ -625,6 +1141,11 @@ export const ApiEndpointTestConnectionRequestSchema = z.object({
   apiKey: z.string().optional(),
   modelId: z.string().optional(),
   format: z.string().optional(),
+  templateId: z.string().optional(),
+  region: z.string().optional(),
+  modelIds: z.array(z.string()).optional(),
+  // 表单里还没保存的请求头、附加请求体、key 放哪个头与不校验证书（同 fetch_models）。
+  ...ApiEndpointRequestExtrasSchema.shape,
 });
 export type ApiEndpointTestConnectionRequest = z.infer<
   typeof ApiEndpointTestConnectionRequestSchema
@@ -642,7 +1163,7 @@ export const ApiEndpointTestConnectionResultSchema = z.object({
 });
 export type ApiEndpointTestConnectionResult = z.infer<typeof ApiEndpointTestConnectionResultSchema>;
 
-/** 请求本身被拒（缺 key、找不到接口、被取消）时 `result` 为 null，原因在 `error`。 */
+/** 请求本身被拒（找不到接口、被取消；老 daemon 还有缺 key）时 `result` 为 null，原因在 `error`。 */
 export const ApiEndpointTestConnectionResponseSchema = z.object({
   type: z.literal("provider.api_endpoint.test_connection.response"),
   payload: z.object({
@@ -654,3 +1175,441 @@ export const ApiEndpointTestConnectionResponseSchema = z.object({
 export type ApiEndpointTestConnectionResponse = z.infer<
   typeof ApiEndpointTestConnectionResponseSchema
 >;
+
+/**
+ * 测试模型（Test models，照 magpie TestModels）：daemon 给这家的每个在服务的模型发一条最小请求（「hi」，回复上限 16），
+ * 并发 4 个、单个 20 秒、整批 3 分钟。给了 `modelId` 只测这一个（可以不在服务）。`method` 是测法：缺省 plain，
+ * 按这家的地址依次试格式（设了「只用这种格式」的只试那种）；claude_code、codex 带中转站记下的那个 CLI 的请求头、
+ * 以流式发到那个 CLI 的格式（ADR 0013，见 ApiEndpointTestAsSchema）；这家不提供的测法拒收（invalid_input），
+ * 还没有 Claude Code 样本时每个模型记成 cli_sample_missing、不发请求。以后加的测法老 daemon 拒收。
+ * 开测前推一条 test_models.started（要测哪些），每测完一个推一条 test_models.progress，最后回 test_models.response 带全部结果。用 cancel 按 requestId 取消：
+ * 不再发新请求，回应带已测完的结果与 cancelled。只有声明了 apiEndpointManagement 的 daemon 认它。
+ */
+export const API_ENDPOINT_MODEL_TEST_METHODS = ["plain", "claude_code", "codex"] as const;
+export type ApiEndpointModelTestMethod = (typeof API_ENDPOINT_MODEL_TEST_METHODS)[number];
+
+export const ApiEndpointTestModelsRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.test_models.request"),
+  requestId: z.string(),
+  endpointId: z.string(),
+  modelId: z.string().optional(),
+  method: z.string().optional(),
+});
+export type ApiEndpointTestModelsRequest = z.infer<typeof ApiEndpointTestModelsRequestSchema>;
+
+/**
+ * 一个模型的测试结果。`format` 是答上（或最后失败）的请求格式，没发请求（已禁用、没有能问的地址）时为 null；
+ * `status` 是 HTTP 状态码，没收到响应时为 null；`durationMs` 是这个模型花的时间。
+ * `error.code`：model_disabled（params：model、pattern）、auth_failed、upstream_error、upstream_unreachable、
+ * upstream_timeout（单个超时，params：seconds）、batch_timeout（整批超时，没来得及测或被打断）、no_format（这家没有能问它的地址）、
+ * cli_sample_missing（按 Claude Code 测，但还没有 Claude Code 请求经过中转站）。
+ * `error.message` 是原因本身（上游的原文），不带请求地址与状态码。
+ */
+export const ApiEndpointModelTestResultSchema = z.object({
+  modelId: z.string(),
+  ok: z.boolean(),
+  format: z.string().nullable(),
+  status: z.number().nullable(),
+  durationMs: z.number(),
+  error: ApiEndpointErrorSchema.nullable(),
+});
+export type ApiEndpointModelTestResult = z.infer<typeof ApiEndpointModelTestResultSchema>;
+
+/**
+ * 开测前推一条：daemon 这次要测的模型，按测试顺序（一周内下线的不在里面，被禁用的在、会直接记成已禁用）。
+ * 客户端据此标「测试中」，没列进来的不标。
+ */
+export const ApiEndpointTestModelsStartedSchema = z.object({
+  type: z.literal("provider.api_endpoint.test_models.started"),
+  payload: z.object({
+    requestId: z.string(),
+    modelIds: z.array(z.string()),
+  }),
+});
+export type ApiEndpointTestModelsStarted = z.infer<typeof ApiEndpointTestModelsStartedSchema>;
+
+/** 测完一个模型推一条；done / total 是这次已测完与一共要测的个数。 */
+export const ApiEndpointTestModelsProgressSchema = z.object({
+  type: z.literal("provider.api_endpoint.test_models.progress"),
+  payload: z.object({
+    requestId: z.string(),
+    result: ApiEndpointModelTestResultSchema,
+    done: z.number(),
+    total: z.number(),
+  }),
+});
+export type ApiEndpointTestModelsProgress = z.infer<typeof ApiEndpointTestModelsProgressSchema>;
+
+/** 全部结果按测试顺序；请求被拒（找不到接口、不认识的测法）时为空，被取消时是已测完的，原因在 `error`。 */
+export const ApiEndpointTestModelsResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.test_models.response"),
+  payload: z.object({
+    requestId: z.string(),
+    results: z.array(ApiEndpointModelTestResultSchema),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointTestModelsResponse = z.infer<typeof ApiEndpointTestModelsResponseSchema>;
+
+/**
+ * 厂商官方状态页说它的 API 怎样（照 magpie upstream）：等级是 API 依赖的那几项里最差的。
+ * 已知的等级；线上是字符串，daemon 以后多一种老客户端照样解析。
+ */
+export const API_ENDPOINT_VENDOR_LEVELS = [
+  "ok",
+  "maintenance",
+  "degraded",
+  "partial",
+  "major",
+] as const;
+export type ApiEndpointVendorLevel = (typeof API_ENDPOINT_VENDOR_LEVELS)[number];
+
+export const ApiEndpointVendorStatusSchema = z.object({
+  vendor: z.string(),
+  name: z.string(),
+  // 给人看的状态页。
+  page: z.string(),
+  // 这家的状态页没有能读的 summary.json（DeepSeek）：只给链接，从不读。
+  isLinkOnly: z.boolean(),
+  // 没读（只给链接的厂商、开关关着、读失败）时为 null：不知道，不等于正常。
+  level: z.string().nullable(),
+  // API 依赖的、不正常的那几项，状态照页面原文（degraded_performance、partial_outage、major_outage、under_maintenance）。
+  parts: z.array(z.object({ name: z.string(), status: z.string() })),
+  // 这几项上还没解决的事件；url 是事件自己的页面。
+  incidents: z.array(
+    z.object({ name: z.string(), impact: z.string().nullable(), url: z.string().nullable() }),
+  ),
+  readAt: z.string().nullable(),
+  error: ApiEndpointErrorSchema.nullable(),
+});
+export type ApiEndpointVendorStatus = z.infer<typeof ApiEndpointVendorStatusSchema>;
+
+/**
+ * 各厂商状态页的当前读数（每页 5 分钟最多读一次）。`vendors`：除了接口对上的厂商，另外要的（用量页的订阅卡片）。
+ * 只有声明了 apiEndpointManagement 的 daemon 认它。
+ */
+export const ApiEndpointVendorStatusRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.vendor_status.request"),
+  requestId: z.string(),
+  vendors: z.array(z.string()).optional(),
+});
+export type ApiEndpointVendorStatusRequest = z.infer<typeof ApiEndpointVendorStatusRequestSchema>;
+
+/** `autoUpdate` 为 false：「价格表自动更新」关着，一页都不读，等级都为 null。`endpointVendors`：接口 id → 厂商。 */
+export const ApiEndpointVendorStatusResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.vendor_status.response"),
+  payload: z.object({
+    requestId: z.string(),
+    autoUpdate: z.boolean(),
+    vendors: z.array(ApiEndpointVendorStatusSchema),
+    endpointVendors: z.record(z.string(), z.string()),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointVendorStatusResponse = z.infer<typeof ApiEndpointVendorStatusResponseSchema>;
+
+/**
+ * 从别的软件导入（Import）：daemon 只读地读本机别的软件的配置（ADR 0013）。每条发现照 Osuna 会加的那家给出，
+ * key 打码，原文留在 daemon，导入时按指纹找回。线上的 status、skip、off 是字符串，daemon 以后多一种老客户端照样解析。
+ * status：new（新的）、added（已添加）、name_taken（名称已被占用）、other_key（同一家、key 不同）。
+ * skip：读到了却不能导入的原因（sign_in、no_base_url、invalid_base_url、points_at_osuna、no_api_key、gemini_unsupported、
+ * no_azure_endpoint）；off：默认不选的原因（turned_off：在那个软件里关着）。
+ */
+export const API_ENDPOINT_IMPORT_STATUSES = ["new", "added", "name_taken", "other_key"] as const;
+export type ApiEndpointImportStatus = (typeof API_ENDPOINT_IMPORT_STATUSES)[number];
+
+export const API_ENDPOINT_IMPORT_SKIP_REASONS = [
+  "sign_in",
+  "no_base_url",
+  "invalid_base_url",
+  "points_at_osuna",
+  "no_api_key",
+  "gemini_unsupported",
+  "no_azure_endpoint",
+] as const;
+export type ApiEndpointImportSkipReason = (typeof API_ENDPOINT_IMPORT_SKIP_REASONS)[number];
+
+/**
+ * 来源读不了的原因：unreadable（文件打不开，params.errno）、not_json、not_database、no_providers_table（数据库里没有认得的表）、
+ * busy（数据库被它的软件锁着）、no_sqlite（跑 daemon 的 Node 打不开 SQLite，params.node）。
+ */
+export const API_ENDPOINT_IMPORT_SOURCE_ERROR_CODES = [
+  "unreadable",
+  "not_json",
+  "not_database",
+  "no_providers_table",
+  "busy",
+  "no_sqlite",
+] as const;
+export type ApiEndpointImportSourceErrorCode =
+  (typeof API_ENDPOINT_IMPORT_SOURCE_ERROR_CODES)[number];
+
+export const ApiEndpointImportItemSchema = z.object({
+  fingerprint: z.string(),
+  ref: z.string(),
+  // 在那个软件里的哪儿（CC Switch 的 Claude Code、Codex……，或 settings.json 这样的文件名）。
+  from: z.string().nullable(),
+  name: z.string(),
+  baseUrls: z.array(ApiEndpointBaseUrlSchema),
+  maskedKey: z.string().nullable(),
+  models: z.array(z.string()),
+  templateId: z.string().nullable(),
+  status: z.string(),
+  // 对上的那家：已添加的、名称撞上的、同一家 key 不同的。
+  existingEndpointId: z.string().nullable(),
+  existingName: z.string().nullable(),
+  // 同一地址、另一把 key 的那家（名称撞上时也给）：这样的默认选上、新增一家。
+  otherKeyName: z.string().nullable().optional(),
+  skip: z.string().nullable(),
+  off: z.string().nullable(),
+});
+export type ApiEndpointImportItem = z.infer<typeof ApiEndpointImportItemSchema>;
+
+export const ApiEndpointImportSourceSchema = z.object({
+  // alma、cc-switch、claude-code、codex、opencode。
+  id: z.string(),
+  name: z.string(),
+  // 读的文件，家目录写成 ~。
+  path: z.string(),
+  found: z.boolean(),
+  // 在那儿却读不了：code 见 API_ENDPOINT_IMPORT_SOURCE_ERROR_CODES。
+  error: ApiEndpointErrorSchema.nullable(),
+  items: z.array(ApiEndpointImportItemSchema),
+});
+export type ApiEndpointImportSource = z.infer<typeof ApiEndpointImportSourceSchema>;
+
+/**
+ * 扫描别的软件的配置。`includeOpenCode`：打开导入窗口时才为 true，OpenCode 的 auth.json 存着它所有的登录。
+ * 只有声明了 apiEndpointManagement 的 daemon 认它。
+ */
+export const ApiEndpointImportScanRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.import_scan.request"),
+  requestId: z.string(),
+  includeOpenCode: z.boolean().optional(),
+});
+export type ApiEndpointImportScanRequest = z.infer<typeof ApiEndpointImportScanRequestSchema>;
+
+export const ApiEndpointImportScanResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.import_scan.response"),
+  payload: z.object({
+    requestId: z.string(),
+    sources: z.array(ApiEndpointImportSourceSchema),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointImportScanResponse = z.infer<typeof ApiEndpointImportScanResponseSchema>;
+
+/**
+ * 「第三方接口」页打开时问有没有可以导入的（发现提示）：不含 OpenCode，daemon 一分钟内只真读一次别的软件的文件。
+ * 只回默认会选上、又没被忽略的那几条的指纹与来源软件（照 magpie importapps/discovery），不带地址与 key。
+ * 只有声明了 apiEndpointManagement 的 daemon 认它。
+ */
+export const ApiEndpointImportDiscoveryRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.import_discovery.request"),
+  requestId: z.string(),
+});
+export type ApiEndpointImportDiscoveryRequest = z.infer<
+  typeof ApiEndpointImportDiscoveryRequestSchema
+>;
+
+export const ApiEndpointImportCandidateSchema = z.object({
+  // 和导入窗口里同一条的指纹相同：「查看」据此只选上提示里的那几条。
+  fingerprint: z.string(),
+  // 来源软件的 id 与名称（CC Switch、Codex……）。
+  sourceId: z.string(),
+  source: z.string(),
+});
+export type ApiEndpointImportCandidate = z.infer<typeof ApiEndpointImportCandidateSchema>;
+
+export const ApiEndpointImportDiscoveryResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.import_discovery.response"),
+  payload: z.object({
+    requestId: z.string(),
+    candidates: z.array(ApiEndpointImportCandidateSchema),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointImportDiscoveryResponse = z.infer<
+  typeof ApiEndpointImportDiscoveryResponseSchema
+>;
+
+/**
+ * 「忽略」发现提示里的这几条：指纹记进主机级的已忽略记录（不存 key 原文），同一批不再提示，有新的或改过的再提示。
+ * 只有声明了 apiEndpointManagement 的 daemon 认它。
+ */
+export const ApiEndpointImportIgnoreRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.import_ignore.request"),
+  requestId: z.string(),
+  fingerprints: z.array(z.string()),
+});
+export type ApiEndpointImportIgnoreRequest = z.infer<typeof ApiEndpointImportIgnoreRequestSchema>;
+
+export const ApiEndpointImportIgnoreResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.import_ignore.response"),
+  payload: z.object({
+    requestId: z.string(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointImportIgnoreResponse = z.infer<typeof ApiEndpointImportIgnoreResponseSchema>;
+
+/** 加了、换上或会被换掉的那一家：id 与名称。 */
+export const ApiEndpointNameRefSchema = z.object({ endpointId: z.string(), name: z.string() });
+export type ApiEndpointNameRef = z.infer<typeof ApiEndpointNameRefSchema>;
+
+/** 导入的一条怎么进来：add（新增一家）、replace（替换名称撞上的那家，保留它的 id 与顺序位置）、rename（改名后新增，name 必填）。 */
+export const API_ENDPOINT_IMPORT_ACTIONS = ["add", "replace", "rename"] as const;
+export type ApiEndpointImportAction = (typeof API_ENDPOINT_IMPORT_ACTIONS)[number];
+
+export const ApiEndpointImportPickSchema = z.object({
+  fingerprint: z.string(),
+  action: z.string(),
+  name: z.string().optional(),
+});
+export type ApiEndpointImportPick = z.infer<typeof ApiEndpointImportPickSchema>;
+
+/**
+ * 导入选中的发现：daemon 重读一遍来源，按指纹找回 key，照 magpie 一条一条地加；一条不成就停下，前面加好的留着。
+ * rename 的名称是空的当没改名、按新增。只有声明了 apiEndpointManagement 的 daemon 认它。
+ */
+export const ApiEndpointImportRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.import.request"),
+  requestId: z.string(),
+  picks: z.array(ApiEndpointImportPickSchema),
+});
+export type ApiEndpointImportRequest = z.infer<typeof ApiEndpointImportRequestSchema>;
+
+export const ApiEndpointImportResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.import.response"),
+  payload: z.object({
+    requestId: z.string(),
+    // 加了或换上的那几家；已经有的、读不了的不在里面。出错时是出错之前加好的。
+    imported: z.array(ApiEndpointNameRefSchema),
+    // 出错的那一条（error 说为什么）；整个请求失败或都成了为 null。
+    failed: z.object({ fingerprint: z.string(), name: z.string() }).nullable().optional(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointImportResponse = z.infer<typeof ApiEndpointImportResponseSchema>;
+
+/**
+ * 导入链接（`paseo://import?…`，ADR 0013）为什么拒收（照 magpie importurl.go），放在 error.params.reason（error.code 是
+ * import_link_refused），params.field 是出问题的参数名（chat、responses、anthropic、gemini、icon），params.template、
+ * params.region 是认不出的模板与区域。线上是字符串，daemon 以后多一种老客户端照样解析。
+ * not_import_link：不是 paseo://import 链接；unknown_template；vertex（Google Vertex AI 要用自己的 Google Cloud 项目加）；
+ * unknown_region；no_name（没有 preset= 也没有 name=）；no_id（名称里没有字母或数字可做标识）；
+ * bad_url（不是一个地址：读不懂、没有主机、带账号、查询串或片段）；needs_https（公网地址不是 https）；
+ * no_base_url（没有任何地址）；gemini_only（只有 Gemini 地址，Osuna 还不能用）；bad_key（超过 4096 字节或带控制字符）；
+ * bad_icon（图片地址不是公网主机上的 https）。
+ */
+export const API_ENDPOINT_IMPORT_LINK_REFUSALS = [
+  "not_import_link",
+  "unknown_template",
+  "vertex",
+  "unknown_region",
+  "no_name",
+  "no_id",
+  "bad_url",
+  "needs_https",
+  "no_base_url",
+  "gemini_only",
+  "bad_key",
+  "bad_icon",
+] as const;
+export type ApiEndpointImportLinkRefusal = (typeof API_ENDPOINT_IMPORT_LINK_REFUSALS)[number];
+
+/**
+ * 导入链接要加的那家，给确认框看（照 magpie renderImport）：hosts 是对话与 key 会发往的主机；key 是链接里带的（没有为 null）；
+ * replaces 是会被它替换的那家（照 magpie Find(id)；没有为 null）；keysUrl 是去拿 key 的页面（链接没带 key 时出「去拿 key」）；
+ * ignoredGemini：链接里的 Gemini 地址没用上（Osuna 还没有 Gemini 格式）。
+ * icon 是 catalog= 对上的内置图标名；iconPending：链接给了 icon= 图片，主机已经开始取，客户端用 import_link_icon 要它
+ * （取到了就用它，不等它也能添加）。
+ */
+export const ApiEndpointImportLinkPreviewSchema = z.object({
+  name: z.string(),
+  key: z.string().nullable(),
+  baseUrls: z.array(ApiEndpointBaseUrlSchema),
+  hosts: z.array(z.string()),
+  models: z.array(z.string()),
+  templateId: z.string().nullable(),
+  region: z.string().nullable(),
+  keysUrl: z.string().nullable(),
+  replaces: ApiEndpointNameRefSchema.nullable(),
+  ignoredGemini: z.boolean(),
+  icon: z.string().nullable().optional(),
+  iconPending: z.boolean().optional(),
+});
+export type ApiEndpointImportLinkPreview = z.infer<typeof ApiEndpointImportLinkPreviewSchema>;
+
+/**
+ * 读一条导入链接给确认框：daemon 照 magpie 解析、拒收，不存任何东西。只有声明了 apiEndpointManagement 的 daemon 认它。
+ */
+export const ApiEndpointImportLinkPreviewRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.import_link_preview.request"),
+  requestId: z.string(),
+  link: z.string(),
+});
+export type ApiEndpointImportLinkPreviewRequest = z.infer<
+  typeof ApiEndpointImportLinkPreviewRequestSchema
+>;
+
+export const ApiEndpointImportLinkPreviewResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.import_link_preview.response"),
+  payload: z.object({
+    requestId: z.string(),
+    preview: ApiEndpointImportLinkPreviewSchema.nullable(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointImportLinkPreviewResponse = z.infer<
+  typeof ApiEndpointImportLinkPreviewResponseSchema
+>;
+
+/**
+ * 导入链接 icon= 的图片（照 magpie 确认框打开后再取图标）：主机读链接时已开始取，这里等它取完；取不到为 null。
+ * 只有声明了 apiEndpointManagement 的 daemon 认它。
+ */
+export const ApiEndpointImportLinkIconRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.import_link_icon.request"),
+  requestId: z.string(),
+  link: z.string(),
+});
+export type ApiEndpointImportLinkIconRequest = z.infer<
+  typeof ApiEndpointImportLinkIconRequestSchema
+>;
+
+export const ApiEndpointImportLinkIconResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.import_link_icon.response"),
+  payload: z.object({
+    requestId: z.string(),
+    iconImage: ApiEndpointIconImageSchema.nullable(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointImportLinkIconResponse = z.infer<
+  typeof ApiEndpointImportLinkIconResponseSchema
+>;
+
+/**
+ * 用户在确认框里点了「添加」/「替换」：daemon 重新解析、拒收一遍链接，用确认框里的名称与 key 加上或换上那家。
+ * key 是空的即不带 key。只有声明了 apiEndpointManagement 的 daemon 认它。
+ */
+export const ApiEndpointImportLinkRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.import_link.request"),
+  requestId: z.string(),
+  link: z.string(),
+  name: z.string(),
+  key: z.string(),
+});
+export type ApiEndpointImportLinkRequest = z.infer<typeof ApiEndpointImportLinkRequestSchema>;
+
+export const ApiEndpointImportLinkResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.import_link.response"),
+  payload: z.object({
+    requestId: z.string(),
+    // 加上或换上的那家；失败为 null。
+    endpoint: ApiEndpointNameRefSchema.nullable(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointImportLinkResponse = z.infer<typeof ApiEndpointImportLinkResponseSchema>;

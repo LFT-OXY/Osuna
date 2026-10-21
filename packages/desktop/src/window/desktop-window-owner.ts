@@ -9,6 +9,7 @@ export interface OwnedDesktopWindow<TAgentTarget> {
   show(): void;
   focus(): void;
   sendAgent(target: TAgentTarget): void;
+  sendImportLink(link: string): void;
 }
 
 interface DesktopWindowOwnerPort<TAgentTarget> {
@@ -22,6 +23,8 @@ interface DesktopWindowOwnerPort<TAgentTarget> {
   focusedWindow(): OwnedDesktopWindow<TAgentTarget> | null;
   agentRoute(target: TAgentTarget): string;
   deliverAgent(webContentsId: number, target: TAgentTarget): TAgentTarget | null;
+  // 导入链接（paseo://import）：渲染层准备好时交出，没准备好先存着。
+  deliverImportLink(webContentsId: number, link: string): string | null;
 }
 
 export interface DesktopWindowOwner<TAgentTarget> {
@@ -31,6 +34,8 @@ export interface DesktopWindowOwner<TAgentTarget> {
   }): Promise<void>;
   openAdditional(input?: { pendingProjectPath?: string | null }): Promise<void>;
   openOrFocusAgent(target: TAgentTarget): Promise<void>;
+  /** 导入链接交给当前窗口（有焦点的，否则看得见的，否则第一个）；一个窗口都没有时开一个再交。 */
+  deliverImportLink(link: string): Promise<void>;
   restoreWhenActivated(): Promise<void>;
   takePendingProject(webContentsId: number): string | null;
 }
@@ -45,8 +50,8 @@ export function createDesktopWindowOwner<TAgentTarget>(
     initialRoute: string | null;
     pendingProjectPath: string | null;
     restoreWindowState: boolean;
-  }): Promise<void> => {
-    await port.create({
+  }): Promise<OwnedDesktopWindow<TAgentTarget>> => {
+    return port.create({
       initialRoute: input.initialRoute,
       restoreWindowState: input.restoreWindowState,
       onCreated: (webContentsId) => pendingProjects.set(webContentsId, input.pendingProjectPath),
@@ -54,19 +59,41 @@ export function createDesktopWindowOwner<TAgentTarget>(
     });
   };
 
+  const currentWindow = (): OwnedDesktopWindow<TAgentTarget> | undefined => {
+    const windows = port.windows();
+    return port.focusedWindow() ?? windows.find((candidate) => candidate.isVisible()) ?? windows[0];
+  };
+
   const owner: DesktopWindowOwner<TAgentTarget> = {
-    openPrimary: (input = {}) =>
-      open({
+    async openPrimary(input = {}) {
+      await open({
         initialRoute: input.initialRoute ?? null,
         pendingProjectPath: input.pendingProjectPath ?? null,
         restoreWindowState: true,
-      }),
-    openAdditional: (input = {}) =>
-      open({
+      });
+    },
+    async openAdditional(input = {}) {
+      await open({
         initialRoute: null,
         pendingProjectPath: input.pendingProjectPath ?? null,
         restoreWindowState: false,
-      }),
+      });
+    },
+    async deliverImportLink(link) {
+      let window = currentWindow();
+      if (!window || window.isDestroyed()) {
+        window = await open({
+          initialRoute: null,
+          pendingProjectPath: null,
+          restoreWindowState: true,
+        });
+      }
+      if (window.isMinimized()) window.restore();
+      window.show();
+      window.focus();
+      const deliverable = port.deliverImportLink(window.webContentsId, link);
+      if (deliverable) window.sendImportLink(deliverable);
+    },
     async openOrFocusAgent(target) {
       const windows = port.windows();
       const window =

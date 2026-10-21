@@ -16,7 +16,9 @@ import {
   isRecord,
   parseJson,
   redactKey,
+  type Secrets,
 } from "../upstream-http.js";
+import { skipsCertificateCheck } from "../insecure-tls.js";
 import type { AgentError } from "./agent-errors.js";
 import { streamStatus } from "./failure.js";
 import { notApiDetail, notApiReply, saysNothingYet, type NotApiReply } from "./not-api-reply.js";
@@ -150,14 +152,17 @@ export async function openUpstream(input: {
   url: URL;
   headers: Record<string, string | string[]>;
   body: Buffer;
-  apiKey: string;
+  // 报错里打码的：key 与用户的请求头值。
+  secrets: Secrets;
+  // 不校验证书的主机（insecure-tls.ts）；没开为空。
+  uncheckedHosts: readonly string[];
   headerTimeoutMs: number;
   // 按哪种协议读回复、认开口；null 时第一段字节就算开口（count_tokens 的回复不是对话）。
   reads: ApiEndpointRequestFormat | null;
   // 上游有动静（发出请求、开口前收到字节）时告诉保活。
   onHeard?: () => void;
 }): Promise<UpstreamOpening> {
-  const { res, url, apiKey } = input;
+  const { res, url, secrets } = input;
   input.onHeard?.();
   const outcome = await sendUpstream(input);
   if (res.destroyed) return { kind: "gone" };
@@ -171,14 +176,14 @@ export async function openUpstream(input: {
   }
   if (outcome.kind === "failed") {
     const detail = `${url.origin}: ${describeNetworkError(outcome.error)}`;
-    return failedBySelf({ status: 502, detail: redactKey(detail, apiKey) });
+    return failedBySelf({ status: 502, detail: redactKey(detail, secrets) });
   }
 
   const { response } = outcome;
   const status = response.statusCode ?? 502;
   if (status >= 400) {
     const text = await readLimited({ stream: response, first: null });
-    return refusedOr(failedByUpstream({ status, response, text, apiKey }));
+    return refusedOr(failedByUpstream({ status, response, text, secrets }));
   }
 
   const opening = await awaitOpening({
@@ -200,7 +205,7 @@ export async function openUpstream(input: {
     case "error": {
       const errorStatus = statusOfError(opening);
       return refusedOr(
-        failedByUpstream({ status: errorStatus, response, text: opening.raw, apiKey }),
+        failedByUpstream({ status: errorStatus, response, text: opening.raw, secrets }),
       );
     }
     case "empty":
@@ -211,7 +216,7 @@ export async function openUpstream(input: {
         detail: `${url.origin}: the connection closed before the reply began`,
       });
     case "enveloped":
-      return failedByUpstream({ status: opening.status, response, text: opening.text, apiKey });
+      return failedByUpstream({ status: opening.status, response, text: opening.text, secrets });
     case "not_api": {
       const text = await readLimited({ stream: response, first: opening.head });
       const statusLine = `${status} ${response.statusMessage ?? ""}`.trim();
@@ -221,7 +226,7 @@ export async function openUpstream(input: {
         headers: response.headers,
         text,
       });
-      return failedBySelf({ status: 502, detail: redactKey(detail, apiKey) });
+      return failedBySelf({ status: 502, detail: redactKey(detail, secrets) });
     }
   }
 }
@@ -237,7 +242,7 @@ function failedByUpstream(input: {
   status: number;
   response: IncomingMessage;
   text: string;
-  apiKey: string;
+  secrets: Secrets;
 }): FailedAttempt {
   const { status, text } = input;
   return {
@@ -245,7 +250,7 @@ function failedByUpstream(input: {
     status,
     headers: input.response.headers,
     text,
-    detail: extractErrorDetail(text, input.apiKey) || `HTTP ${status}`,
+    detail: extractErrorDetail(text, input.secrets) || `HTTP ${status}`,
     upstreamError: readUpstreamError(text),
     cause: "error",
   };
@@ -433,6 +438,7 @@ interface UpstreamSend {
   url: URL;
   headers: Record<string, string | string[]>;
   body: Buffer;
+  uncheckedHosts: readonly string[];
   headerTimeoutMs: number;
 }
 
@@ -490,9 +496,12 @@ async function answeredOnLiveConnection(input: {
 
 function sendOnce(input: UpstreamSend): ClientRequest {
   const transport = input.url.protocol === "https:" ? https : http;
+  // 不校验证书的连接与校验的不共用：全局 agent 按 rejectUnauthorized 分开放连接。
+  const skipsCheck = skipsCertificateCheck(input);
   const upstream = transport.request(input.url, {
     method: "POST",
     headers: { ...input.headers, "content-length": String(input.body.length) },
+    ...(skipsCheck ? { rejectUnauthorized: false } : {}),
   });
   // 开口之后的连接错误由 response 的 error / close 处理；这里只为不让无人接的 error 打崩进程。
   upstream.on("error", () => {});
@@ -533,8 +542,8 @@ function isErrorCode(value: unknown): value is string | number {
 }
 
 /** 上游没理会 stream: true，回的又不是这个协议的整份回复：读不出回复，当作开口前失败换家。 */
-export function notAStream(input: { url: URL; text: string; apiKey: string }): FailedAttempt {
-  const detail = extractErrorDetail(input.text, input.apiKey);
+export function notAStream(input: { url: URL; text: string; secrets: Secrets }): FailedAttempt {
+  const detail = extractErrorDetail(input.text, input.secrets);
   return failedBySelf({
     status: 502,
     detail: `${input.url.origin}: the reply was not a stream: ${detail}`,

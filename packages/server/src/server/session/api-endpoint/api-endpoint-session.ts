@@ -2,20 +2,32 @@ import type pino from "pino";
 import type {
   ApiEndpointAgentSettings,
   ApiEndpointError,
+  ApiEndpointIconImage,
+  ApiEndpointRequestExtras,
+  ApiEndpointVendorStatusResponse,
+  ApiEndpointImportScanResponse,
+  ApiEndpointImportDiscoveryResponse,
+  ApiEndpointImportResponse,
+  ApiEndpointImportLinkPreviewResponse,
+  ApiEndpointImportLinkIconResponse,
+  ApiEndpointImportLinkResponse,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import { keyHeaderOf } from "@getpaseo/protocol/api-endpoint/request-extras";
 import type { SessionInboundMessage, SessionOutboundMessage } from "../../messages.js";
 import {
   ApiEndpointRequestError,
   type ApiEndpointAgentSettingsInput,
   type ApiEndpointService,
+  type ApiEndpointRequestExtrasInput,
   type KeepCurrentSettingsCode,
+  validateModelScope,
 } from "../../api-endpoints/service.js";
 
 export interface ApiEndpointSessionHost {
   emit(msg: SessionOutboundMessage): void;
 }
 
-type ApiEndpointRequest = Extract<
+export type ApiEndpointRequest = Extract<
   SessionInboundMessage,
   {
     type:
@@ -27,12 +39,70 @@ type ApiEndpointRequest = Extract<
       | "provider.api_endpoint.keep_current_settings.request"
       | "provider.api_endpoint.preview_switch_off.request"
       | "provider.api_endpoint.set_endpoint_state.request"
+      | "provider.api_endpoint.set_order.request"
+      | "provider.api_endpoint.set_long_conversations.request"
+      | "provider.api_endpoint.set_disabled_models.request"
+      | "provider.api_endpoint.set_endpoint_name_display.request"
+      | "provider.api_endpoint.reveal_key.request"
+      | "provider.api_endpoint.forget_catalog.request"
+      | "provider.api_endpoint.vendor_status.request"
+      | "provider.api_endpoint.import_scan.request"
+      | "provider.api_endpoint.import.request"
+      | "provider.api_endpoint.import_discovery.request"
+      | "provider.api_endpoint.import_ignore.request"
+      | "provider.api_endpoint.import_link_preview.request"
+      | "provider.api_endpoint.import_link_icon.request"
+      | "provider.api_endpoint.import_link.request"
+      | "provider.api_endpoint.list_templates.request"
+      | "provider.api_endpoint.store_icon.request"
+      | "provider.api_endpoint.fetch_site_icon.request"
+      | "provider.api_endpoint.read_icon.request"
       | "provider.api_endpoint.fetch_models.request"
       | "provider.api_endpoint.test_connection.request"
       | "provider.api_endpoint.detect_formats.request"
+      | "provider.api_endpoint.test_models.request"
       | "provider.api_endpoint.cancel.request";
   }
 >;
+
+// 写成以类型为键的对象：ApiEndpointRequest 加了类型而这里漏了，类型检查就过不去。
+const API_ENDPOINT_REQUEST_TYPES: Record<ApiEndpointRequest["type"], true> = {
+  "provider.api_endpoint.list.request": true,
+  "provider.api_endpoint.save.request": true,
+  "provider.api_endpoint.delete.request": true,
+  "provider.api_endpoint.set_active.request": true,
+  "provider.api_endpoint.set_agent_settings.request": true,
+  "provider.api_endpoint.keep_current_settings.request": true,
+  "provider.api_endpoint.preview_switch_off.request": true,
+  "provider.api_endpoint.set_endpoint_state.request": true,
+  "provider.api_endpoint.set_order.request": true,
+  "provider.api_endpoint.set_long_conversations.request": true,
+  "provider.api_endpoint.set_disabled_models.request": true,
+  "provider.api_endpoint.set_endpoint_name_display.request": true,
+  "provider.api_endpoint.reveal_key.request": true,
+  "provider.api_endpoint.forget_catalog.request": true,
+  "provider.api_endpoint.vendor_status.request": true,
+  "provider.api_endpoint.import_scan.request": true,
+  "provider.api_endpoint.import.request": true,
+  "provider.api_endpoint.import_discovery.request": true,
+  "provider.api_endpoint.import_ignore.request": true,
+  "provider.api_endpoint.import_link_preview.request": true,
+  "provider.api_endpoint.import_link_icon.request": true,
+  "provider.api_endpoint.import_link.request": true,
+  "provider.api_endpoint.list_templates.request": true,
+  "provider.api_endpoint.store_icon.request": true,
+  "provider.api_endpoint.fetch_site_icon.request": true,
+  "provider.api_endpoint.read_icon.request": true,
+  "provider.api_endpoint.fetch_models.request": true,
+  "provider.api_endpoint.test_connection.request": true,
+  "provider.api_endpoint.detect_formats.request": true,
+  "provider.api_endpoint.test_models.request": true,
+  "provider.api_endpoint.cancel.request": true,
+};
+
+export function isApiEndpointRequest(msg: SessionInboundMessage): msg is ApiEndpointRequest {
+  return Object.hasOwn(API_ENDPOINT_REQUEST_TYPES, msg.type);
+}
 
 /** daemon 没有这项服务时为 null，同时也不声明 apiEndpoints 能力。 */
 export function createApiEndpointSession(options: {
@@ -81,12 +151,104 @@ export class ApiEndpointSession {
         return this.handlePreviewSwitchOff(request);
       case "provider.api_endpoint.set_endpoint_state.request":
         return this.handleSetEndpointState(request);
+      case "provider.api_endpoint.set_order.request":
+        return this.handleSetOrder(request);
+      case "provider.api_endpoint.set_long_conversations.request":
+        return this.handleSetLongConversations(request);
+      case "provider.api_endpoint.set_disabled_models.request":
+        return this.handleSetDisabledModels(request);
+      case "provider.api_endpoint.set_endpoint_name_display.request":
+        return this.handleSetEndpointNameDisplay(request);
+      case "provider.api_endpoint.reveal_key.request":
+        return this.handleRevealKey(request);
+      case "provider.api_endpoint.forget_catalog.request":
+        return this.handleForgetCatalog(request);
+      case "provider.api_endpoint.vendor_status.request":
+        return this.handleVendorStatus(request);
+      default:
+        return this.handleAddingAids(request, connectionSignal);
+    }
+  }
+
+  /** 添加接口的辅助：模板、图标、从别的软件导入；其余是要向上游发请求的几种。 */
+  private async handleAddingAids(
+    request: Extract<
+      ApiEndpointRequest,
+      {
+        type:
+          | "provider.api_endpoint.import_scan.request"
+          | "provider.api_endpoint.import.request"
+          | "provider.api_endpoint.import_discovery.request"
+          | "provider.api_endpoint.import_ignore.request"
+          | "provider.api_endpoint.import_link_preview.request"
+          | "provider.api_endpoint.import_link_icon.request"
+          | "provider.api_endpoint.import_link.request"
+          | "provider.api_endpoint.list_templates.request"
+          | "provider.api_endpoint.store_icon.request"
+          | "provider.api_endpoint.read_icon.request"
+          | "provider.api_endpoint.fetch_site_icon.request"
+          | "provider.api_endpoint.fetch_models.request"
+          | "provider.api_endpoint.test_connection.request"
+          | "provider.api_endpoint.detect_formats.request"
+          | "provider.api_endpoint.test_models.request"
+          | "provider.api_endpoint.cancel.request";
+      }
+    >,
+    connectionSignal: AbortSignal,
+  ): Promise<void> {
+    switch (request.type) {
+      case "provider.api_endpoint.import_scan.request":
+        return this.handleImportScan(request);
+      case "provider.api_endpoint.import.request":
+        return this.handleImport(request);
+      case "provider.api_endpoint.import_discovery.request":
+        return this.handleImportDiscovery(request);
+      case "provider.api_endpoint.import_ignore.request":
+        return this.handleImportIgnore(request);
+      case "provider.api_endpoint.import_link_preview.request":
+        return this.handleImportLinkPreview(request);
+      case "provider.api_endpoint.import_link_icon.request":
+        return this.handleImportLinkIcon(request);
+      case "provider.api_endpoint.import_link.request":
+        return this.handleImportLink(request);
+      case "provider.api_endpoint.list_templates.request":
+        return this.handleListTemplates(request);
+      case "provider.api_endpoint.store_icon.request":
+        return this.handleStoreIcon(request);
+      case "provider.api_endpoint.read_icon.request":
+        return this.handleReadIcon(request);
+      default:
+        return this.handleUpstream(request, connectionSignal);
+    }
+  }
+
+  /** 要向上游发请求的几种（可被取消），与取消本身。 */
+  private async handleUpstream(
+    request: Extract<
+      ApiEndpointRequest,
+      {
+        type:
+          | "provider.api_endpoint.fetch_site_icon.request"
+          | "provider.api_endpoint.fetch_models.request"
+          | "provider.api_endpoint.test_connection.request"
+          | "provider.api_endpoint.detect_formats.request"
+          | "provider.api_endpoint.test_models.request"
+          | "provider.api_endpoint.cancel.request";
+      }
+    >,
+    connectionSignal: AbortSignal,
+  ): Promise<void> {
+    switch (request.type) {
+      case "provider.api_endpoint.fetch_site_icon.request":
+        return this.handleFetchSiteIcon(request, connectionSignal);
       case "provider.api_endpoint.fetch_models.request":
         return this.handleFetchModels(request, connectionSignal);
       case "provider.api_endpoint.test_connection.request":
         return this.handleTestConnection(request, connectionSignal);
       case "provider.api_endpoint.detect_formats.request":
         return this.handleDetectFormats(request, connectionSignal);
+      case "provider.api_endpoint.test_models.request":
+        return this.handleTestModels(request, connectionSignal);
       case "provider.api_endpoint.cancel.request":
         return this.handleCancel(request);
     }
@@ -140,6 +302,20 @@ export class ApiEndpointSession {
         ...(request.modelMapping !== undefined ? { modelMapping: request.modelMapping } : {}),
         ...(request.manualModels !== undefined ? { manualModels: request.manualModels } : {}),
         ...(request.searchesWeb !== undefined ? { searchesWeb: request.searchesWeb } : {}),
+        ...(request.copyOf !== undefined ? { copyOf: request.copyOf } : {}),
+        ...(request.templateId !== undefined ? { templateId: request.templateId } : {}),
+        ...(request.region !== undefined ? { region: request.region } : {}),
+        ...(request.icon !== undefined ? { icon: request.icon } : {}),
+        ...(request.catalog !== undefined ? { catalog: request.catalog } : {}),
+        ...(request.modelScope !== undefined
+          ? { modelScope: validateModelScope(request.modelScope) }
+          : {}),
+        ...(request.autoPick !== undefined ? { autoPick: request.autoPick } : {}),
+        ...(request.modelSettings !== undefined ? { modelSettings: request.modelSettings } : {}),
+        ...(request.cooldownSettings !== undefined
+          ? { cooldownSettings: request.cooldownSettings }
+          : {}),
+        ...requestExtrasOf(request),
       });
       this.host.emit({
         type: "provider.api_endpoint.save.response",
@@ -321,6 +497,332 @@ export class ApiEndpointSession {
     });
   }
 
+  private async handleSetOrder(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.set_order.request" }>,
+  ): Promise<void> {
+    let error: ApiEndpointError | null = null;
+    try {
+      await this.service.setOrder(request.endpointIds);
+    } catch (caught) {
+      error = this.toWireError(caught, request);
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.set_order.response",
+      payload: { requestId: request.requestId, error },
+    });
+  }
+
+  private async handleSetLongConversations(
+    request: Extract<
+      ApiEndpointRequest,
+      { type: "provider.api_endpoint.set_long_conversations.request" }
+    >,
+  ): Promise<void> {
+    let error: ApiEndpointError | null = null;
+    try {
+      await this.service.setLongConversations({
+        fullContext: request.fullContext,
+        ...(request.compactAt !== undefined ? { compactAt: request.compactAt } : {}),
+      });
+    } catch (caught) {
+      error = this.toWireError(caught, request);
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.set_long_conversations.response",
+      payload: { requestId: request.requestId, error },
+    });
+  }
+
+  private async handleSetDisabledModels(
+    request: Extract<
+      ApiEndpointRequest,
+      { type: "provider.api_endpoint.set_disabled_models.request" }
+    >,
+  ): Promise<void> {
+    let error: ApiEndpointError | null = null;
+    try {
+      await this.service.setDisabledModels({ models: request.models });
+    } catch (caught) {
+      error = this.toWireError(caught, request);
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.set_disabled_models.response",
+      payload: { requestId: request.requestId, error },
+    });
+  }
+
+  private async handleSetEndpointNameDisplay(
+    request: Extract<
+      ApiEndpointRequest,
+      { type: "provider.api_endpoint.set_endpoint_name_display.request" }
+    >,
+  ): Promise<void> {
+    let error: ApiEndpointError | null = null;
+    try {
+      await this.service.setEndpointNameDisplay({ display: request.display });
+    } catch (caught) {
+      error = this.toWireError(caught, request);
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.set_endpoint_name_display.response",
+      payload: { requestId: request.requestId, error },
+    });
+  }
+
+  private async handleRevealKey(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.reveal_key.request" }>,
+  ): Promise<void> {
+    let apiKey: string | null = null;
+    let error: ApiEndpointError | null = null;
+    try {
+      apiKey = this.service.revealKey(request.endpointId);
+    } catch (caught) {
+      error = this.toWireError(caught, request);
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.reveal_key.response",
+      payload: { requestId: request.requestId, apiKey, error },
+    });
+  }
+
+  private async handleForgetCatalog(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.forget_catalog.request" }>,
+  ): Promise<void> {
+    let error: ApiEndpointError | null = null;
+    try {
+      await this.service.forgetCatalog(request.endpointId);
+    } catch (caught) {
+      error = this.toWireError(caught, request);
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.forget_catalog.response",
+      payload: { requestId: request.requestId, error },
+    });
+  }
+
+  /** 读接口存储失败时整个请求失败；一个来源读不了只记在那个来源的 error 里。 */
+  private handleImportScan(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.import_scan.request" }>,
+  ): void {
+    let payload: Omit<ApiEndpointImportScanResponse["payload"], "requestId">;
+    try {
+      const sources = this.service.scanImports({
+        includeOpenCode: request.includeOpenCode === true,
+      });
+      payload = { sources, error: null };
+    } catch (caught) {
+      payload = { sources: [], error: this.toWireError(caught, request) };
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.import_scan.response",
+      payload: { requestId: request.requestId, ...payload },
+    });
+  }
+
+  private async handleImport(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.import.request" }>,
+  ): Promise<void> {
+    let payload: Omit<ApiEndpointImportResponse["payload"], "requestId">;
+    try {
+      const outcome = await this.service.importFromApps(request.picks);
+      let error: ApiEndpointError | null = null;
+      if (outcome.error !== null) error = this.toWireError(outcome.error, request);
+      payload = { imported: outcome.imported, failed: outcome.failed, error };
+    } catch (caught) {
+      payload = { imported: [], failed: null, error: this.toWireError(caught, request) };
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.import.response",
+      payload: { requestId: request.requestId, ...payload },
+    });
+  }
+
+  /** 发现提示：读接口存储失败时整个请求失败（客户端不出提示）；一个来源读不了只是它没有候选。 */
+  private handleImportDiscovery(
+    request: Extract<
+      ApiEndpointRequest,
+      { type: "provider.api_endpoint.import_discovery.request" }
+    >,
+  ): void {
+    let payload: Omit<ApiEndpointImportDiscoveryResponse["payload"], "requestId">;
+    try {
+      payload = { candidates: this.service.discoverImports(), error: null };
+    } catch (caught) {
+      payload = { candidates: [], error: this.toWireError(caught, request) };
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.import_discovery.response",
+      payload: { requestId: request.requestId, ...payload },
+    });
+  }
+
+  private async handleImportIgnore(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.import_ignore.request" }>,
+  ): Promise<void> {
+    let error: ApiEndpointError | null = null;
+    try {
+      await this.service.ignoreImports({ fingerprints: request.fingerprints });
+    } catch (caught) {
+      error = this.toWireError(caught, request);
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.import_ignore.response",
+      payload: { requestId: request.requestId, error },
+    });
+  }
+
+  /** 导入链接的确认框：拒收与读接口存储失败都放进 error。链接里的 key 从不写日志。 */
+  private handleImportLinkPreview(
+    request: Extract<
+      ApiEndpointRequest,
+      { type: "provider.api_endpoint.import_link_preview.request" }
+    >,
+  ): void {
+    let payload: Omit<ApiEndpointImportLinkPreviewResponse["payload"], "requestId">;
+    try {
+      const preview = this.service.previewImportLink(request.link);
+      payload = { preview, error: null };
+    } catch (caught) {
+      payload = { preview: null, error: this.toWireError(caught, request) };
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.import_link_preview.response",
+      payload: { requestId: request.requestId, ...payload },
+    });
+  }
+
+  /** 导入链接的图片：等主机取完；拒收、取图出了想不到的错都放进 error。 */
+  private async handleImportLinkIcon(
+    request: Extract<
+      ApiEndpointRequest,
+      { type: "provider.api_endpoint.import_link_icon.request" }
+    >,
+  ): Promise<void> {
+    let payload: Omit<ApiEndpointImportLinkIconResponse["payload"], "requestId">;
+    try {
+      const iconImage = await this.service.importLinkIcon(request.link);
+      payload = { iconImage, error: null };
+    } catch (caught) {
+      payload = { iconImage: null, error: this.toWireError(caught, request) };
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.import_link_icon.response",
+      payload: { requestId: request.requestId, ...payload },
+    });
+  }
+
+  private async handleImportLink(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.import_link.request" }>,
+  ): Promise<void> {
+    let payload: Omit<ApiEndpointImportLinkResponse["payload"], "requestId">;
+    try {
+      const endpoint = await this.service.addFromImportLink({
+        link: request.link,
+        name: request.name,
+        key: request.key,
+      });
+      payload = { endpoint, error: null };
+    } catch (caught) {
+      payload = { endpoint: null, error: this.toWireError(caught, request) };
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.import_link.response",
+      payload: { requestId: request.requestId, ...payload },
+    });
+  }
+
+  /** 读接口存储失败时整个请求失败；状态页读不到只记在那家的 error 里。 */
+  private async handleVendorStatus(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.vendor_status.request" }>,
+  ): Promise<void> {
+    let payload: Omit<ApiEndpointVendorStatusResponse["payload"], "requestId">;
+    try {
+      payload = {
+        ...(await this.service.vendorStatus({ vendors: request.vendors ?? [] })),
+        error: null,
+      };
+    } catch (caught) {
+      payload = {
+        autoUpdate: false,
+        vendors: [],
+        endpointVendors: {},
+        error: this.toWireError(caught, request),
+      };
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.vendor_status.response",
+      payload: { requestId: request.requestId, ...payload },
+    });
+  }
+
+  private handleListTemplates(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.list_templates.request" }>,
+  ): void {
+    this.host.emit({
+      type: "provider.api_endpoint.list_templates.response",
+      payload: {
+        requestId: request.requestId,
+        templates: this.service.listTemplates(),
+        error: null,
+      },
+    });
+  }
+
+  private handleStoreIcon(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.store_icon.request" }>,
+  ): void {
+    let icon: string | null = null;
+    let error: ApiEndpointError | null = null;
+    try {
+      icon = this.service.storeIcon(Buffer.from(request.data, "base64"));
+    } catch (caught) {
+      error = this.toWireError(caught, request);
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.store_icon.response",
+      payload: { requestId: request.requestId, icon, error },
+    });
+  }
+
+  private async handleFetchSiteIcon(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.fetch_site_icon.request" }>,
+    connectionSignal: AbortSignal,
+  ): Promise<void> {
+    const { signal, release } = this.trackUpstreamRequest(request.requestId, connectionSignal);
+    let icon: string | null = null;
+    let error: ApiEndpointError | null = null;
+    try {
+      icon = await this.service.fetchSiteIcon(
+        { baseUrl: request.baseUrl, name: request.name },
+        signal,
+      );
+    } catch (caught) {
+      error = this.toWireError(caught, request);
+    } finally {
+      release();
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.fetch_site_icon.response",
+      payload: { requestId: request.requestId, icon, error },
+    });
+  }
+
+  private handleReadIcon(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.read_icon.request" }>,
+  ): void {
+    let icon: ApiEndpointIconImage | null = null;
+    let error: ApiEndpointError | null = null;
+    try {
+      icon = this.service.readIcon(request.icon);
+    } catch (caught) {
+      error = this.toWireError(caught, request);
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.read_icon.response",
+      payload: { requestId: request.requestId, icon, error },
+    });
+  }
+
   private async handleFetchModels(
     request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.fetch_models.request" }>,
     connectionSignal: AbortSignal,
@@ -334,6 +836,11 @@ export class ApiEndpointSession {
           baseUrl: request.baseUrl,
           ...(request.apiKey !== undefined ? { apiKey: request.apiKey } : {}),
           ...(request.format !== undefined ? { format: request.format } : {}),
+          ...(request.preview !== undefined ? { preview: request.preview } : {}),
+          ...(request.templateId !== undefined ? { templateId: request.templateId } : {}),
+          ...(request.region !== undefined ? { region: request.region } : {}),
+          ...(request.baseUrls !== undefined ? { baseUrls: request.baseUrls } : {}),
+          ...requestExtrasOf(request),
         },
         signal,
       );
@@ -369,6 +876,10 @@ export class ApiEndpointSession {
           ...(request.apiKey !== undefined ? { apiKey: request.apiKey } : {}),
           ...(request.modelId !== undefined ? { modelId: request.modelId } : {}),
           ...(request.format !== undefined ? { format: request.format } : {}),
+          ...(request.templateId !== undefined ? { templateId: request.templateId } : {}),
+          ...(request.region !== undefined ? { region: request.region } : {}),
+          ...(request.modelIds !== undefined ? { modelIds: request.modelIds } : {}),
+          ...requestExtrasOf(request),
         },
         signal,
       );
@@ -396,17 +907,26 @@ export class ApiEndpointSession {
   ): Promise<void> {
     const { signal, release } = this.trackUpstreamRequest(request.requestId, connectionSignal);
     try {
-      const results = await this.service.detectFormats(
+      const { results, models } = await this.service.detectFormats(
         {
           ...(request.endpointId !== undefined ? { endpointId: request.endpointId } : {}),
           baseUrl: request.baseUrl,
           ...(request.apiKey !== undefined ? { apiKey: request.apiKey } : {}),
+          ...(request.modelId !== undefined ? { modelId: request.modelId } : {}),
+          ...(request.modelIds !== undefined ? { modelIds: request.modelIds } : {}),
+          ...(request.eachModel !== undefined ? { eachModel: request.eachModel } : {}),
+          ...requestExtrasOf(request),
         },
         signal,
       );
       this.host.emit({
         type: "provider.api_endpoint.detect_formats.response",
-        payload: { requestId: request.requestId, results, error: null },
+        payload: {
+          requestId: request.requestId,
+          results,
+          ...(models === null ? {} : { models }),
+          error: null,
+        },
       });
     } catch (error) {
       this.host.emit({
@@ -416,6 +936,48 @@ export class ApiEndpointSession {
           results: [],
           error: this.toWireError(error, request),
         },
+      });
+    } finally {
+      release();
+    }
+  }
+
+  /** 每测完一个模型推一条进度；取消时回应带已测完的结果与 cancelled。 */
+  private async handleTestModels(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.test_models.request" }>,
+    connectionSignal: AbortSignal,
+  ): Promise<void> {
+    const { requestId } = request;
+    const { signal, release } = this.trackUpstreamRequest(requestId, connectionSignal);
+    try {
+      const outcome = await this.service.testModels({
+        request: {
+          endpointId: request.endpointId,
+          ...(request.modelId !== undefined ? { modelId: request.modelId } : {}),
+          ...(request.method !== undefined ? { method: request.method } : {}),
+        },
+        signal,
+        onStarted: (modelIds) =>
+          this.host.emit({
+            type: "provider.api_endpoint.test_models.started",
+            payload: { requestId, modelIds },
+          }),
+        onResult: ({ result, done, total }) =>
+          this.host.emit({
+            type: "provider.api_endpoint.test_models.progress",
+            payload: { requestId, result, done, total },
+          }),
+      });
+      const cancelled: ApiEndpointError = { code: "cancelled", message: "Request cancelled" };
+      const error = outcome.kind === "cancelled" ? cancelled : null;
+      this.host.emit({
+        type: "provider.api_endpoint.test_models.response",
+        payload: { requestId, results: outcome.results, error },
+      });
+    } catch (error) {
+      this.host.emit({
+        type: "provider.api_endpoint.test_models.response",
+        payload: { requestId, results: [], error: this.toWireError(error, request) },
       });
     } finally {
       release();
@@ -529,4 +1091,17 @@ function sideModelsRequested(request: SideModelsRequest): SideModelsRequest {
     requested.allowsAnySubagentModel = request.allowsAnySubagentModel;
   }
   return requested;
+}
+
+/**
+ * 请求带的请求头、附加请求体、key 放哪个头与不校验证书（保存、拉模型、测试、检测都一样）；没带的不传。
+ * 线上的 keyHeader 是字符串，在这里换成认得的一种（不认识的当 both）。
+ */
+function requestExtrasOf(request: ApiEndpointRequestExtras): ApiEndpointRequestExtrasInput {
+  const extras: ApiEndpointRequestExtrasInput = {};
+  if (request.headers !== undefined) extras.headers = request.headers;
+  if (request.extraBody !== undefined) extras.extraBody = request.extraBody;
+  if (request.keyHeader !== undefined) extras.keyHeader = keyHeaderOf(request.keyHeader);
+  if (request.insecureTls !== undefined) extras.insecureTls = request.insecureTls;
+  return extras;
 }
