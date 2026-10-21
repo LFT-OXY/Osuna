@@ -2530,6 +2530,14 @@ export const zhCN: TranslationResources = {
         needsCheck: "key 无效，需要检查",
       },
       import: {
+        discovery: {
+          found_one: "发现 {{count}} 个本地配置",
+          found_other: "发现 {{count}} 个本地配置",
+          review: "查看",
+          ignore: "忽略",
+          info: "Osuna 看了这台主机上的 CC Switch、Claude Code、Codex 和 Alma，发现了还没添加的配置。「查看」打开导入窗口并选上这几条；「忽略」后这几条不再提示，改动过才会再提示，新的照样提示。",
+          ignoreFailed: "没能忽略：{{message}}",
+        },
         open: "导入",
         title: "从别的软件导入",
         info: "Osuna 只读这台主机上 CC Switch、Claude Code、Codex、Alma 和 OpenCode 的设置，不改动它们。key 留在主机上，只添加你选中的条目。",

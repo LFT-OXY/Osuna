@@ -2541,6 +2541,14 @@ export const ptBR: TranslationResources = {
         needsCheck: "Chave recusada, precisa de revisão",
       },
       import: {
+        discovery: {
+          found_one: "{{count}} configuração local encontrada",
+          found_other: "{{count}} configurações locais encontradas",
+          review: "Revisar",
+          ignore: "Ignorar",
+          info: "O Osuna olhou o CC Switch, o Claude Code, o Codex e o Alma neste host e encontrou configurações que você ainda não adicionou. Revisar abre Importar com estas selecionadas. Ignorar as oculta até que mudem; as novas continuam sendo oferecidas.",
+          ignoreFailed: "Não foi possível ignorá-las: {{message}}",
+        },
         open: "Importar",
         title: "Importar de outros apps",
         info: "O Osuna lê as configurações do CC Switch, Claude Code, Codex, Alma e OpenCode neste host e não muda nada nelas. As chaves ficam no host; só as entradas que você escolher são adicionadas.",

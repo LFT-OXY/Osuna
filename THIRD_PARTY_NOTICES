@@ -1038,6 +1038,16 @@ renderImportApps and importAppRow in internal/gui/assets/app.js:
   packages/app/src/api-endpoints/internal/import-picks.test.ts
   packages/app/src/api-endpoints/import-apps-sheet.tsx
 
+The prompt on the endpoints page for local configurations (what it offers, the
+apps it names, read at most once a minute and again after an import, Review
+picking only what it offered, Ignore remembering those fingerprints until they
+change) follows the GET /api/importapps/discovery handler in magpie's
+internal/gui/importapps.go, and discoverLocalProviders, renderProviderDiscovery
+and the Ignore handler in internal/gui/assets/app.js:
+
+  packages/app/src/api-endpoints/use-import-discovery.ts
+  packages/app/src/api-endpoints/import-discovery-banner.tsx
+
 MIT License
 
 Copyright (c) 2026 yetone

@@ -42,16 +42,21 @@ export function isPickable(item: ApiEndpointImportItem): boolean {
 
 /**
  * 打开时默认选上的（magpie openImportApps）：新的与同一家 key 不同的选上（名称撞上、又是同一家 key 不同的也选上，新增一家）；
- * 只是名称撞上的、在那个软件里关着的要用户自己选。
+ * 只是名称撞上的、在那个软件里关着的要用户自己选。从发现提示的「查看」打开时，只选上提示里的那几条（offered）。
  */
-export function initialImportPicks(sources: readonly ApiEndpointImportSource[]): ImportPicks {
+export function initialImportPicks(input: {
+  sources: readonly ApiEndpointImportSource[];
+  offered: ReadonlySet<string> | null;
+}): ImportPicks {
+  const { sources, offered } = input;
   const picks: Record<string, ImportPick> = {};
   for (const source of sources) {
     for (const item of source.items) {
       if (!isPickable(item)) continue;
       const isOnlyTaken = item.status === "name_taken" && (item.otherKeyName ?? null) === null;
+      const isOffered = offered === null || offered.has(item.fingerprint);
       picks[item.fingerprint] = {
-        on: item.off === null && !isOnlyTaken,
+        on: isOffered && item.off === null && !isOnlyTaken,
         choice: "add",
         name: item.name,
       };

@@ -2504,6 +2504,14 @@ export const ar: TranslationResources = {
         needsCheck: "المفتاح مرفوض، يحتاج إلى مراجعة",
       },
       import: {
+        discovery: {
+          found_one: "تم العثور على إعدادات محلية: {{count}}",
+          found_other: "تم العثور على إعدادات محلية: {{count}}",
+          review: "مراجعة",
+          ignore: "تجاهل",
+          info: "فحص Osuna تطبيقات CC Switch وClaude Code وCodex وAlma على هذا المضيف ووجد إعدادات لم تضفها بعد. تفتح «مراجعة» نافذة الاستيراد مع تحديد هذه الإعدادات. ويخفيها «تجاهل» حتى تتغير، وتظل الإعدادات الجديدة معروضة.",
+          ignoreFailed: "تعذّر تجاهلها: {{message}}",
+        },
         open: "استيراد",
         title: "استيراد من تطبيقات أخرى",
         info: "يقرأ Osuna إعدادات CC Switch وClaude Code وCodex وAlma وOpenCode على هذا المضيف دون أن يغيّر فيها شيئًا. تبقى المفاتيح على المضيف، ولا يُضاف إلا ما تختاره.",

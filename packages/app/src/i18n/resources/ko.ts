@@ -2517,6 +2517,14 @@ export const ko: TranslationResources = {
         needsCheck: "키가 거부됨, 확인 필요",
       },
       import: {
+        discovery: {
+          found_one: "로컬 구성 {{count}}개를 찾았습니다",
+          found_other: "로컬 구성 {{count}}개를 찾았습니다",
+          review: "검토",
+          ignore: "무시",
+          info: "Osuna가 이 호스트의 CC Switch, Claude Code, Codex, Alma를 살펴보고 아직 추가하지 않은 설정을 찾았습니다. 검토를 누르면 이 항목들이 선택된 채로 가져오기가 열립니다. 무시하면 바뀌기 전까지 숨기며, 새 항목은 계속 알려 줍니다.",
+          ignoreFailed: "무시하지 못했습니다: {{message}}",
+        },
         open: "가져오기",
         title: "다른 앱에서 가져오기",
         info: "Osuna는 이 호스트에 있는 CC Switch, Claude Code, Codex, Alma, OpenCode의 설정을 읽기만 하고 아무것도 바꾸지 않습니다. 키는 호스트에 남고, 선택한 항목만 추가됩니다.",

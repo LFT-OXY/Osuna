@@ -2567,6 +2567,14 @@ export const en = {
         needsCheck: "Key rejected, needs a check",
       },
       import: {
+        discovery: {
+          found_one: "Found {{count}} local configuration",
+          found_other: "Found {{count}} local configurations",
+          review: "Review",
+          ignore: "Ignore",
+          info: "Osuna looked at CC Switch, Claude Code, Codex and Alma on this host and found settings you haven't added yet. Review opens Import with these picked. Ignore hides them until they change; new ones are still offered.",
+          ignoreFailed: "Couldn't ignore them: {{message}}",
+        },
         open: "Import",
         title: "Import from other apps",
         info: "Osuna reads the settings of CC Switch, Claude Code, Codex, Alma and OpenCode on this host and changes nothing in them. Keys stay on the host; only the entries you pick are added.",

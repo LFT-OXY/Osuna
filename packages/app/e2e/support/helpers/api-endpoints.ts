@@ -328,6 +328,8 @@ interface ApiEndpointSeedClient {
     modelSettings?: ApiEndpointModelSettings;
   }): Promise<ApiEndpointSaveResponse["payload"]>;
   apiEndpointListTemplates(): Promise<ApiEndpointListTemplatesResponse["payload"]>;
+  // 让 daemon 当场重读别的软件的配置（发现提示一分钟内只真读一次）。
+  apiEndpointImportScan(options: { includeOpenCode?: boolean }): Promise<unknown>;
   apiEndpointStoreIcon(options: {
     data: string;
   }): Promise<{ icon: string | null; error: { code: string; message: string } | null }>;

@@ -45,12 +45,20 @@ import type { ImportResult, ImportScanState } from "./use-import-apps";
 
 export interface ImportAppsSheetProps {
   scan: ImportScanState;
+  // 从发现提示「查看」打开时提示里的那几条：只选上它们；从「导入」按钮打开时为 null。
+  offered: ReadonlySet<string> | null;
   onRetry: () => void;
   onImport: (picks: ReturnType<typeof importRequests>) => Promise<ImportResult>;
   onClose: () => void;
 }
 
-export function ImportAppsSheet({ scan, onRetry, onImport, onClose }: ImportAppsSheetProps) {
+export function ImportAppsSheet({
+  scan,
+  offered,
+  onRetry,
+  onImport,
+  onClose,
+}: ImportAppsSheetProps) {
   const { t } = useTranslation();
   const [picks, setPicks] = useState<ImportPicks>({});
   // 每份新的扫描结果重新定默认选择（React 的「渲染时按 props 调整 state」）。
@@ -59,7 +67,7 @@ export function ImportAppsSheet({ scan, onRetry, onImport, onClose }: ImportApps
   const [failure, setFailure] = useState<ImportFailure | null>(null);
   if (scan.status === "ready" && scan.updatedAt !== seenAt) {
     setSeenAt(scan.updatedAt);
-    setPicks(initialImportPicks(scan.sources));
+    setPicks(initialImportPicks({ sources: scan.sources, offered }));
   }
   const sources = scan.status === "ready" ? scan.sources : null;
   const count = pickedCount(picks);

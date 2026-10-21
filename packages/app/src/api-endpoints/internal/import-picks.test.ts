@@ -65,7 +65,7 @@ const sources = [
 
 describe("import picks", () => {
   it("picks new and same-vendor entries by default, a name in use that is also the same vendor too; a name in use alone or one turned off waits for the user", () => {
-    const picks = initialImportPicks(sources);
+    const picks = initialImportPicks({ sources, offered: null });
     expect(Object.keys(picks)).toEqual(["new", "other", "taken", "off", "takenOther"]);
     expect(Object.entries(picks).map(([key, pick]) => [key, pick.on, pick.choice])).toEqual([
       ["new", true, "add"],
@@ -77,9 +77,20 @@ describe("import picks", () => {
     expect(pickedCount(picks)).toBe(3);
   });
 
+  it("opened from the prompt, only the entries the prompt offered start picked", () => {
+    const picks = initialImportPicks({ sources, offered: new Set(["other", "takenOther"]) });
+    expect(Object.entries(picks).map(([key, pick]) => [key, pick.on])).toEqual([
+      ["new", false],
+      ["other", true],
+      ["taken", false],
+      ["off", false],
+      ["takenOther", true],
+    ]);
+  });
+
   it("a name in use can keep both or replace; renaming drops replace and picks the entry", () => {
     const taken = sources[0]?.items[2];
-    const picks = initialImportPicks(sources);
+    const picks = initialImportPicks({ sources, offered: null });
     const pick = picks.taken;
     if (!taken || !pick) throw new Error("fixture");
     expect(importChoices(taken, pick)).toEqual(["add", "replace"]);
@@ -98,7 +109,7 @@ describe("import picks", () => {
   it("sends add, replace and rename for the picked entries only", () => {
     const taken = sources[0]?.items[2];
     if (!taken) throw new Error("fixture");
-    let picks = initialImportPicks(sources);
+    let picks = initialImportPicks({ sources, offered: null });
     picks = { ...picks, taken: renamePick({ item: taken, pick: picks.taken!, name: "  Mine 2 " }) };
     expect(importRequests({ sources, picks })).toEqual([
       { fingerprint: "new", action: "add" },
@@ -115,7 +126,11 @@ describe("import picks", () => {
 
   it("select all turns every pickable entry of a source on or off", () => {
     const only = sources[0]!;
-    const all = setSourcePicks({ source: only, picks: initialImportPicks(sources), on: true });
+    const all = setSourcePicks({
+      source: only,
+      picks: initialImportPicks({ sources, offered: null }),
+      on: true,
+    });
     expect(sourcePickState({ source: only, picks: all })).toEqual({ pickable: 5, on: 5 });
     const none = setSourcePicks({ source: only, picks: all, on: false });
     expect(sourcePickState({ source: only, picks: none })).toEqual({ pickable: 5, on: 0 });

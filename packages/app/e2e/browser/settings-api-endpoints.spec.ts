@@ -5719,7 +5719,10 @@ test.describe("Import from other apps", () => {
 
   // 假配置：CC Switch（config.json）里一家新的中转服务，Codex 里一家和已有接口重名的，OpenCode 里一个登录。
   // extra：CC Switch 里再多一家新的（Second Relay，在 localhost 上）。
-  async function writeImportSources(input: { extra?: boolean } = {}): Promise<void> {
+  // openCodeKey：OpenCode 里再多一把 DeepSeek 的 key（发现提示不读 OpenCode，导入窗口读）。
+  async function writeImportSources(
+    input: { extra?: boolean; openCodeKey?: boolean } = {},
+  ): Promise<void> {
     const second = {
       name: "Second Relay",
       settingsConfig: {
@@ -5765,7 +5768,10 @@ test.describe("Import from other apps", () => {
     await mkdir(path.join(importHome, ".local", "share", "opencode"), { recursive: true });
     await writeFile(
       path.join(importHome, ".local", "share", "opencode", "auth.json"),
-      JSON.stringify({ anthropic: { type: "oauth", refresh: "r", access: "a", expires: 1 } }),
+      JSON.stringify({
+        anthropic: { type: "oauth", refresh: "r", access: "a", expires: 1 },
+        ...(input.openCodeKey ? { deepseek: { type: "api", key: "sk-e2e-deepseek" } } : {}),
+      }),
     );
   }
 
@@ -5916,6 +5922,177 @@ test.describe("Import from other apps", () => {
     // 重扫过：加好的那条已添加，不能再选。
     await expect(importItem(page, "claude/second")).toContainText("Already added");
     await expect(page.getByTestId("api-endpoints-list")).not.toContainText("Team Relay");
+  });
+});
+
+test.describe("The prompt for local configurations", () => {
+  const importHome = path.join(cliHome, "import-home");
+
+  // CC Switch 里一家（extra 时两家）新的中转服务，OpenCode 里一把 key。
+  async function writeDiscoverySources(input: { extra: boolean }): Promise<void> {
+    const relayAt = (host: string, key: string, name: string) => ({
+      name,
+      settingsConfig: {
+        env: {
+          ANTHROPIC_BASE_URL: `${relay.origin.replace("127.0.0.1", host)}/good`,
+          ANTHROPIC_AUTH_TOKEN: key,
+        },
+      },
+    });
+    const providers = {
+      team: relayAt("127.0.0.1", RELAY_KEY, "Team Relay"),
+      ...(input.extra ? { second: relayAt("localhost", "sk-e2e-second", "Second Relay") } : {}),
+    };
+    await mkdir(path.join(importHome, ".cc-switch"), { recursive: true });
+    await writeFile(
+      path.join(importHome, ".cc-switch", "config.json"),
+      JSON.stringify({ claude: { providers } }),
+    );
+    await mkdir(path.join(importHome, ".local", "share", "opencode"), { recursive: true });
+    await writeFile(
+      path.join(importHome, ".local", "share", "opencode", "auth.json"),
+      JSON.stringify({ deepseek: { type: "api", key: "sk-e2e-deepseek" } }),
+    );
+    // daemon 一分钟内只真读一次：导入窗口那种扫描会当场重读，提示照它算。
+    await client.apiEndpointImportScan({ includeOpenCode: false });
+  }
+
+  test.afterEach(async () => {
+    await rm(path.join(importHome, ".cc-switch"), { recursive: true, force: true });
+    await rm(path.join(importHome, ".local", "share", "opencode"), {
+      recursive: true,
+      force: true,
+    });
+  });
+
+  function prompt(page: Page): Locator {
+    return page.getByTestId("api-endpoints-import-discovery").filter({ visible: true });
+  }
+
+  function importSheet(page: Page): Locator {
+    return page.getByTestId("api-endpoint-import-sheet").filter({ visible: true });
+  }
+
+  function pickOf(page: Page, ref: string): Locator {
+    return importSheet(page).getByTestId(`api-endpoint-import-item-${ref}-pick`);
+  }
+
+  test("says how many it found and in which apps; Review opens Import with only those picked", async ({
+    page,
+  }) => {
+    await writeDiscoverySources({ extra: true });
+    await openApiEndpointsPage(page);
+    await expect(prompt(page)).toContainText("Found 2 local configurations");
+    await expect(prompt(page)).toContainText("CC Switch");
+    await expect(prompt(page)).not.toContainText(RELAY_KEY);
+    await prompt(page).getByTestId("api-endpoints-import-discovery-review").click();
+    await expect(importSheet(page)).toBeVisible();
+    await expect(pickOf(page, "claude/team")).toBeChecked();
+    await expect(pickOf(page, "claude/second")).toBeChecked();
+    // OpenCode 不在提示里：从提示打开时不选上它。
+    await expect(pickOf(page, "deepseek")).not.toBeChecked();
+    await page.getByTestId("api-endpoint-import-submit").click();
+    await expect(importSheet(page)).toHaveCount(0);
+    await expect(page.getByText(/^Imported 2: /)).toBeVisible();
+    // 都加上了：提示不再出现。
+    await expect(prompt(page)).toHaveCount(0);
+  });
+
+  test("Review whose scan fails says why in the dialog and can be tried again", async ({
+    page,
+  }) => {
+    await writeDiscoverySources({ extra: false });
+    const scan = { fails: true };
+    await answerImportRpc(page, {
+      type: "provider.api_endpoint.import_scan",
+      isAnswering: () => scan.fails,
+      payload: {
+        sources: [],
+        error: { code: "endpoints_unparsable", message: "endpoints.json could not be parsed" },
+      },
+    });
+    await openApiEndpointsPage(page);
+    await expect(prompt(page)).toContainText("Found 1 local configuration");
+    await prompt(page).getByTestId("api-endpoints-import-discovery-review").click();
+    const failed = importSheet(page).getByTestId("api-endpoint-import-scan-error");
+    await expect(failed).toContainText("endpoints.json could not be parsed");
+    scan.fails = false;
+    await failed.getByRole("button", { name: "Try again" }).click();
+    await expect(pickOf(page, "claude/team")).toBeChecked();
+  });
+
+  test("Ignore hides that batch, also after reopening the page; a new one brings the prompt back", async ({
+    page,
+  }) => {
+    await writeDiscoverySources({ extra: false });
+    await openApiEndpointsPage(page);
+    await expect(prompt(page)).toContainText("Found 1 local configuration");
+    await prompt(page).getByTestId("api-endpoints-import-discovery-ignore").click();
+    await expect(prompt(page)).toHaveCount(0);
+    await page.reload();
+    await expect(page.getByTestId("api-endpoints-list")).toBeVisible();
+    await expect(prompt(page)).toHaveCount(0);
+
+    await writeDiscoverySources({ extra: true });
+    await page.reload();
+    await expect(prompt(page)).toContainText("Found 1 local configuration");
+    await prompt(page).getByTestId("api-endpoints-import-discovery-review").click();
+    await expect(pickOf(page, "claude/second")).toBeChecked();
+    await expect(pickOf(page, "claude/team")).not.toBeChecked();
+  });
+
+  test("a failed Ignore keeps the prompt and says why; trying again hides it", async ({ page }) => {
+    await writeDiscoverySources({ extra: false });
+    const ignore = { fails: true };
+    await answerImportRpc(page, {
+      type: "provider.api_endpoint.import_ignore",
+      isAnswering: () => ignore.fails,
+      payload: {
+        error: { code: "endpoints_unparsable", message: "endpoints.json could not be parsed" },
+      },
+    });
+    await openApiEndpointsPage(page);
+    await prompt(page).getByTestId("api-endpoints-import-discovery-ignore").click();
+    await expect(prompt(page).getByTestId("api-endpoints-import-discovery-error")).toHaveText(
+      "Couldn't ignore them: endpoints.json could not be parsed",
+    );
+    ignore.fails = false;
+    await prompt(page).getByTestId("api-endpoints-import-discovery-ignore").click();
+    await expect(prompt(page)).toHaveCount(0);
+  });
+
+  test("at 390 the prompt reads in full and both buttons show", async ({ page }) => {
+    await writeDiscoverySources({ extra: true });
+    await openApiEndpointsPage(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(prompt(page)).toContainText("Found 2 local configurations");
+    for (const id of ["review", "ignore"]) {
+      const button = prompt(page).getByTestId(`api-endpoints-import-discovery-${id}`);
+      await expect(button).toBeInViewport({ ratio: 1 });
+    }
+  });
+
+  test("a host without apiEndpointManagement has no prompt", async ({ page }) => {
+    await writeDiscoverySources({ extra: false });
+    await hideManagementCapability(page);
+    await openApiEndpointsPage(page);
+    await expect(page.getByTestId("api-endpoints-list")).toBeVisible();
+    await expect(prompt(page)).toHaveCount(0);
+  });
+
+  test("a prompt the host can't answer just isn't shown", async ({ page }) => {
+    await writeDiscoverySources({ extra: false });
+    await answerImportRpc(page, {
+      type: "provider.api_endpoint.import_discovery",
+      isAnswering: () => true,
+      payload: {
+        candidates: [],
+        error: { code: "endpoints_unparsable", message: "endpoints.json could not be parsed" },
+      },
+    });
+    await openApiEndpointsPage(page);
+    await expect(page.getByTestId("api-endpoints-import-button")).toBeVisible();
+    await expect(prompt(page)).toHaveCount(0);
   });
 });
 

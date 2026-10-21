@@ -61,6 +61,8 @@ import { EndpointIconHostProvider } from "./endpoint-icon";
 import { TemplatePickerSheet } from "./template-picker-sheet";
 import { ImportAppsSheet } from "./import-apps-sheet";
 import { useImportApps } from "./use-import-apps";
+import { ImportDiscoveryBanner } from "./import-discovery-banner";
+import { useImportDiscovery } from "./use-import-discovery";
 import { useEndpointTemplates } from "./use-endpoint-templates";
 import { useHostEndpoints, type UseHostEndpointsResult } from "./use-host-endpoints";
 
@@ -474,8 +476,18 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
   // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机没有 set_order、长对话设置、已禁用的模型与接口名显示方式。
   const hasManagement = useHostFeature(serverId, "apiEndpointManagement");
   const [sheet, setSheet] = useState<ConnectionSheetState>(null);
-  const [isImportOpen, setIsImportOpen] = useState(false);
-  const closeImport = useCallback(() => setIsImportOpen(false), []);
+  // 导入窗口：null 关着；从发现提示「查看」打开时带提示里的那几条，只选上它们。
+  const [importOpen, setImportOpen] = useState<ImportOpen | null>(null);
+  const closeImport = useCallback(() => setImportOpen(null), []);
+  // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机没有发现提示。
+  const discovery = useImportDiscovery({ serverId, enabled: hasManagement });
+  const reviewDiscovery = useCallback(
+    () =>
+      setImportOpen({
+        offered: new Set(discovery.candidates.map((candidate) => candidate.fingerprint)),
+      }),
+    [discovery.candidates],
+  );
   const { entries: providerEntries } = useProvidersSnapshot(serverId);
   // 这一页开着时每 5 分钟问一次厂商官方状态页；问不到只是不出提示。
   const vendorStatus = useVendorStatus({ serverId });
@@ -491,7 +503,7 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
               router.push(buildProviderSettingsRoute(serverId, provider)),
             onDuplicate: (endpoint) =>
               setSheet({ kind: "form", seed: duplicateSeed(endpoint, t), backToPicker: false }),
-            onImport: () => setIsImportOpen(true),
+            onImport: () => setImportOpen({ offered: null }),
           }
         : undefined,
     [hasManagement, providerEntries, router, serverId, t, vendorNotices],
@@ -524,8 +536,20 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
     [router, serverId],
   );
 
+  const isFirstEndpoint =
+    endpoints.state.status === "ready" && endpoints.state.endpoints.length === 0;
+
   return (
     <>
+      {hasManagement ? (
+        <ImportDiscoveryBanner
+          candidates={discovery.candidates}
+          ignoreState={discovery.ignoreState}
+          isFirstEndpoint={isFirstEndpoint}
+          onReview={reviewDiscovery}
+          onIgnore={discovery.ignore}
+        />
+      ) : null}
       <ApiEndpointsListSection
         state={endpoints.state}
         now={now}
@@ -573,13 +597,28 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
         onSaved={handleSaved}
         onOpenEndpoint={handleOpenById}
       />
-      {isImportOpen ? <ImportSheet serverId={serverId} onClose={closeImport} /> : null}
+      {importOpen ? (
+        <ImportSheet serverId={serverId} offered={importOpen.offered} onClose={closeImport} />
+      ) : null}
     </>
   );
 }
 
+interface ImportOpen {
+  // 发现提示里的那几条；从「导入」按钮打开时为 null，照常默认选择。
+  offered: ReadonlySet<string> | null;
+}
+
 /** 从别的软件导入：开着时扫一次（含 OpenCode），导入成功就关上。 */
-function ImportSheet({ serverId, onClose }: { serverId: string; onClose: () => void }) {
+function ImportSheet({
+  serverId,
+  offered,
+  onClose,
+}: {
+  serverId: string;
+  offered: ReadonlySet<string> | null;
+  onClose: () => void;
+}) {
   const { scan, retryScan, importPicked } = useImportApps({ serverId });
   const handleImport = useCallback(
     async (picks: Parameters<typeof importPicked>[0]) => {
@@ -590,7 +629,13 @@ function ImportSheet({ serverId, onClose }: { serverId: string; onClose: () => v
     [importPicked, onClose],
   );
   return (
-    <ImportAppsSheet scan={scan} onRetry={retryScan} onImport={handleImport} onClose={onClose} />
+    <ImportAppsSheet
+      scan={scan}
+      offered={offered}
+      onRetry={retryScan}
+      onImport={handleImport}
+      onClose={onClose}
+    />
   );
 }
 

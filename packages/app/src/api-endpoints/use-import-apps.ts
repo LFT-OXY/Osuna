@@ -12,6 +12,7 @@ import { useToast } from "@/contexts/toast-context";
 import { useFetchQuery } from "@/data/query";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { toErrorMessage } from "@/utils/error-messages";
+import { importDiscoveryQueryKey } from "./use-import-discovery";
 
 export type ImportScanState =
   | { status: "loading" }
@@ -74,6 +75,8 @@ export function useImportApps({ serverId }: { serverId: string }): {
       const hasImported = response.imported.length > 0;
       if (hasImported) {
         await queryClient.invalidateQueries({ queryKey: ["api-endpoints", serverId] });
+        // 发现提示重问一次：daemon 导入后会重读别的软件（magpie 导入后 discoverLocalProviders(true)）。
+        void queryClient.invalidateQueries({ queryKey: importDiscoveryQueryKey(serverId) });
         const names = response.imported.map((entry) => entry.name).join(", ");
         const count = response.imported.length;
         toast.show(t("settings.apiEndpoints.import.imported", { count, names }), {

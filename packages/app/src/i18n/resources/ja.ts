@@ -2526,6 +2526,14 @@ export const ja: TranslationResources = {
         needsCheck: "キーが拒否されました。確認が必要です",
       },
       import: {
+        discovery: {
+          found_one: "ローカル設定が {{count}} 件見つかりました",
+          found_other: "ローカル設定が {{count}} 件見つかりました",
+          review: "確認",
+          ignore: "無視",
+          info: "Osuna はこのホストの CC Switch、Claude Code、Codex、Alma を調べ、まだ追加していない設定を見つけました。「確認」でこれらを選んだ状態のインポートを開きます。「無視」すると変更されるまで表示しません。新しいものは引き続き表示します。",
+          ignoreFailed: "無視できませんでした：{{message}}",
+        },
         open: "インポート",
         title: "ほかのアプリからインポート",
         info: "Osuna はこのホスト上の CC Switch、Claude Code、Codex、Alma、OpenCode の設定を読むだけで、何も変更しません。キーはホストに残り、選んだ項目だけが追加されます。",

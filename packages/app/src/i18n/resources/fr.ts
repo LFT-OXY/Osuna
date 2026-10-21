@@ -2556,6 +2556,14 @@ export const fr: TranslationResources = {
         needsCheck: "Clé refusée, à vérifier",
       },
       import: {
+        discovery: {
+          found_one: "{{count}} configuration locale trouvée",
+          found_other: "{{count}} configurations locales trouvées",
+          review: "Examiner",
+          ignore: "Ignorer",
+          info: "Osuna a regardé CC Switch, Claude Code, Codex et Alma sur cet hôte et a trouvé des réglages que vous n'avez pas encore ajoutés. Examiner ouvre Importer avec ceux-ci sélectionnés. Ignorer les masque jusqu'à ce qu'ils changent ; les nouveaux restent proposés.",
+          ignoreFailed: "Impossible de les ignorer : {{message}}",
+        },
         open: "Importer",
         title: "Importer depuis d'autres apps",
         info: "Osuna lit les réglages de CC Switch, Claude Code, Codex, Alma et OpenCode sur cet hôte sans rien y modifier. Les clés restent sur l'hôte ; seules les entrées choisies sont ajoutées.",
