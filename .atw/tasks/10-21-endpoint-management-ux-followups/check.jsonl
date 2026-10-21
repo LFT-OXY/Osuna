@@ -1,0 +1,8 @@
+{"file": ".atw/tasks/archive/2026-10/10-16-endpoint-management-ux/prd.md", "reason": "原任务需求与用户故事编号（9、70、89 等），判断补的测试是否对上原行为"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "浏览器测试的失败分支写法、三种测试各归各的目录"}
+{"file": ".atw/spec/app/frontend/component-guidelines.md", "reason": "接口管理界面统一样式（工单 30 写回的那节），窄窗口与截图规矩"}
+{"file": ".atw/spec/server/backend/testing.md", "reason": "daemon 端到端与单元测试规矩、平台跳过写法"}
+{"file": ".atw/spec/server/backend/error-handling.md", "reason": "给用户的失败原因写法（拉模型清单失败不露请求地址）"}
+{"file": "docs/testing.md", "reason": "确定性、真实依赖优先、测试组织"}
+{"file": "docs/glossary.md", "reason": "术语表 Import 两条与新增三条"}
+{"file": "docs/i18n.md", "reason": "单复数与新增文案"}

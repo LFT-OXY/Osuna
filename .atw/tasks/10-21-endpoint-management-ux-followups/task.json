@@ -3,7 +3,7 @@
   "name": "endpoint-management-ux-followups",
   "title": "接口管理好用性验收遗留",
   "description": "10-16-endpoint-management-ux 验收时留下的小问题：窄窗口 key 截断、已禁用的模型删除失败缺浏览器测试、3 处截图证据不全、4 个用户故事缺完整流程测试，以及验收中观察到的几处小瑕疵",
-  "status": "discover",
+  "status": "specify",
   "dev_type": null,
   "scope": null,
   "package": "app",
