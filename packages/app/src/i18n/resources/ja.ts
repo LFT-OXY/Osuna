@@ -2785,6 +2785,14 @@ export const ja: TranslationResources = {
           userIdInfo:
             "new-api 中継でのユーザー ID（サイトの個人設定に表示）。残高を照会するときだけ New-Api-User として送り、チャットのリクエストには付けません。このエンドポイントのヘッダーにある New-Api-User も使えます。両方あるときはこの欄が優先です。",
           userIdPlaceholder: "任意 · new-api のみ",
+          teamOrgId: "チームの組織 ID",
+          teamOrgIdInfo:
+            "GLM Coding Plan チームの組織 ID（BigModel または Z.ai のコンソールに表示）。プロジェクト ID も入れると、このキーに自分のプランがないときチームのウィンドウを読みます。",
+          teamOrgIdPlaceholder: "任意 · GLM チームプランのみ",
+          teamProjectId: "チームのプロジェクト ID",
+          teamProjectIdInfo: "同じコンソールにあるチームのプロジェクト ID。両方の ID が必要です。",
+          teamProjectIdPlaceholder: "任意 · GLM チームプランのみ",
+          teamBothNeeded: "チームプラン：組織 ID とプロジェクト ID の両方を入力してください",
           fixNewApiKeyQuery:
             "…/api/usage/token が受け付けるのは API キーで、このトークンではありません。アカウントの残高は、new-api なら /api/user/self、sub2api なら /api/v1/user/profile です。",
           fixSub2apiKeyQuery:
@@ -3066,6 +3074,8 @@ export const ja: TranslationResources = {
           month: "月",
           allowance: "プラン使用量",
           mcpMonth: "MCP · 月",
+          session: "セッション",
+          credits: "クレジット",
           bucket: "{{bucket}} · {{window}}",
           bucketVideo: "動画",
           bucketImage: "画像",
@@ -3073,6 +3083,18 @@ export const ja: TranslationResources = {
         },
         pace: "ペース {{pace}}",
         asideTitle: "使い切ってもモデルは止まりません",
+        teamPlan: "チームプラン",
+        resets: {
+          left: "残り {{resets}}",
+          countOne: "リセット {{count}} 回",
+          countMany: "リセット {{count}} 回",
+          fiveHourOne: "5 時間リセット {{count}} 回",
+          fiveHourMany: "5 時間リセット {{count}} 回",
+          weeklyOne: "週リセット {{count}} 回",
+          weeklyMany: "週リセット {{count}} 回",
+          soonest: "最短の期限 {{when}}",
+          info: "リセットはベンダーのページで使います。Osuna は表示するだけです。",
+        },
         autoRefresh: {
           label: "残高とプラン使用量を自動更新",
           hint: "エンドポイント一覧または各エンドポイントのページを開いている間、1 分ごとに読み取ります。オフ：これらのページを開いたとき、またはエンドポイントのページで「更新」を押したときだけ。",

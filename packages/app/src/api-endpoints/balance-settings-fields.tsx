@@ -1,6 +1,6 @@
 // 余额查询地址、方法、取值写法与「查询余额」的编排照 magpie（https://github.com/yetone/magpie，
 // internal/gui/assets/app.js 编辑窗口的 Balance URL、Balance request method、Balance field、Check balance、
-// 账户令牌（Account balance）与 balanceFix，7597c132）。「自动识别」是 Osuna 加的，magpie 没有。
+// 账户令牌（Account balance）、balanceFix 与团队的 zhipuTeam 两栏，7597c132）。「自动识别」是 Osuna 加的，magpie 没有。
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import React, { useCallback, useMemo } from "react";
 import type { TFunction } from "i18next";
@@ -29,7 +29,8 @@ const KEY = "settings.apiEndpoints.form.balance";
 /**
  * 「高级」里的余额设置：方法（GET / POST）与余额查询地址同一行，取值写法的占位是按地址给的默认写法；
  * 地址下面的「自动识别」用表单里的 key 与地址试 new-api、sub2api 的余额地址，试中就填上，结果写在按钮旁。
- * 账户令牌打码（可显示、可移除），令牌与地址对不上时就地提示并给「改用 …」；new-api 的用户 ID。
+ * 账户令牌打码（可显示、可移除），令牌与地址对不上时就地提示并给「改用 …」；new-api 的用户 ID；
+ * 地址是智谱或 Z.ai 时另有团队组织 ID 与项目 ID。
  * 「查询余额」在最后，用表单里还没保存的值当场查，结果写在按钮旁，留到再查或关掉窗口。说明都在信息提示里。
  */
 export function BalanceSettingsFields({
@@ -137,6 +138,40 @@ export function BalanceSettingsFields({
           testID="api-endpoint-connection-balance-user-id-input"
         />
       </View>
+      {state.isZhipuAddress ? (
+        <>
+          <TeamIdField
+            label={t(`${KEY}.teamOrgId`)}
+            info={t(`${KEY}.teamOrgIdInfo`)}
+            placeholder={t(`${KEY}.teamOrgIdPlaceholder`)}
+            value={state.balanceTeamOrgIdText}
+            onChangeText={model.setBalanceTeamOrgId}
+            invalid={state.hasLoneTeamId && state.balanceTeamOrgIdText.trim() === ""}
+            size={size}
+            testID="api-endpoint-connection-balance-team-org"
+          />
+          <TeamIdField
+            label={t(`${KEY}.teamProjectId`)}
+            info={t(`${KEY}.teamProjectIdInfo`)}
+            placeholder={t(`${KEY}.teamProjectIdPlaceholder`)}
+            value={state.balanceTeamProjectIdText}
+            onChangeText={model.setBalanceTeamProjectId}
+            invalid={state.hasLoneTeamId && state.balanceTeamProjectIdText.trim() === ""}
+            size={size}
+            testID="api-endpoint-connection-balance-team-project"
+          />
+          {state.hasLoneTeamId ? (
+            <Text
+              variant="caption"
+              color="statusWarning"
+              accessibilityLiveRegion="polite"
+              testID="api-endpoint-connection-balance-team-both"
+            >
+              {t(`${KEY}.teamBothNeeded`)}
+            </Text>
+          ) : null}
+        </>
+      ) : null}
       <View style={styles.checkRow}>
         <Button
           variant="outline"
@@ -151,6 +186,45 @@ export function BalanceSettingsFields({
         <CheckResult check={check} />
       </View>
     </>
+  );
+}
+
+/** 智谱团队组织 ID、项目 ID 的一栏（照 magpie 编辑器的 Team organization / Team project）。 */
+function TeamIdField({
+  label,
+  info,
+  placeholder,
+  value,
+  onChangeText,
+  invalid,
+  size,
+  testID,
+}: {
+  label: string;
+  info: string;
+  placeholder: string;
+  value: string;
+  onChangeText: (value: string) => void;
+  // 另一栏填了、这栏空着：描成警告的边，看得出缺的是哪一栏。
+  invalid: boolean;
+  size: "sm" | "md";
+  testID: string;
+}) {
+  return (
+    <View style={styles.field} testID={testID}>
+      <AdvancedFieldLabel label={label} info={info} testID={`${testID}-info`} />
+      <FormTextInput
+        initialValue={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        autoCapitalize="none"
+        autoCorrect={false}
+        invalid={invalid}
+        size={size}
+        accessibilityLabel={label}
+        testID={`${testID}-input`}
+      />
+    </View>
   );
 }
 

@@ -2309,4 +2309,41 @@ describe("API endpoint balance (apiEndpointBalance)", () => {
     };
     expect(ApiEndpointBalanceReadingSchema.parse(refused)).toEqual(refused);
   });
+
+  it("parses a GLM team's windows with its resets by window, team settings on a save, and older ones without", () => {
+    const team = {
+      endpointId: "ep_glm",
+      status: "ok",
+      items: [],
+      windows: [{ id: "5h", label: "5 hours", usedPct: 20, remainingPct: 80, resetsAt: null }],
+      team: true,
+      resets: {
+        count: 3,
+        until: "2026-10-25T00:00:00.000Z",
+        byWindow: true,
+        fiveHour: 2,
+        weekly: 1,
+        each: [
+          { until: "2026-10-25T00:00:00.000Z", window: "fiveHour" },
+          { until: "2026-10-26T00:00:00.000Z", window: "weekly" },
+          { until: null, window: "fiveHour" },
+        ],
+      },
+      readAt: "2026-10-22T08:00:00.000Z",
+      failure: null,
+    };
+    expect(ApiEndpointBalanceReadingSchema.parse(team)).toEqual(team);
+    const { team: _team, resets: _resets, ...older } = team;
+    expect(ApiEndpointBalanceReadingSchema.parse(older)).toEqual(older);
+    const save = {
+      type: "provider.api_endpoint.save.request" as const,
+      requestId: "req-t1",
+      provider: "claude",
+      name: "GLM team",
+      baseUrls: [{ format: "anthropic_messages", url: "https://open.bigmodel.cn/api/anthropic" }],
+      models: [],
+      balance: { teamOrgId: "org-1", teamProjectId: "proj-1" },
+    };
+    expect(SessionInboundMessageSchema.parse(save)).toEqual(save);
+  });
 });

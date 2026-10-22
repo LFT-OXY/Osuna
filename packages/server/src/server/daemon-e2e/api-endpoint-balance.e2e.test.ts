@@ -400,6 +400,9 @@ describe("API endpoint balance of the other known vendors", () => {
       minimax_cn: "https://api.minimaxi.com/v1/token_plan/remains",
       minimax_io: "https://api.minimax.io/v1/token_plan/remains",
       opencode_go: "https://opencode.ai/zen/go/v1/usage",
+      // 套餐窗口第二批（工单 09）：智谱团队在 bigmodel.cn 的第二个站点，Command Code 的套餐。
+      glm_cn_biz: "https://bigmodel.cn/api/monitor/usage/quota/limit",
+      commandcode_subscriptions: "https://api.commandcode.ai/alpha/billing/subscriptions",
     });
   });
 
@@ -475,10 +478,13 @@ describe("API endpoint balance of the other known vendors", () => {
       const reading = await readAt(baseUrl);
       expect(reading.status).toBe("ok");
       expect(reading.items).toEqual([item]);
-      expect(requests).toHaveLength(1);
-      expect(requests[0]?.url).toBe(pathOf(vendor));
-      expect(requests[0]?.headers.authorization).toBe(`Bearer ${KEY}`);
-      expect(requests[0]?.headers["user-agent"]).toBe(`Osuna/${VERSION}`);
+      // Command Code 与 Ollama Cloud 的套餐窗口也问同一个地址（照 magpie 两张卡各问各的）。
+      expect(requests.length).toBeGreaterThanOrEqual(1);
+      for (const request of requests) {
+        expect(request.url).toBe(pathOf(vendor));
+        expect(request.headers.authorization).toBe(`Bearer ${KEY}`);
+        expect(request.headers["user-agent"]).toBe(`Osuna/${VERSION}`);
+      }
     },
   );
 
@@ -2240,6 +2246,332 @@ describe("API endpoint plan windows", () => {
     expect(busy.status).toBe("ok");
     expect(busy.stale?.reason).toBe("temporary");
     expect(busy.windows?.map((window) => window.id)).toEqual(["5h"]);
+  });
+
+  async function saveTeamAt(baseUrl: string, team: { org?: string; project?: string }) {
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: "GLM team",
+      baseUrl,
+      apiKey: KEY,
+      models: [{ id: "some-model" }],
+      defaultModelId: "some-model",
+      balance: {
+        ...(team.org === undefined ? {} : { teamOrgId: team.org }),
+        ...(team.project === undefined ? {} : { teamProjectId: team.project }),
+      },
+    });
+    expect(saved.error).toBeNull();
+    if (!saved.endpoint) throw new Error("Expected a saved endpoint");
+    return saved.endpoint;
+  }
+
+  const NO_PERSONAL_PLAN = { code: 200, success: true, data: { level: "", limits: [] } };
+  const TEAM_QUOTA = {
+    code: 200,
+    success: true,
+    data: {
+      limits: [
+        // 团队的 5 小时不带 number。
+        {
+          type: "CREDIT_LIMIT",
+          unit: 3,
+          percentage: 20,
+          nextResetTime: Date.parse("2026-10-22T10:00:00.000Z"),
+        },
+        {
+          type: "CREDIT_LIMIT",
+          unit: 6,
+          number: 1,
+          percentage: 50,
+          nextResetTime: Date.parse("2026-10-27T00:00:00.000Z"),
+        },
+      ],
+    },
+  };
+  const TEAM_RESETS = {
+    code: 200,
+    success: true,
+    data: {
+      fiveHourResets: [
+        { available: true, expireTime: "2026-10-26 00:00:00" },
+        { available: true, expireTime: Date.parse("2026-10-24T00:00:00.000Z") },
+        // 用掉的那次还列着一周，不算。
+        { available: false, expireTime: Date.parse("2026-10-23T00:00:00.000Z") },
+      ],
+      weekResets: [{ available: true }],
+    },
+  };
+  const glmCn = () => pathOf("glm_cn");
+  const resetsOf = (quota: string) =>
+    `${quota.replace("/api/monitor/usage/quota/limit", "/api/biz/customer-package-reset/list")}?targetType=TEAM`;
+
+  test("a GLM team's IDs are kept in the balance settings, and an empty pair clears them", async () => {
+    const endpoint = await saveTeamAt("https://open.bigmodel.cn/api/anthropic", {
+      org: " org-1 ",
+      project: "proj-1",
+    });
+    expect(endpoint.balance).toEqual({ teamOrgId: "org-1", teamProjectId: "proj-1" });
+    const cleared = await client.apiEndpointSave({
+      provider: "claude",
+      endpointId: endpoint.id,
+      name: "GLM team",
+      models: [{ id: "some-model" }],
+      defaultModelId: "some-model",
+      balance: { teamOrgId: "", teamProjectId: " " },
+    });
+    expect(cleared.endpoint?.balance).toBeUndefined();
+  });
+
+  test("a GLM key with no personal windows and the team's IDs shows the team's windows and resets by window", async () => {
+    replies.set(glmCn(), (response) => sendJson(response, 200, NO_PERSONAL_PLAN));
+    replies.set(`${glmCn()}?type=2`, (response) => sendJson(response, 200, TEAM_QUOTA));
+    replies.set(resetsOf(glmCn()), (response) => sendJson(response, 200, TEAM_RESETS));
+    const endpoint = await saveTeamAt("https://open.bigmodel.cn/api/coding/paas/v4", {
+      org: "org-1",
+      project: "proj-1",
+    });
+    const reading = await read(endpoint.id);
+    expect(reading.status).toBe("ok");
+    expect(reading.team).toBe(true);
+    expect(reading.windows?.map((window) => [window.id, window.usedPct])).toEqual([
+      ["5h", 20],
+      ["7d", 50],
+    ]);
+    expect(reading.resets).toEqual({
+      count: 3,
+      until: "2026-10-24T00:00:00.000Z",
+      byWindow: true,
+      fiveHour: 2,
+      weekly: 1,
+      each: [
+        { until: "2026-10-24T00:00:00.000Z", window: "fiveHour" },
+        // 智谱的「2026-10-26 00:00:00」按北京时间。
+        { until: "2026-10-25T16:00:00.000Z", window: "fiveHour" },
+        { until: null, window: "weekly" },
+      ],
+    });
+    const team = requests.find((request) => request.url === `${glmCn()}?type=2`);
+    expect(team?.headers.authorization).toBe(KEY);
+    expect(team?.headers["bigmodel-organization"]).toBe("org-1");
+    expect(team?.headers["bigmodel-project"]).toBe("proj-1");
+    expect(team?.headers["set-language"]).toBe("zh");
+    expect(team?.headers["user-agent"]).toBe(`Osuna/${VERSION}`);
+    const resets = requests.find((request) => request.url === resetsOf(glmCn()));
+    expect(resets?.headers.authorization).toBe(KEY);
+    expect(resets?.headers["bigmodel-organization"]).toBe("org-1");
+    expect(resets?.headers["bigmodel-project"]).toBe("proj-1");
+    const kept = await readFile(
+      path.join(daemon.paseoHome, "api-endpoints", "balance-readings.json"),
+      "utf8",
+    );
+    expect(kept).toContain("fiveHour");
+  });
+
+  test("BigModel's team is asked at bigmodel.cn when open.bigmodel.cn has none; Z.ai's in English", async () => {
+    replies.set(glmCn(), (response) => sendJson(response, 200, NO_PERSONAL_PLAN));
+    replies.set(`${glmCn()}?type=2`, (response) => sendJson(response, 200, NO_PERSONAL_PLAN));
+    const biz = pathOf("glm_cn_biz");
+    replies.set(`${biz}?type=2`, (response) => sendJson(response, 200, TEAM_QUOTA));
+    const endpoint = await saveTeamAt("https://open.bigmodel.cn/api/anthropic", {
+      org: "org-1",
+      project: "proj-1",
+    });
+    const reading = await read(endpoint.id);
+    expect(reading.windows?.map((window) => window.id)).toEqual(["5h", "7d"]);
+    // 重置次数在答出团队窗口的站点问；那里没有就不写次数。
+    expect(requests.map((request) => request.url)).toContain(resetsOf(biz));
+    expect(reading.resets).toBeUndefined();
+
+    requests.length = 0;
+    const zai = pathOf("glm_z");
+    replies.set(zai, (response) => sendJson(response, 200, NO_PERSONAL_PLAN));
+    replies.set(`${zai}?type=2`, (response) => sendJson(response, 200, TEAM_QUOTA));
+    const onZai = await saveTeamAt("https://api.z.ai/api/anthropic", {
+      org: "org-2",
+      project: "proj-2",
+    });
+    expect((await read(onZai.id)).team).toBe(true);
+    const asked = requests.find((request) => request.url === `${zai}?type=2`);
+    expect(asked?.headers["set-language"]).toBe("en");
+  });
+
+  test("without both team IDs no team is asked; a key refused is not asked as a team's", async () => {
+    replies.set(glmCn(), (response) => sendJson(response, 200, NO_PERSONAL_PLAN));
+    const half = await saveTeamAt("https://open.bigmodel.cn/api/coding/paas/v4", {
+      org: "org-1",
+    });
+    const reading = await read(half.id);
+    expect(reading.status).toBe("unsupported");
+    expect(requests.map((request) => request.url)).toEqual([glmCn()]);
+
+    requests.length = 0;
+    replies.set(glmCn(), (response) =>
+      sendJson(response, 200, { code: 1001, msg: "Token expired", success: false }),
+    );
+    const refused = await saveTeamAt("https://open.bigmodel.cn/api/coding/paas/v4", {
+      org: "org-1",
+      project: "proj-1",
+    });
+    expect((await read(refused.id)).failure?.hint).toBe("glm_key_refused");
+    expect(requests.map((request) => request.url)).toEqual([glmCn()]);
+  });
+
+  test("a GLM key on its own plan is not asked as a team's", async () => {
+    replies.set(glmCn(), (response) => sendJson(response, 200, GLM_QUOTA));
+    const endpoint = await saveTeamAt("https://open.bigmodel.cn/api/coding/paas/v4", {
+      org: "org-1",
+      project: "proj-1",
+    });
+    const reading = await read(endpoint.id);
+    expect(reading.team).toBeUndefined();
+    expect(requests.map((request) => request.url)).toEqual([glmCn()]);
+  });
+
+  const COMMAND_CODE_CREDITS = {
+    credits: {
+      planId: "individual-goat-monthly",
+      monthlyCredits: 41.2,
+      purchasedCredits: 5,
+      freeCredits: 0,
+    },
+    windowLimits: {
+      limited: true,
+      fiveHour: { used: 3, cap: 10, resetAt: Date.parse("2026-10-22T10:00:00.000Z") },
+      // 秒也认。
+      weekly: { used: 12, cap: 40, resetAt: Date.parse("2026-10-27T00:00:00.000Z") / 1000 },
+    },
+  };
+
+  test("a Command Code plan key shows its 5-hour and weekly windows and the month's credits, beside its balance", async () => {
+    replies.set(pathOf("commandcode"), (response) => sendJson(response, 200, COMMAND_CODE_CREDITS));
+    const reading = await readAt("https://api.commandcode.ai/provider/v1");
+    expect(reading.status).toBe("ok");
+    expect(reading.items).toEqual([{ label: null, text: "$46.20", value: 46.2, unit: "USD" }]);
+    expect(reading.windows).toEqual([
+      {
+        id: "5h",
+        label: "5 hours",
+        usedPct: 30,
+        remainingPct: 70,
+        resetsAt: "2026-10-22T10:00:00.000Z",
+        startsAt: "2026-10-22T05:00:00.000Z",
+        pacePct: expect.closeTo(-30, 6),
+      },
+      {
+        id: "7d",
+        label: "7 days",
+        usedPct: 30,
+        remainingPct: 70,
+        resetsAt: "2026-10-27T00:00:00.000Z",
+        startsAt: "2026-10-20T00:00:00.000Z",
+        pacePct: expect.closeTo(30 - (56 / 168) * 100, 3),
+      },
+      {
+        // GOAT 每月 $70：池子 70 + 5，剩 46.2。
+        id: "credits",
+        label: "Credits",
+        usedPct: expect.closeTo((28.8 / 75) * 100, 6),
+        remainingPct: expect.closeTo((46.2 / 75) * 100, 6),
+        resetsAt: null,
+        used: expect.closeTo(28.8, 6),
+        limit: 75,
+        unit: "USD",
+      },
+    ]);
+    // 回复里有 planId，不问订阅。
+    expect(requests.map((request) => request.url)).not.toContain(
+      pathOf("commandcode_subscriptions"),
+    );
+  });
+
+  test("Command Code's credits leaving the plan out ask its subscription, kept ten minutes", async () => {
+    const { planId: _planId, ...credits } = COMMAND_CODE_CREDITS.credits;
+    replies.set(pathOf("commandcode"), (response) =>
+      sendJson(response, 200, { ...COMMAND_CODE_CREDITS, credits }),
+    );
+    replies.set(pathOf("commandcode_subscriptions"), (response) =>
+      sendJson(response, 200, {
+        success: true,
+        data: { planId: "individual-pro-monthly", status: "active" },
+      }),
+    );
+    const id = await saveAt("https://api.commandcode.ai/provider/v1");
+    const reading = await read(id);
+    // Pro 每月 $30，剩的月度 41.2 比它多：池子 41.2 + 5。
+    expect(reading.windows?.find((window) => window.id === "credits")).toMatchObject({
+      used: 0,
+      limit: 46.2,
+    });
+    const asked = requests.filter((request) => request.url === pathOf("commandcode_subscriptions"));
+    expect(asked).toHaveLength(1);
+    expect(asked[0]?.headers.authorization).toBe(`Bearer ${KEY}`);
+    expect(asked[0]?.headers["user-agent"]).toBe(`Osuna/${VERSION}`);
+    clock = NOW + 9 * 60 * 1000;
+    await read(id, { force: true });
+    clock = NOW + 11 * 60 * 1000;
+    await read(id, { force: true });
+    expect(
+      requests.filter((request) => request.url === pathOf("commandcode_subscriptions")),
+    ).toHaveLength(2);
+  });
+
+  test("a Command Code pay-as-you-go key has no windows: only its balance", async () => {
+    replies.set(pathOf("commandcode"), (response) =>
+      sendJson(response, 200, { credits: { monthlyCredits: 0, purchasedCredits: 12 } }),
+    );
+    const reading = await readAt("https://api.commandcode.ai/provider/v1");
+    expect(reading.items.map((item) => item.text)).toEqual(["$12.00"]);
+    expect(reading.windows).toBeUndefined();
+  });
+
+  test("Ollama Cloud's allowance is a month's window, aside when credits are bought", async () => {
+    replies.set(pathOf("ollama"), (response) =>
+      sendJson(response, 200, {
+        included: {
+          balance_usd: 72.5,
+          allowance_usd: 100,
+          period: { from: "2026-10-15T00:00:00Z", until: "2026-11-15T00:00:00Z" },
+        },
+        purchased: { balance_usd: 25 },
+      }),
+    );
+    const reading = await readAt("https://ollama.com");
+    expect(reading.items.map((item) => item.text)).toEqual(["$25.00"]);
+    expect(reading.windows).toEqual([
+      {
+        id: "month",
+        label: "Month",
+        usedPct: expect.closeTo(27.5, 6),
+        remainingPct: 72.5,
+        resetsAt: "2026-11-15T00:00:00.000Z",
+        used: 27.5,
+        limit: 100,
+        unit: "USD",
+        aside: true,
+        startsAt: "2026-10-15T00:00:00.000Z",
+        pacePct: expect.closeTo(27.5 - ((7 * 24 + 8) / (31 * 24)) * 100, 3),
+      },
+    ]);
+  });
+
+  test("Ollama Cloud's legacy plan shows its session and weekly limits", async () => {
+    replies.set(pathOf("ollama"), (response) =>
+      sendJson(response, 200, {
+        included: {
+          session: { remaining_percent: 75, resets_at: "2026-10-22T09:00:00Z" },
+          weekly: { remaining_percent: 40, resets_at: "2026-10-27T00:00:00Z" },
+        },
+      }),
+    );
+    const reading = await readAt("https://ollama.com");
+    expect(reading.items).toEqual([]);
+    expect(reading.windows?.map((window) => [window.id, window.usedPct, window.aside])).toEqual([
+      ["session", 25, undefined],
+      ["7d", 60, undefined],
+    ]);
+    // 回复不说 Session 多长，没有配速。
+    expect(reading.windows?.[0]?.pacePct).toBeUndefined();
   });
 
   test("checking the balance from the form asks no plan", async () => {

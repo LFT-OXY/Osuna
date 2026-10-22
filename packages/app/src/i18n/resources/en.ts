@@ -2820,6 +2820,15 @@ export const en = {
           userIdInfo:
             "Your user ID on a new-api relay, shown in the site's personal settings. Sent as New-Api-User only when the balance is asked, never with a chat request. A New-Api-User header on this endpoint works too; this field wins over it.",
           userIdPlaceholder: "Optional · new-api only",
+          teamOrgId: "Team organization ID",
+          teamOrgIdInfo:
+            "A GLM Coding Plan team's organization ID, as the BigModel or Z.ai console shows it. With the project ID too, the team's windows are read when this key has no plan of its own.",
+          teamOrgIdPlaceholder: "Optional · GLM team plan only",
+          teamProjectId: "Team project ID",
+          teamProjectIdInfo:
+            "The team's project ID, from the same console. Both IDs are needed to read the team's windows.",
+          teamProjectIdPlaceholder: "Optional · GLM team plan only",
+          teamBothNeeded: "Team plan: give both the organization ID and the project ID",
           fixNewApiKeyQuery:
             "…/api/usage/token takes the API key, not this token. For the account's balance, new-api uses /api/user/self; sub2api uses /api/v1/user/profile.",
           fixSub2apiKeyQuery:
@@ -3096,6 +3105,8 @@ export const en = {
           month: "Month",
           allowance: "Plan usage",
           mcpMonth: "MCP · Month",
+          session: "Session limit",
+          credits: "Credits",
           bucket: "{{bucket}} · {{window}}",
           bucketVideo: "Video",
           bucketImage: "Image",
@@ -3103,6 +3114,18 @@ export const en = {
         },
         pace: "Pace {{pace}}",
         asideTitle: "Doesn't stop the models",
+        teamPlan: "Team plan",
+        resets: {
+          left: "{{resets}} left",
+          countOne: "{{count}} reset",
+          countMany: "{{count}} resets",
+          fiveHourOne: "{{count}} five-hour reset",
+          fiveHourMany: "{{count}} five-hour resets",
+          weeklyOne: "{{count}} weekly reset",
+          weeklyMany: "{{count}} weekly resets",
+          soonest: "Soonest expires {{when}}",
+          info: "Resets are used on the vendor's own page; Osuna only shows them.",
+        },
         autoRefresh: {
           label: "Auto-refresh balance and plan usage",
           hint: "Every minute while the endpoint list or an endpoint's page is open. Off: only when you open one of them, or press Refresh on an endpoint's page.",

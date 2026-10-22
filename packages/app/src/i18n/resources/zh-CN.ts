@@ -2777,6 +2777,14 @@ export const zhCN: TranslationResources = {
           userIdInfo:
             "你在 new-api 中转站的用户 ID，在站点的个人设置里能看到。只在查余额时作为 New-Api-User 发出，聊天请求不带。这家请求头里的 New-Api-User 也认，两者都有时以这一栏为准。",
           userIdPlaceholder: "可选 · 只有 new-api 要",
+          teamOrgId: "团队组织 ID",
+          teamOrgIdInfo:
+            "GLM Coding Plan 团队的组织 ID，在智谱或 Z.ai 控制台里看。和项目 ID 一起填了，这把 key 自己没有套餐时就读团队的窗口。",
+          teamOrgIdPlaceholder: "可选 · 只有 GLM 团队套餐要",
+          teamProjectId: "团队项目 ID",
+          teamProjectIdInfo: "团队的项目 ID，在同一个控制台里看。两个 ID 都填了才读团队的窗口。",
+          teamProjectIdPlaceholder: "可选 · 只有 GLM 团队套餐要",
+          teamBothNeeded: "团队套餐：请同时填写组织 ID 和项目 ID",
           fixNewApiKeyQuery:
             "…/api/usage/token 只认 API key，不认这个令牌。要看账户余额，new-api 用 /api/user/self，sub2api 用 /api/v1/user/profile。",
           fixSub2apiKeyQuery:
@@ -3045,6 +3053,8 @@ export const zhCN: TranslationResources = {
           month: "月",
           allowance: "套餐用量",
           mcpMonth: "MCP · 月",
+          session: "会话上限",
+          credits: "积分",
           bucket: "{{bucket}} · {{window}}",
           bucketVideo: "视频",
           bucketImage: "图片",
@@ -3052,6 +3062,18 @@ export const zhCN: TranslationResources = {
         },
         pace: "配速 {{pace}}",
         asideTitle: "用完不影响模型使用",
+        teamPlan: "团队套餐",
+        resets: {
+          left: "还有 {{resets}}",
+          countOne: "{{count}} 次重置",
+          countMany: "{{count}} 次重置",
+          fiveHourOne: "{{count}} 次 5 小时重置",
+          fiveHourMany: "{{count}} 次 5 小时重置",
+          weeklyOne: "{{count}} 次周重置",
+          weeklyMany: "{{count}} 次周重置",
+          soonest: "最早 {{when}} 过期",
+          info: "重置要到厂商自己的页面上用，Osuna 只显示。",
+        },
         autoRefresh: {
           label: "自动刷新余额与套餐用量",
           hint: "接口列表页或接口详情页开着时每分钟读一次。关掉后只在打开这些页面、或在详情页点刷新时读。",

@@ -1,11 +1,16 @@
 // 套餐窗口移植自 magpie（https://github.com/yetone/magpie，internal/provider/planquota.go 的 planQuotaSourceOf、
 // readZhipuPlan、readKimiCode、kimiCodeBase、readMiniMaxPlan、miniMaxCount、readOpenCodeGo、planBody、zhipuRefused，
-// zhipu_envelope.go 的 zhipuEnvelope、ZhipuKeyRefused，opencode_client.go 的 OpenCodeSession、openCodeNewID，7597c132；
+// zhipu_envelope.go 的 zhipuEnvelope、ZhipuKeyRefused，opencode_client.go 的 OpenCodeSession、openCodeNewID，
+// commandcode_plan.go 的 cmdWindows、cmdLeft、cmdPlans、cmdQuotaOf、cmdKeyWindows、cmdSubscription、cmdTime，
+// ollama_usage.go 的 readOllamaPlan，planquota.go 的 planKeyWindows、zhipuKeyTeamWindows、zhipuTeamRoots，
+// zcode_team.go 的 zcodeBizRoot、zcodeTeamHeaders、zhipuResets、zcodeWhen，zcode.go 的 zhipuTime，7597c132；
 // OpenCode Go 也认 /inference/go 照最新版 ea6be159）。
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import { randomBytes } from "node:crypto";
 import type {
   ApiEndpointBalanceReading,
+  ApiEndpointBalanceReset,
+  ApiEndpointBalanceResets,
   ApiEndpointBalanceWindow,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { numberOf } from "./balance-field.js";
@@ -15,7 +20,8 @@ import { hostOf } from "./vendor-status.js";
 import { paceBetween, windowStart, type WindowSpan } from "./window-pace.js";
 
 /*
- * 套餐 key 的窗口：GLM Coding Plan、Kimi Code、MiniMax、OpenCode Go 这些按 5 小时 / 周 / 月限量的套餐，厂商把窗口告诉 key。
+ * 套餐 key 的窗口：GLM Coding Plan、Kimi Code、MiniMax、OpenCode Go、Command Code、Ollama Cloud 这些按 5 小时 / 周 / 月
+ * 限量的套餐，厂商把窗口告诉 key。
  * 按接口各格式地址的主机名与路径认（照 magpie 的先后：Chat、Anthropic、Responses），不看模板，也不看余额查询地址。
  * 只显示，不进中转站选路。请求只带认证、Accept、Accept-Language 与 Osuna 的 User-Agent，不带这家自己的请求头。
  */
@@ -29,12 +35,19 @@ export const PLAN_VENDOR_URLS = {
   minimax_cn: "https://api.minimaxi.com/v1/token_plan/remains",
   minimax_io: "https://api.minimax.io/v1/token_plan/remains",
   opencode_go: "https://opencode.ai/zen/go/v1/usage",
+  // 智谱团队套餐：open.bigmodel.cn 问不出时再问 bigmodel.cn（ZCode 问的站点）；Z.ai 只有 api.z.ai。
+  glm_cn_biz: "https://bigmodel.cn/api/monitor/usage/quota/limit",
+  // 余额也问这两个地址（balance.ts）。
+  commandcode: "https://api.commandcode.ai/alpha/billing/credits",
+  ollama: "https://ollama.com/api/balance",
+  // credits 回复没写套餐时问这把 key 的订阅，拿套餐每月给多少 credits。
+  commandcode_subscriptions: "https://api.commandcode.ai/alpha/billing/subscriptions",
 } as const;
 
 export type PlanVendorId = keyof typeof PLAN_VENDOR_URLS;
 
 /** 读出的一个窗口，还没算配速。 */
-interface PlanWindow {
+export interface PlanWindow {
   id: string;
   label: string;
   usedPct: number;
@@ -63,6 +76,8 @@ export interface PlanSource {
   // 智谱不认 key 时去哪换一把。
   keysAt: string | null;
   opencode: boolean;
+  // 智谱团队套餐在哪几处问（照 magpie zhipuTeamRoots，先这把 key 自己的站点）与 Set-Language；不是智谱为 null。
+  team: { urls: string[]; language: "zh" | "en" } | null;
 }
 
 const PLAN_FORMAT_ORDER = ["openai_chat", "anthropic_messages", "openai_responses"] as const;
@@ -97,6 +112,7 @@ export function planSourceOf(input: {
     const host = hostOf(base);
     const zhipu = ZHIPU_HOSTS[host] ?? null;
     if (zhipu !== null) {
+      const bigModel = zhipu === "glm_cn";
       return {
         vendor: zhipu,
         url: urlOf(zhipu),
@@ -105,6 +121,10 @@ export function planSourceOf(input: {
         read: readZhipuPlan,
         keysAt: ZHIPU_KEYS[zhipu],
         opencode: false,
+        team: {
+          urls: bigModel ? [urlOf(zhipu), urlOf("glm_cn_biz")] : [urlOf(zhipu)],
+          language: bigModel ? "zh" : "en",
+        },
       };
     }
     const kimi = KIMI_HOSTS[host] ?? null;
@@ -117,6 +137,7 @@ export function planSourceOf(input: {
         read: readKimiCode,
         keysAt: null,
         opencode: false,
+        team: null,
       };
     }
     const minimax = MINIMAX_HOSTS[host] ?? null;
@@ -130,6 +151,33 @@ export function planSourceOf(input: {
         read: readMiniMaxPlan,
         keysAt: null,
         opencode: false,
+        team: null,
+      };
+    }
+    if (host === "api.commandcode.ai") {
+      // 套餐的 key（Studio 里建的或登录拿的）在这里有 5 小时与周窗口；按量付费的 key 没有，不显示。
+      return {
+        vendor: "commandcode",
+        url: urlOf("commandcode"),
+        bearer: true,
+        sure: false,
+        read: readCommandCodePlan,
+        keysAt: null,
+        opencode: false,
+        team: null,
+      };
+    }
+    if (host === "ollama.com") {
+      // Ollama Cloud 套餐含的额度（magpie #1888）；没有的 key 不显示。
+      return {
+        vendor: "ollama",
+        url: urlOf("ollama"),
+        bearer: true,
+        sure: false,
+        read: readOllamaPlan,
+        keysAt: null,
+        opencode: false,
+        team: null,
       };
     }
     if (host === "opencode.ai" && isOpenCodeGo(base)) {
@@ -141,6 +189,7 @@ export function planSourceOf(input: {
         read: readOpenCodeGo,
         keysAt: null,
         opencode: true,
+        team: null,
       };
     }
   }
@@ -501,6 +550,266 @@ function readOpenCodeGo(body: unknown): PlanRead {
     };
   }
   return { kind: "windows", windows };
+}
+
+/** 重置时间：秒或毫秒，或 RFC 3339（照 magpie cmdTime）。 */
+function commandCodeTime(value: unknown): string | null {
+  if (typeof value === "string") {
+    const at = Date.parse(value);
+    if (!Number.isNaN(at) && /\d{4}-\d{2}-\d{2}T/.test(value)) return isoOfMs(at);
+  }
+  const n = numberOf(value);
+  if (n === null || n <= 0) return null;
+  return isoOfMs(n < 1e12 ? n * 1000 : n);
+}
+
+/**
+ * Command Code 的 /alpha/billing/credits（同 CLI 的 /usage）：{"credits":{"planId":…,"monthlyCredits":41.2,
+ * "purchasedCredits":5,"freeCredits":0},"windowLimits":{"fiveHour":{"used":3.1,"cap":10,"resetAt":…},"weekly":{…}}}。
+ * 这里只读给了上限的 5 小时与周窗口；没有窗口的是按量付费的 key。credits 那个窗口要知道套餐（commandCodeCredits）。
+ */
+function readCommandCodePlan(body: unknown): PlanRead {
+  const limits = isRecord(body) && isRecord(body.windowLimits) ? body.windowLimits : {};
+  const windows: PlanWindow[] = [];
+  const known = [
+    { key: "fiveHour", id: "5h", label: "5 hours", span: 5 * 3_600_000 },
+    { key: "weekly", id: "7d", label: "7 days", span: 7 * 24 * 3_600_000 },
+  ];
+  for (const entry of known) {
+    const window = limits[entry.key];
+    if (!isRecord(window)) continue;
+    const used = numberOf(window.used);
+    const cap = numberOf(window.cap);
+    if (used === null || cap === null || cap <= 0) continue;
+    windows.push({
+      id: entry.id,
+      label: entry.label,
+      usedPct: Math.min(100, (100 * Math.max(0, used)) / cap),
+      resetsAt: commandCodeTime(window.resetAt),
+      span: entry.span,
+    });
+  }
+  return { kind: "windows", windows };
+}
+
+/** 套餐 id 的开头（最长的在前）与每月给多少美元的 credits，照 CLI 的 getPlanInfo；individual-pro-v1 是旧 Pro。 */
+const COMMAND_CODE_PLANS = [
+  { id: "individual-provider", monthly: 15 },
+  { id: "individual-pro-v1", monthly: 80 },
+  { id: "individual-goat", monthly: 70 },
+  { id: "individual-ultra", monthly: 300 },
+  { id: "individual-max", monthly: 150 },
+  { id: "individual-pro", monthly: 30 },
+  { id: "individual-go", monthly: 10 },
+  { id: "teams-pro", monthly: 40 },
+] as const;
+
+/** credits 回复里写的套餐 id；没写为 null。 */
+export function commandCodePlanIdOf(body: unknown): string | null {
+  const credits = isRecord(body) && isRecord(body.credits) ? body.credits : null;
+  const planId = typeof credits?.planId === "string" ? credits.planId : "";
+  return planId === "" ? null : planId;
+}
+
+/**
+ * 套餐的月度 credits 也作一个窗口（照 magpie cmdQuotaOf）：池子是套餐每月给的（剩的更多时取剩的）加上买的与送的，
+ * 已用是池子减剩下的；不知道套餐或回复没说 credits 时没有这个窗口。
+ */
+export function commandCodeCreditsWindow(input: {
+  body: unknown;
+  planId: string | null;
+}): PlanWindow | null {
+  const id = (input.planId ?? "").toLowerCase().replaceAll("_", "-");
+  const plan = COMMAND_CODE_PLANS.find((candidate) => id.startsWith(candidate.id));
+  if (!plan) return null;
+  const credits = isRecord(input.body) && isRecord(input.body.credits) ? input.body.credits : {};
+  let monthly = 0;
+  let left = 0;
+  let isKnown = false;
+  for (const [index, value] of [
+    credits.monthlyCredits,
+    credits.purchasedCredits,
+    credits.freeCredits,
+  ].entries()) {
+    const n = numberOf(value);
+    if (n === null) continue;
+    const kept = Math.max(0, n);
+    if (index === 0) monthly = kept;
+    left += kept;
+    isKnown = true;
+  }
+  if (!isKnown) return null;
+  const pool = Math.max(plan.monthly, monthly) + left - monthly;
+  const used = pool - left;
+  return {
+    id: "credits",
+    label: "Credits",
+    usedPct: Math.min(100, (100 * used) / pool),
+    resetsAt: null,
+    span: null,
+    used,
+    limit: pool,
+    unit: "USD",
+  };
+}
+
+/**
+ * Command Code 的订阅（照 magpie cmdSubscription）：{"success":true,"data":{"planId":…,"status":"active"}}；
+ * 取消了、过期了或没有的是没有套餐（""）。读不出为 null。
+ */
+export function commandCodeSubscriptionPlanId(body: unknown): string | null {
+  if (!isRecord(body) || body.success === false) return null;
+  const data = isRecord(body.data) ? body.data : null;
+  const planId = typeof data?.planId === "string" ? data.planId : "";
+  const status = typeof data?.status === "string" ? data.status : "";
+  if (planId === "" || status === "canceled" || status === "incomplete_expired") return "";
+  return planId;
+}
+
+/**
+ * Ollama Cloud 的 /api/balance：{"included":{"balance_usd":72.5,"allowance_usd":100,"period":{"from":…,"until":…}},
+ * "purchased":{"balance_usd":25}}；旧套餐没有美元额度，是 session 与 weekly 两个限额（给剩余百分比）。
+ * 套餐含的额度是一个窗口（27–32 天的叫 Month），用完会花买的 credits，所以买过 credits 时这些窗口放一旁。
+ */
+function readOllamaPlan(body: unknown): PlanRead {
+  const included = isRecord(body) && isRecord(body.included) ? body.included : null;
+  if (included === null) return { kind: "windows", windows: [] };
+  const purchased = isRecord(body) && isRecord(body.purchased) ? body.purchased : null;
+  const isBought = (numberOf(purchased?.balance_usd) ?? 0) > 0;
+  const allowance = ollamaAllowance(included);
+  const windows = [...ollamaLimits(included), ...(allowance === null ? [] : [allowance])];
+  return {
+    kind: "windows",
+    windows: isBought ? windows.map((window) => ({ ...window, aside: true })) : windows,
+  };
+}
+
+/** 旧套餐的 session 与 weekly 限额（给的是剩余百分比）；session 多长回复不说，没有长度，周就是一周。 */
+function ollamaLimits(included: Record<string, unknown>): PlanWindow[] {
+  const limits = [
+    { key: "session", id: "session", label: "Session limit", span: null },
+    { key: "weekly", id: "7d", label: "7 days", span: 7 * 24 * 3_600_000 },
+  ];
+  const windows: PlanWindow[] = [];
+  for (const entry of limits) {
+    const limit = included[entry.key];
+    const left = isRecord(limit) ? numberOf(limit.remaining_percent) : null;
+    if (!isRecord(limit) || left === null) continue;
+    const reset = typeof limit.resets_at === "string" ? Date.parse(limit.resets_at) : Number.NaN;
+    windows.push({
+      id: entry.id,
+      label: entry.label,
+      usedPct: clampPct(100 - left),
+      resetsAt: Number.isNaN(reset) ? null : isoOfMs(reset),
+      span: entry.span,
+    });
+  }
+  return windows;
+}
+
+/** 套餐含的美元额度：这一期用了多少，期末重置；回复没说额度或剩多少时没有这个窗口。 */
+function ollamaAllowance(included: Record<string, unknown>): PlanWindow | null {
+  const allowance = numberOf(included.allowance_usd);
+  const left = numberOf(included.balance_usd);
+  if (allowance === null || left === null || allowance <= 0) return null;
+  const used = Math.min(allowance, Math.max(0, allowance - left));
+  const period = isRecord(included.period) ? included.period : {};
+  const until = typeof period.until === "string" ? Date.parse(period.until) : Number.NaN;
+  const from = typeof period.from === "string" ? Date.parse(period.from) : Number.NaN;
+  const span = until > from ? until - from : null;
+  const days = (span ?? 0) / (24 * 3_600_000);
+  const isMonth = days >= 27 && days <= 32;
+  return {
+    id: isMonth ? "month" : "allowance",
+    label: isMonth ? "Month" : "Allowance",
+    usedPct: clampPct((used / allowance) * 100),
+    resetsAt: Number.isNaN(until) ? null : isoOfMs(until),
+    span,
+    used,
+    limit: allowance,
+    unit: "USD",
+  };
+}
+
+/** 问智谱团队窗口的请求头（照 magpie zhipuKeyTeamAt 与 zcodeTeamHeaders）：裸 key、团队的组织与项目、Set-Language。 */
+export function zhipuTeamHeaders(input: {
+  apiKey: string;
+  org: string;
+  project: string;
+  language: "zh" | "en";
+  userAgent: string;
+}): Record<string, string> {
+  return {
+    authorization: input.apiKey,
+    accept: "application/json",
+    "accept-language": "en-US,en",
+    "user-agent": input.userAgent,
+    "bigmodel-organization": input.org,
+    "bigmodel-project": input.project,
+    "set-language": input.language,
+  };
+}
+
+/** 团队窗口的地址：个人的查询带 type=2。 */
+export function zhipuTeamQuotaUrl(quotaUrl: string): string {
+  return `${quotaUrl}?type=2`;
+}
+
+/** 团队的重置清单在同一站点（magpie zhipuTeamResets 的 customer-package-reset/list，targetType=TEAM）。 */
+export function zhipuTeamResetsUrl(quotaUrl: string): string {
+  const root = quotaUrl.replace(/\/api\/monitor\/usage\/quota\/limit$/, "");
+  return `${root}/api/biz/customer-package-reset/list?targetType=TEAM`;
+}
+
+/** 智谱的时间：「2026-10-18 12:00:00」按北京时间，也有秒或毫秒（照 magpie zcodeWhen、zhipuTime）。 */
+function zhipuWhen(value: unknown): string | null {
+  if (typeof value === "string") {
+    const match = /^(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}:\d{2}))?$/.exec(value.trim());
+    if (match) return isoOfMs(Date.parse(`${match[1]}T${match[2] ?? "00:00:00"}+08:00`));
+  }
+  const n = numberOf(value);
+  if (n === null || n <= 0) return null;
+  return isoOfMs(n > 1e12 ? n : n * 1000);
+}
+
+/**
+ * 重置清单（照 magpie zhipuResets）：{"code":200,"data":{"fiveHourResets":[{"available":true,"expireTime":…}],
+ * "weekResets":[…]}}。只数还能用的（用掉的还列一周）；读不出或一次都没有为 null，不显示 0。
+ */
+export function readZhipuResets(body: unknown): ApiEndpointBalanceResets | null {
+  if (!isRecord(body)) return null;
+  const code = body.code === undefined || body.code === null ? "" : String(body.code).trim();
+  if (code !== "" && code !== "0" && code !== "200") return null;
+  const data = isRecord(body.data) ? body.data : null;
+  if (data === null) return null;
+  const each: ApiEndpointBalanceReset[] = [];
+  const count = (list: unknown, window: "fiveHour" | "weekly") => {
+    const resets = Array.isArray(list) ? list.filter(isRecord) : [];
+    let n = 0;
+    for (const reset of resets) {
+      if (reset.available !== true) continue;
+      n += 1;
+      each.push({ until: zhipuWhen(reset.expireTime), window });
+    }
+    return n;
+  };
+  const fiveHour = count(data.fiveHourResets, "fiveHour");
+  const weekly = count(data.weekResets, "weekly");
+  if (fiveHour + weekly === 0) return null;
+  // 最早过期的在前，不过期的在后。
+  each.sort((a, b) => {
+    if (a.until === null || b.until === null)
+      return Number(a.until === null) - Number(b.until === null);
+    return Date.parse(a.until) - Date.parse(b.until);
+  });
+  return {
+    count: fiveHour + weekly,
+    until: each[0]?.until ?? null,
+    byWindow: true,
+    fiveHour,
+    weekly,
+    each,
+  };
 }
 
 /** 窗口照协议的形状写出，带上读数时的配速；同名的代号加序号，界面拿它作 key。 */

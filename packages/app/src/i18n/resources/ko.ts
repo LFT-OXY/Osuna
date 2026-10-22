@@ -2771,6 +2771,14 @@ export const ko: TranslationResources = {
           userIdInfo:
             "new-api 중계에서의 사용자 ID(사이트 개인 설정에 표시). 잔액을 조회할 때만 New-Api-User로 보내며 채팅 요청에는 붙이지 않습니다. 이 엔드포인트 헤더의 New-Api-User도 인식하며, 둘 다 있으면 이 칸이 우선합니다.",
           userIdPlaceholder: "선택 사항 · new-api만",
+          teamOrgId: "팀 조직 ID",
+          teamOrgIdInfo:
+            "GLM Coding Plan 팀의 조직 ID(BigModel 또는 Z.ai 콘솔에 표시). 프로젝트 ID도 넣으면 이 키에 자체 플랜이 없을 때 팀의 창을 읽습니다.",
+          teamOrgIdPlaceholder: "선택 사항 · GLM 팀 플랜만",
+          teamProjectId: "팀 프로젝트 ID",
+          teamProjectIdInfo: "같은 콘솔에 있는 팀의 프로젝트 ID. 두 ID가 모두 있어야 합니다.",
+          teamProjectIdPlaceholder: "선택 사항 · GLM 팀 플랜만",
+          teamBothNeeded: "팀 플랜: 조직 ID와 프로젝트 ID를 모두 입력하세요",
           fixNewApiKeyQuery:
             "…/api/usage/token은 이 토큰이 아니라 API 키를 받습니다. 계정 잔액은 new-api는 /api/user/self, sub2api는 /api/v1/user/profile입니다.",
           fixSub2apiKeyQuery:
@@ -3050,6 +3058,8 @@ export const ko: TranslationResources = {
           month: "월",
           allowance: "플랜 사용량",
           mcpMonth: "MCP · 월",
+          session: "세션",
+          credits: "크레딧",
           bucket: "{{bucket}} · {{window}}",
           bucketVideo: "동영상",
           bucketImage: "이미지",
@@ -3057,6 +3067,18 @@ export const ko: TranslationResources = {
         },
         pace: "페이스 {{pace}}",
         asideTitle: "다 써도 모델은 멈추지 않음",
+        teamPlan: "팀 플랜",
+        resets: {
+          left: "{{resets}} 남음",
+          countOne: "리셋 {{count}}회",
+          countMany: "리셋 {{count}}회",
+          fiveHourOne: "5시간 리셋 {{count}}회",
+          fiveHourMany: "5시간 리셋 {{count}}회",
+          weeklyOne: "주간 리셋 {{count}}회",
+          weeklyMany: "주간 리셋 {{count}}회",
+          soonest: "가장 빠른 만료 {{when}}",
+          info: "리셋은 벤더 페이지에서 사용합니다. Osuna는 보여 주기만 합니다.",
+        },
         autoRefresh: {
           label: "잔액과 요금제 사용량 자동 새로고침",
           hint: "엔드포인트 목록이나 엔드포인트 페이지가 열려 있는 동안 1분마다 읽습니다. 끄면: 이 페이지를 열 때나 엔드포인트 페이지에서 새로고침을 누를 때만 읽습니다.",

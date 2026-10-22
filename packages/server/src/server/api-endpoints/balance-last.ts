@@ -5,6 +5,7 @@ import type pino from "pino";
 import { z } from "zod";
 import {
   ApiEndpointBalanceItemSchema,
+  ApiEndpointBalanceResetsSchema,
   ApiEndpointBalanceWindowSchema,
   type ApiEndpointBalanceReading,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
@@ -15,7 +16,7 @@ import { parseJson } from "./upstream-http.js";
 
 /*
  * 每家接口最近一次成功的余额读数，存在 api-endpoints/balance-readings.json，重启后还在：
- * 对方忙或断网（暂时查不到）时界面看上次读数，不看一句错误。只有余额各项、限额与套餐窗口和读数时间，不含 key 与令牌；
+ * 对方忙或断网（暂时查不到）时界面看上次读数，不看一句错误。只有余额各项、限额与套餐窗口、重置次数和读数时间，不含 key 与令牌；
  * 每条带这家查余额用的地址、余额设置、key 与账户令牌的指纹（摘要，还原不出 key），对不上即作废（magpie 按 key 的摘要记，换了 key 自然对不上）。
  * 它是缓存，读不懂当作空的。
  */
@@ -26,6 +27,9 @@ const LastReadingSchema = z.object({
   readAt: z.string(),
   items: z.array(ApiEndpointBalanceItemSchema),
   windows: z.array(ApiEndpointBalanceWindowSchema).optional(),
+  // 智谱团队套餐的窗口与重置次数。
+  team: z.boolean().optional(),
+  resets: ApiEndpointBalanceResetsSchema.optional(),
 });
 type LastReading = z.infer<typeof LastReadingSchema>;
 
@@ -59,6 +63,8 @@ export class LastBalanceReadings {
         readAt: reading.readAt,
         items: reading.items,
         ...(reading.windows === undefined ? {} : { windows: reading.windows }),
+        ...(reading.team ? { team: true } : {}),
+        ...(reading.resets === undefined ? {} : { resets: reading.resets }),
       },
     });
   }
@@ -84,6 +90,8 @@ export class LastBalanceReadings {
       status: "ok",
       items: last.items,
       ...(last.windows === undefined ? {} : { windows: last.windows }),
+      ...(last.team ? { team: true } : {}),
+      ...(last.resets === undefined ? {} : { resets: last.resets }),
       readAt: last.readAt,
       failure: null,
       stale: failure,

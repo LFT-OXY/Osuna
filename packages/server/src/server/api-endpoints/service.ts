@@ -986,6 +986,8 @@ export class ApiEndpointService {
   private readonly catalogRefresh: CatalogRefreshSchedule;
   private readonly vendorStatusPages: VendorStatusPages;
   private readonly balanceUrls: Partial<Record<BalanceVendorId, string>> | undefined;
+  // Command Code 每把 key 的套餐 id，留 10 分钟（balance.ts 的 commandCodeKeyPlanId）；只在内存里。
+  private readonly commandCodePlans = new Map<string, { planId: string; at: number }>();
   // daemon 自己发起的请求（查余额）自报的 User-Agent：Osuna/<版本>。
   private readonly userAgent: string;
   private readonly importSourcePaths: ApiEndpointServiceOptions["importSourcePaths"];
@@ -3492,6 +3494,7 @@ export class ApiEndpointService {
           vendorUrls: this.balanceUrls,
           withPlan: true,
           hasLastReading: this.lastBalances.has(settings, endpoint.id),
+          commandCodePlans: this.commandCodePlans,
           signal: input.signal,
           deadline,
         });
@@ -5663,7 +5666,8 @@ type StoredBalanceSettings = Pick<StoredApiEndpoint, "balance">;
 
 /**
  * 存下的余额设置：请求给了就整份换上（地址、取值写法去掉首尾空白，空的不存；GET 是缺省不存），没给留 base 的。
- * 没有余额查询地址即清掉整项。方法不是 GET、POST 的拒收（照 magpie 命令行的 balance.method=GET|POST）。
+ * 没有余额查询地址即只留智谱团队组织 ID 与项目 ID（照 magpie ZhipuTeam.normal，有一个就存），都没有即清掉整项。
+ * 方法不是 GET、POST 的拒收（照 magpie 命令行的 balance.method=GET|POST）。
  */
 function savedBalanceSettings(input: {
   requested: ApiEndpointBalanceSettings | undefined;
@@ -5680,8 +5684,9 @@ function savedBalanceSettings(input: {
       params: { field: "method" },
     });
   }
+  const team = savedTeamIds(requested);
   const url = requested.url?.trim() ?? "";
-  if (url === "") return {};
+  if (url === "") return Object.keys(team).length > 0 ? { balance: team } : {};
   const field = requested.field?.trim() ?? "";
   const userId = requested.userId?.trim() ?? "";
   return {
@@ -5690,7 +5695,20 @@ function savedBalanceSettings(input: {
       ...(method === "POST" ? { method } : {}),
       ...(field === "" ? {} : { field }),
       ...(userId === "" ? {} : { userId }),
+      ...team,
     },
+  };
+}
+
+/** 存下的智谱团队组织 ID 与项目 ID：去掉首尾空白，空的不存。 */
+function savedTeamIds(
+  requested: ApiEndpointBalanceSettings,
+): Pick<ApiEndpointBalanceSettings, "teamOrgId" | "teamProjectId"> {
+  const teamOrgId = requested.teamOrgId?.trim() ?? "";
+  const teamProjectId = requested.teamProjectId?.trim() ?? "";
+  return {
+    ...(teamOrgId === "" ? {} : { teamOrgId }),
+    ...(teamProjectId === "" ? {} : { teamProjectId }),
   };
 }
 

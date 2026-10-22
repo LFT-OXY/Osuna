@@ -1,5 +1,6 @@
 // 取值写法的占位照 magpie（https://github.com/yetone/magpie，internal/gui/assets/app.js 的 balanceFieldOf，7597c132）；
-// 令牌配错地址与缺用户 ID 的提示照同一文件的 balanceFix。
+// 令牌配错地址与缺用户 ID 的提示照同一文件的 balanceFix；团队两个 ID 要都填照同一文件编辑器保存时的 zhipuTeam 检查，
+// 哪些地址给这两栏照 internal/provider/planquota.go 的 TakesZhipuTeam。
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import {
   balanceMethodOf,
@@ -20,12 +21,14 @@ import type {
  * 添加 / 编辑窗口「高级」里余额设置的纯逻辑：存的设置与表单里的样子互相换算。
  */
 
-/** 表单里的余额设置：余额查询地址、方法、取值写法、new-api 的用户 ID。 */
+/** 表单里的余额设置：余额查询地址、方法、取值写法、new-api 的用户 ID、智谱团队组织 ID 与项目 ID。 */
 export interface BalanceFields {
   balanceUrlText: string;
   balanceMethod: ApiEndpointBalanceMethod;
   balanceFieldText: string;
   balanceUserIdText: string;
+  balanceTeamOrgIdText: string;
+  balanceTeamProjectIdText: string;
 }
 
 /** 「查询余额」：没按过、查询中、查到的读数（含查不到的原因）、请求本身没成立（断线、主机拒收）。 */
@@ -52,18 +55,31 @@ export function balanceFieldsOf(settings: ApiEndpointBalanceSettings | undefined
     balanceMethod: balanceMethodOf(settings?.method) === "POST" ? "POST" : "GET",
     balanceFieldText: settings?.field ?? "",
     balanceUserIdText: settings?.userId ?? "",
+    balanceTeamOrgIdText: settings?.teamOrgId ?? "",
+    balanceTeamProjectIdText: settings?.teamProjectId ?? "",
   };
 }
 
-/** 填了余额查询地址：表单一打开就展开「高级」。 */
+/** 填了余额查询地址或智谱团队的 ID：表单一打开就展开「高级」。 */
 export function hasBalanceSettings(fields: BalanceFields): boolean {
-  return fields.balanceUrlText.trim() !== "";
+  return [fields.balanceUrlText, fields.balanceTeamOrgIdText, fields.balanceTeamProjectIdText].some(
+    (text) => text.trim() !== "",
+  );
 }
 
-/** 保存与「查询余额」时整份发的样子：去掉首尾空白，空的不发，GET 是缺省不发；没有地址即 {}（清掉）。 */
+/**
+ * 保存与「查询余额」时整份发的样子：去掉首尾空白，空的不发，GET 是缺省不发；没有地址时只发智谱团队的 ID，
+ * 都没有即 {}（清掉）。
+ */
 export function balanceSettingsOf(fields: BalanceFields): ApiEndpointBalanceSettings {
+  const teamOrgId = fields.balanceTeamOrgIdText.trim();
+  const teamProjectId = fields.balanceTeamProjectIdText.trim();
+  const team = {
+    ...(teamOrgId === "" ? {} : { teamOrgId }),
+    ...(teamProjectId === "" ? {} : { teamProjectId }),
+  };
   const url = fields.balanceUrlText.trim();
-  if (url === "") return {};
+  if (url === "") return team;
   const field = fields.balanceFieldText.trim();
   const userId = fields.balanceUserIdText.trim();
   return {
@@ -71,7 +87,28 @@ export function balanceSettingsOf(fields: BalanceFields): ApiEndpointBalanceSett
     ...(fields.balanceMethod === "POST" ? { method: "POST" } : {}),
     ...(field === "" ? {} : { field }),
     ...(userId === "" ? {} : { userId }),
+    ...team,
   };
+}
+
+/** 团队的两个 ID 只填了一个：照 magpie 不让保存，要么都填要么都空。 */
+export function hasLoneTeamId(fields: BalanceFields): boolean {
+  const hasOrg = fields.balanceTeamOrgIdText.trim() !== "";
+  const hasProject = fields.balanceTeamProjectIdText.trim() !== "";
+  return hasOrg !== hasProject;
+}
+
+const ZHIPU_HOSTS = new Set(["open.bigmodel.cn", "api.z.ai"]);
+
+/** 这家的地址在智谱或 Z.ai（照 magpie TakesZhipuTeam）：编辑窗口给团队组织 ID 与项目 ID 两栏。 */
+export function isZhipuAddress(addresses: readonly string[]): boolean {
+  return addresses.some((address) => {
+    try {
+      return ZHIPU_HOSTS.has(new URL(address.trim()).hostname.toLowerCase());
+    } catch {
+      return false;
+    }
+  });
 }
 
 /** 账户令牌在保存与「查询余额」里的样子：打了的发（去掉首尾空白），移除了发空字符串，没动不发（daemon 留原来的）。 */

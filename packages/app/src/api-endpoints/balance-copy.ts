@@ -1,3 +1,5 @@
+// 重置次数的说法照 magpie（https://github.com/yetone/magpie，internal/provider/codex_resets.go 的 ResetCredits.Words，7597c132）。
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import type { TFunction } from "i18next";
 import {
   API_ENDPOINT_BALANCE_FAILURES,
@@ -8,6 +10,7 @@ import {
   type ApiEndpointBalanceHint,
   type ApiEndpointBalanceItem,
   type ApiEndpointBalancePart,
+  type ApiEndpointBalanceResets,
   type ApiEndpointBalanceWindow,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 
@@ -53,6 +56,8 @@ const NAMED_WINDOW_KEYS: Record<string, string> = {
   month: "settings.apiEndpoints.balance.window.month",
   allowance: "settings.apiEndpoints.balance.window.allowance",
   mcp_month: "settings.apiEndpoints.balance.window.mcpMonth",
+  session: "settings.apiEndpoints.balance.window.session",
+  credits: "settings.apiEndpoints.balance.window.credits",
 };
 const BUCKET_KEYS: Record<string, string> = {
   video: "settings.apiEndpoints.balance.window.bucketVideo",
@@ -85,6 +90,25 @@ function spanLabel(input: { t: TFunction; id: string }): string | null {
   const count = Number(match[1]);
   const keys = SPAN_KEYS[match[2]!]!;
   return input.t(count === 1 ? keys.one : keys.many, { count });
+}
+
+const RESET_KEY = "settings.apiEndpoints.balance.resets";
+
+/**
+ * 「还有 2 次 5 小时重置 · 1 次周重置」：按窗口计的（智谱团队）分开写，没有的那种不写；否则「还有 N 次重置」
+ * （照 magpie ResetCredits.Words）。
+ */
+export function resetsLine(input: { t: TFunction; resets: ApiEndpointBalanceResets }): string {
+  const { t, resets } = input;
+  const counted = (count: number, kind: "count" | "fiveHour" | "weekly") =>
+    t(`${RESET_KEY}.${kind}${count === 1 ? "One" : "Many"}`, { count });
+  const parts = resets.byWindow
+    ? [
+        ...((resets.fiveHour ?? 0) > 0 ? [counted(resets.fiveHour ?? 0, "fiveHour")] : []),
+        ...((resets.weekly ?? 0) > 0 ? [counted(resets.weekly ?? 0, "weekly")] : []),
+      ]
+    : [counted(resets.count, "count")];
+  return t(`${RESET_KEY}.left`, { resets: parts.join(" · ") });
 }
 
 /** 窗口用量的单位：美元以外认得的翻译，别的照 daemon 给的写。 */

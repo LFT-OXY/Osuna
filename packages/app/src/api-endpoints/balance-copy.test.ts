@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import type { ApiEndpointBalanceWindow } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { i18n } from "@/i18n/i18next";
-import { windowLabel } from "./balance-copy";
+import { resetsLine, windowLabel } from "./balance-copy";
 
 function labelOf(id: string, label = id): string {
   const window: ApiEndpointBalanceWindow = { id, label };
@@ -21,6 +21,8 @@ describe("windowLabel", () => {
     expect(labelOf("month")).toBe("Month");
     expect(labelOf("allowance")).toBe("Plan usage");
     expect(labelOf("mcp_month")).toBe("MCP · Month");
+    expect(labelOf("session")).toBe("Session limit");
+    expect(labelOf("credits")).toBe("Credits");
     expect(labelOf("video:24h")).toBe("Video · 24 hours");
     expect(labelOf("image:7d#2")).toBe("Image · 7 days");
   });
@@ -34,6 +36,24 @@ describe("windowLabel", () => {
     await i18n.changeLanguage("zh-CN");
     expect(labelOf("1h")).toBe("1 小时");
     expect(labelOf("video:7d")).toBe("视频 · 7 天");
+    await i18n.changeLanguage("en");
+  });
+});
+
+describe("resetsLine", () => {
+  it("counts a team's resets by window, leaving out a window with none, in English and Chinese", async () => {
+    await i18n.changeLanguage("en");
+    const t = i18n.t.bind(i18n);
+    const byWindow = { count: 3, until: null, byWindow: true, fiveHour: 2, weekly: 1 };
+    expect(resetsLine({ t, resets: byWindow })).toBe("2 five-hour resets · 1 weekly reset left");
+    expect(resetsLine({ t, resets: { ...byWindow, count: 1, fiveHour: 0, weekly: 1 } })).toBe(
+      "1 weekly reset left",
+    );
+    expect(resetsLine({ t, resets: { count: 1, until: null } })).toBe("1 reset left");
+    await i18n.changeLanguage("zh-CN");
+    expect(resetsLine({ t: i18n.t.bind(i18n), resets: byWindow })).toBe(
+      "还有 2 次 5 小时重置 · 1 次周重置",
+    );
     await i18n.changeLanguage("en");
   });
 });

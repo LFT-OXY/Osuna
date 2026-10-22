@@ -2795,6 +2795,14 @@ export const ru: TranslationResources = {
           userIdInfo:
             "Ваш ID пользователя на релее new-api, указан в личных настройках сайта. Отправляется как New-Api-User только при запросе баланса, никогда с запросом чата. Заголовок New-Api-User у этого эндпоинта тоже подходит; это поле важнее.",
           userIdPlaceholder: "Необязательно · только new-api",
+          teamOrgId: "ID организации команды",
+          teamOrgIdInfo:
+            "ID организации команды GLM Coding Plan, как в консоли BigModel или Z.ai. Вместе с ID проекта окна команды читаются, когда у этого ключа нет своего тарифа.",
+          teamOrgIdPlaceholder: "Необязательно · только командный тариф GLM",
+          teamProjectId: "ID проекта команды",
+          teamProjectIdInfo: "ID проекта команды из той же консоли. Нужны оба ID.",
+          teamProjectIdPlaceholder: "Необязательно · только командный тариф GLM",
+          teamBothNeeded: "Командный тариф: укажите и ID организации, и ID проекта",
           fixNewApiKeyQuery:
             "…/api/usage/token принимает API-ключ, а не этот токен. Для баланса аккаунта new-api использует /api/user/self, sub2api — /api/v1/user/profile.",
           fixSub2apiKeyQuery:
@@ -3074,6 +3082,8 @@ export const ru: TranslationResources = {
           month: "Месяц",
           allowance: "Использование тарифа",
           mcpMonth: "MCP · Месяц",
+          session: "Сессия",
+          credits: "Кредиты",
           bucket: "{{bucket}} · {{window}}",
           bucketVideo: "Видео",
           bucketImage: "Изображения",
@@ -3081,6 +3091,18 @@ export const ru: TranslationResources = {
         },
         pace: "Темп {{pace}}",
         asideTitle: "Не останавливает модели",
+        teamPlan: "Командный тариф",
+        resets: {
+          left: "Осталось: {{resets}}",
+          countOne: "сбросов: {{count}}",
+          countMany: "сбросов: {{count}}",
+          fiveHourOne: "5-часовых сбросов: {{count}}",
+          fiveHourMany: "5-часовых сбросов: {{count}}",
+          weeklyOne: "недельных сбросов: {{count}}",
+          weeklyMany: "недельных сбросов: {{count}}",
+          soonest: "Ближайший истекает {{when}}",
+          info: "Сбросы используются на странице поставщика; Osuna только показывает их.",
+        },
         autoRefresh: {
           label: "Автообновление баланса и использования тарифа",
           hint: "Раз в минуту, пока открыт список точек или страница точки. Выключено: только при открытии этих страниц или по кнопке «Обновить» на странице точки.",

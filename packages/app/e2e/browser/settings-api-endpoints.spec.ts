@@ -6975,6 +6975,90 @@ test.describe("Balance", () => {
     await expect(failure.getByTestId("api-endpoint-balance-failure-console")).toBeVisible();
   });
 
+  // 工单 09：智谱团队套餐。个人的查询没有窗口，填了团队组织 ID 与项目 ID 才问团队的窗口与重置次数。
+  async function glmTeamAnswers(): Promise<void> {
+    const inHours = (hours: number) => Date.now() + hours * 60 * 60 * 1000;
+    const team = {
+      code: 200,
+      success: true,
+      data: {
+        limits: [
+          { type: "CREDIT_LIMIT", unit: 3, percentage: 20, nextResetTime: inHours(2) },
+          { type: "CREDIT_LIMIT", unit: 6, number: 1, percentage: 50, nextResetTime: inHours(96) },
+        ],
+      },
+    };
+    const resets = {
+      code: 200,
+      success: true,
+      data: {
+        fiveHourResets: [
+          { available: true, expireTime: inHours(48) },
+          { available: true, expireTime: inHours(72) },
+        ],
+        weekResets: [{ available: true, expireTime: inHours(120) }],
+      },
+    };
+    const reply = (body: unknown) => ({ status: 200, body: JSON.stringify(body) });
+    await writeFile(
+      fakeSites,
+      JSON.stringify({
+        [GLM_QUOTA]: reply({ code: 200, success: true, data: { limits: [] } }),
+        [`${GLM_QUOTA}?type=2`]: reply(team),
+        "https://open.bigmodel.cn/api/biz/customer-package-reset/list?targetType=TEAM":
+          reply(resets),
+      }),
+    );
+  }
+
+  test("a GLM team's IDs are asked for at Zhipu's address only, both or neither; with them the team's windows and resets show", async ({
+    page,
+  }) => {
+    await glmTeamAnswers();
+    const relayId = await seedRelay();
+    await openEndpointDetail(page, relayId);
+    await page.getByTestId("api-endpoint-edit-connection").filter({ visible: true }).click();
+    await page.getByTestId("api-endpoint-connection-advanced-toggle").click();
+    await expect(page.getByTestId("api-endpoint-connection-balance-url")).toBeVisible();
+    await expect(page.getByTestId("api-endpoint-connection-balance-team-org")).toHaveCount(0);
+    await page.getByRole("button", { name: "Cancel" }).click();
+
+    const id = await seedGlm();
+    await openEndpointDetail(page, id);
+    // 个人没有窗口、还没填团队 ID：什么都读不到。
+    await expect(balanceSection(page).getByTestId("api-endpoint-balance-windows")).toHaveCount(0);
+    await page.getByTestId("api-endpoint-edit-connection").filter({ visible: true }).click();
+    await page.getByTestId("api-endpoint-connection-advanced-toggle").click();
+    await page.getByTestId("api-endpoint-connection-balance-team-org-input").fill("org-1");
+    const both = page.getByTestId("api-endpoint-connection-balance-team-both");
+    await expect(both).toHaveText("Team plan: give both the organization ID and the project ID");
+    await expect(page.getByTestId("api-endpoint-connection-save")).toBeDisabled();
+    await page.getByTestId("api-endpoint-connection-balance-team-project-input").fill("proj-1");
+    await expect(both).toHaveCount(0);
+    await page.getByTestId("api-endpoint-connection-save").click();
+    await expect(page.getByTestId("api-endpoint-connection-form")).toHaveCount(0);
+    const listed = (await client.apiEndpointList("claude")).endpoints.find(
+      (endpoint) => endpoint.id === id,
+    );
+    expect(listed?.balance).toEqual({ teamOrgId: "org-1", teamProjectId: "proj-1" });
+
+    const section = balanceSection(page);
+    await section.getByTestId("api-endpoint-balance-refresh").click();
+    await expect(section.getByTestId("api-endpoint-balance-team")).toHaveText("Team plan");
+    await expect(section.getByTestId("api-endpoint-balance-window-5h")).toContainText("20%");
+    await expect(section.getByTestId("api-endpoint-balance-window-7d")).toContainText("50%");
+    await expect(section.getByTestId("api-endpoint-balance-resets-count")).toHaveText(
+      "2 five-hour resets · 1 weekly reset left",
+    );
+    await expect(section.getByTestId("api-endpoint-balance-resets")).toContainText(
+      "Soonest expires",
+    );
+    await openApiEndpointsPage(page);
+    await expect(row(page, id).getByTestId("api-endpoint-row-balance")).toHaveText(
+      "7 days 50% used",
+    );
+  });
+
   test("DeepSeek lists each currency and splits the granted from the topped up; OpenCode Zen says to read its console", async ({
     page,
   }) => {

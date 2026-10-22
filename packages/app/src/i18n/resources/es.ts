@@ -2813,6 +2813,15 @@ export const es: TranslationResources = {
           userIdInfo:
             "Tu ID de usuario en un relay new-api, visible en los ajustes personales del sitio. Se envía como New-Api-User solo al consultar el saldo, nunca con una solicitud de chat. Una cabecera New-Api-User en este endpoint también sirve; este campo tiene prioridad.",
           userIdPlaceholder: "Opcional · solo new-api",
+          teamOrgId: "ID de organización del equipo",
+          teamOrgIdInfo:
+            "El ID de organización de un equipo de GLM Coding Plan, como lo muestra la consola de BigModel o Z.ai. Con el ID de proyecto, se leen las ventanas del equipo cuando esta clave no tiene plan propio.",
+          teamOrgIdPlaceholder: "Opcional · solo plan de equipo GLM",
+          teamProjectId: "ID de proyecto del equipo",
+          teamProjectIdInfo:
+            "El ID de proyecto del equipo, de la misma consola. Hacen falta los dos ID.",
+          teamProjectIdPlaceholder: "Opcional · solo plan de equipo GLM",
+          teamBothNeeded: "Plan de equipo: indica el ID de organización y el ID de proyecto",
           fixNewApiKeyQuery:
             "…/api/usage/token acepta la clave de API, no este token. Para el saldo de la cuenta, new-api usa /api/user/self; sub2api usa /api/v1/user/profile.",
           fixSub2apiKeyQuery:
@@ -3094,6 +3103,8 @@ export const es: TranslationResources = {
           month: "Mes",
           allowance: "Uso del plan",
           mcpMonth: "MCP · Mes",
+          session: "Sesión",
+          credits: "Créditos",
           bucket: "{{bucket}} · {{window}}",
           bucketVideo: "Vídeo",
           bucketImage: "Imagen",
@@ -3101,6 +3112,18 @@ export const es: TranslationResources = {
         },
         pace: "Ritmo {{pace}}",
         asideTitle: "No detiene los modelos",
+        teamPlan: "Plan de equipo",
+        resets: {
+          left: "Quedan {{resets}}",
+          countOne: "{{count}} reinicio",
+          countMany: "{{count}} reinicios",
+          fiveHourOne: "{{count}} reinicio de 5 horas",
+          fiveHourMany: "{{count}} reinicios de 5 horas",
+          weeklyOne: "{{count}} reinicio semanal",
+          weeklyMany: "{{count}} reinicios semanales",
+          soonest: "El primero vence {{when}}",
+          info: "Los reinicios se usan en la página del proveedor; Osuna solo los muestra.",
+        },
         autoRefresh: {
           label: "Actualizar saldo y uso del plan automáticamente",
           hint: "Cada minuto mientras la lista de endpoints o la página de un endpoint esté abierta. Desactivado: solo al abrir una de ellas o al pulsar Actualizar en la página de un endpoint.",

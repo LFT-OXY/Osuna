@@ -1916,3 +1916,52 @@ return this.lastBalances.standIn(settings, fresh);
 const readings = await Promise.all(/* … */);
 return readings.map((reading) => withPaceAt({ reading, now: this.now().getTime() }));
 ```
+
+## Scenario: Command Code, Ollama Cloud and a GLM team's plan windows (endpoint-balance ticket 09, magpie `commandcode_plan.go`, `ollama_usage.go`, `planquota.go` `planKeyWindows` / `zhipuKeyTeamWindows`, `zcode_team.go` `zhipuResets`)
+
+### 1. Scope / Trigger
+- Two more plan sources on the same balance reading, a second request for Command Code's plan id, GLM team requests driven by two new optional balance settings, and new optional reading fields (`team`, `resets`).
+
+### 2. Signatures
+- `PLAN_VENDOR_URLS` gains `glm_cn_biz` (`https://bigmodel.cn/api/monitor/usage/quota/limit`), `commandcode`, `ollama` (moved here from the balance table; the balance reads them through the spread) and `commandcode_subscriptions`. The browser harness `e2e/support/daemon-upgrade-seal.mjs` seals `https://bigmodel.cn/` too.
+- `PlanSource.team: { urls: string[]; language: "zh" | "en" } | null` — BigModel `[glm_cn, glm_cn_biz]` + `zh`, Z.ai `[glm_z]` + `en`.
+- `balance-plan.ts`: `commandCodePlanIdOf(body)`, `commandCodeCreditsWindow({ body, planId })`, `commandCodeSubscriptionPlanId(body) → string | null` ("" = no plan), `zhipuTeamHeaders`, `zhipuTeamQuotaUrl(q) = q + "?type=2"`, `zhipuTeamResetsUrl(q)` (`…/api/biz/customer-package-reset/list?targetType=TEAM` on the same site), `readZhipuResets(body)`.
+- `ReadBalanceInput.commandCodePlans?: Map<string, { planId, at }>` — one per service, keyed by subscriptions URL + key.
+
+### 3. Contracts
+- Settings: `ApiEndpointBalanceSettings.teamOrgId?`, `teamProjectId?`; stored in `balance` trimmed, each only when non-empty, and `balance.url` is now optional on disk — `balance` exists when there is a URL or a team ID. They are in the last-reading fingerprint (via `balance`).
+- Reading: `team?: true`, `resets?: { count, until: string | null, byWindow?, fiveHour?, weekly?, each?: [{ until: string | null, window? }] }`, sorted soonest first, never-expiring last; kept by `LastBalanceReadings` and carried through the balance/plan merge.
+- Window ids added: `session` (Ollama legacy, no span), `credits` (Command Code month's credits, `unit: "USD"`, `used`/`limit`, no reset → no pace).
+- Command Code: windows only from `windowLimits` with `cap > 0`; none → no plan. Credits window when the plan id is known (reply's `planId`, else subscriptions, cached 10 min; a failed ask reuses the last id) and some credit number is given: pool = max(plan monthly, monthlyCredits) + purchased + free.
+- Ollama: allowance window `month` when the period is 27–32 days, else `allowance`, span = until − from; every Ollama window `aside` when purchased credits > 0.
+- GLM team: asked only when both IDs are set, the own read has no windows or failed for a reason other than `glm_key_refused`; first site whose `?type=2` reply has windows wins; resets asked at that site, failure → no `resets`. Headers: bare key, `accept`, `accept-language`, `user-agent`, `bigmodel-organization`, `bigmodel-project`, `set-language`.
+
+### 4. Validation & Error Matrix
+- One team ID only → daemon stores it but asks no team; the edit dialog (Zhipu address only) shows `teamBothNeeded`, marks the empty box `invalid` and disables Save (magpie's editor check).
+- Team quota ≥300 / non-JSON / no windows → next site, then the personal result stands.
+- Resets reply: non-2xx, `code` not in `"" | 0 | 200`, or zero available → no `resets`.
+
+### 5. Good/Base/Bad Cases
+- Good: GLM key, empty personal limits, both IDs → `team: true`, team 5h/7d, `resets.byWindow` counts.
+- Base: open.bigmodel.cn answers no team windows → bigmodel.cn asked; resets 404 there → windows without `resets`.
+- Bad: refused GLM key → only the personal request; no team request.
+
+### 6. Tests Required
+- `daemon-e2e/api-endpoint-balance.e2e.test.ts` › "API endpoint plan windows": team IDs kept / cleared; team windows + resets + headers + last reading on disk; bigmodel.cn fallback and Z.ai `en`; half IDs or refused key ask no team; own plan asks no team; Command Code windows + credits, subscription cached 10 min, pay-as-you-go; Ollama month aside and legacy session/weekly.
+- App: `internal/balance-settings-form.test.ts` (`balanceSettingsOf` with team IDs, `hasLoneTeamId`, `isZhipuAddress`), `balance-copy.test.ts` (`session`, `credits`, `resetsLine` en/zh); browser `Balance` › "a GLM team's IDs are asked for at Zhipu's address only…".
+
+### 7. Wrong vs Correct
+#### Wrong
+```ts
+// 余额与套餐都读到时只拼窗口：团队标记和重置次数丢了
+return { ...balance, windows: [...(balance.windows ?? []), ...(planned.windows ?? [])] };
+```
+#### Correct
+```ts
+return {
+  ...balance,
+  windows: [...(balance.windows ?? []), ...(planned.windows ?? [])],
+  ...(planned.team ? { team: true } : {}),
+  ...(planned.resets === undefined ? {} : { resets: planned.resets }),
+};
+```

@@ -59,6 +59,8 @@ import {
   balanceTokenRequest,
   fieldAfterUsing,
   hasBalanceSettings,
+  hasLoneTeamId,
+  isZhipuAddress,
   type BalanceCheck,
   type BalanceDetect,
   type BalanceFields,
@@ -484,6 +486,12 @@ export interface ConnectionFormState {
   balanceUrlGeneration: number;
   balanceFieldGeneration: number;
   balanceUserIdText: string;
+  // 智谱团队组织 ID 与项目 ID：只在这家的地址是智谱或 Z.ai 时给（isZhipuAddress）。
+  isZhipuAddress: boolean;
+  balanceTeamOrgIdText: string;
+  balanceTeamProjectIdText: string;
+  // 两个团队 ID 只填了一个：提示都填，挡住保存（照 magpie）。
+  hasLoneTeamId: boolean;
   // 账户令牌：存了的打码（移除后为 null），框里显示的字（打的或读回的），显示与读回中的状态。
   balanceTokenMask: string | null;
   hasSavedBalanceToken: boolean;
@@ -589,6 +597,8 @@ export interface ConnectionFormModel {
   setBalanceMethod(value: BalanceFields["balanceMethod"]): void;
   setBalanceField(value: string): void;
   setBalanceUserId(value: string): void;
+  setBalanceTeamOrgId(value: string): void;
+  setBalanceTeamProjectId(value: string): void;
   setBalanceToken(value: string): void;
   toggleBalanceTokenVisible(): void;
   removeBalanceToken(): void;
@@ -680,6 +690,8 @@ interface Values {
   balanceMethod: BalanceFields["balanceMethod"];
   balanceFieldText: string;
   balanceUserIdText: string;
+  balanceTeamOrgIdText: string;
+  balanceTeamProjectIdText: string;
   balanceCheck: BalanceCheck;
   balanceDetect: BalanceDetect;
   balanceUrlGeneration: number;
@@ -907,7 +919,7 @@ export function createConnectionFormModel(
     };
   }
 
-  /** 账户令牌与用户 ID 这几栏的样子，和令牌、地址对不上的提示。 */
+  /** 账户令牌、用户 ID 与智谱团队 ID 这几栏的样子，和令牌、地址对不上的提示。 */
   function deriveBalanceToken(next: Values) {
     const mask = next.balanceTokenRemoved ? null : savedTokenMask;
     const hasToken = next.balanceTokenText.trim() !== "" || mask !== null;
@@ -915,6 +927,10 @@ export function createConnectionFormModel(
       balanceUrlGeneration: next.balanceUrlGeneration,
       balanceFieldGeneration: next.balanceFieldGeneration,
       balanceUserIdText: next.balanceUserIdText,
+      isZhipuAddress: isZhipuForm(next),
+      balanceTeamOrgIdText: next.balanceTeamOrgIdText,
+      balanceTeamProjectIdText: next.balanceTeamProjectIdText,
+      hasLoneTeamId: hasLoneShownTeamId(next),
       balanceTokenMask: mask,
       hasSavedBalanceToken: mask !== null,
       balanceTokenBoxValue: next.balanceTokenBoxValue,
@@ -938,6 +954,19 @@ export function createConnectionFormModel(
     };
   }
 
+  function isZhipuForm(next: Values): boolean {
+    return isZhipuAddress([
+      next.urls.openai_chat,
+      next.urls.anthropic_messages,
+      next.urls.openai_responses,
+    ]);
+  }
+
+  /** 给出了团队两栏、却只填了一个（照 magpie 只在给出两栏时查）。 */
+  function hasLoneShownTeamId(next: Values): boolean {
+    return canSetBalance && isZhipuForm(next) && hasLoneTeamId(next);
+  }
+
   /** 能保存：不在忙、有名称、有 key（选填时不要求）、地址都像样，「高级」里也没有读不通的。 */
   function canSubmitOf(input: {
     next: Values;
@@ -950,7 +979,9 @@ export function createConnectionFormModel(
   }): boolean {
     // 发不出去的请求头只提示、不挡保存（magpie 照存）；读不通的附加请求体挡住，daemon 也会拒收。
     const hasExtrasProblem =
-      input.extras.extraBodyProblem !== null || input.cooldown.cooldownProblem !== null;
+      input.extras.extraBodyProblem !== null ||
+      input.cooldown.cooldownProblem !== null ||
+      hasLoneShownTeamId(input.next);
     const isFilled = input.next.name.trim() !== "" && input.hasKey && input.hasValidUrls;
     return !input.busy && isFilled && !input.serviceAddressInvalid && !hasExtrasProblem;
   }
@@ -2008,6 +2039,12 @@ export function createConnectionFormModel(
     },
     setBalanceUserId(value) {
       update({ balanceUserIdText: value });
+    },
+    setBalanceTeamOrgId(value) {
+      update({ balanceTeamOrgIdText: value });
+    },
+    setBalanceTeamProjectId(value) {
+      update({ balanceTeamProjectIdText: value });
     },
     setBalanceToken(value) {
       update({

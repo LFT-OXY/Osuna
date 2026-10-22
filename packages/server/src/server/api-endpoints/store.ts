@@ -129,14 +129,16 @@ const StoredApiEndpointSchema = z.object({
   insecureTls: z.boolean().optional().catch(undefined),
   // 冷却设置（gateway/cooldown.ts）：分钟数，0 不存；手改成别的类型时当没设，不让整个文件读不懂，越界的用时按 0 到八天算。
   cooldownSettings: StoredCooldownSettingsSchema.optional().catch(undefined),
-  // 余额设置（balance.ts）：余额查询地址，方法只存 POST（GET 是缺省），取值写法与 new-api 的用户 ID 空着不存。
-  // 没有地址即没有这项；手改成读不懂的当没设，不让整个文件读不懂。
+  // 余额设置（balance.ts）：余额查询地址，方法只存 POST（GET 是缺省），取值写法、new-api 的用户 ID、智谱团队组织 ID 与
+  // 项目 ID 空着不存。地址和团队 ID 都没有即没有这项；手改成读不懂的当没设，不让整个文件读不懂。
   balance: z
     .object({
-      url: z.string(),
+      url: z.string().optional(),
       method: z.string().optional(),
       field: z.string().optional(),
       userId: z.string().optional(),
+      teamOrgId: z.string().optional(),
+      teamProjectId: z.string().optional(),
     })
     .optional()
     .catch(undefined),

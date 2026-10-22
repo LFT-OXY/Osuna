@@ -211,13 +211,16 @@ export type ApiEndpointCooldownSettings = z.infer<typeof ApiEndpointCooldownSett
  * 余额设置（照 magpie 的 Balance URL、Balance request method、Balance field）：填了余额查询地址就按它查余额，不再按接口地址认厂商。
  * url：余额查询地址，地址与请求头里的 {key} 一类占位换成这家的 key；method：GET（缺省）或 POST（不带正文），见 balance-settings.ts；
  * field：取值写法，空着时按地址给默认写法（defaultBalanceField）；userId：new-api 的用户 ID，只在查余额时作为
- * New-Api-User 发出（接口请求头里的 New-Api-User 也认，二者都有以它为准）。都只在设了时有，老 daemon 不发、忽略。
+ * New-Api-User 发出（接口请求头里的 New-Api-User 也认，二者都有以它为准）；teamOrgId、teamProjectId：智谱团队套餐的团队组织 ID
+ * 与项目 ID（照 magpie ZhipuTeam），两个都有时个人窗口为空才问团队窗口，和余额查询地址无关。都只在设了时有，老 daemon 不发、忽略。
  */
 export const ApiEndpointBalanceSettingsSchema = z.object({
   url: z.string().optional(),
   method: z.string().optional(),
   field: z.string().optional(),
   userId: z.string().optional(),
+  teamOrgId: z.string().optional(),
+  teamProjectId: z.string().optional(),
 });
 export type ApiEndpointBalanceSettings = z.infer<typeof ApiEndpointBalanceSettingsSchema>;
 
@@ -1479,12 +1482,37 @@ export const ApiEndpointBalanceWindowSchema = z.object({
 });
 export type ApiEndpointBalanceWindow = z.infer<typeof ApiEndpointBalanceWindowSchema>;
 
+/** 一次重置：什么时候过期（null 是不过期），按窗口计的另写是哪个窗口的（fiveHour、weekly）。 */
+export const ApiEndpointBalanceResetSchema = z.object({
+  until: z.string().nullable(),
+  window: z.string().optional(),
+});
+export type ApiEndpointBalanceReset = z.infer<typeof ApiEndpointBalanceResetSchema>;
+
+/**
+ * 套餐还有几次重置（照 magpie ResetCredits）：until 是最早过期的那次（不知道或都不过期为 null），each 每次一项、
+ * 最早过期的在前、不过期的在后。byWindow 是按窗口计（智谱团队套餐）：fiveHour、weekly 各几次。只显示，不能在 Osuna 里用掉。
+ */
+export const ApiEndpointBalanceResetsSchema = z.object({
+  count: z.number(),
+  until: z.string().nullable(),
+  byWindow: z.boolean().optional(),
+  fiveHour: z.number().optional(),
+  weekly: z.number().optional(),
+  each: z.array(ApiEndpointBalanceResetSchema).optional(),
+});
+export type ApiEndpointBalanceResets = z.infer<typeof ApiEndpointBalanceResetsSchema>;
+
 export const ApiEndpointBalanceReadingSchema = z.object({
   endpointId: z.string(),
   status: z.string(),
   items: z.array(ApiEndpointBalanceItemSchema),
   // 回复里带的限额窗口；没有时不发，老 daemon 不发。
   windows: z.array(ApiEndpointBalanceWindowSchema).optional(),
+  // 窗口是智谱团队套餐的（填了团队组织 ID 与项目 ID、个人窗口为空时问到的）；不是不发，老 daemon 不发。
+  team: z.boolean().optional(),
+  // 套餐还有几次重置；没有或读不到不发，老 daemon 不发。
+  resets: ApiEndpointBalanceResetsSchema.optional(),
   // 这次读的时刻；unsupported 为 null。带 stale 的是上次读数读到的时刻。
   readAt: z.string().nullable(),
   failure: ApiEndpointBalanceFailureSchema.nullable(),

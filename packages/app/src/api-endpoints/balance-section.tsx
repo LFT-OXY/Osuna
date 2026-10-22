@@ -6,6 +6,7 @@ import { StyleSheet } from "react-native-unistyles";
 import { RotateCw } from "lucide-react-native";
 import type {
   ApiEndpointBalanceReading,
+  ApiEndpointBalanceResets,
   ApiEndpointBalanceWindow,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
@@ -21,7 +22,14 @@ import type { UsageWindowPace } from "@/usage/types";
 import { UsageWindowBar, type UsageWindowBarLayout } from "@/usage/window-bar";
 import { openExternalUrl } from "@/utils/open-external-url";
 import { relativeAgo } from "./reopen-hints-copy";
-import { failureTitle, hintOf, itemLabel, windowLabel, windowUnitLabel } from "./balance-copy";
+import {
+  failureTitle,
+  hintOf,
+  itemLabel,
+  resetsLine,
+  windowLabel,
+  windowUnitLabel,
+} from "./balance-copy";
 import { paceOf } from "./internal/balance-windows";
 import type { EndpointBalances } from "./use-endpoint-balances";
 
@@ -209,7 +217,12 @@ function BalanceBody({
         </View>
       ))}
       {windows.length > 0 ? (
-        <BalanceWindows windows={windows} afterItems={reading.items.length > 0} />
+        <BalanceWindows
+          windows={windows}
+          afterItems={reading.items.length > 0}
+          isTeam={reading.team === true}
+          resets={reading.resets ?? null}
+        />
       ) : null}
     </>
   );
@@ -222,9 +235,14 @@ function BalanceBody({
 function BalanceWindows({
   windows,
   afterItems,
+  isTeam,
+  resets,
 }: {
   windows: ApiEndpointBalanceWindow[];
   afterItems: boolean;
+  // 智谱团队套餐的窗口：顶上写「团队套餐」，窗口后写还有几次重置。
+  isTeam: boolean;
+  resets: ApiEndpointBalanceResets | null;
 }) {
   const { t, i18n } = useTranslation();
   const { settings, updateSettings } = useAppSettings();
@@ -275,7 +293,12 @@ function BalanceWindows({
       style={[styles.windows, afterItems && settingsStyles.rowBorder]}
       testID="api-endpoint-balance-windows"
     >
-      <View style={styles.windowsHeader}>
+      <View style={[styles.windowsHeader, isTeam && styles.windowsHeaderTeam]}>
+        {isTeam ? (
+          <UiText variant="caption" color="foregroundMuted" testID="api-endpoint-balance-team">
+            {t("settings.apiEndpoints.balance.teamPlan")}
+          </UiText>
+        ) : null}
         <SegmentedControl
           options={displayOptions}
           value={displayAs}
@@ -294,6 +317,7 @@ function BalanceWindows({
           displayAs={displayAs}
         />
       ))}
+      {resets ? <ResetsRows resets={resets} /> : null}
       {aside.length > 0 ? (
         <View style={styles.asideGroup} testID="api-endpoint-balance-windows-aside">
           <UiText variant="caption" color="foregroundMuted">
@@ -347,6 +371,31 @@ function BalanceWindowBar({
 }
 
 function noop() {}
+
+/** 还有几次重置，最早什么时候过期（照 magpie 的重置卡，只显示：重置要到厂商自己的页面上用）。 */
+function ResetsRows({ resets }: { resets: ApiEndpointBalanceResets }) {
+  const { t, i18n } = useTranslation();
+  const soonest = resets.until
+    ? new Date(resets.until).toLocaleString(i18n.language, {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
+  return (
+    <View style={styles.resets} testID="api-endpoint-balance-resets">
+      <UiText weight="medium" selectable testID="api-endpoint-balance-resets-count">
+        {resetsLine({ t, resets })}
+      </UiText>
+      <UiText variant="caption" color="foregroundMuted">
+        {soonest
+          ? `${t("settings.apiEndpoints.balance.resets.soonest", { when: soonest })} · ${t("settings.apiEndpoints.balance.resets.info")}`
+          : t("settings.apiEndpoints.balance.resets.info")}
+      </UiText>
+    </View>
+  );
+}
 
 /**
  * 「$15.00 / $20.00」「1 / 5 个视频」：已用（或剩余）与上限，照 magpie quotaCount——美元每个数写成货币，
@@ -479,6 +528,14 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     justifyContent: "flex-end",
     paddingVertical: theme.spacing[1],
+  },
+  windowsHeaderTeam: {
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  resets: {
+    gap: theme.spacing[1],
+    marginTop: theme.spacing[2],
   },
   asideGroup: {
     marginTop: theme.spacing[2],

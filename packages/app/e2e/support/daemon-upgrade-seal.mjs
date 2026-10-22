@@ -58,6 +58,8 @@ const SEALED_VENDOR_ORIGINS = [
   "https://ollama.com/",
   "https://aihubmix.com/",
   "https://open.bigmodel.cn/",
+  // 智谱团队套餐的第二个站点（balance-plan.ts 的 glm_cn_biz）。
+  "https://bigmodel.cn/",
   "https://api.z.ai/",
   "https://api.kimi.com/",
   "https://api.kimi.ai/",

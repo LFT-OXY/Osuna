@@ -237,6 +237,8 @@ then Anthropic, then Responses):
 | Kimi Code       | `api.kimi.com` / `api.kimi.ai`, path with `/coding` | `GET <base>/coding/v1/usages`, on the endpoint's own host                 |
 | MiniMax         | `api.minimaxi.com` / `api.minimax.io`               | `GET https://api.minimaxi.com/v1/token_plan/remains` (`.io`)              |
 | OpenCode Go     | `opencode.ai/zen/go` or `opencode.ai/inference/go`  | `GET https://opencode.ai/zen/go/v1/usage`                                 |
+| Command Code    | `api.commandcode.ai`                                | `GET https://api.commandcode.ai/alpha/billing/credits`                    |
+| Ollama Cloud    | `ollama.com`                                        | `GET https://ollama.com/api/balance`                                      |
 
 These carry only the key (`Authorization: Bearer`, the bare key for GLM),
 `Accept: application/json`, `Accept-Language: en-US,en` and
@@ -245,7 +247,25 @@ carries a new `x-opencode-session` and `x-opencode-session-id`, without which
 OpenCode's gateway answers 400. A key that has no plan shows nothing: a reply
 with no windows, or a failed read of a GLM key off `/api/coding/` or of any
 MiniMax key (pay-as-you-go keys use the same address), unless the failure is
-temporary. "Check balance" and "Detect URL" don't read plan windows. Each
+temporary, as does a Command Code or Ollama Cloud key with no windows. Command
+Code and Ollama Cloud are asked the same address twice, once for the balance and
+once for the windows, as magpie asks it. When Command Code's reply leaves out
+the plan, the daemon also asks `GET
+https://api.commandcode.ai/alpha/billing/subscriptions` with the same key, at
+most every ten minutes per key, for the month's credits the Credits window is
+measured against.
+
+A GLM key whose own read shows no windows (or fails, other than the key being
+refused) is asked as a team plan's, only when the endpoint has both the **Team
+organization ID** and **Team project ID**: `GET
+<site>/api/monitor/usage/quota/limit?type=2` with the bare key,
+`Bigmodel-Organization`, `Bigmodel-Project` and `Set-Language` (`zh` on BigModel,
+`en` on Z.ai), first at the key's own host and then, for BigModel, at
+`bigmodel.cn`. The site that answers is then asked `GET
+<site>/api/biz/customer-package-reset/list?targetType=TEAM` with the same headers
+for the team's resets by window; magpie reads those only with a ZCode sign-in,
+which Osuna doesn't read, so when the key isn't taken there no count shows.
+"Check balance" and "Detect URL" don't read plan windows. Each
 window carries its pace as of the read: the share used less the share of the
 window gone by, the window starting its length before its reset, and a monthly
 one on the same day a month before.

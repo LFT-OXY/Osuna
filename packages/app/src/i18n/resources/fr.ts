@@ -2815,6 +2815,15 @@ export const fr: TranslationResources = {
           userIdInfo:
             "Votre ID utilisateur sur un relais new-api, affiché dans les paramètres personnels du site. Envoyé en New-Api-User seulement pour interroger le solde, jamais avec une requête de chat. Un en-tête New-Api-User sur ce point de terminaison marche aussi ; ce champ l'emporte.",
           userIdPlaceholder: "Facultatif · new-api seulement",
+          teamOrgId: "ID d'organisation de l'équipe",
+          teamOrgIdInfo:
+            "L'ID d'organisation d'une équipe GLM Coding Plan, tel que l'affiche la console BigModel ou Z.ai. Avec l'ID de projet, les fenêtres de l'équipe sont lues quand cette clé n'a pas de forfait à elle.",
+          teamOrgIdPlaceholder: "Facultatif · forfait d'équipe GLM seulement",
+          teamProjectId: "ID de projet de l'équipe",
+          teamProjectIdInfo:
+            "L'ID de projet de l'équipe, dans la même console. Les deux ID sont nécessaires.",
+          teamProjectIdPlaceholder: "Facultatif · forfait d'équipe GLM seulement",
+          teamBothNeeded: "Forfait d'équipe : indiquez l'ID d'organisation et l'ID de projet",
           fixNewApiKeyQuery:
             "…/api/usage/token prend la clé d'API, pas ce jeton. Pour le solde du compte, new-api utilise /api/user/self ; sub2api utilise /api/v1/user/profile.",
           fixSub2apiKeyQuery:
@@ -3103,6 +3112,8 @@ export const fr: TranslationResources = {
           month: "Mois",
           allowance: "Utilisation du forfait",
           mcpMonth: "MCP · Mois",
+          session: "Session",
+          credits: "Crédits",
           bucket: "{{bucket}} · {{window}}",
           bucketVideo: "Vidéo",
           bucketImage: "Image",
@@ -3110,6 +3121,18 @@ export const fr: TranslationResources = {
         },
         pace: "Rythme {{pace}}",
         asideTitle: "N'arrête pas les modèles",
+        teamPlan: "Forfait d'équipe",
+        resets: {
+          left: "Il reste {{resets}}",
+          countOne: "{{count}} réinitialisation",
+          countMany: "{{count}} réinitialisations",
+          fiveHourOne: "{{count}} réinitialisation de 5 heures",
+          fiveHourMany: "{{count}} réinitialisations de 5 heures",
+          weeklyOne: "{{count}} réinitialisation hebdomadaire",
+          weeklyMany: "{{count}} réinitialisations hebdomadaires",
+          soonest: "La première expire {{when}}",
+          info: "Les réinitialisations s'utilisent sur la page du fournisseur ; Osuna les affiche seulement.",
+        },
         autoRefresh: {
           label: "Actualiser automatiquement le solde et l'usage du forfait",
           hint: "Toutes les minutes tant que la liste des points d'accès ou la page d'un point d'accès est ouverte. Désactivé : seulement à l'ouverture de l'une d'elles, ou en appuyant sur Actualiser sur la page d'un point d'accès.",

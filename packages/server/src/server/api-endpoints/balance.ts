@@ -3,7 +3,8 @@
 // DeepSeek 的赠送 / 充值拆分与 OpenCode Zen 的说明照最新版 ea6be159 的 readDeepSeekSplit、errOpenCodeNoBalance、openCodeZen）。
 // 填了余额查询地址时的自定义余额照 magpie 的 balanceRead、balanceMethodOf、balanceKeyNames、withBalanceKey（7597c132）。
 // 账户令牌照 magpie 的 keyQueryOf、keyNotToken、balanceAuthorization、errKeyQueryWithToken、newAPIUserHint、
-// readAiHubMixAccount，sub2api 的限额窗口照 sub2api_usage.go 的 readSub2APIKeyLimits 与 Balance（7597c132）。
+// readAiHubMixAccount，sub2api 的限额窗口照 sub2api_usage.go 的 readSub2APIKeyLimits 与 Balance；套餐窗口照
+// planquota.go 的 planKeyWindows、zhipuKeyTeamAt 与 commandcode_plan.go 的 cmdKeyWindows、cmdKeyPlanID（7597c132）。
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import {
   balanceMethodOf,
@@ -18,6 +19,7 @@ import type {
   ApiEndpointBalanceHint,
   ApiEndpointBalanceItem,
   ApiEndpointBalanceReading,
+  ApiEndpointBalanceResets,
   ApiEndpointBalanceWindow,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import {
@@ -29,13 +31,21 @@ import {
 } from "./request-extras.js";
 import { numberOf, readBalanceField } from "./balance-field.js";
 import {
+  commandCodeCreditsWindow,
+  commandCodePlanIdOf,
+  commandCodeSubscriptionPlanId,
   PLAN_VENDOR_URLS,
   planRequestHeaders,
   planSourceOf,
+  readZhipuResets,
   shownWindows,
   withPace,
   zhipuKeyRefusal,
+  zhipuTeamHeaders,
+  zhipuTeamQuotaUrl,
+  zhipuTeamResetsUrl,
   type PlanSource,
+  type PlanWindow,
 } from "./balance-plan.js";
 import { upstreamFetch, type UpstreamResponse } from "./insecure-tls.js";
 import type { StoredApiEndpoint } from "./store.js";
@@ -69,11 +79,10 @@ export const BALANCE_VENDOR_URLS = {
   siliconflow_com: "https://api.siliconflow.com/v1/user/info",
   stepfun_com: "https://api.stepfun.com/v1/accounts",
   stepfun_ai: "https://api.stepfun.ai/v1/accounts",
-  commandcode: "https://api.commandcode.ai/alpha/billing/credits",
-  ollama: "https://ollama.com/api/balance",
   aihubmix: "https://aihubmix.com/dashboard/billing/remain",
   // 填了账户令牌时问整个账户的余额。
   aihubmix_account: "https://aihubmix.com/api/user/self",
+  // 套餐窗口的查询；Command Code 与 Ollama Cloud 的余额也问这里的 commandcode、ollama。
   ...PLAN_VENDOR_URLS,
 } as const;
 
@@ -205,6 +214,8 @@ export interface ReadBalanceInput {
   withPlan?: boolean;
   // 这家有对得上的上次读数：认不准是套餐的 key 暂时没读成时，照 magpie 只在读到过时才显示（回上次读数）。
   hasLastReading?: boolean;
+  // Command Code 每把 key 的套餐 id 与读到的时刻（照 magpie cmdKeyPlans，留 10 分钟）；daemon 一份，测试可不给。
+  commandCodePlans?: Map<string, { planId: string; at: number }>;
   // 连接断了：抛错，不回读数。
   signal: AbortSignal;
   // 整页的期限到了：和单次超时一样算暂时查不到。
@@ -252,57 +263,116 @@ function mergedReading(input: {
   const { balance, planned } = input;
   if (planned === null) return balance;
   if (planned.status === "ok" && balance.status === "ok") {
-    return { ...balance, windows: [...(balance.windows ?? []), ...(planned.windows ?? [])] };
+    return {
+      ...balance,
+      windows: [...(balance.windows ?? []), ...(planned.windows ?? [])],
+      ...(planned.team ? { team: true } : {}),
+      ...(planned.resets === undefined ? {} : { resets: planned.resets }),
+    };
   }
   if (balance.status === "ok") return balance;
   return planned;
 }
 
+/** 问一次套餐窗口的结果：读出的窗口（空的是没有套餐），或没读成的原因（还没按「认不准是套餐」筛过）。 */
+type PlanAnswer =
+  | { kind: "windows"; windows: PlanWindow[]; status: number }
+  | { kind: "failed"; failure: ApiEndpointBalanceFailure };
+
 /**
- * 问套餐 key 的窗口（照 magpie planBody 与 PlanQuotas）。null 是没有可显示的：这把 key 没有套餐（回了空窗口），或认不准是
+ * 问套餐 key 的窗口（照 magpie planKeyWindows 与 PlanQuotas）。null 是没有可显示的：这把 key 没有套餐（回了空窗口），或认不准是
  * 套餐（按量付费也走这个地址）时没读成——读到过且这次只是暂时查不到除外，那样回上次读数。
+ * 智谱的 key 自己没有窗口（或没读成，但不是 key 被拒）、又填了团队组织 ID 与项目 ID 时，问团队的窗口与重置次数。
  */
 async function readPlanWindows(input: {
   input: ReadBalanceInput;
   source: PlanSource;
   apiKey: string;
 }): Promise<ApiEndpointBalanceReading | null> {
-  const { source, apiKey } = input;
-  const { endpoint, signal, deadline } = input.input;
+  const { source } = input;
+  const { endpoint } = input.input;
   const now = input.input.now();
   const readAt = now.toISOString();
-  const secrets = [apiKey];
-  const failed = (failure: ApiEndpointBalanceFailure): ApiEndpointBalanceReading | null => {
-    const keepsLast = failure.reason === "temporary" && input.input.hasLastReading === true;
-    if (!source.sure && !keepsLast) return null;
-    return { endpointId: endpoint.id, status: "failed", items: [], readAt, failure };
-  };
-  let status: number;
-  let text: string;
+  const shown = (windows: PlanWindow[]): ApiEndpointBalanceReading => ({
+    endpointId: endpoint.id,
+    status: "ok",
+    items: [],
+    windows: shownWindows({ windows, now: now.getTime() }),
+    readAt,
+    failure: null,
+  });
+  const answer = await askPlan(input);
+  const isRefused = answer.kind === "failed" && answer.failure.hint === "glm_key_refused";
+  const hasWindows = answer.kind === "windows" && answer.windows.length > 0;
+  if (!hasWindows && !isRefused) {
+    const team = await readTeamWindows(input);
+    if (team !== null) {
+      return {
+        ...shown(team.windows),
+        team: true,
+        ...(team.resets === null ? {} : { resets: team.resets }),
+      };
+    }
+  }
+  if (answer.kind === "windows") {
+    // 没有窗口的 key 没有套餐，不显示（照 magpie）。
+    return answer.windows.length === 0 ? null : shown(answer.windows);
+  }
+  const keepsLast = answer.failure.reason === "temporary" && input.input.hasLastReading === true;
+  if (!source.sure && !keepsLast) return null;
+  return { endpointId: endpoint.id, status: "failed", items: [], readAt, failure: answer.failure };
+}
+
+/** GET 一个套餐相关的地址：回状态与正文，网络错误、超时为 null（连接断了照常抛）。 */
+async function fetchPlan(input: {
+  input: ReadBalanceInput;
+  url: string;
+  headers: Record<string, string>;
+}): Promise<{ status: number; text: string } | { error: unknown }> {
+  const { signal, deadline } = input.input;
   try {
     const response = await upstreamFetch({
-      url: source.url,
+      url: input.url,
       init: {
-        headers: planRequestHeaders({
-          source,
-          apiKey,
-          userAgent: input.input.userAgent,
-          now: now.getTime(),
-        }),
+        headers: input.headers,
         signal: AbortSignal.any([signal, AbortSignal.timeout(BALANCE_READ_TIMEOUT_MS), deadline]),
       },
       uncheckedHosts: input.input.extras.uncheckedHosts,
     });
-    status = response.status;
-    text = await readCapped(response);
+    return { status: response.status, text: await readCapped(response) };
   } catch (error) {
     if (signal.aborted) throw error;
+    return { error };
+  }
+}
+
+/** 问这把 key 自己的套餐窗口（照 magpie planBody）。 */
+async function askPlan(input: {
+  input: ReadBalanceInput;
+  source: PlanSource;
+  apiKey: string;
+}): Promise<PlanAnswer> {
+  const { source, apiKey } = input;
+  const secrets = [apiKey];
+  const failed = (failure: ApiEndpointBalanceFailure): PlanAnswer => ({ kind: "failed", failure });
+  const fetched = await fetchPlan({
+    input: input.input,
+    url: source.url,
+    headers: planRequestHeaders({
+      source,
+      apiKey,
+      userAgent: input.input.userAgent,
+      now: input.input.now().getTime(),
+    }),
+  });
+  if ("error" in fetched) {
     return failed({
       reason: "temporary",
-      detail: clip(redactKey(describeNetworkError(error), secrets)),
+      detail: clip(redactKey(describeNetworkError(fetched.error), secrets)),
       status: null,
     });
   }
+  const { status, text } = fetched;
   const body = parseJson(text);
   const glmRefused = (detail: string | null): ApiEndpointBalanceFailure => ({
     reason: "token_rejected",
@@ -337,16 +407,100 @@ async function readPlanWindows(input: {
   if (read.kind === "no_value") {
     return failed({ reason: "no_value", detail: clip(redactKey(read.detail, secrets)), status });
   }
-  // 没有窗口的 key 没有套餐，不显示（照 magpie）。
-  if (read.windows.length === 0) return null;
-  return {
-    endpointId: endpoint.id,
-    status: "ok",
-    items: [],
-    windows: shownWindows({ windows: read.windows, now: now.getTime() }),
-    readAt,
-    failure: null,
-  };
+  if (source.vendor === "commandcode" && read.windows.length > 0) {
+    // 有窗口的才是套餐 key：月度 credits 另作一个窗口，回复没写套餐时问这把 key 的订阅（照 magpie cmdKeyWindows）。
+    const planId = commandCodePlanIdOf(body) ?? (await commandCodeKeyPlanId(input));
+    const credits = commandCodeCreditsWindow({ body, planId });
+    return {
+      kind: "windows",
+      windows: credits ? [...read.windows, credits] : read.windows,
+      status,
+    };
+  }
+  return { kind: "windows", windows: read.windows, status };
+}
+
+const COMMAND_CODE_PLAN_KEEP_MS = 10 * 60 * 1000;
+
+/**
+ * 这把 Command Code key 的套餐 id（照 magpie cmdKeyPlanID）：读到的留 10 分钟；读不出时用上次读到的，再没有为 null。
+ * 订阅有时要 15–20 秒才答，所以不每分钟问。
+ */
+async function commandCodeKeyPlanId(input: {
+  input: ReadBalanceInput;
+  apiKey: string;
+}): Promise<string | null> {
+  const cache = input.input.commandCodePlans;
+  const url =
+    input.input.vendorUrls?.commandcode_subscriptions ??
+    BALANCE_VENDOR_URLS.commandcode_subscriptions;
+  const cacheKey = `${url}\u0000${input.apiKey}`;
+  const now = input.input.now().getTime();
+  const seen = cache?.get(cacheKey);
+  if (seen !== undefined && now - seen.at < COMMAND_CODE_PLAN_KEEP_MS) return seen.planId;
+  const fetched = await fetchPlan({
+    input: input.input,
+    url,
+    headers: {
+      authorization: `Bearer ${input.apiKey}`,
+      accept: "application/json",
+      "user-agent": input.input.userAgent,
+    },
+  });
+  const planId =
+    "error" in fetched || fetched.status < 200 || fetched.status >= 300
+      ? null
+      : commandCodeSubscriptionPlanId(parseJson(fetched.text));
+  if (planId === null) return seen?.planId ?? null;
+  cache?.set(cacheKey, { planId, at: now });
+  return planId;
+}
+
+/**
+ * 智谱团队套餐的窗口（照 magpie zhipuKeyTeamWindows）：两个 ID 都填了才问，先这把 key 自己的站点、再 ZCode 问的站点，
+ * 取第一个答出窗口的。重置次数在答出窗口的那个站点问（magpie 只用 ZCode 登录读团队的重置次数，这里用 key 与团队的 ID 问；
+ * 读不出就不写次数）。都没答出为 null。
+ */
+async function readTeamWindows(input: {
+  input: ReadBalanceInput;
+  source: PlanSource;
+  apiKey: string;
+}): Promise<{ windows: PlanWindow[]; resets: ApiEndpointBalanceResets | null } | null> {
+  const { source, apiKey } = input;
+  const settings = input.input.endpoint.balance;
+  const org = settings?.teamOrgId?.trim() ?? "";
+  const project = settings?.teamProjectId?.trim() ?? "";
+  if (source.team === null || org === "" || project === "") return null;
+  const headers = zhipuTeamHeaders({
+    apiKey,
+    org,
+    project,
+    language: source.team.language,
+    userAgent: input.input.userAgent,
+  });
+  for (const quotaUrl of source.team.urls) {
+    const fetched = await fetchPlan({
+      input: input.input,
+      url: zhipuTeamQuotaUrl(quotaUrl),
+      headers,
+    });
+    if ("error" in fetched || fetched.status >= 300) continue;
+    const body = parseJson(fetched.text);
+    if (body === undefined) continue;
+    const read = source.read(body);
+    if (read.kind !== "windows" || read.windows.length === 0) continue;
+    const listed = await fetchPlan({
+      input: input.input,
+      url: zhipuTeamResetsUrl(quotaUrl),
+      headers,
+    });
+    const resets =
+      "error" in listed || listed.status < 200 || listed.status >= 300
+        ? null
+        : readZhipuResets(parseJson(listed.text));
+    return { windows: read.windows, resets };
+  }
+  return null;
 }
 
 /** 只读余额：认不出或没有 key 时什么都不发。 */
@@ -590,7 +744,7 @@ interface BalanceReplyItems {
 function sourceOf(input: ReadBalanceInput): BalanceSource | null {
   const token = tokenOtherThanKey(input.balanceToken, input.apiKey);
   const custom = input.endpoint.balance;
-  const savedUrl = custom?.url.trim() ?? "";
+  const savedUrl = custom?.url?.trim() ?? "";
   if (custom !== undefined && savedUrl !== "") {
     const asked = keyQueryWithoutToken({
       url: savedUrl,

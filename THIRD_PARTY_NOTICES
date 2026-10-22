@@ -1145,6 +1145,26 @@ it is written follows quotaPace and paceNumber in internal/gui/assets/app.js:
   packages/server/src/server/api-endpoints/window-pace.ts
   packages/app/src/api-endpoints/internal/balance-windows.ts
 
+Command Code's and Ollama Cloud's plan windows (Command Code's 5-hour and
+weekly windows and the month's credits measured against its plan, the plan read
+from its subscription and kept ten minutes, Ollama's allowance named Month at
+27–32 days, its legacy session and weekly limits, set aside when credits are
+bought) follow cmdWindows, cmdLeft, cmdPlans, cmdQuotaOf, cmdKeyWindows,
+cmdKeyPlanID, cmdSubscription and cmdTime in magpie's
+internal/provider/commandcode_plan.go and readOllamaPlan in ollama_usage.go; a
+GLM team plan's windows (asked with type=2 and the team's organization and
+project, at the key's host then bigmodel.cn) and its resets by window follow
+planKeyWindows, zhipuKeyTeamWindows and zhipuTeamRoots in planquota.go,
+zcodeBizRoot, zcodeTeamHeaders, zhipuResets and zcodeWhen in zcode_team.go,
+zhipuTime in zcode.go and ResetCredits.Words in codex_resets.go, and the
+editor's team fields follow the zhipuTeam fields in internal/gui/assets/app.js:
+
+  packages/server/src/server/api-endpoints/balance-plan.ts
+  packages/server/src/server/api-endpoints/balance.ts
+  packages/app/src/api-endpoints/balance-copy.ts
+  packages/app/src/api-endpoints/balance-settings-fields.tsx
+  packages/app/src/api-endpoints/internal/balance-settings-form.ts
+
 Import from other apps (the five sources and where each keeps its file, how a
 CC Switch, Claude Code, Codex, Alma or OpenCode entry becomes an endpoint, a
 template's when the URLs are its own, entries of one account merged, Osuna's own

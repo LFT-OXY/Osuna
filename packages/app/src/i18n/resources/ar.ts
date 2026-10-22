@@ -2752,6 +2752,14 @@ export const ar: TranslationResources = {
           userIdInfo:
             "معرّف المستخدم الخاص بك على مرحّل new-api، ويظهر في الإعدادات الشخصية للموقع. يُرسل بصيغة New-Api-User عند الاستعلام عن الرصيد فقط، ولا يُرسل أبدًا مع طلب محادثة. ترويسة New-Api-User على نقطة النهاية هذه تعمل أيضًا، وهذا الحقل له الأولوية.",
           userIdPlaceholder: "اختياري · لـ new-api فقط",
+          teamOrgId: "معرّف مؤسسة الفريق",
+          teamOrgIdInfo:
+            "معرّف مؤسسة فريق GLM Coding Plan كما تعرضه وحدة تحكم BigModel أو Z.ai. مع معرّف المشروع تُقرأ نوافذ الفريق عندما لا تكون لهذا المفتاح خطة خاصة به.",
+          teamOrgIdPlaceholder: "اختياري · لخطة فريق GLM فقط",
+          teamProjectId: "معرّف مشروع الفريق",
+          teamProjectIdInfo: "معرّف مشروع الفريق من وحدة التحكم نفسها. يلزم المعرّفان معًا.",
+          teamProjectIdPlaceholder: "اختياري · لخطة فريق GLM فقط",
+          teamBothNeeded: "خطة الفريق: أدخل معرّف المؤسسة ومعرّف المشروع معًا",
           fixNewApiKeyQuery:
             "…/api/usage/token يقبل مفتاح API لا هذا الرمز. لرصيد الحساب يستخدم new-api العنوان /api/user/self، ويستخدم sub2api العنوان /api/v1/user/profile.",
           fixSub2apiKeyQuery:
@@ -3023,6 +3031,8 @@ export const ar: TranslationResources = {
           month: "شهر",
           allowance: "استخدام الخطة",
           mcpMonth: "MCP · شهر",
+          session: "الجلسة",
+          credits: "الأرصدة",
           bucket: "{{bucket}} · {{window}}",
           bucketVideo: "فيديو",
           bucketImage: "صور",
@@ -3030,6 +3040,18 @@ export const ar: TranslationResources = {
         },
         pace: "الوتيرة {{pace}}",
         asideTitle: "لا يوقف النماذج",
+        teamPlan: "خطة الفريق",
+        resets: {
+          left: "المتبقي: {{resets}}",
+          countOne: "{{count}} إعادة ضبط",
+          countMany: "{{count}} إعادات ضبط",
+          fiveHourOne: "{{count}} إعادة ضبط لخمس ساعات",
+          fiveHourMany: "{{count}} إعادات ضبط لخمس ساعات",
+          weeklyOne: "{{count}} إعادة ضبط أسبوعية",
+          weeklyMany: "{{count}} إعادات ضبط أسبوعية",
+          soonest: "أقربها تنتهي {{when}}",
+          info: "تُستخدم إعادات الضبط في صفحة المورّد؛ Osuna يعرضها فقط.",
+        },
         autoRefresh: {
           label: "تحديث الرصيد واستخدام الخطة تلقائيًا",
           hint: "كل دقيقة ما دامت قائمة نقاط الاتصال أو صفحة نقطة اتصال مفتوحة. عند الإيقاف: فقط عند فتح إحداهما أو الضغط على تحديث في صفحة نقطة الاتصال.",

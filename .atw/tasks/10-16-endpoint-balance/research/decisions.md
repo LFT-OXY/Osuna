@@ -55,6 +55,14 @@
   - 详情分区的窗口块顶上有「已用 / 剩余」切换（magpie 是点数字切换），写的就是套餐用量那个设置，各处同一个选择。
   - magpie 对个人 GLM 套餐另读的重置次数与套餐期限（`zhipuPersonalResets`、`zhipuTerm`）不在 prd 与任何工单里，没有做，交用户决定。
 
+- 2026-10-22 工单 09 实现时定下：
+  - 团队的重置次数：magpie 只在有 ZCode 登录时用登录令牌读（`zhipuTeamResets`），用 key 读团队窗口时不读次数。R1-Q8 不读 ZCode 登录，所以改用 key 加两个团队 ID，在答出团队窗口的站点问同一份清单 `customer-package-reset/list?targetType=TEAM`；读不到就不写次数。这是比 magpie 多做、没有在真实接口上验证过的一步，已写进 `docs/usage.md`。
+  - 没填全两个 ID 时不发团队请求（工单原文）；magpie 不带 ID 也会试 `?type=2`。编辑窗口照 magpie 只填一个时不让保存，并标出空着的那栏；daemon 照 magpie `ZhipuTeam.normal` 有一个就存。
+  - 团队窗口的读数带 `team: true`，详情分区顶上写「团队套餐」（magpie 的卡片名是 GLM Coding Team）。
+  - Command Code 的 credits 窗口：回复里没有 planId 时问订阅，每把 key 留 10 分钟、读不出用上次的（`cmdKeyPlanID`）；在 daemon 内存里，不落盘。窗口 id `credits`，界面写「积分」（magpie 的中文）；Ollama 旧套餐的 Session 窗口 id `session`，界面写「会话上限」。
+  - Command Code 与 Ollama Cloud 的余额和窗口各问一次同一个地址（magpie 两张卡也各问各的）。
+  - 余额设置的 `url` 在存储里改为可选：只填了团队 ID 时 `balance` 只有这两项。
+
 ## magpie 出处（照做时对照）
 
 ### 按地址认的厂商余额（`provider/balance.go:41-84, 255-470`）
