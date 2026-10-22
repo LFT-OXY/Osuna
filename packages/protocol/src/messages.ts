@@ -122,6 +122,8 @@ import {
   ApiEndpointSetEndpointNameDisplayResponseSchema,
   ApiEndpointRevealKeyRequestSchema,
   ApiEndpointRevealKeyResponseSchema,
+  ApiEndpointRevealSecretRequestSchema,
+  ApiEndpointRevealSecretResponseSchema,
   ApiEndpointForgetCatalogRequestSchema,
   ApiEndpointForgetCatalogResponseSchema,
   ApiEndpointVendorStatusRequestSchema,
@@ -3788,6 +3790,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ApiEndpointReadBalanceRequestSchema,
   ApiEndpointSetBalanceAutoRefreshRequestSchema,
   ApiEndpointCheckBalanceRequestSchema,
+  ApiEndpointRevealSecretRequestSchema,
   ApiEndpointImportScanRequestSchema,
   ApiEndpointImportRequestSchema,
   ApiEndpointImportDiscoveryRequestSchema,
@@ -4187,7 +4190,8 @@ export const ServerInfoStatusPayloadSchema = z
         // COMPAT(apiEndpointBalance): added in v0.17.0, remove gate after 2027-04-22.
         // 任务 10-16-endpoint-balance：read_balance（接口的余额，1 分钟缓存、asked 与 force），接口列表行与详情页的
         // 「余额与套餐用量」；列表带 balanceAutoRefresh，支持 set_balance_auto_refresh（自动刷新余额与套餐用量）；
-        // 接口带 balance（余额查询地址、方法、取值写法），保存可写可清，支持 check_balance（编辑窗口的「查询余额」）。
+        // 接口带 balance（余额查询地址、方法、取值写法），保存可写可清，支持 check_balance（编辑窗口的「查询余额」）；
+        // 接口带 balanceTokenMask，保存与 check_balance 带 balanceToken（账户令牌），支持 reveal_secret；读数带 windows。
         apiEndpointBalance: z.boolean().optional(),
         // COMPAT(providerVersions): added in v0.14.0, remove gate after 2027-04-01.
         // 快照带内置提供方的已装版本 version；daemon 支持 provider.version.check.* 与 provider.upgrade.*。
@@ -7612,6 +7616,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ApiEndpointReadBalanceResponseSchema,
   ApiEndpointSetBalanceAutoRefreshResponseSchema,
   ApiEndpointCheckBalanceResponseSchema,
+  ApiEndpointRevealSecretResponseSchema,
   ApiEndpointImportScanResponseSchema,
   ApiEndpointImportResponseSchema,
   ApiEndpointImportDiscoveryResponseSchema,

@@ -2757,6 +2757,25 @@ export const ko: TranslationResources = {
             "응답에서 잔액이 있는 위치입니다(예: data.balance). + - * /와 괄호로 계산할 수 있습니다(예: data.total / 500000). 앞에 “$”나 “¥”를 붙이면 기호가 붙고, 뒤에 “%”를 붙이면 막대와 함께 백분율로 표시합니다. 여러 개는 “;”로 나누고 각각 라벨을 붙일 수 있습니다(예: 5h: a.used / a.cap %; $credits.left). 목록의 각 항목은 a.*.used, 조건에 맞는 항목은 a[status=active].used로 쓰고 sum(), max(), min(), count()에 넣습니다. 비워 두면 new-api, sub2api, credit grants 주소는 자리 표시자의 식으로 읽습니다.",
           check: "잔액 조회",
           nothingToAsk: "잔액 조회 URL이 없고 이 공급자의 조회 방법도 알 수 없습니다",
+          token: "계정 토큰",
+          tokenInfo:
+            "잔액 조회 URL이 계정 자체의 토큰을 요구할 때 키 대신 사용합니다: new-api 중계의 시스템 액세스 토큰, 또는 sub2api 패널의 로그인 토큰(JWT, Bearer로 전송). AiHubMix에서는 시스템 액세스 토큰만 넣으면 잔액 조회 URL 없이 계정 전체 잔액을 보여 줍니다. 이 호스트에만 저장되며 다른 데는 쓰지 않습니다.",
+          tokenPlaceholder: "선택 사항 · 계정의 시스템 액세스 토큰 또는 로그인 토큰",
+          tokenSavedPlaceholder: "저장됨: {{mask}}",
+          tokenRemove: "삭제",
+          userId: "사용자 ID",
+          userIdInfo:
+            "new-api 중계에서의 사용자 ID(사이트 개인 설정에 표시). 잔액을 조회할 때만 New-Api-User로 보내며 채팅 요청에는 붙이지 않습니다. 이 엔드포인트 헤더의 New-Api-User도 인식하며, 둘 다 있으면 이 칸이 우선합니다.",
+          userIdPlaceholder: "선택 사항 · new-api만",
+          fixNewApiKeyQuery:
+            "…/api/usage/token은 이 토큰이 아니라 API 키를 받습니다. 계정 잔액은 new-api는 /api/user/self, sub2api는 /api/v1/user/profile입니다.",
+          fixSub2apiKeyQuery:
+            "…/v1/usage는 이 토큰이 아니라 API 키를 받습니다. 계정 잔액은 sub2api 패널의 /api/v1/user/profile입니다.",
+          fixNoUrl:
+            "토큰에는 잔액 조회 URL이 필요합니다: new-api 중계는 /api/user/self, sub2api 패널은 /api/v1/user/profile입니다.",
+          fixUserId:
+            "new-api 중계는 사용자 ID도 필요합니다(사이트 개인 설정에 표시): 아래 「사용자 ID」를 입력하세요.",
+          useUrl: "{{url}} 사용",
         },
         extras: {
           advanced: "고급",
@@ -3005,6 +3024,15 @@ export const ko: TranslationResources = {
             "이 키에는 한도가 없고, AiHubMix는 키에 남은 금액만 알려 줍니다. 계정 잔액을 보려면 이 엔드포인트 설정에 계정 액세스 토큰(AiHubMix → 설정 → 시스템 액세스 토큰 생성)을 입력하거나, AiHubMix 콘솔에서 키에 한도를 설정하세요.",
           notAsked:
             "아직 읽지 않았습니다: 자동 새로고침이 꺼져 있습니다. 새로고침을 눌러 읽으세요.",
+          tokenOnKeyUrl:
+            "이 잔액 조회 URL은 계정 토큰이 아니라 API 키를 받습니다. 계정 잔액을 보려면 {{url}}로 바꾸고, 키 자체의 잔액을 보려면 토큰을 삭제하세요.",
+          newApiUserMissing:
+            "중계가 사용자 ID를 요구합니다: 이 엔드포인트 설정에서 「사용자 ID」를 입력하세요(사이트 개인 설정에 표시).",
+        },
+        window: {
+          fiveHours: "5시간",
+          oneDay: "1일",
+          sevenDays: "7일",
         },
         autoRefresh: {
           label: "잔액과 요금제 사용량 자동 새로고침",

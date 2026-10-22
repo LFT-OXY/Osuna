@@ -210,12 +210,14 @@ export type ApiEndpointCooldownSettings = z.infer<typeof ApiEndpointCooldownSett
 /**
  * 余额设置（照 magpie 的 Balance URL、Balance request method、Balance field）：填了余额查询地址就按它查余额，不再按接口地址认厂商。
  * url：余额查询地址，地址与请求头里的 {key} 一类占位换成这家的 key；method：GET（缺省）或 POST（不带正文），见 balance-settings.ts；
- * field：取值写法，空着时按地址给默认写法（defaultBalanceField）。都只在设了时有，老 daemon 不发、忽略。
+ * field：取值写法，空着时按地址给默认写法（defaultBalanceField）；userId：new-api 的用户 ID，只在查余额时作为
+ * New-Api-User 发出（接口请求头里的 New-Api-User 也认，二者都有以它为准）。都只在设了时有，老 daemon 不发、忽略。
  */
 export const ApiEndpointBalanceSettingsSchema = z.object({
   url: z.string().optional(),
   method: z.string().optional(),
   field: z.string().optional(),
+  userId: z.string().optional(),
 });
 export type ApiEndpointBalanceSettings = z.infer<typeof ApiEndpointBalanceSettingsSchema>;
 
@@ -279,6 +281,8 @@ export const ApiEndpointSchema = z.object({
   cooldownSettings: ApiEndpointCooldownSettingsSchema.optional(),
   // 余额设置；设了余额查询地址才发，老 daemon 不发。
   balance: ApiEndpointBalanceSettingsSchema.optional(),
+  // 账户令牌的打码（同 apiKeyMask）；原文只在 daemon，经 reveal_secret 读回。没有令牌时不发，老 daemon 不发。
+  balanceTokenMask: z.string().optional(),
 });
 export type ApiEndpoint = z.infer<typeof ApiEndpointSchema>;
 
@@ -460,6 +464,9 @@ export type ApiEndpointListResponse = z.infer<typeof ApiEndpointListResponseSche
  *
  * balance：余额设置，整份替换（没有余额查询地址即清掉），省略即保留（复制时是原来那家的），老客户端保存不会清掉它。
  * 方法不是 GET、POST 的拒收（invalid_balance_settings，params.field 为 method）。老 daemon 忽略它。
+ *
+ * balanceToken：账户令牌（new-api 的系统访问令牌、sub2api 的登录令牌、AiHubMix 的系统访问令牌），只存在 daemon 的 key 文件里。
+ * 非空即换成它，空字符串清掉，省略即保留（复制时是原来那家的）。老 daemon 忽略它。
  */
 export const ApiEndpointSaveRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.save.request"),
@@ -485,6 +492,7 @@ export const ApiEndpointSaveRequestSchema = z.object({
   modelSettings: ApiEndpointModelSettingsSchema.optional(),
   cooldownSettings: ApiEndpointCooldownSettingsSchema.optional(),
   balance: ApiEndpointBalanceSettingsSchema.optional(),
+  balanceToken: z.string().optional(),
   ...ApiEndpointRequestExtrasSchema.shape,
 });
 export type ApiEndpointSaveRequest = z.infer<typeof ApiEndpointSaveRequestSchema>;
@@ -836,6 +844,31 @@ export const ApiEndpointSetBalanceAutoRefreshResponseSchema = z.object({
 export type ApiEndpointSetBalanceAutoRefreshResponse = z.infer<
   typeof ApiEndpointSetBalanceAutoRefreshResponseSchema
 >;
+
+/**
+ * 读回一家接口已保存的别的机密原文（编辑窗口里账户令牌的「显示」）：secret 为 balance_token；没有时 value 为 null。
+ * 不认得的 secret 拒收（invalid_input）。照 magpie 不确认、不限次数。只有声明了 apiEndpointBalance 的 daemon 认它。
+ */
+export const API_ENDPOINT_SECRETS = ["balance_token"] as const;
+export type ApiEndpointSecret = (typeof API_ENDPOINT_SECRETS)[number];
+
+export const ApiEndpointRevealSecretRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.reveal_secret.request"),
+  requestId: z.string(),
+  endpointId: z.string(),
+  secret: z.string(),
+});
+export type ApiEndpointRevealSecretRequest = z.infer<typeof ApiEndpointRevealSecretRequestSchema>;
+
+export const ApiEndpointRevealSecretResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.reveal_secret.response"),
+  payload: z.object({
+    requestId: z.string(),
+    value: z.string().nullable(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointRevealSecretResponse = z.infer<typeof ApiEndpointRevealSecretResponseSchema>;
 
 /**
  * 读回一家接口已保存的 key 原文（编辑窗口的「显示」）；没有 key 时 apiKey 为 null。照 magpie 不确认、不限次数。
@@ -1372,13 +1405,16 @@ export type ApiEndpointBalanceFailureReason = (typeof API_ENDPOINT_BALANCE_FAILU
 /**
  * 失败附带的具体提示：opencode_no_balance（OpenCode 不给 key 查 Zen 的余额）、siliconflow_retired（硅基流动的
  * 余额接口已下线）、aihubmix_no_limit（AiHubMix 的 key 没设上限，要填账户令牌）、not_asked（「自动刷新余额与套餐用量」
- * 关着，这次读取不是用户要求的，也还没有读数）。
+ * 关着，这次读取不是用户要求的，也还没有读数）、token_on_key_url（账户令牌配了只认 key 的查询，该改用的地址在 useUrl，
+ * 没发请求）、new_api_user_missing（new-api 说缺 New-Api-User，要填用户 ID）。
  */
 export const API_ENDPOINT_BALANCE_HINTS = [
   "opencode_no_balance",
   "siliconflow_retired",
   "aihubmix_no_limit",
   "not_asked",
+  "token_on_key_url",
+  "new_api_user_missing",
 ] as const;
 export type ApiEndpointBalanceHint = (typeof API_ENDPOINT_BALANCE_HINTS)[number];
 export const API_ENDPOINT_BALANCE_PARTS = ["granted", "topped_up"] as const;
@@ -1409,13 +1445,33 @@ export const ApiEndpointBalanceFailureSchema = z.object({
   hint: z.string().nullable().optional(),
   // 余额该去哪看（厂商的控制台）。
   seeAt: z.string().nullable().optional(),
+  // 余额查询地址该改成这个（hint 为 token_on_key_url 时）。
+  useUrl: z.string().nullable().optional(),
 });
 export type ApiEndpointBalanceFailure = z.infer<typeof ApiEndpointBalanceFailureSchema>;
+
+/**
+ * 一个限额窗口（如 sub2api key 的 5 小时 / 1 天 / 7 天），字段名同套餐用量的窗口（ProviderUsageWindowSchema），
+ * 另带用量与上限的数（used、limit，单位 unit，如 USD）。id 是窗口的代号（5h、1d、7d），界面按它翻译，认不得的写 label。
+ */
+export const ApiEndpointBalanceWindowSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  usedPct: z.number().nullable().optional(),
+  remainingPct: z.number().nullable().optional(),
+  resetsAt: z.string().nullable().optional(),
+  used: z.number().nullable().optional(),
+  limit: z.number().nullable().optional(),
+  unit: z.string().nullable().optional(),
+});
+export type ApiEndpointBalanceWindow = z.infer<typeof ApiEndpointBalanceWindowSchema>;
 
 export const ApiEndpointBalanceReadingSchema = z.object({
   endpointId: z.string(),
   status: z.string(),
   items: z.array(ApiEndpointBalanceItemSchema),
+  // 回复里带的限额窗口；没有时不发，老 daemon 不发。
+  windows: z.array(ApiEndpointBalanceWindowSchema).optional(),
   // 这次读的时刻；unsupported 为 null。带 stale 的是上次读数读到的时刻。
   readAt: z.string().nullable(),
   failure: ApiEndpointBalanceFailureSchema.nullable(),
@@ -1455,8 +1511,8 @@ export type ApiEndpointReadBalanceResponse = z.infer<typeof ApiEndpointReadBalan
  * 查询余额（编辑窗口的「查询余额」，照 magpie 编辑器的 Check balance）：用表单里还没保存的值当场查一次，只读，
  * 不进 1 分钟缓存，也不记作上次读数。key 的规则同 test_connection（apiKey 省略即用 endpointId 那家存的）；
  * baseUrls、templateId 与请求头等附加项是表单里的，不校验证书的主机按它们算（省略即用那家存的）。
- * balance 没有余额查询地址时按表单的地址认厂商，同读余额。可以用 cancel 按 requestId 取消。
- * 只有声明了 apiEndpointBalance 的 daemon 认它。
+ * balance 没有余额查询地址时按表单的地址认厂商，同读余额。balanceToken 是表单里的账户令牌：省略即用那家存的，空字符串即没有。
+ * 可以用 cancel 按 requestId 取消。只有声明了 apiEndpointBalance 的 daemon 认它。
  */
 export const ApiEndpointCheckBalanceRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.check_balance.request"),
@@ -1466,6 +1522,7 @@ export const ApiEndpointCheckBalanceRequestSchema = z.object({
   baseUrls: z.array(ApiEndpointBaseUrlSchema).optional(),
   templateId: z.string().optional(),
   balance: ApiEndpointBalanceSettingsSchema,
+  balanceToken: z.string().optional(),
   ...ApiEndpointRequestExtrasSchema.shape,
 });
 export type ApiEndpointCheckBalanceRequest = z.infer<typeof ApiEndpointCheckBalanceRequestSchema>;

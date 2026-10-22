@@ -2782,6 +2782,25 @@ export const ptBR: TranslationResources = {
           check: "Consultar saldo",
           nothingToAsk:
             "Não há URL do saldo para consultar e o saldo deste fornecedor não é conhecido",
+          token: "Token da conta",
+          tokenInfo:
+            "Com o que a URL do saldo é consultada no lugar da chave quando pede o token da própria conta: o token de acesso do sistema de um relay new-api, ou o token de login de um painel sub2api (um JWT, enviado como Bearer). No AiHubMix, o token de acesso do sistema mostra o saldo da conta inteira sem URL do saldo. Fica guardado só neste host e não é usado para mais nada.",
+          tokenPlaceholder: "Opcional · o token de acesso do sistema ou de login da conta",
+          tokenSavedPlaceholder: "Salvo: {{mask}}",
+          tokenRemove: "Remover",
+          userId: "ID de usuário",
+          userIdInfo:
+            "Seu ID de usuário num relay new-api, mostrado nas configurações pessoais do site. Enviado como New-Api-User só ao consultar o saldo, nunca numa solicitação de chat. Um cabeçalho New-Api-User neste endpoint também vale; este campo tem prioridade.",
+          userIdPlaceholder: "Opcional · só new-api",
+          fixNewApiKeyQuery:
+            "…/api/usage/token aceita a chave de API, não este token. Para o saldo da conta, o new-api usa /api/user/self; o sub2api usa /api/v1/user/profile.",
+          fixSub2apiKeyQuery:
+            "…/v1/usage aceita a chave de API, não este token. Para o saldo da conta, um painel sub2api usa /api/v1/user/profile.",
+          fixNoUrl:
+            "O token precisa de uma URL do saldo: um relay new-api usa /api/user/self; um painel sub2api usa /api/v1/user/profile.",
+          fixUserId:
+            "Um relay new-api também pede seu ID de usuário (nas configurações pessoais do site): preencha ID de usuário abaixo.",
+          useUrl: "Usar {{url}}",
         },
         extras: {
           advanced: "Avançado",
@@ -3032,6 +3051,15 @@ export const ptBR: TranslationResources = {
             "Esta chave não tem limite, e a AiHubMix só informa a uma chave quanto resta nela. Para ver o saldo da conta, informe o token de acesso da conta nas configurações deste endpoint (AiHubMix → Configurações → Gerar token de acesso do sistema), ou defina um limite para a chave no console da AiHubMix.",
           notAsked:
             "Ainda não lido: a atualização automática está desligada. Toque em Atualizar para ler.",
+          tokenOnKeyUrl:
+            "Esta URL do saldo aceita a chave de API, não o token da conta. Mude para {{url}} para ver o saldo da conta, ou remova o token para ver o da chave.",
+          newApiUserMissing:
+            "O relay pede seu ID de usuário: preencha ID de usuário nas configurações deste endpoint (mostrado nas configurações pessoais do site).",
+        },
+        window: {
+          fiveHours: "5 horas",
+          oneDay: "1 dia",
+          sevenDays: "7 dias",
         },
         autoRefresh: {
           label: "Atualizar saldo e uso do plano automaticamente",

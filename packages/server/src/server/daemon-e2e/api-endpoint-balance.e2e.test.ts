@@ -9,6 +9,7 @@ import {
 import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
+import pino from "pino";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
@@ -390,6 +391,7 @@ describe("API endpoint balance of the other known vendors", () => {
       commandcode: "https://api.commandcode.ai/alpha/billing/credits",
       ollama: "https://ollama.com/api/balance",
       aihubmix: "https://aihubmix.com/dashboard/billing/remain",
+      aihubmix_account: "https://aihubmix.com/api/user/self",
     });
   });
 
@@ -575,6 +577,30 @@ describe("API endpoint balance of the other known vendors", () => {
       hint: "aihubmix_no_limit",
       seeAt: null,
     });
+  });
+
+  test("AiHubMix with the account's token asks the account's balance, with the token as it is", async () => {
+    replies.set(pathOf("aihubmix_account"), (response) =>
+      sendJson(response, 200, { success: true, data: { quota: 2500000 } }),
+    );
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: "AiHubMix",
+      baseUrl: "https://aihubmix.com",
+      apiKey: KEY,
+      balanceToken: "aihubmix-system-token",
+      models: [{ id: "some-model" }],
+      defaultModelId: "some-model",
+    });
+    if (!saved.endpoint) throw new Error("Expected a saved endpoint");
+    const answer = await client.apiEndpointReadBalance({ endpointIds: [saved.endpoint.id] });
+    expect(answer.readings[0]?.items).toEqual([
+      { label: null, text: "$5.00", value: 5, unit: "USD" },
+    ]);
+    const sent = requests.find((request) => request.url === pathOf("aihubmix_account"));
+    expect(sent?.headers.authorization).toBe("aihubmix-system-token");
+    expect(sent?.headers["user-agent"]).toBe(`Osuna/${VERSION}`);
+    expect(requests.some((request) => request.url === pathOf("aihubmix"))).toBe(false);
   });
 
   test("OpenCode Zen tells no key its balance: said so with its console, nothing asked and no read time", async () => {
@@ -905,6 +931,7 @@ describe("API endpoint balance at an address the user gave", () => {
     replies: Record<string, Reply>;
   };
   let clock = NOW;
+  let logLines: string[] = [];
 
   async function startRelay() {
     const fake: typeof relay = { origin: "", requests: [], replies: {} };
@@ -933,8 +960,10 @@ describe("API endpoint balance at an address the user gave", () => {
     tempRoots.push(root);
     deepseek = await startDeepSeek();
     relay = await startRelay();
+    logLines = [];
     daemon = await createTestPaseoDaemon({
       daemonVersion: VERSION,
+      logger: pino({ level: "trace" }, { write: (line: string) => logLines.push(line) }),
       apiEndpoints: {
         env: { CLAUDE_CONFIG_DIR: path.join(root, "claude"), CODEX_HOME: path.join(root, "codex") },
         homeDir: root,
@@ -955,7 +984,8 @@ describe("API endpoint balance at an address the user gave", () => {
   });
 
   async function saveRelay(input: {
-    balance?: { url?: string; method?: string; field?: string };
+    balance?: { url?: string; method?: string; field?: string; userId?: string };
+    balanceToken?: string;
     headers?: Record<string, string>;
     baseUrl?: string;
     endpointId?: string;
@@ -971,6 +1001,7 @@ describe("API endpoint balance at an address the user gave", () => {
       apiKey: RELAY_KEY,
       models: [{ id: "claude-sonnet" }],
       ...(input.balance === undefined ? {} : { balance: input.balance }),
+      ...(input.balanceToken === undefined ? {} : { balanceToken: input.balanceToken }),
       ...(input.headers === undefined ? {} : { headers: input.headers }),
     });
     return saved;
@@ -1257,5 +1288,319 @@ describe("API endpoint balance at an address the user gave", () => {
       expect(answer.reading).toBeNull();
       expect(answer.error?.code).toBe("not_found");
     });
+  });
+  // 账户余额：用这家自己的账户令牌问（工单 06）。
+  const TOKEN = "new-api-access-token-123";
+  const JWT = "eyJhbGciOiJIUzI1NiJ9.eyJ1aWQiOjF9.c2lnbmF0dXJl";
+  const NEW_API_SELF = { success: true, data: { quota: 2500000, id: 42 } };
+
+  test("new-api's /api/user/self is asked with the token as it is and the user ID as New-Api-User", async () => {
+    relay.replies["/api/user/self"] = (response) => sendJson(response, 200, NEW_API_SELF);
+    const id = await savedRelayId({
+      balance: { url: `${relay.origin}/api/user/self`, userId: "42" },
+      balanceToken: TOKEN,
+    });
+    expect((await read(id)).items).toEqual([
+      { label: null, text: "$5.00", value: 5, unit: "USD", ratio: null },
+    ]);
+    const [sent] = relay.requests;
+    expect(sent?.headers.authorization).toBe(TOKEN);
+    expect(sent?.headers["new-api-user"]).toBe("42");
+    expect(sent?.headers["user-agent"]).toBe(`Osuna/${VERSION}`);
+    expect((await listed(id))?.balance).toEqual({
+      url: `${relay.origin}/api/user/self`,
+      userId: "42",
+    });
+  });
+
+  test("a JWT goes as a Bearer, one written with its scheme as it is", async () => {
+    relay.replies["/api/v1/user/profile"] = (response) =>
+      sendJson(response, 200, { code: 0, data: { balance: 12.5 } });
+    const id = await savedRelayId({
+      balance: { url: `${relay.origin}/api/v1/user/profile` },
+      balanceToken: JWT,
+    });
+    expect((await read(id)).items[0]?.text).toBe("$12.50");
+    await savedRelayId({ endpointId: id, balanceToken: `Token ${TOKEN}` });
+    await read(id, { force: true });
+    expect(relay.requests.map((sent) => sent.headers.authorization)).toEqual([
+      `Bearer ${JWT}`,
+      `Token ${TOKEN}`,
+    ]);
+  });
+
+  test("New-Api-User in the endpoint's headers is taken too; the user ID wins over it", async () => {
+    relay.replies["/api/user/self"] = (response) => sendJson(response, 200, NEW_API_SELF);
+    const id = await savedRelayId({
+      balance: { url: `${relay.origin}/api/user/self` },
+      balanceToken: TOKEN,
+      headers: { "New-Api-User": "7" },
+    });
+    await read(id);
+    await savedRelayId({
+      endpointId: id,
+      balance: { url: `${relay.origin}/api/user/self`, userId: "42" },
+    });
+    await read(id, { force: true });
+    expect(relay.requests.map((sent) => sent.headers["new-api-user"])).toEqual(["7", "42"]);
+  });
+
+  test("the user ID goes with the balance query only, never with a chat request", async () => {
+    relay.replies["/anthropic/v1/messages"] = (response) =>
+      sendJson(response, 200, {
+        id: "msg_1",
+        type: "message",
+        role: "assistant",
+        content: [{ type: "text", text: "ok" }],
+        model: "claude-sonnet",
+        stop_reason: "end_turn",
+        usage: { input_tokens: 1, output_tokens: 1 },
+      });
+    const id = await savedRelayId({
+      baseUrl: `${relay.origin}/anthropic`,
+      balance: { url: `${relay.origin}/api/user/self`, userId: "42" },
+      balanceToken: TOKEN,
+    });
+    relay.requests.length = 0;
+    await client.apiEndpointTestConnection({
+      provider: "claude",
+      endpointId: id,
+      baseUrl: `${relay.origin}/anthropic`,
+      modelId: "claude-sonnet",
+    });
+    const chat = relay.requests.find((sent) => sent.url === "/anthropic/v1/messages");
+    expect(chat).toBeDefined();
+    expect(chat?.headers["new-api-user"]).toBeUndefined();
+    expect(chat?.headers.authorization).not.toBe(TOKEN);
+  });
+
+  test("success:false about New-Api-User is a refused token, with the hint to give the user ID", async () => {
+    relay.replies["/api/user/self"] = (response) =>
+      sendJson(response, 200, {
+        success: false,
+        message: "无权进行此操作，未提供 New-Api-User",
+      });
+    const id = await savedRelayId({
+      balance: { url: `${relay.origin}/api/user/self` },
+      balanceToken: TOKEN,
+    });
+    expect((await read(id)).failure).toEqual({
+      reason: "token_rejected",
+      detail: "无权进行此操作，未提供 New-Api-User",
+      status: 200,
+      hint: "new_api_user_missing",
+    });
+  });
+
+  test.each([
+    ["/api/usage/token", "/api/user/self"],
+    ["/v1/usage", "/api/v1/user/profile"],
+  ])(
+    "a token beside the key's own query %s asks nothing and names %s instead",
+    async (keyPath, accountPath) => {
+      const id = await savedRelayId({
+        balance: { url: `${relay.origin}${keyPath}` },
+        balanceToken: TOKEN,
+      });
+      expect((await read(id)).failure).toEqual({
+        reason: "wrong_url",
+        detail: null,
+        status: null,
+        hint: "token_on_key_url",
+        useUrl: `${relay.origin}${accountPath}`,
+      });
+      expect(relay.requests).toHaveLength(0);
+    },
+  );
+
+  test("an account query with no token asks the same site's query for the key, with the key", async () => {
+    relay.replies["/api/usage/token"] = (response) =>
+      sendJson(response, 200, { code: true, data: { total_available: 1000000 } });
+    const id = await savedRelayId({
+      balance: { url: `${relay.origin}/api/user/self?x=1`, field: "$data.quota / 500000" },
+    });
+    expect((await read(id)).items[0]?.text).toBe("$2.00");
+    const [sent] = relay.requests;
+    expect(sent?.url).toBe("/api/usage/token");
+    expect(sent?.headers.authorization).toBe(`Bearer ${RELAY_KEY}`);
+  });
+
+  test("an account query with an Authorization header of the user's own is asked as they set it", async () => {
+    relay.replies["/api/user/self"] = (response) => sendJson(response, 200, NEW_API_SELF);
+    const id = await savedRelayId({
+      balance: { url: `${relay.origin}/api/user/self` },
+      headers: { Authorization: "own-token" },
+    });
+    expect((await read(id)).items[0]?.text).toBe("$5.00");
+    expect(relay.requests[0]?.headers.authorization).toBe("own-token");
+  });
+
+  test("a token that is only the key pasted again is asked as the key", async () => {
+    relay.replies["/v1/usage"] = (response) => sendJson(response, 200, { remaining: 3 });
+    const id = await savedRelayId({
+      balance: { url: `${relay.origin}/v1/usage` },
+      balanceToken: `Bearer ${RELAY_KEY}`,
+    });
+    expect((await read(id)).items[0]?.text).toBe("$3.00");
+    expect(relay.requests[0]?.headers.authorization).toBe(`Bearer ${RELAY_KEY}`);
+  });
+
+  test("sub2api's key query shows its 5-hour, day and week windows in dollars, with their resets", async () => {
+    relay.replies["/v1/usage"] = (response) =>
+      sendJson(response, 200, {
+        mode: "quota_limited",
+        rate_limits: [
+          { window: "7d", limit: 800, used: 200, reset_at: "2026-10-27T00:00:00Z" },
+          { window: "5h", limit: 20, used: 15, reset_at: "2026-10-22T10:00:00Z" },
+          { window: "1d", limit: 50, used: 0, reset_at: null },
+          { window: "30d", limit: 9, used: 1 },
+        ],
+      });
+    const id = await savedRelayId({ balance: { url: `${relay.origin}/v1/usage` } });
+    const reading = await read(id);
+    expect(reading.status).toBe("ok");
+    // 没有 remaining：余额取各窗口剩的最少的那个。
+    expect(reading.items).toEqual([{ label: null, text: "$5.00", value: 5, unit: "USD" }]);
+    expect(reading.windows).toEqual([
+      {
+        id: "5h",
+        label: "5 hours",
+        usedPct: 75,
+        remainingPct: 25,
+        resetsAt: "2026-10-22T10:00:00.000Z",
+        used: 15,
+        limit: 20,
+        unit: "USD",
+      },
+      {
+        id: "1d",
+        label: "1 day",
+        usedPct: 0,
+        remainingPct: 100,
+        resetsAt: null,
+        used: 0,
+        limit: 50,
+        unit: "USD",
+      },
+      {
+        id: "7d",
+        label: "7 days",
+        usedPct: 25,
+        remainingPct: 75,
+        resetsAt: "2026-10-27T00:00:00.000Z",
+        used: 200,
+        limit: 800,
+        unit: "USD",
+      },
+    ]);
+  });
+
+  test("sub2api with a remaining shows it beside the windows", async () => {
+    relay.replies["/v1/usage"] = (response) =>
+      sendJson(response, 200, {
+        remaining: 7.25,
+        rate_limits: [{ window: "5h", limit: 20, used: 5, reset_at: "2026-10-22T10:00:00Z" }],
+      });
+    const id = await savedRelayId({ balance: { url: `${relay.origin}/v1/usage` } });
+    const reading = await read(id);
+    expect(reading.items[0]?.text).toBe("$7.25");
+    expect(reading.windows?.map((window) => window.id)).toEqual(["5h"]);
+  });
+
+  test("the token is kept in the daemon: listed masked, revealed on asking, never in a reading or the log", async () => {
+    relay.replies["/api/user/self"] = (response) =>
+      sendJson(response, 401, { success: false, message: `bad token ${TOKEN}` });
+    const id = await savedRelayId({
+      balance: { url: `${relay.origin}/api/user/self`, userId: "42" },
+      balanceToken: TOKEN,
+    });
+    const list = await client.apiEndpointList("claude");
+    const endpoint = list.endpoints.find((entry) => entry.id === id);
+    expect(endpoint?.balanceTokenMask).toBe("new-…-123");
+    const reading = await read(id);
+    expect(reading.failure?.reason).toBe("token_rejected");
+    const checked = await client.apiEndpointCheckBalance({
+      endpointId: id,
+      balance: { url: `${relay.origin}/api/user/self` },
+    });
+    expect(checked.reading?.failure?.reason).toBe("token_rejected");
+    for (const answer of [list, reading, checked]) {
+      expect(JSON.stringify(answer)).not.toContain(TOKEN);
+    }
+    expect(logLines.length).toBeGreaterThan(0);
+    expect(logLines.join("\n")).not.toContain(TOKEN);
+    const revealed = await client.apiEndpointRevealSecret({
+      endpointId: id,
+      secret: "balance_token",
+    });
+    expect(revealed).toMatchObject({ value: TOKEN, error: null });
+    const files = await readFile(
+      path.join(daemon.paseoHome, "api-endpoints", "endpoints.json"),
+      "utf8",
+    );
+    expect(files).not.toContain(TOKEN);
+  });
+
+  test("an old client's save keeps the token, an empty one clears it, and a copy takes it", async () => {
+    relay.replies["/api/user/self"] = (response) => sendJson(response, 200, NEW_API_SELF);
+    const balance = { url: `${relay.origin}/api/user/self`, userId: "42" };
+    const id = await savedRelayId({ balance, balanceToken: TOKEN });
+    await savedRelayId({ endpointId: id });
+    expect((await listed(id))?.balanceTokenMask).toBe("new-…-123");
+    const copied = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Relay copy",
+      baseUrls: [{ format: "anthropic_messages", url: "http://127.0.0.1:1/anthropic" }],
+      models: [{ id: "claude-sonnet" }],
+      copyOf: id,
+    });
+    if (!copied.endpoint) throw new Error("Expected the copy");
+    expect(copied.endpoint.balanceTokenMask).toBe("new-…-123");
+    await read(copied.endpoint.id);
+    expect(relay.requests.at(-1)?.headers.authorization).toBe(TOKEN);
+    await savedRelayId({ endpointId: id, balanceToken: "" });
+    expect((await listed(id))?.balanceTokenMask).toBeUndefined();
+    expect(
+      await client.apiEndpointRevealSecret({ endpointId: id, secret: "balance_token" }),
+    ).toMatchObject({ value: null, error: null });
+  });
+
+  test("a check asks with the form's token: typed, cleared, or the saved one when left out", async () => {
+    relay.replies["/api/user/self"] = (response) => sendJson(response, 200, NEW_API_SELF);
+    relay.replies["/api/usage/token"] = (response) =>
+      sendJson(response, 200, { data: { total_available: 500000 } });
+    const balance = { url: `${relay.origin}/api/user/self`, userId: "42" };
+    const id = await savedRelayId({ balance, balanceToken: TOKEN });
+    await client.apiEndpointCheckBalance({ endpointId: id, balance });
+    await client.apiEndpointCheckBalance({ endpointId: id, balance, balanceToken: "typed" });
+    const cleared = await client.apiEndpointCheckBalance({
+      endpointId: id,
+      balance,
+      balanceToken: "",
+    });
+    expect(cleared.reading?.items[0]?.text).toBe("$1.00");
+    expect(relay.requests.map((sent) => `${sent.url} ${sent.headers.authorization}`)).toEqual([
+      `/api/user/self ${TOKEN}`,
+      "/api/user/self typed",
+      `/api/usage/token Bearer ${RELAY_KEY}`,
+    ]);
+  });
+
+  test("changing the token drops the endpoint's last reading", async () => {
+    relay.replies["/api/user/self"] = (response) => sendJson(response, 200, NEW_API_SELF);
+    const balance = { url: `${relay.origin}/api/user/self` };
+    const id = await savedRelayId({ balance, balanceToken: TOKEN });
+    await read(id);
+    const kept = await readFile(
+      path.join(daemon.paseoHome, "api-endpoints", "balance-readings.json"),
+      "utf8",
+    );
+    expect(kept).toContain("$5.00");
+    expect(kept).not.toContain(TOKEN);
+    relay.replies["/api/user/self"] = (response) => sendJson(response, 503, { error: "busy" });
+    await savedRelayId({ endpointId: id, balanceToken: "another-token" });
+    const reading = await read(id);
+    expect(reading.status).toBe("failed");
+    expect(reading.stale).toBeUndefined();
   });
 });

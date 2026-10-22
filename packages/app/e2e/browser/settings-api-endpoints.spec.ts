@@ -16,6 +16,7 @@ import {
   connectApiEndpointClient,
   hideManagementCapability,
   openApiEndpointsPage,
+  RELAY_ACCOUNT_TOKEN,
   RELAY_KEY,
   setCliHeaderSamples,
   resetApiEndpoints,
@@ -6760,6 +6761,97 @@ test.describe("Balance", () => {
     await expect(balanceSection(page).getByTestId("api-endpoint-balance-item")).toHaveText(
       /Balance.*\$7\.50/,
     );
+  });
+
+  test("a token beside the key's own query offers the account query; Use … fills it, the missing user ID is said, and the account's balance shows once saved", async ({
+    page,
+  }) => {
+    const id = await seedRelay();
+    await openEndpointDetail(page, id);
+    await page.getByTestId("api-endpoint-edit-connection").filter({ visible: true }).click();
+    await page.getByTestId("api-endpoint-connection-advanced-toggle").click();
+    await page
+      .getByTestId("api-endpoint-connection-balance-url-input")
+      .fill(`${relay.origin}/api/usage/token`);
+    await page.getByTestId("api-endpoint-connection-balance-token-input").fill(RELAY_ACCOUNT_TOKEN);
+    const fix = page.getByTestId("api-endpoint-connection-balance-fix");
+    await expect(fix).toContainText("…/api/usage/token takes the API key, not this token.");
+    const useButtons = page.getByTestId("api-endpoint-connection-balance-use-url");
+    await expect(useButtons).toHaveText([
+      `Use ${relay.origin}/api/user/self`,
+      `Use ${relay.origin}/api/v1/user/profile`,
+    ]);
+
+    await useButtons.first().click();
+    await expect(page.getByTestId("api-endpoint-connection-balance-url-input")).toHaveValue(
+      `${relay.origin}/api/user/self`,
+    );
+    await expect(page.getByTestId("api-endpoint-connection-balance-field-input")).toHaveAttribute(
+      "placeholder",
+      "$data.quota / 500000",
+    );
+    await expect(fix).toHaveText(
+      "A new-api relay also wants your user ID (shown in the site's personal settings): fill in User ID below.",
+    );
+
+    // 没填用户 ID 就查：中转站拒绝，并说要补用户 ID。
+    const check = page.getByTestId("api-endpoint-connection-check-balance");
+    const result = page.getByTestId("api-endpoint-connection-balance-result");
+    await check.click();
+    await expect(result).toContainText("(HTTP 200)");
+    await expect(result).toContainText("The relay wants your user ID");
+
+    await page.getByTestId("api-endpoint-connection-balance-user-id-input").fill("42");
+    await expect(fix).toHaveCount(0);
+    await check.click();
+    await expect(result).toHaveText("Balance $12.00");
+
+    await page.getByTestId("api-endpoint-connection-save").click();
+    await expect(page.getByTestId("api-endpoint-connection-form")).toHaveCount(0);
+    const listed = (await client.apiEndpointList("claude")).endpoints.find(
+      (endpoint) => endpoint.id === id,
+    );
+    expect(listed?.balance).toEqual({ url: `${relay.origin}/api/user/self`, userId: "42" });
+    expect(listed?.balanceTokenMask).toBe("rela…0042");
+    await balanceSection(page).getByTestId("api-endpoint-balance-refresh").click();
+    await expect(balanceSection(page).getByTestId("api-endpoint-balance-item")).toHaveText(
+      /Balance.*\$12\.00/,
+    );
+
+    // 再打开编辑：令牌打码，「显示」读回原文。
+    await page.getByTestId("api-endpoint-edit-connection").filter({ visible: true }).click();
+    const token = page.getByTestId("api-endpoint-connection-balance-token-input");
+    await expect(token).toHaveAttribute("placeholder", "Saved: rela…0042");
+    await page.getByTestId("api-endpoint-connection-balance-token-show").click();
+    await expect(token).toHaveValue(RELAY_ACCOUNT_TOKEN);
+  });
+
+  test("sub2api's key query shows its 5-hour, day and week windows with what is used of each", async ({
+    page,
+  }) => {
+    const id = await seedRelay();
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      endpointId: id,
+      name: "Relay",
+      baseUrls: [{ format: "openai_chat", url: `${relay.origin}/good/v1` }],
+      models: [{ id: "gpt-5" }],
+      balance: { url: `${relay.origin}/v1/usage` },
+    });
+    expect(saved.error).toBeNull();
+    await openEndpointDetail(page, id);
+
+    // 没有 remaining：余额是剩得最少的窗口（5 小时还剩 $5）。
+    await expect(balanceSection(page).getByTestId("api-endpoint-balance-item")).toHaveText(
+      /Balance.*\$5\.00/,
+    );
+    const windows = balanceSection(page).getByTestId("api-endpoint-balance-windows");
+    await expect(windows).toContainText("5 hours");
+    await expect(windows).toContainText("$15.00 / $20.00 · 75%");
+    await expect(windows).toContainText("1 day");
+    await expect(windows).toContainText("$10.00 / $50.00 · 20%");
+    await expect(windows).toContainText("7 days");
+    await expect(windows).toContainText("$200.00 / $800.00 · 25%");
   });
 
   test("DeepSeek lists each currency and splits the granted from the topped up; OpenCode Zen says to read its console", async ({

@@ -36,7 +36,7 @@ import { ModelFactsSchema } from "./model-facts.js";
 /*
  * $PASEO_HOME/api-endpoints/ 下的私有文件，全部 0600：
  * - endpoints.json：主机共用的接口与每个 Agent 的总开关、默认模型，不含 key；
- * - keys.json：API key，只有 daemon 读，任何 RPC 都不返回；
+ * - keys.json：API key 与账户令牌（balanceTokens，查账户余额用），只有 daemon 读，RPC 只给打码（reveal_key、reveal_secret 除外）；
  * - takeover-claude.json：接管记录，含用户原先写在 settings.json 里的值（可能是别的 token）；
  * - takeover-codex.json：config.toml 的接管记录；
  * - codex-models.json：Codex 的 model_catalog_json，Codex 总开关开着时才有；
@@ -129,10 +129,15 @@ const StoredApiEndpointSchema = z.object({
   insecureTls: z.boolean().optional().catch(undefined),
   // 冷却设置（gateway/cooldown.ts）：分钟数，0 不存；手改成别的类型时当没设，不让整个文件读不懂，越界的用时按 0 到八天算。
   cooldownSettings: StoredCooldownSettingsSchema.optional().catch(undefined),
-  // 余额设置（balance.ts）：余额查询地址，方法只存 POST（GET 是缺省），取值写法空着不存。没有地址即没有这项；
-  // 手改成读不懂的当没设，不让整个文件读不懂。
+  // 余额设置（balance.ts）：余额查询地址，方法只存 POST（GET 是缺省），取值写法与 new-api 的用户 ID 空着不存。
+  // 没有地址即没有这项；手改成读不懂的当没设，不让整个文件读不懂。
   balance: z
-    .object({ url: z.string(), method: z.string().optional(), field: z.string().optional() })
+    .object({
+      url: z.string(),
+      method: z.string().optional(),
+      field: z.string().optional(),
+      userId: z.string().optional(),
+    })
     .optional()
     .catch(undefined),
   createdAt: z.string(),
@@ -224,7 +229,11 @@ export class ApiEndpointsFileUnparsableError extends Error {
   }
 }
 
-const KeysFileSchema = z.object({ keys: z.record(z.string(), z.string()) });
+const KeysFileSchema = z.object({
+  keys: z.record(z.string(), z.string()),
+  // 账户令牌，按接口 id；没有的接口不留条目。升级前的文件没有这一项。
+  balanceTokens: z.record(z.string(), z.string()).optional(),
+});
 type KeysFile = z.infer<typeof KeysFileSchema>;
 
 // 导入指纹的 HMAC 密钥（import-apps.ts）。
@@ -439,8 +448,30 @@ export class ApiEndpointStore {
     this.writeKeys(keys);
   }
 
+  /** 接口删掉了：它的 key 与账户令牌一起删。 */
+  removeSecrets(id: string): void {
+    const file = this.readKeysFile();
+    const { [id]: _removed, ...keys } = file.keys;
+    const { [id]: _token, ...balanceTokens } = file.balanceTokens ?? {};
+    this.writeKeysFile({ keys, balanceTokens });
+  }
+
   getApiKey(id: string): string | null {
     return this.readKeys()[id] ?? null;
+  }
+
+  getBalanceToken(id: string): string | null {
+    return this.readKeysFile().balanceTokens?.[id] ?? null;
+  }
+
+  /** null 清掉。 */
+  setBalanceToken(id: string, token: string | null): void {
+    const file = this.readKeysFile();
+    const { [id]: _previous, ...rest } = file.balanceTokens ?? {};
+    this.writeKeysFile({
+      ...file,
+      balanceTokens: token === null ? rest : { ...rest, [id]: token },
+    });
   }
 
   readGatewayTokens(): GatewayTokens {
@@ -600,11 +631,21 @@ export class ApiEndpointStore {
   }
 
   private readKeys(): Record<string, string> {
-    return this.keysFile.read()?.keys ?? {};
+    return this.readKeysFile().keys;
   }
 
   private writeKeys(keys: Record<string, string>): void {
-    this.keysFile.write(KeysFileSchema.parse({ keys }));
+    this.writeKeysFile({ ...this.readKeysFile(), keys });
+  }
+
+  private readKeysFile(): KeysFile {
+    return this.keysFile.read() ?? { keys: {} };
+  }
+
+  private writeKeysFile(file: KeysFile): void {
+    const { balanceTokens, ...rest } = file;
+    const hasTokens = balanceTokens !== undefined && Object.keys(balanceTokens).length > 0;
+    this.keysFile.write(KeysFileSchema.parse(hasTokens ? { ...rest, balanceTokens } : rest));
   }
 
   private readJson(name: string): unknown {

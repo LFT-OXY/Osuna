@@ -146,6 +146,7 @@ import type {
   MutableDaemonConfigPatch,
   SubscribeCheckoutDiffRequest,
 } from "@getpaseo/protocol/messages";
+import type { ApiEndpointSecret } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { isRelayClientWebSocketUrl } from "@getpaseo/protocol/daemon-endpoints";
 import {
   asUint8Array,
@@ -700,6 +701,10 @@ type ApiEndpointSetEndpointNameDisplayPayload = Extract<
 type ApiEndpointRevealKeyPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.reveal_key.response" }
+>["payload"];
+type ApiEndpointRevealSecretPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.reveal_secret.response" }
 >["payload"];
 type ApiEndpointForgetCatalogPayload = Extract<
   SessionOutboundMessage,
@@ -6657,6 +6662,17 @@ export class DaemonClient {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId,
       message: { type: "provider.api_endpoint.reveal_key.request", endpointId },
+    });
+  }
+
+  /** 读回一家接口已保存的别的机密原文（账户令牌）；只有声明了 apiEndpointBalance 的 daemon 认。 */
+  async apiEndpointRevealSecret(
+    options: { endpointId: string; secret: ApiEndpointSecret },
+    requestId?: string,
+  ): Promise<ApiEndpointRevealSecretPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.reveal_secret.request", ...options },
     });
   }
 

@@ -2770,6 +2770,25 @@ export const ja: TranslationResources = {
             "返答の中で残高がある場所。例：data.balance。+ - * / と括弧で計算できます（例：data.total / 500000）。前に「$」「¥」で記号を付け、後ろに「%」でパーセントとバーを表示します。複数は「;」で区切り、それぞれにラベルを付けられます（例：5h: a.used / a.cap %; $credits.left）。リストの各項目は a.*.used、条件に合うものは a[status=active].used と書き、sum()、max()、min()、count() に入れます。空欄なら new-api、sub2api、credit grants のアドレスはプレースホルダーの式で読みます。",
           check: "残高を照会",
           nothingToAsk: "残高照会 URL がなく、このベンダーの照会方法もわかりません",
+          token: "アカウントトークン",
+          tokenInfo:
+            "残高照会 URL がアカウント自身のトークンを求めるとき、キーの代わりに使います：new-api 中継のシステムアクセストークン、または sub2api パネルのログイントークン（JWT、Bearer として送信）。AiHubMix ではシステムアクセストークンを入れると、残高照会 URL なしでアカウント全体の残高が表示されます。このホストにだけ保存され、ほかには使いません。",
+          tokenPlaceholder: "任意 · アカウントのシステムアクセストークンまたはログイントークン",
+          tokenSavedPlaceholder: "保存済み：{{mask}}",
+          tokenRemove: "削除",
+          userId: "ユーザー ID",
+          userIdInfo:
+            "new-api 中継でのユーザー ID（サイトの個人設定に表示）。残高を照会するときだけ New-Api-User として送り、チャットのリクエストには付けません。このエンドポイントのヘッダーにある New-Api-User も使えます。両方あるときはこの欄が優先です。",
+          userIdPlaceholder: "任意 · new-api のみ",
+          fixNewApiKeyQuery:
+            "…/api/usage/token が受け付けるのは API キーで、このトークンではありません。アカウントの残高は、new-api なら /api/user/self、sub2api なら /api/v1/user/profile です。",
+          fixSub2apiKeyQuery:
+            "…/v1/usage が受け付けるのは API キーで、このトークンではありません。アカウントの残高は、sub2api パネルなら /api/v1/user/profile です。",
+          fixNoUrl:
+            "トークンには残高照会 URL が必要です：new-api 中継は /api/user/self、sub2api パネルは /api/v1/user/profile です。",
+          fixUserId:
+            "new-api 中継ではユーザー ID も必要です（サイトの個人設定に表示）：下の「ユーザー ID」に入力してください。",
+          useUrl: "{{url}} を使う",
         },
         extras: {
           advanced: "詳細",
@@ -3020,6 +3039,15 @@ export const ja: TranslationResources = {
           aihubmixNoLimit:
             "このキーには上限がなく、AiHubMix はキー自身の残りしか教えません。アカウントの残高を見るには、このエンドポイントの設定にアカウントのアクセストークン（AiHubMix → 設定 → システムアクセストークンを生成）を入力するか、AiHubMix コンソールでキーに上限を設定してください。",
           notAsked: "まだ読み取っていません：自動更新がオフです。「更新」を押すと読み取ります。",
+          tokenOnKeyUrl:
+            "この残高照会 URL が受け付けるのは API キーで、アカウントトークンではありません。アカウントの残高なら {{url}} に変更し、キー自身の残高ならトークンを削除してください。",
+          newApiUserMissing:
+            "中継がユーザー ID を求めています：このエンドポイントの設定で「ユーザー ID」を入力してください（サイトの個人設定に表示）。",
+        },
+        window: {
+          fiveHours: "5 時間",
+          oneDay: "1 日",
+          sevenDays: "7 日",
         },
         autoRefresh: {
           label: "残高とプラン使用量を自動更新",

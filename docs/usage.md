@@ -226,10 +226,24 @@ An endpoint on OpenCode Zen (`opencode.ai/zen` or `opencode.ai/inference`, not
 Go's `/go` or a `/custom` provider) sends nothing either: OpenCode tells no key
 its balance, so its section says to read it on the OpenCode console.
 
+An **Account token** saved on the endpoint replaces the key as the whole
+`Authorization` header: a JWT (a sub2api login token) as `Bearer <token>`, one
+written with its scheme as is, any other (a new-api or AiHubMix system access
+token) bare. It goes to the Balance URL with the endpoint's headers, or, on
+AiHubMix with no Balance URL, to `GET https://aihubmix.com/api/user/self` with
+none of them. The **User ID** goes as `New-Api-User` on the Balance URL's request
+only, over a `New-Api-User` header set on the endpoint, and never on a chat
+request. A token beside a query that takes only the key (new-api's
+`/api/usage/token`, sub2api's `/v1/usage`) sends nothing: the section names the
+account query to use instead. An account query (`/api/user/self`,
+`/api/v1/user/profile`) without a token asks the same site's key query with the
+key, unless the endpoint sets its own `Authorization` or `Cookie` header. The
+token never reaches a log, and no RPC returns it except the edit dialog's Show.
+
 "Check balance" in the edit dialog sends the same read once, when you press it,
-with what is in the form: its Balance URL, method, field, key, base URLs and
-headers, saved or not. Its answer is not kept for the minute nor as the last
-reading.
+with what is in the form: its Balance URL, method, field, key, account token,
+user ID, base URLs and headers, saved or not. Its answer is not kept for the
+minute nor as the last reading.
 
 It carries the key as `Authorization: Bearer`, `Accept: application/json`,
 `User-Agent: Osuna/<version>` and the endpoint's own **Headers**, which can

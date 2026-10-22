@@ -2763,6 +2763,24 @@ export const zhCN: TranslationResources = {
             "余额在回复里的位置，如 data.balance。可以用 + - * / 和括号计算，如 data.total / 500000。前面加「$」「¥」带上符号；后面加「%」显示成百分比并带进度条。几项用「;」分开，每项可加标签，如 5h: a.used / a.cap %; $credits.left。列表的每一项写 a.*.used，只要符合条件的写 a[status=active].used，放进 sum()、max()、min() 或 count()。不填时，new-api、sub2api 与 credit grants 的地址按占位里的写法取。",
           check: "查询余额",
           nothingToAsk: "没填余额查询地址，也没认出这家的余额查法",
+          token: "账户令牌",
+          tokenInfo:
+            "余额查询地址要账户自己的令牌时，用它代替 key 去查：new-api 中转的系统访问令牌，或 sub2api 面板的登录令牌（JWT，按 Bearer 发出）。AiHubMix 填了它不用填地址，就能看整个账户的余额。只存在这台主机上，不作他用。",
+          tokenPlaceholder: "可选 · 账户的系统访问令牌或登录令牌",
+          tokenSavedPlaceholder: "已保存：{{mask}}",
+          tokenRemove: "移除",
+          userId: "用户 ID",
+          userIdInfo:
+            "你在 new-api 中转站的用户 ID，在站点的个人设置里能看到。只在查余额时作为 New-Api-User 发出，聊天请求不带。这家请求头里的 New-Api-User 也认，两者都有时以这一栏为准。",
+          userIdPlaceholder: "可选 · 只有 new-api 要",
+          fixNewApiKeyQuery:
+            "…/api/usage/token 只认 API key，不认这个令牌。要看账户余额，new-api 用 /api/user/self，sub2api 用 /api/v1/user/profile。",
+          fixSub2apiKeyQuery:
+            "…/v1/usage 只认 API key，不认这个令牌。要看账户余额，sub2api 面板用 /api/v1/user/profile。",
+          fixNoUrl:
+            "令牌还要配余额查询地址：new-api 中转用 /api/user/self，sub2api 面板用 /api/v1/user/profile。",
+          fixUserId: "new-api 中转还要你的用户 ID（在站点的个人设置里）：请在下面填上「用户 ID」。",
+          useUrl: "改用 {{url}}",
         },
         extras: {
           advanced: "高级",
@@ -3001,6 +3019,15 @@ export const zhCN: TranslationResources = {
           aihubmixNoLimit:
             "这把 key 没设上限，AiHubMix 只告诉 key 它自己还剩多少。要看账户余额，请在这家的设置里填账户令牌（AiHubMix → 设置 → 生成系统访问令牌），或在 AiHubMix 控制台给 key 设上限。",
           notAsked: "还没读过：「自动刷新余额与套餐用量」关着，点刷新读一次。",
+          tokenOnKeyUrl:
+            "这个余额查询地址只认 API key，不认账户令牌。要看账户余额请改成 {{url}}，要看这把 key 的余额请移除令牌。",
+          newApiUserMissing:
+            "中转站要你的用户 ID：请在这家的设置里填上「用户 ID」（在站点的个人设置里能看到）。",
+        },
+        window: {
+          fiveHours: "5 小时",
+          oneDay: "1 天",
+          sevenDays: "7 天",
         },
         autoRefresh: {
           label: "自动刷新余额与套餐用量",

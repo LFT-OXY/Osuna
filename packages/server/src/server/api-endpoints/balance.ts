@@ -2,10 +2,15 @@
 // balanceSourceOf、balanceRead、balanceRefusal、money、currencySign、number 与各厂商的 read*，7597c132；
 // DeepSeek 的赠送 / 充值拆分与 OpenCode Zen 的说明照最新版 ea6be159 的 readDeepSeekSplit、errOpenCodeNoBalance、openCodeZen）。
 // 填了余额查询地址时的自定义余额照 magpie 的 balanceRead、balanceMethodOf、balanceKeyNames、withBalanceKey（7597c132）。
+// 账户令牌照 magpie 的 keyQueryOf、keyNotToken、balanceAuthorization、errKeyQueryWithToken、newAPIUserHint、
+// readAiHubMixAccount，sub2api 的限额窗口照 sub2api_usage.go 的 readSub2APIKeyLimits 与 Balance（7597c132）。
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import {
   balanceMethodOf,
+  balanceUrlPath,
   defaultBalanceField,
+  NEW_API_BALANCE_QUERIES,
+  SUB2API_BALANCE_QUERIES,
 } from "@getpaseo/protocol/api-endpoint/balance-settings";
 import type {
   ApiEndpointBalanceFailure,
@@ -13,6 +18,7 @@ import type {
   ApiEndpointBalanceHint,
   ApiEndpointBalanceItem,
   ApiEndpointBalanceReading,
+  ApiEndpointBalanceWindow,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import {
   secretsOf,
@@ -39,7 +45,9 @@ import { hostOf } from "./vendor-status.js";
  * 地址与请求头里的 {key} 一类占位换成 key（地址里先转义）。
  * 没填时厂商按接口各格式地址的主机名精确认（顺序同 magpie：Chat、Responses、Anthropic），不看模板。
  * 请求带 key 的 Bearer 头、Accept、Osuna 的 User-Agent，再写上这家自己的请求头（用户的可以盖过 User-Agent，ADR 0008）。
- * 回复里的 key 与请求头的值打码后截到 200 字给界面看。
+ * 填了账户令牌（new-api、sub2api、AiHubMix 的账户余额）时用它代替 key 作 Authorization：形如 JWT 的加「Bearer 」，
+ * 其余原样（照 magpie balanceAuthorization）；new-api 的用户 ID 只在这里作为 New-Api-User 发出。
+ * 回复里的 key、令牌与请求头的值打码后截到 200 字给界面看。
  */
 
 /** 各厂商的余额查询（照 magpie balanceSourceOf）；测试 daemon 把它们换成本机地址。 */
@@ -55,6 +63,8 @@ export const BALANCE_VENDOR_URLS = {
   commandcode: "https://api.commandcode.ai/alpha/billing/credits",
   ollama: "https://ollama.com/api/balance",
   aihubmix: "https://aihubmix.com/dashboard/billing/remain",
+  // 填了账户令牌时问整个账户的余额。
+  aihubmix_account: "https://aihubmix.com/api/user/self",
 } as const;
 
 export type BalanceVendorId = keyof typeof BALANCE_VENDOR_URLS;
@@ -66,11 +76,15 @@ interface BalanceNotOffered {
   seeAt: string | null;
 }
 
-/** 读一份回复的结果：余额各项（空的是这家现在没有余额可显示）、这家不给查、取不到值（detail 是 magpie 给的说明）。 */
+/**
+ * 读一份回复的结果：余额各项（空的是这家现在没有余额可显示）、这家不给查、取不到值（detail 是 magpie 给的说明）、
+ * 回复说令牌不对。
+ */
 type BalanceRead =
   | { kind: "items"; items: ApiEndpointBalanceItem[] }
   | BalanceNotOffered
-  | { kind: "no_value"; detail: string | null };
+  | { kind: "no_value"; detail: string | null }
+  | { kind: "rejected"; detail: string };
 
 const NO_VALUE: BalanceRead = { kind: "no_value", detail: null };
 
@@ -84,6 +98,8 @@ interface BalanceVendor {
   read: (body: unknown) => BalanceRead;
   // 状态 ≥300 时这家已知的说法（照 magpie balanceSource.failed）；不是它时 null。
   failed?: (status: number, body: unknown) => BalanceNotOffered | null;
+  // 填了账户令牌时改问整个账户：令牌代替 key，这家自己的请求头不带（照 magpie）。
+  account?: { id: BalanceVendorId; read: (body: unknown) => BalanceRead };
 }
 
 const BALANCE_VENDORS: readonly BalanceVendor[] = [
@@ -108,8 +124,13 @@ const BALANCE_VENDORS: readonly BalanceVendor[] = [
   { id: "commandcode", host: "api.commandcode.ai", read: readCommandCode },
   // 套餐之外买的 credits（magpie #1888）；套餐额度是套餐窗口，不在这里。
   { id: "ollama", host: "ollama.com", read: readOllamaCredits },
-  // 不填令牌时问 key 自己还剩多少；填账户令牌查账户余额另做（工单 06）。
-  { id: "aihubmix", host: "aihubmix.com", read: readAiHubMix },
+  // 不填令牌时问 key 自己还剩多少，填了问整个账户。
+  {
+    id: "aihubmix",
+    host: "aihubmix.com",
+    read: readAiHubMix,
+    account: { id: "aihubmix_account", read: readAiHubMixAccount },
+  },
 ];
 
 /** OpenCode 的控制台：Zen 的按量 credits 只在这里（Overview → Credits）给工作区的所有者与管理员看。 */
@@ -142,6 +163,8 @@ export function balanceVendorOf(baseUrls: StoredApiEndpoint["baseUrls"]): Balanc
 export interface ReadBalanceInput {
   endpoint: Pick<StoredApiEndpoint, "id" | "baseUrls" | "balance">;
   apiKey: string | null;
+  // 账户令牌；没有为 null。
+  balanceToken: string | null;
   extras: RequestExtras;
   userAgent: string;
   now: () => Date;
@@ -199,7 +222,22 @@ export async function readEndpointBalance(
   }
   const apiKey = input.apiKey;
   const extras = withKeyInHeaders(input.extras, apiKey);
-  const secrets = [...secretsOf({ apiKey, extras }), queryEscape(apiKey)];
+  const secrets = [
+    ...secretsOf({ apiKey, extras }),
+    queryEscape(apiKey),
+    ...(source.token === null ? [] : [source.token]),
+  ];
+  const keyQuery = source.token === null ? null : keyQueryInsteadOf(source.url);
+  if (keyQuery !== null) {
+    // 令牌配了只认 key 的查询：问了也只会被拒，照 magpie 不发，说该改用哪个地址。
+    return failed({
+      reason: "wrong_url",
+      detail: null,
+      status: null,
+      hint: "token_on_key_url",
+      useUrl: keyQuery,
+    });
+  }
   if (source.method === null) {
     // 手改坏的方法照 magpie 不发，也不当 GET 发。
     return failed({
@@ -217,14 +255,7 @@ export async function readEndpointBalance(
       status: null,
     });
   }
-  const headers = withUserHeaders(
-    {
-      authorization: `Bearer ${apiKey}`,
-      accept: "application/json",
-      "user-agent": input.userAgent,
-    },
-    extras,
-  );
+  const headers = requestHeadersOf({ source, apiKey, extras, userAgent: input.userAgent });
   let status: number;
   let text: string;
   try {
@@ -253,9 +284,56 @@ export async function readEndpointBalance(
   }
   const replied = readReply({ source, status, text, secrets });
   if ("items" in replied) {
-    return { endpointId, status: "ok", items: replied.items, readAt, failure: null };
+    return {
+      endpointId,
+      status: "ok",
+      items: replied.items,
+      ...(replied.windows.length > 0 ? { windows: replied.windows } : {}),
+      readAt,
+      failure: null,
+    };
   }
   return failed(replied);
+}
+
+/**
+ * 这次请求的头。用 key 问：key 的 Bearer 头、Accept、User-Agent，再写这家的请求头（可以盖过前面的）。
+ * 用令牌问用户填的地址：这家的请求头照带，Authorization 换成令牌；问认得的厂商（AiHubMix）只带令牌（照 magpie balanceRead）。
+ * 用户填的地址带上用户 ID 作 New-Api-User，盖过请求头里的。
+ */
+function requestHeadersOf(input: {
+  source: BalanceSource;
+  apiKey: string;
+  extras: RequestExtras;
+  userAgent: string;
+}): Record<string, string> {
+  const { source, extras } = input;
+  const base = { accept: "application/json", "user-agent": input.userAgent };
+  let headers: Record<string, string>;
+  if (source.token === null) {
+    headers = withUserHeaders({ authorization: `Bearer ${input.apiKey}`, ...base }, extras);
+  } else if (source.isCustom) {
+    headers = withoutHeader(withUserHeaders(base, extras), "authorization");
+    headers.authorization = balanceAuthorization(source.token);
+  } else {
+    headers = { ...base, authorization: balanceAuthorization(source.token) };
+  }
+  if (source.userId !== null) {
+    headers = withoutHeader(headers, "new-api-user");
+    headers["new-api-user"] = source.userId;
+  }
+  return headers;
+}
+
+function withoutHeader(headers: Record<string, string>, name: string): Record<string, string> {
+  return Object.fromEntries(Object.entries(headers).filter(([key]) => key.toLowerCase() !== name));
+}
+
+/** 令牌作 Authorization（照 magpie balanceAuthorization）：带空格的原样（已写了方案），形如 JWT 的加「Bearer 」，其余原样。 */
+function balanceAuthorization(token: string): string {
+  if (token.includes(" ")) return token;
+  if (token.startsWith("eyJ") && token.split(".").length === 3) return `Bearer ${token}`;
+  return token;
 }
 
 /** 对方的回复读成余额各项，或失败的原因（照 magpie balanceRead 的先后：拒绝、状态、不是 JSON、取值）。 */
@@ -264,7 +342,7 @@ function readReply(input: {
   status: number;
   text: string;
   secrets: readonly string[];
-}): { items: ApiEndpointBalanceItem[] } | ApiEndpointBalanceFailure {
+}): BalanceReplyItems | ApiEndpointBalanceFailure {
   const { source, status, text, secrets } = input;
   const notOffered = (note: BalanceNotOffered): ApiEndpointBalanceFailure => ({
     reason: "not_offered",
@@ -276,8 +354,15 @@ function readReply(input: {
   const body = parseJson(text);
   const refusal = refusalOf(body);
   if (refusal !== null) {
-    // new-api 一类的 {"success":false,"message":…}：不论状态码都是拒绝。
-    return { reason: "token_rejected", detail: clip(redactKey(refusal, secrets)), status };
+    // new-api 一类的 {"success":false,"message":…}：不论状态码都是拒绝；说缺 New-Api-User 的提示补上用户 ID（magpie newAPIUserHint）。
+    return {
+      reason: "token_rejected",
+      detail: clip(redactKey(refusal, secrets)),
+      status,
+      ...(refusal.toLowerCase().includes("new-api-user")
+        ? { hint: "new_api_user_missing" as const }
+        : {}),
+    };
   }
   if (status >= 300) {
     const known = source.failed?.(status, body) ?? null;
@@ -285,16 +370,26 @@ function readReply(input: {
     return { reason: failureOfStatus(status), detail: quoted(text, secrets), status };
   }
   if (body === undefined) return { reason: "wrong_url", detail: null, status };
+  const windows = source.readsKeyLimits ? sub2ApiKeyLimits(body) : [];
   const read = source.read(body);
   if (read.kind === "not_offered") return notOffered(read);
+  if (read.kind === "rejected") {
+    return { reason: "token_rejected", detail: clip(redactKey(read.detail, secrets)), status };
+  }
   if (read.kind === "no_value") {
+    const limitsOnly = windows.length > 0 && !source.namesField;
+    if (limitsOnly) {
+      // 只给了限额、没有总额度的 key 没有 remaining：它现在能花的是剩得最少的那个窗口（照 magpie Balance）。
+      const left = Math.min(...windows.map((window) => (window.limit ?? 0) - (window.used ?? 0)));
+      return { items: [moneyItem("USD", Math.max(0, left))], windows };
+    }
     return {
       reason: "no_value",
       detail: read.detail && clip(redactKey(read.detail, secrets)),
       status,
     };
   }
-  return { items: read.items };
+  return { items: read.items, windows };
 }
 
 /** 去哪问、怎么问、怎么读回复；认不出且没填余额查询地址时为 null。 */
@@ -304,30 +399,176 @@ interface BalanceSource {
   method: "GET" | "POST" | null;
   read: (body: unknown) => BalanceRead;
   failed?: BalanceVendor["failed"];
+  // 用户填的余额查询地址（不是按主机名认的厂商）。
+  isCustom: boolean;
+  // 代替 key 作 Authorization 的账户令牌；用 key 问时为 null。
+  token: string | null;
+  // 作 New-Api-User 发出的用户 ID；没填或不是用户填的地址时为 null。
+  userId: string | null;
+  // 用户自己写了取值写法。
+  namesField: boolean;
+  // sub2api 的 key 级查询：回复里另读限额窗口。
+  readsKeyLimits: boolean;
+}
+
+// 先后照 magpie tokenQueries。
+const TOKEN_QUERIES = [SUB2API_BALANCE_QUERIES, NEW_API_BALANCE_QUERIES] as const;
+
+/** 用户填的余额查询地址与取值写法，问之前可能换成同站点的 key 查询（keyQueryWithoutToken）。 */
+interface AskedQuery {
+  url: string;
+  field: string;
+}
+
+/** 一份回复读出的余额各项与限额窗口。 */
+interface BalanceReplyItems {
+  items: ApiEndpointBalanceItem[];
+  windows: ApiEndpointBalanceWindow[];
 }
 
 function sourceOf(input: ReadBalanceInput): BalanceSource | null {
+  const token = tokenOtherThanKey(input.balanceToken, input.apiKey);
   const custom = input.endpoint.balance;
-  const customUrl = custom?.url.trim() ?? "";
-  if (custom !== undefined && customUrl !== "") {
+  const savedUrl = custom?.url.trim() ?? "";
+  if (custom !== undefined && savedUrl !== "") {
+    const asked = keyQueryWithoutToken({
+      url: savedUrl,
+      field: custom.field?.trim() ?? "",
+      token,
+      extras: input.extras,
+    });
     // 用户填的地址：取值写法空着时按地址给默认写法（magpie #881），都没有时照 magpie 说要写哪里。
-    const field = custom.field?.trim() || defaultBalanceField(customUrl) || "";
+    const field = asked.field || defaultBalanceField(asked.url) || "";
     return {
-      url: customUrl,
+      url: asked.url,
       method: balanceMethodOf(custom.method),
       read: (body) => readBalanceField(body, field),
+      isCustom: true,
+      token,
+      userId: custom.userId?.trim() || null,
+      namesField: asked.field !== "",
+      readsKeyLimits: balanceUrlPath(asked.url) === SUB2API_BALANCE_QUERIES.key,
     };
   }
   const vendorId = balanceVendorOf(input.endpoint.baseUrls);
   const vendor = BALANCE_VENDORS.find((candidate) => candidate.id === vendorId);
   if (!vendor) return null;
+  const account = token === null ? undefined : vendor.account;
+  const asked = account ?? vendor;
   // 认得的厂商照它的回答方式问：方法只跟用户自己的地址走。
   return {
-    url: input.vendorUrls?.[vendor.id] ?? BALANCE_VENDOR_URLS[vendor.id],
+    url: input.vendorUrls?.[asked.id] ?? BALANCE_VENDOR_URLS[asked.id],
     method: "GET",
-    read: vendor.read,
+    read: asked.read,
     ...(vendor.failed ? { failed: vendor.failed } : {}),
+    isCustom: false,
+    token: account === undefined ? null : token,
+    userId: null,
+    namesField: false,
+    readsKeyLimits: false,
   };
+}
+
+/** 令牌只是这家的 key 再粘一遍（可带「Bearer 」）时当没有令牌，照用 key 的方式问（magpie keyNotToken）。 */
+function tokenOtherThanKey(token: string | null, apiKey: string | null): string | null {
+  let bare = token?.trim() ?? "";
+  if (bare.length > 7 && bare.slice(0, 7).toLowerCase() === "bearer ") bare = bare.slice(7).trim();
+  if (bare === "" || bare === apiKey?.trim()) return null;
+  return token?.trim() ?? null;
+}
+
+/**
+ * 填的是只认账户令牌的查询却没有令牌：改问同站点只认 key 的查询（magpie keyQueryOf），取值写法是账户查询的默认写法时
+ * 改用 key 查询的默认写法。有令牌、用户自己写了 Authorization 或 Cookie 头时照填的问。
+ */
+function keyQueryWithoutToken(input: {
+  url: string;
+  field: string;
+  token: string | null;
+  extras: RequestExtras;
+}): AskedQuery {
+  const asSet = { url: input.url, field: input.field };
+  if (input.token !== null) return asSet;
+  const ownsAuth = Object.entries(input.extras.headers).some(
+    ([name, value]) =>
+      value.trim() !== "" && ["authorization", "cookie"].includes(name.toLowerCase()),
+  );
+  if (ownsAuth) return asSet;
+  let parsed: URL;
+  try {
+    parsed = new URL(input.url);
+  } catch {
+    return asSet;
+  }
+  const path = parsed.pathname.replace(/\/+$/, "");
+  for (const query of TOKEN_QUERIES) {
+    if (!path.endsWith(query.account)) continue;
+    const accountField = defaultBalanceField(input.url);
+    parsed.pathname = path.slice(0, -query.account.length) + query.key;
+    parsed.search = "";
+    parsed.hash = "";
+    return { url: parsed.toString(), field: input.field === accountField ? "" : input.field };
+  }
+  return asSet;
+}
+
+/**
+ * 令牌配了只认 key 的查询（new-api 的 /api/usage/token、sub2api 的 /v1/usage）：该改用的同站点账户查询（magpie
+ * errKeyUsageWithToken、errSub2APIKeyUsageWithToken）；别的地址为 null。
+ */
+function keyQueryInsteadOf(url: string): string | null {
+  const path = balanceUrlPath(url);
+  const query = TOKEN_QUERIES.find((candidate) => candidate.key === path);
+  if (query === undefined) return null;
+  try {
+    const parsed = new URL(url.trim());
+    return `${parsed.origin}${query.account}`;
+  } catch {
+    return query.account;
+  }
+}
+
+const SUB2API_WINDOWS = [
+  { id: "5h", label: "5 hours" },
+  { id: "1d", label: "1 day" },
+  { id: "7d", label: "7 days" },
+] as const;
+
+/**
+ * sub2api key 的限额窗口（照 magpie readSub2APIKeyLimits）：rate_limits 里每个窗口的已用、上限（美元）与重置时间，
+ * 依 5 小时、1 天、7 天排；上限不是正数的不算。没有 reset_at 的窗口还没开始，或用完后还没再用。
+ */
+function sub2ApiKeyLimits(body: unknown): ApiEndpointBalanceWindow[] {
+  if (!isRecord(body) || !Array.isArray(body.rate_limits)) return [];
+  const limits = body.rate_limits.filter(isRecord);
+  const windows: ApiEndpointBalanceWindow[] = [];
+  for (const known of SUB2API_WINDOWS) {
+    for (const entry of limits) {
+      const limit = numberOf(entry.limit);
+      const window = typeof entry.window === "string" ? entry.window.trim() : "";
+      if (window !== known.id || limit === null || limit <= 0) continue;
+      const used = Math.max(0, numberOf(entry.used) ?? 0);
+      const usedPct = Math.min(100, Math.max(0, (used / limit) * 100));
+      windows.push({
+        id: known.id,
+        label: known.label,
+        usedPct,
+        remainingPct: 100 - usedPct,
+        resetsAt: isoOf(entry.reset_at),
+        used,
+        limit,
+        unit: "USD",
+      });
+      break;
+    }
+  }
+  return windows;
+}
+
+function isoOf(value: unknown): string | null {
+  if (typeof value !== "string" || value.trim() === "") return null;
+  const at = new Date(value);
+  return Number.isNaN(at.getTime()) ? null : at.toISOString();
 }
 
 /** 地址或请求头的值里怎么写 key（照 magpie balanceKeyNames）：{key} {apiKey} {api_key} {API_KEY} {token} {{key}} ${API_KEY}，大小写不论。 */
@@ -563,6 +804,19 @@ function readAiHubMix(body: unknown): BalanceRead {
   if (value === null) return NO_VALUE;
   if (value < 0) return { kind: "not_offered", hint: "aihubmix_no_limit", seeAt: null };
   return itemsOf(moneyItem("USD", value));
+}
+
+/**
+ * AiHubMix 的账户（填了账户令牌）：{"success":true,"data":{"quota":2500000}}，按 500000 换 1 美元。
+ * 拒绝且有话说的在 refusalOf 里已经认出；没话说的照 magpie 说没收下令牌。
+ */
+function readAiHubMixAccount(body: unknown): BalanceRead {
+  if (!isRecord(body)) return NO_VALUE;
+  if (body.success !== true) {
+    return { kind: "rejected", detail: "AiHubMix didn't take the access token" };
+  }
+  const quota = isRecord(body.data) ? numberOf(body.data.quota) : null;
+  return quota === null ? NO_VALUE : itemsOf(moneyItem("USD", quota / 500000));
 }
 
 /**

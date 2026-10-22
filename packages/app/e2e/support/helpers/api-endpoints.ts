@@ -76,12 +76,60 @@ function send(response: ServerResponse, status: number, body: unknown) {
  * - /reject：Anthropic 对话回 401（中转站把它标成需要检查）。
  * - /free：像不要 key 的本机服务，谁来都答，其余同 /good。
  * - /balance/usage：余额查询地址，回 {"data":{"left":7.5}}（key 不对时照样 401）。
+ * - /api/user/self：new-api 的账户余额，只认 RELAY_ACCOUNT_TOKEN（原样作 Authorization）；没有 New-Api-User 时照 new-api
+ *   回 success:false，有时回 quota 6000000（$12.00）。
+ * - /v1/usage：sub2api 的 key 级查询，只给限额窗口（5 小时 15/20、1 天 10/50、7 天 200/800 美元），没有 remaining。
  * - /azure：像 Azure OpenAI 的资源，key 只认 api-key 头；/azure/openai/deployments 列出 AZURE_DEPLOYMENTS。
  * - 测试模型用：/good 上对话请求问 bad-* 回 404（模型不存在），问 slow-* 什么都不回；cc-only-* 只答 User-Agent 是
  *   Claude Code 的，codex-only-* 只答 originator 是 Codex 的（照只放行某 CLI 的分组），别的回 403。
  * - 逐个模型识别用：/good 上 chat-only-* 在 Anthropic 上回 400，只在 Chat 上答。
  * 除 /free 外，任何路径上 key 不对都回 401。
  */
+/** 假 new-api 的账户令牌（工单 06）。 */
+export const RELAY_ACCOUNT_TOKEN = "relay-account-token-0042";
+
+const HOUR_MS = 60 * 60 * 1000;
+
+/** 重置时间从回复的这一刻算起：2 小时、10 小时、4 天后。 */
+function sub2ApiRateLimits() {
+  const at = (hours: number) => new Date(Date.now() + hours * HOUR_MS).toISOString();
+  return [
+    { window: "5h", limit: 20, used: 15, reset_at: at(2) },
+    { window: "1d", limit: 50, used: 10, reset_at: at(10) },
+    { window: "7d", limit: 800, used: 200, reset_at: at(96) },
+  ];
+}
+
+/** key 级的余额查询：/balance/usage（工单 05，取值写法 $data.left）与 sub2api 的 /v1/usage；别的地址回 false。 */
+function answersKeyBalance(input: { url: string; response: ServerResponse }): boolean {
+  if (input.url === "/balance/usage") {
+    send(input.response, 200, { data: { left: 7.5 } });
+    return true;
+  }
+  if (input.url === "/v1/usage") {
+    send(input.response, 200, { mode: "quota_limited", rate_limits: sub2ApiRateLimits() });
+    return true;
+  }
+  return false;
+}
+
+/** new-api 的 /api/user/self：令牌原样作 Authorization，另要 New-Api-User。 */
+function answerNewApiAccount(input: { headers: IncomingHttpHeaders; response: ServerResponse }) {
+  const { headers, response } = input;
+  if (headers.authorization !== RELAY_ACCOUNT_TOKEN) {
+    send(response, 401, { success: false, message: "无权进行此操作，access token 无效" });
+    return;
+  }
+  if (!headers["new-api-user"]) {
+    send(response, 200, {
+      success: false,
+      message: "Unauthorized, New-Api-User header not provided",
+    });
+    return;
+  }
+  send(response, 200, { success: true, data: { quota: 6000000 } });
+}
+
 export async function startFakeRelay(): Promise<FakeRelay> {
   const relay: Omit<FakeRelay, "close"> = {
     origin: "",
@@ -102,6 +150,10 @@ export async function startFakeRelay(): Promise<FakeRelay> {
       relay.requests.push(recordOf({ request, text }));
       if (url.startsWith("/azure/")) {
         answerAzure({ url, apiKey: headers["api-key"], response });
+        return;
+      }
+      if (url === "/api/user/self") {
+        answerNewApiAccount({ headers, response });
         return;
       }
       if (!isFree && headers.authorization !== `Bearer ${RELAY_KEY}`) {
@@ -139,11 +191,7 @@ export async function startFakeRelay(): Promise<FakeRelay> {
         send(response, 402, { error: { message: "insufficient balance" } });
         return;
       }
-      if (url === "/balance/usage") {
-        // 余额查询地址（工单 05）：key 级余额，取值写法 $data.left。
-        send(response, 200, { data: { left: 7.5 } });
-        return;
-      }
+      if (answersKeyBalance({ url, response })) return;
       if (url === "/reject/v1/messages") {
         send(response, 401, { error: { message: "This key has been revoked" } });
         return;
@@ -344,6 +392,8 @@ interface ApiEndpointSeedClient {
     modelScope?: string;
     autoPick?: string[];
     modelSettings?: ApiEndpointModelSettings;
+    balance?: { url?: string; method?: string; field?: string; userId?: string };
+    balanceToken?: string;
   }): Promise<ApiEndpointSaveResponse["payload"]>;
   apiEndpointListTemplates(): Promise<ApiEndpointListTemplatesResponse["payload"]>;
   // 让 daemon 当场重读别的软件的配置（发现提示一分钟内只真读一次）。

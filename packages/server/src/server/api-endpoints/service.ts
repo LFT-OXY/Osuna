@@ -542,6 +542,8 @@ export interface ApiEndpointSaveInput extends ApiEndpointRequestExtrasInput {
   cooldownSettings?: ApiEndpointCooldownSettings;
   // 余额设置，整份替换、没有地址即清掉；undefined 保留原来的（复制时是原来那家的）。
   balance?: ApiEndpointBalanceSettings;
+  // 账户令牌：非空换上，空白清掉，undefined 保留原来的（复制时是原来那家的）。
+  balanceToken?: string;
 }
 
 /** 「查询余额」带的表单值：key 与地址省略即用 endpointId 那家存的。 */
@@ -551,6 +553,8 @@ export interface ApiEndpointCheckBalanceInput extends ApiEndpointRequestExtrasIn
   baseUrls?: { format: string; url: string }[];
   templateId?: string;
   balance: ApiEndpointBalanceSettings;
+  // 表单里的账户令牌：undefined 用 endpointId 那家存的，空白即没有。
+  balanceToken?: string;
 }
 
 export interface ApiEndpointAgentSettingsInput {
@@ -1572,6 +1576,8 @@ export class ApiEndpointService {
           keys: apiKey ? { [endpoint.id]: apiKey } : {},
         },
       );
+      const balanceToken = savedBalanceTokenOf({ input, copySource, store: this.store });
+      if (balanceToken !== undefined) this.store.setBalanceToken(endpoint.id, balanceToken);
       // 编辑过这家接口就解除「需要检查」；改了连接（key 或地址）时冷却也是旧连接的，一并清掉。
       if (existing) {
         const connectionEdited =
@@ -1679,6 +1685,14 @@ export class ApiEndpointService {
     }
   }
 
+  /** 读回一家接口已保存的账户令牌原文（编辑窗口的「显示」）；没有为 null。 */
+  revealBalanceToken(endpointId: string): string | null {
+    if (!findEndpoint(this.readState(), endpointId)) {
+      throw new ApiEndpointRequestError({ code: "not_found", message: "API endpoint not found" });
+    }
+    return this.store.getBalanceToken(endpointId);
+  }
+
   /** 读回一家接口已保存的 key 原文（编辑窗口的「显示」）；没有 key 为 null。照 magpie 不确认、不限次数。 */
   revealKey(endpointId: string): string | null {
     if (!findEndpoint(this.readState(), endpointId)) {
@@ -1699,7 +1713,7 @@ export class ApiEndpointService {
         ...state,
         endpoints: state.endpoints.filter((endpoint) => endpoint.id !== endpointId),
       });
-      this.store.removeApiKey(endpointId);
+      this.store.removeSecrets(endpointId);
       this.cooldowns.clear(endpointId);
       this.keptBalances.delete(endpointId);
       this.lastBalances.forget(endpointId);
@@ -3451,13 +3465,15 @@ export class ApiEndpointService {
         const usesKept = kept !== undefined && !input.force && (isFresh || held);
         if (usesKept) return kept.reading;
         const apiKey = this.store.getApiKey(endpoint.id);
-        const settings = { endpoint, apiKey };
+        const balanceToken = this.store.getBalanceToken(endpoint.id);
+        const settings = { endpoint, apiKey, balanceToken };
         if (held) return this.lastBalances.standIn(settings, notAskedReading(endpoint.id));
         const at = this.now().getTime();
         const extras = storedRequestExtras(endpoint);
         const fresh = await readEndpointBalance({
           endpoint,
           apiKey,
+          balanceToken,
           extras,
           userAgent: this.userAgent,
           now: this.now,
@@ -3497,10 +3513,12 @@ export class ApiEndpointService {
     });
     // 表单的值照保存时的样子读（方法不是 GET、POST 的同样拒收），只是不存。
     const { balance } = savedBalanceSettings({ requested: input.balance, base: null });
+    const balanceToken = this.checkedBalanceToken(input.balanceToken, saved);
     try {
       return await readEndpointBalance({
         endpoint: { id: input.endpointId ?? "", baseUrls, balance },
         apiKey,
+        balanceToken,
         extras,
         userAgent: this.userAgent,
         now: this.now,
@@ -4951,6 +4969,7 @@ export class ApiEndpointService {
       enabled: endpoint.enabled,
       hasApiKey: apiKey !== null,
       ...(apiKey !== null ? { apiKeyMask: maskApiKey(apiKey) } : {}),
+      ...this.balanceTokenMaskOf(endpoint.id),
       defaultModelProviders: defaultModelProvidersOf(state, endpoint.id),
       cooldown: this.cooldownOf(endpoint.id),
       ...(endpoint.catalog
@@ -4995,6 +5014,21 @@ export class ApiEndpointService {
     const facts: Record<string, ApiEndpointModelFacts> = {};
     for (const { id } of models) facts[id] ??= this.autoModelFacts(endpoint, id);
     return facts;
+  }
+
+  /** 「查询余额」用的账户令牌：表单给了用表单的（空白即没有），没给用那家存的。 */
+  private checkedBalanceToken(
+    typed: string | undefined,
+    saved: StoredApiEndpoint | null,
+  ): string | null {
+    if (typed !== undefined) return typed.trim() || null;
+    return saved ? this.store.getBalanceToken(saved.id) : null;
+  }
+
+  /** 账户令牌只发打码；没有令牌时没有这项。 */
+  private balanceTokenMaskOf(endpointId: string): { balanceTokenMask?: string } {
+    const token = this.store.getBalanceToken(endpointId);
+    return token === null ? {} : { balanceTokenMask: maskApiKey(token) };
   }
 
   /** 整家接口的冷却；只冷却了某个模型的不算。 */
@@ -5568,13 +5602,29 @@ function savedBalanceSettings(input: {
   const url = requested.url?.trim() ?? "";
   if (url === "") return {};
   const field = requested.field?.trim() ?? "";
+  const userId = requested.userId?.trim() ?? "";
   return {
     balance: {
       url,
       ...(method === "POST" ? { method } : {}),
       ...(field === "" ? {} : { field }),
+      ...(userId === "" ? {} : { userId }),
     },
   };
+}
+
+/**
+ * 存下的账户令牌：请求给了非空的就换上（去掉首尾空白），空白清掉（null）；没给时复制取原来那家的，编辑与新建不动（undefined）。
+ */
+function savedBalanceTokenOf(input: {
+  input: ApiEndpointSaveInput;
+  copySource: StoredApiEndpoint | null;
+  store: ApiEndpointStore;
+}): string | null | undefined {
+  const typed = input.input.balanceToken;
+  if (typed !== undefined) return typed.trim() || null;
+  if (!input.copySource) return undefined;
+  return input.store.getBalanceToken(input.copySource.id) ?? undefined;
 }
 
 /**

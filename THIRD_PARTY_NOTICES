@@ -1112,6 +1112,23 @@ fields in internal/gui/assets/app.js:
   packages/app/src/api-endpoints/internal/balance-settings-form.ts
   packages/app/src/api-endpoints/balance-settings-fields.tsx
 
+An account's balance asked with its own token (the token as the whole
+Authorization, a JWT as a Bearer; a token that is only the key asked as the key;
+an account query without a token asking the same site's key query; a token
+beside a key query refused with the account query named; a refusal about
+New-Api-User; AiHubMix's account at /api/user/self) and a sub2api key's 5-hour,
+day and week windows (its balance, without "remaining", being what its fullest
+window has left), with the editor's account token and the Use … buttons, follow
+keyQueryOf, keyNotToken, balanceAuthorization, errKeyQueryWithToken,
+newAPIUserHint, readAiHubMixAccount and Balance in magpie's
+internal/provider/balance.go, readSub2APIKeyLimits in
+internal/provider/sub2api_usage.go, and balanceFix and the account balance field
+in internal/gui/assets/app.js:
+
+  packages/server/src/server/api-endpoints/balance.ts
+  packages/app/src/api-endpoints/internal/balance-settings-form.ts
+  packages/app/src/api-endpoints/balance-settings-fields.tsx
+
 Import from other apps (the five sources and where each keeps its file, how a
 CC Switch, Claude Code, Codex, Alma or OpenCode entry becomes an endpoint, a
 template's when the URLs are its own, entries of one account merged, Osuna's own

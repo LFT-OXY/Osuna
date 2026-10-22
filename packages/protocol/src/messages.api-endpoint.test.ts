@@ -2136,4 +2136,82 @@ describe("API endpoint balance (apiEndpointBalance)", () => {
       expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
     }
   });
+  it("parses an account token on a save and a check, its mask and user ID on an endpoint, and reveal_secret", () => {
+    const save = {
+      type: "provider.api_endpoint.save.request" as const,
+      requestId: "req-t1",
+      provider: "claude",
+      name: "Relay",
+      models: [],
+      balance: { url: "https://relay.example/api/user/self", userId: "42" },
+      balanceToken: "sys-token",
+    };
+    expect(SessionInboundMessageSchema.parse(save)).toEqual(save);
+    const check = {
+      type: "provider.api_endpoint.check_balance.request" as const,
+      requestId: "req-t2",
+      balance: { url: "https://relay.example/api/user/self" },
+      balanceToken: "",
+    };
+    expect(SessionInboundMessageSchema.parse(check)).toEqual(check);
+    const endpoint = { ...ENDPOINT, balance: save.balance, balanceTokenMask: "sys-…oken" };
+    const listed = {
+      type: "provider.api_endpoint.save.response" as const,
+      payload: { requestId: "req-t1", endpoint, error: null },
+    };
+    expect(SessionOutboundMessageSchema.parse(listed)).toEqual(listed);
+    const reveal = {
+      type: "provider.api_endpoint.reveal_secret.request" as const,
+      requestId: "req-t3",
+      endpointId: "ep_1",
+      secret: "balance_token",
+    };
+    expect(SessionInboundMessageSchema.parse(reveal)).toEqual(reveal);
+    for (const payload of [
+      { requestId: "req-t3", value: "sys-token", error: null },
+      { requestId: "req-t3", value: null, error: { code: "not_found", message: "gone" } },
+    ]) {
+      const response = { type: "provider.api_endpoint.reveal_secret.response" as const, payload };
+      expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+    }
+  });
+
+  it("parses a reading with limit windows and the wrong-address hint, and one without either", () => {
+    const withWindows = {
+      endpointId: "ep_1",
+      status: "ok",
+      items: [{ label: null, text: "$5.00", value: 5, unit: "USD" }],
+      windows: [
+        {
+          id: "5h",
+          label: "5 hours",
+          usedPct: 75,
+          remainingPct: 25,
+          resetsAt: "2026-10-22T10:00:00.000Z",
+          used: 15,
+          limit: 20,
+          unit: "USD",
+        },
+      ],
+      readAt: "2026-10-22T08:00:00.000Z",
+      failure: null,
+    };
+    expect(ApiEndpointBalanceReadingSchema.parse(withWindows)).toEqual(withWindows);
+    const wrongAddress = {
+      endpointId: "ep_1",
+      status: "failed",
+      items: [],
+      readAt: "2026-10-22T08:00:00.000Z",
+      failure: {
+        reason: "wrong_url",
+        detail: null,
+        status: null,
+        hint: "token_on_key_url",
+        useUrl: "https://relay.example/api/user/self",
+      },
+    };
+    expect(ApiEndpointBalanceReadingSchema.parse(wrongAddress)).toEqual(wrongAddress);
+    const { windows: _windows, ...older } = withWindows;
+    expect(ApiEndpointBalanceReadingSchema.parse(older)).toEqual(older);
+  });
 });

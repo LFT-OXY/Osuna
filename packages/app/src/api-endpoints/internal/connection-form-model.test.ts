@@ -20,6 +20,7 @@ import {
   type ConnectionIconResult,
   type ConnectionBalanceCheckRequest,
   type ConnectionBalanceCheckResult,
+  type ConnectionRevealSecretResult,
 } from "./connection-form-model";
 import { curlOf, type CurlCommand } from "./curl-command";
 import type { ConnectionCurlInputs } from "./connection-form-model";
@@ -53,7 +54,13 @@ function fakeDeps() {
   const testAnswers: Deferred<ConnectionTestResult>[] = [];
   const balanceChecks: { request: ConnectionBalanceCheckRequest; signal: AbortSignal }[] = [];
   const balanceAnswers: Deferred<ConnectionBalanceCheckResult>[] = [];
+  const tokenReveals: string[] = [];
+  let tokenRevealAnswer = deferred<ConnectionRevealSecretResult>();
   const deps: ConnectionFormDeps = {
+    revealBalanceToken: (endpointId) => {
+      tokenReveals.push(endpointId);
+      return tokenRevealAnswer.promise;
+    },
     save: async (request) => {
       saves.push(request);
       return saveResult;
@@ -111,6 +118,11 @@ function fakeDeps() {
       balanceAnswers[index]?.resolve(result);
     },
     reveals,
+    tokenReveals,
+    answerTokenReveal(result: ConnectionRevealSecretResult) {
+      tokenRevealAnswer.resolve(result);
+      tokenRevealAnswer = deferred<ConnectionRevealSecretResult>();
+    },
     storedIcons,
     siteIconRequests,
     answerStoreIcon(result: ConnectionIconResult) {
@@ -2973,5 +2985,197 @@ describe("connection form: balance settings and checking the balance", () => {
     older.setBalanceUrl("https://relay.example/q");
     await older.submit();
     expect(fake.saves[1]).not.toHaveProperty("balance");
+  });
+});
+
+describe("connection form: the account's balance token and user ID", () => {
+  const WITH_TOKEN: ApiEndpoint = {
+    ...SAVED_ENDPOINT,
+    balance: { url: "https://relay.example/api/user/self", userId: "42" },
+    balanceTokenMask: "sys-…oken",
+  };
+
+  function editing(endpoint: ApiEndpoint = WITH_TOKEN) {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel({ mode: "edit", endpoint }, fake.deps, WITH_BALANCE);
+    return { fake, model };
+  }
+
+  it("opens with the saved token masked and the user ID, and leaves both out of a save not touching them", async () => {
+    const { fake, model } = editing();
+    expect(model.getState()).toMatchObject({
+      isAdvancedOpen: true,
+      balanceTokenMask: "sys-…oken",
+      hasSavedBalanceToken: true,
+      balanceTokenBoxValue: "",
+      balanceUserIdText: "42",
+    });
+    await model.submit();
+    expect(fake.saves[0]).not.toHaveProperty("balanceToken");
+    expect(fake.saves[0]).not.toHaveProperty("balance");
+  });
+
+  it("saves a typed token trimmed, a changed user ID with the settings, and an empty string once removed", async () => {
+    const { fake, model } = editing();
+    model.setBalanceToken(" new-token ");
+    model.setBalanceUserId(" 7 ");
+    await model.submit();
+    expect(fake.saves[0]).toMatchObject({
+      balanceToken: "new-token",
+      balance: { url: "https://relay.example/api/user/self", userId: "7" },
+    });
+    model.removeBalanceToken();
+    expect(model.getState()).toMatchObject({
+      hasSavedBalanceToken: false,
+      balanceTokenBoxValue: "",
+    });
+    await model.submit();
+    expect(fake.saves[1]?.balanceToken).toBe("");
+  });
+
+  it("shows the saved token on asking, and hides it again without keeping it in the box", async () => {
+    const { fake, model } = editing();
+    model.toggleBalanceTokenVisible();
+    expect(model.getState().isRevealingBalanceToken).toBe(true);
+    expect(fake.tokenReveals).toEqual(["ep_1"]);
+    fake.answerTokenReveal({ status: "revealed", value: "sys-token" });
+    await flush();
+    expect(model.getState()).toMatchObject({
+      isBalanceTokenVisible: true,
+      balanceTokenBoxValue: "sys-token",
+    });
+    model.toggleBalanceTokenVisible();
+    expect(model.getState()).toMatchObject({
+      isBalanceTokenVisible: false,
+      balanceTokenBoxValue: "",
+    });
+    await model.submit();
+    expect(fake.saves[0]).not.toHaveProperty("balanceToken");
+  });
+
+  it("a token that could not be read back says why at the field", async () => {
+    const { fake, model } = editing();
+    model.toggleBalanceTokenVisible();
+    fake.answerTokenReveal({ status: "failed", message: "Host disconnected" });
+    await flush();
+    expect(model.getState()).toMatchObject({
+      isRevealingBalanceToken: false,
+      isBalanceTokenVisible: false,
+      balanceTokenRevealError: "Host disconnected",
+    });
+  });
+
+  it("checks with the typed token, an empty one once removed, and none when untouched", async () => {
+    const { fake, model } = editing();
+    model.checkBalance();
+    model.setBalanceToken("typed");
+    model.checkBalance();
+    model.removeBalanceToken();
+    model.checkBalance();
+    expect(fake.balanceChecks.map(({ request }) => request.balanceToken)).toEqual([
+      undefined,
+      "typed",
+      "",
+    ]);
+    expect(fake.balanceChecks[0]?.request.balance).toEqual({
+      url: "https://relay.example/api/user/self",
+      userId: "42",
+    });
+  });
+
+  it("a duplicate's check asks with the original's saved token", () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "duplicate", source: WITH_TOKEN, name: "Relay copy" },
+      fake.deps,
+      WITH_BALANCE,
+    );
+    model.setApiKey("sk-typed");
+    model.checkBalance();
+    expect(fake.balanceChecks[0]?.request).toMatchObject({
+      endpointId: "ep_1",
+      apiKey: "sk-typed",
+    });
+  });
+
+  it("a token beside new-api's key query names the two account queries on the same site", () => {
+    const { model } = editing({
+      ...SAVED_ENDPOINT,
+      balance: { url: "https://relay.example/api/usage/token" },
+    });
+    expect(model.getState().balanceFix).toBeNull();
+    model.setBalanceToken("tok");
+    expect(model.getState().balanceFix).toEqual({
+      kind: "token_url",
+      reason: "new_api_key_query",
+      useUrls: ["https://relay.example/api/user/self", "https://relay.example/api/v1/user/profile"],
+    });
+  });
+
+  it("a token beside sub2api's key query names its profile only; a token with no address names both on the endpoint's site", () => {
+    const { model } = editing({ ...SAVED_ENDPOINT, balanceTokenMask: "abcd…wxyz" });
+    expect(model.getState().balanceFix).toEqual({
+      kind: "token_url",
+      reason: "no_url",
+      useUrls: ["https://relay.example/api/user/self", "https://relay.example/api/v1/user/profile"],
+    });
+    model.setBalanceUrl("https://other.example/v1/usage");
+    expect(model.getState().balanceFix).toEqual({
+      kind: "token_url",
+      reason: "sub2api_key_query",
+      useUrls: ["https://other.example/api/v1/user/profile"],
+    });
+  });
+
+  it("AiHubMix takes its token with no address: nothing to fix", () => {
+    const { model } = editing({
+      ...SAVED_ENDPOINT,
+      baseUrls: [{ format: "openai_chat", url: "https://aihubmix.com/v1" }],
+      balanceTokenMask: "abcd…wxyz",
+    });
+    expect(model.getState().balanceFix).toBeNull();
+  });
+
+  it("using an account query puts it in the address, and a key query's field makes way for its default", () => {
+    const { model } = editing({
+      ...SAVED_ENDPOINT,
+      balance: {
+        url: "https://relay.example/api/usage/token",
+        field: "$data.total_available / 500000",
+      },
+    });
+    model.setBalanceToken("tok");
+    const before = model.getState().balanceUrlGeneration;
+    model.useBalanceUrl("https://relay.example/api/user/self");
+    expect(model.getState()).toMatchObject({
+      balanceUrlText: "https://relay.example/api/user/self",
+      balanceFieldText: "",
+      balanceFieldPlaceholder: "$data.quota / 500000",
+    });
+    expect(model.getState().balanceUrlGeneration).toBe(before + 1);
+    // 账户查询没填用户 ID 也没有 New-Api-User 头：提示补上。
+    expect(model.getState().balanceFix).toEqual({ kind: "user_id" });
+    model.setBalanceUserId("42");
+    expect(model.getState().balanceFix).toBeNull();
+  });
+
+  it("a field of the user's own is kept when an account query is used", () => {
+    const { model } = editing({
+      ...SAVED_ENDPOINT,
+      balance: { url: "https://relay.example/api/usage/token", field: "data.mine" },
+    });
+    model.setBalanceToken("tok");
+    model.useBalanceUrl("https://relay.example/api/v1/user/profile");
+    expect(model.getState().balanceFieldText).toBe("data.mine");
+  });
+
+  it("New-Api-User in the endpoint's headers is as good as a user ID", () => {
+    const { model } = editing({
+      ...SAVED_ENDPOINT,
+      balance: { url: "https://relay.example/api/user/self" },
+      headers: { "New-Api-User": "42" },
+      balanceTokenMask: "abcd…wxyz",
+    });
+    expect(model.getState().balanceFix).toBeNull();
   });
 });

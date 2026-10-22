@@ -30,6 +30,13 @@
 
 - 2026-10-22 写 spec 时更正 R1-Q3 的描述：访谈里说 magpie「仅手动」是「只在点刷新时才查」，不准确。magpie 的「仅手动」把**打开用量页**也算作用户要求的读取（30 秒内重开不再读），只停掉定时刷新、托盘轮询与提醒（`provider/quota_asked.go:28-57`、`plugins/usage/page.js:12-16`）。spec 照 magpie：开关关着时，打开接口列表页 / 详情页各读一次（30 秒内重开不再读）、点刷新或「查询余额」读，页面开着时不再每分钟重读。用户在 stop ② 确认。
 
+- 2026-10-22 工单 06 实现时定下（照 magpie，或效果相同的写法差异）：
+  - 账户令牌存在 `keys.json` 的 `balanceTokens`，客户端只拿 `balanceTokenMask`；「显示」走新 RPC `provider.api_endpoint.reveal_secret`（`secret` 现在只有 `balance_token`，留给工单 10 的云账号密钥）。保存的 `balanceToken`：非空换上、空字符串清掉、省略保留，复制时沿用原来那家的（同 magpie 的 `clearBalanceToken` 与复制草稿）。编辑窗口照 magpie 给「移除」，另有和 key 一样的「显示」。
+  - 令牌配 key 级地址时 daemon 不发请求，读数是「地址不对」加提示 `token_on_key_url` 与该改用的 `useUrl`（magpie 的报错还写出账户查询的取值写法；这里不写，因为取值写法空着时按地址补默认写法，效果相同）。
+  - 编辑窗口的「改用 …」把取值写法清空、占位显示新地址的默认写法；magpie 是把默认写法填进框里。保存后少存一个与默认相同的 `field`，查法相同。
+  - 「令牌还要配余额查询地址」的提示在表单地址是 aihubmix.com 时不出：magpie 只对自定义接口给这条提示，AiHubMix 是它的已知厂商，填令牌不填地址就查账户余额。
+  - sub2api 的限额窗口放在读数的 `windows`，字段名同套餐用量的窗口，另带 `used`、`limit`、`unit`；协议里另写一份而不是从 `ProviderUsageWindowSchema` 派生，因为 `messages.ts` 引用 `rpc-schemas.ts`，反过来引用会成环。窗口的配速留给工单 08 一起算；详情分区的已用 / 剩余跟随套餐用量现有的显示设置（工单 08 的切换做好后同一个选择）。
+
 ## magpie 出处（照做时对照）
 
 ### 按地址认的厂商余额（`provider/balance.go:41-84, 255-470`）

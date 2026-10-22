@@ -27,6 +27,7 @@ import type {
   ConnectionFetchRequest,
   ConnectionFetchResult,
   ConnectionRevealKeyResult,
+  ConnectionRevealSecretResult,
   ConnectionIconError,
   ConnectionIconResult,
   ConnectionSaveRequest,
@@ -156,6 +157,8 @@ export interface UseHostEndpointsResult {
     request: ConnectionBalanceCheckRequest,
     signal: AbortSignal,
   ) => Promise<ConnectionBalanceCheckResult>;
+  // 编辑窗口账户令牌的「显示」；只在声明了 apiEndpointBalance 的主机上用。
+  revealBalanceToken: (endpointId: string) => Promise<ConnectionRevealSecretResult>;
 }
 
 /** 调用方已经确认主机声明了 apiEndpointGateway 能力。 */
@@ -562,6 +565,23 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     [client, t],
   );
 
+  const revealBalanceToken = useCallback(
+    async (endpointId: string): Promise<ConnectionRevealSecretResult> => {
+      if (!client) return { status: "failed", message: t("workspace.terminal.hostDisconnected") };
+      try {
+        const result = await client.apiEndpointRevealSecret({
+          endpointId,
+          secret: "balance_token",
+        });
+        if (result.error) return { status: "failed", message: result.error.message };
+        return { status: "revealed", value: result.value };
+      } catch (error) {
+        return { status: "failed", message: toErrorMessage(error) };
+      }
+    },
+    [client, t],
+  );
+
   // 存图片与从网站取图标的回复一样：主机给的图标值，或失败原因。
   const iconRequest = useCallback(
     async (
@@ -631,6 +651,7 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     fetchModels,
     testConnection,
     checkBalance,
+    revealBalanceToken,
   };
 }
 

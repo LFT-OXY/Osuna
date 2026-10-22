@@ -19,20 +19,38 @@ export function balanceMethodOf(raw: string | undefined): ApiEndpointBalanceMeth
 }
 
 /**
+ * new-api 与 sub2api 各有一个只认账户令牌的查询（账户余额）和同站点只认 key 的查询（这把 key 的余额），
+ * 照 magpie 的 newAPIUserSelf、newAPIKeyUsage、sub2APIProfile、sub2APIKeyUsage 与 tokenQueries。
+ */
+export const NEW_API_BALANCE_QUERIES = {
+  account: "/api/user/self",
+  key: "/api/usage/token",
+} as const;
+export const SUB2API_BALANCE_QUERIES = {
+  account: "/api/v1/user/profile",
+  key: "/v1/usage",
+} as const;
+
+/** 地址的路径，去掉末尾的斜杠；读不懂为空（照 magpie balanceURLPath）。 */
+export function balanceUrlPath(balanceUrl: string): string {
+  try {
+    return new URL(balanceUrl.trim()).pathname.replace(/\/+$/, "");
+  } catch {
+    return "";
+  }
+}
+
+/**
  * 回复已知的几种查询，取值写法空着时照这个取（magpie #881）：new-api 的 key 级与账户级（500000 换 1 美元）、
  * sub2api 的 key 级与账户级、OpenAI 旧式的 credit grants；别的地址没有默认写法。
  */
 export function defaultBalanceField(balanceUrl: string): string | null {
-  let path: string;
-  try {
-    path = new URL(balanceUrl.trim()).pathname.replace(/\/+$/, "");
-  } catch {
-    return null;
-  }
-  if (path === "/api/user/self") return "$data.quota / 500000";
-  if (path === "/api/usage/token") return "$data.total_available / 500000";
-  if (path === "/api/v1/user/profile") return "$data.balance";
-  if (path === "/v1/usage") return "$remaining";
+  const path = balanceUrlPath(balanceUrl);
+  if (path === "") return null;
+  if (path === NEW_API_BALANCE_QUERIES.account) return "$data.quota / 500000";
+  if (path === NEW_API_BALANCE_QUERIES.key) return "$data.total_available / 500000";
+  if (path === SUB2API_BALANCE_QUERIES.account) return "$data.balance";
+  if (path === SUB2API_BALANCE_QUERIES.key) return "$remaining";
   if (path.endsWith("/dashboard/billing/credit_grants")) return "$total_available";
   return null;
 }

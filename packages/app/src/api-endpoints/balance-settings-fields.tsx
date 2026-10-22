@@ -1,7 +1,8 @@
 // 余额查询地址、方法、取值写法与「查询余额」的编排照 magpie（https://github.com/yetone/magpie，
-// internal/gui/assets/app.js 编辑窗口的 Balance URL、Balance request method、Balance field、Check balance，7597c132）。
+// internal/gui/assets/app.js 编辑窗口的 Balance URL、Balance request method、Balance field、Check balance、
+// 账户令牌（Account balance）与 balanceFix，7597c132）。
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
-import React, { useMemo } from "react";
+import React, { useCallback, useMemo } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { View } from "react-native";
@@ -20,7 +21,8 @@ const KEY = "settings.apiEndpoints.form.balance";
 
 /**
  * 「高级」里的余额设置：方法（GET / POST）与余额查询地址同一行，取值写法的占位是按地址给的默认写法；
- * 「查询余额」用表单里还没保存的值当场查，结果写在按钮旁，留到再查或关掉窗口。说明都在信息提示里。
+ * 账户令牌打码（可显示、可移除），令牌与地址对不上时就地提示并给「改用 …」；new-api 的用户 ID。
+ * 「查询余额」在最后，用表单里还没保存的值当场查，结果写在按钮旁，留到再查或关掉窗口。说明都在信息提示里。
  */
 export function BalanceSettingsFields({
   state,
@@ -34,6 +36,7 @@ export function BalanceSettingsFields({
   const { t } = useTranslation();
   const urlLabel = t(`${KEY}.url`);
   const fieldLabel = t(`${KEY}.field`);
+  const userIdLabel = t(`${KEY}.userId`);
   const methods = useMemo<SegmentedControlOption<ApiEndpointBalanceMethod>[]>(
     () => [
       { value: "GET", label: "GET", testID: "api-endpoint-connection-balance-get" },
@@ -63,6 +66,7 @@ export function BalanceSettingsFields({
           <View style={styles.flex}>
             <FormTextInput
               initialValue={state.balanceUrlText}
+              resetKey={state.balanceUrlGeneration}
               onChangeText={model.setBalanceUrl}
               placeholder="https://…/api/usage/token"
               autoCapitalize="none"
@@ -84,6 +88,7 @@ export function BalanceSettingsFields({
         />
         <FormTextInput
           initialValue={state.balanceFieldText}
+          resetKey={state.balanceFieldGeneration}
           onChangeText={model.setBalanceField}
           placeholder={state.balanceFieldPlaceholder}
           autoCapitalize="none"
@@ -92,21 +97,172 @@ export function BalanceSettingsFields({
           accessibilityLabel={fieldLabel}
           testID="api-endpoint-connection-balance-field-input"
         />
-        <View style={styles.checkRow}>
+      </View>
+      <BalanceTokenField state={state} model={model} size={size} />
+      <View style={styles.field} testID="api-endpoint-connection-balance-user-id">
+        <AdvancedFieldLabel
+          label={userIdLabel}
+          info={t(`${KEY}.userIdInfo`)}
+          testID="api-endpoint-connection-balance-user-id-info"
+        />
+        <FormTextInput
+          initialValue={state.balanceUserIdText}
+          onChangeText={model.setBalanceUserId}
+          placeholder={t(`${KEY}.userIdPlaceholder`)}
+          autoCapitalize="none"
+          autoCorrect={false}
+          size={size}
+          accessibilityLabel={userIdLabel}
+          testID="api-endpoint-connection-balance-user-id-input"
+        />
+      </View>
+      <View style={styles.checkRow}>
+        <Button
+          variant="outline"
+          size="sm"
+          onPress={model.checkBalance}
+          loading={isChecking}
+          disabled={isChecking}
+          testID="api-endpoint-connection-check-balance"
+        >
+          {t(`${KEY}.check`)}
+        </Button>
+        <CheckResult check={check} />
+      </View>
+    </>
+  );
+}
+
+/** 账户令牌：打码框，「显示」读回原文，存了的可「移除」；下面是令牌与地址对不上时的提示。 */
+function BalanceTokenField({
+  state,
+  model,
+  size,
+}: {
+  state: ConnectionFormState;
+  model: ConnectionFormModel;
+  size: "sm" | "md";
+}) {
+  const { t } = useTranslation();
+  const label = t(`${KEY}.token`);
+  const placeholder = state.balanceTokenMask
+    ? t(`${KEY}.tokenSavedPlaceholder`, { mask: state.balanceTokenMask })
+    : t(`${KEY}.tokenPlaceholder`);
+  return (
+    <View style={styles.field} testID="api-endpoint-connection-balance-token">
+      <AdvancedFieldLabel
+        label={label}
+        info={t(`${KEY}.tokenInfo`)}
+        testID="api-endpoint-connection-balance-token-info"
+      />
+      <View style={styles.tokenRow}>
+        <View style={styles.tokenBox}>
+          <FormTextInput
+            key={state.isBalanceTokenVisible ? "shown" : "hidden"}
+            initialValue={state.balanceTokenBoxValue}
+            resetKey={state.balanceTokenBoxGeneration}
+            onChangeText={model.setBalanceToken}
+            placeholder={placeholder}
+            secureTextEntry={!state.isBalanceTokenVisible}
+            autoCapitalize="none"
+            autoCorrect={false}
+            invalid={state.balanceTokenRevealError !== null}
+            size={size}
+            accessibilityLabel={label}
+            testID="api-endpoint-connection-balance-token-input"
+          />
+        </View>
+        <Button
+          variant="outline"
+          size="sm"
+          onPress={model.toggleBalanceTokenVisible}
+          loading={state.isRevealingBalanceToken}
+          testID="api-endpoint-connection-balance-token-show"
+        >
+          {state.isBalanceTokenVisible
+            ? t("settings.apiEndpoints.form.hideKey")
+            : t("settings.apiEndpoints.form.showKey")}
+        </Button>
+        {state.hasSavedBalanceToken ? (
           <Button
             variant="outline"
             size="sm"
-            onPress={model.checkBalance}
-            loading={isChecking}
-            disabled={isChecking}
-            testID="api-endpoint-connection-check-balance"
+            onPress={model.removeBalanceToken}
+            testID="api-endpoint-connection-balance-token-remove"
           >
-            {t(`${KEY}.check`)}
+            {t(`${KEY}.tokenRemove`)}
           </Button>
-          <CheckResult check={check} />
-        </View>
+        ) : null}
       </View>
-    </>
+      {state.balanceTokenRevealError ? (
+        <Text variant="caption" color="statusDanger" selectable>
+          {state.balanceTokenRevealError}
+        </Text>
+      ) : null}
+      {state.balanceFix ? <BalanceFixNotice fix={state.balanceFix} model={model} /> : null}
+    </View>
+  );
+}
+
+const FIX_REASON_KEYS = {
+  new_api_key_query: `${KEY}.fixNewApiKeyQuery`,
+  sub2api_key_query: `${KEY}.fixSub2apiKeyQuery`,
+  no_url: `${KEY}.fixNoUrl`,
+} as const;
+
+/** 令牌配了只认 key 的地址（或没填地址）：说该用哪个，每个账户查询一个「改用 …」；缺用户 ID 时说补上。 */
+function BalanceFixNotice({
+  fix,
+  model,
+}: {
+  fix: NonNullable<ConnectionFormState["balanceFix"]>;
+  model: ConnectionFormModel;
+}) {
+  const { t } = useTranslation();
+  if (fix.kind === "user_id") {
+    return (
+      <Text
+        variant="caption"
+        color="foregroundMuted"
+        accessibilityLiveRegion="polite"
+        testID="api-endpoint-connection-balance-fix"
+      >
+        {t(`${KEY}.fixUserId`)}
+      </Text>
+    );
+  }
+  return (
+    <View
+      style={styles.fix}
+      accessibilityLiveRegion="polite"
+      testID="api-endpoint-connection-balance-fix"
+    >
+      <Text variant="caption" color="statusWarning">
+        {t(FIX_REASON_KEYS[fix.reason])}
+      </Text>
+      {fix.useUrls.length > 0 ? (
+        <View style={styles.fixActions}>
+          {fix.useUrls.map((url) => (
+            <UseUrlButton key={url} url={url} model={model} />
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function UseUrlButton({ url, model }: { url: string; model: ConnectionFormModel }) {
+  const { t } = useTranslation();
+  const handlePress = useCallback(() => model.useBalanceUrl(url), [model, url]);
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      onPress={handlePress}
+      testID="api-endpoint-connection-balance-use-url"
+    >
+      {t(`${KEY}.useUrl`, { url })}
+    </Button>
   );
 }
 
@@ -190,12 +346,23 @@ const styles = StyleSheet.create((theme) => ({
   field: {
     gap: theme.spacing[2],
   },
+  // 窄窗口里放不下时地址框换到下一行占满整行，地址的结尾看得见。
   urlRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
     gap: theme.spacing[2],
   },
   flex: {
+    flex: 1,
+    minWidth: 260,
+  },
+  tokenRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+  },
+  tokenBox: {
     flex: 1,
     minWidth: 0,
   },
@@ -209,6 +376,14 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "flex-start",
     flexWrap: "wrap",
     gap: theme.spacing[3],
+  },
+  fix: {
+    gap: theme.spacing[2],
+  },
+  fixActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing[2],
   },
   result: {
     flex: 1,

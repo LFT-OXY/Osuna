@@ -14,11 +14,13 @@ import type {
   ApiEndpointImportLinkIconResponse,
   ApiEndpointImportLinkResponse,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import { API_ENDPOINT_SECRETS } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { keyHeaderOf } from "@getpaseo/protocol/api-endpoint/request-extras";
 import type { SessionInboundMessage, SessionOutboundMessage } from "../../messages.js";
 import {
   ApiEndpointRequestError,
   type ApiEndpointAgentSettingsInput,
+  type ApiEndpointSaveInput,
   type ApiEndpointService,
   type ApiEndpointRequestExtrasInput,
   type KeepCurrentSettingsCode,
@@ -51,6 +53,7 @@ export type ApiEndpointRequest = Extract<
       | "provider.api_endpoint.read_balance.request"
       | "provider.api_endpoint.set_balance_auto_refresh.request"
       | "provider.api_endpoint.check_balance.request"
+      | "provider.api_endpoint.reveal_secret.request"
       | "provider.api_endpoint.import_scan.request"
       | "provider.api_endpoint.import.request"
       | "provider.api_endpoint.import_discovery.request"
@@ -90,6 +93,7 @@ const API_ENDPOINT_REQUEST_TYPES: Record<ApiEndpointRequest["type"], true> = {
   "provider.api_endpoint.read_balance.request": true,
   "provider.api_endpoint.set_balance_auto_refresh.request": true,
   "provider.api_endpoint.check_balance.request": true,
+  "provider.api_endpoint.reveal_secret.request": true,
   "provider.api_endpoint.import_scan.request": true,
   "provider.api_endpoint.import.request": true,
   "provider.api_endpoint.import_discovery.request": true,
@@ -107,6 +111,18 @@ const API_ENDPOINT_REQUEST_TYPES: Record<ApiEndpointRequest["type"], true> = {
   "provider.api_endpoint.test_models.request": true,
   "provider.api_endpoint.cancel.request": true,
 };
+
+type SavedBalance = Pick<ApiEndpointSaveInput, "balance" | "balanceToken">;
+
+/** 保存请求里的余额设置与账户令牌：给了才带。 */
+function savedBalanceOf(
+  request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.save.request" }>,
+): SavedBalance {
+  return {
+    ...(request.balance !== undefined ? { balance: request.balance } : {}),
+    ...(request.balanceToken !== undefined ? { balanceToken: request.balanceToken } : {}),
+  };
+}
 
 export function isApiEndpointRequest(msg: SessionInboundMessage): msg is ApiEndpointRequest {
   return Object.hasOwn(API_ENDPOINT_REQUEST_TYPES, msg.type);
@@ -179,6 +195,8 @@ export class ApiEndpointSession {
         return this.handleSetBalanceAutoRefresh(request);
       case "provider.api_endpoint.check_balance.request":
         return this.handleCheckBalance(request, connectionSignal);
+      case "provider.api_endpoint.reveal_secret.request":
+        return this.handleRevealSecret(request);
       default:
         return this.handleAddingAids(request, connectionSignal);
     }
@@ -329,7 +347,7 @@ export class ApiEndpointSession {
         ...(request.cooldownSettings !== undefined
           ? { cooldownSettings: request.cooldownSettings }
           : {}),
-        ...(request.balance !== undefined ? { balance: request.balance } : {}),
+        ...savedBalanceOf(request),
         ...requestExtrasOf(request),
       });
       this.host.emit({
@@ -600,6 +618,30 @@ export class ApiEndpointSession {
     });
   }
 
+  private async handleRevealSecret(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.reveal_secret.request" }>,
+  ): Promise<void> {
+    let value: string | null = null;
+    let error: ApiEndpointError | null = null;
+    try {
+      const secret = API_ENDPOINT_SECRETS.find((known) => known === request.secret);
+      if (secret === undefined) {
+        throw new ApiEndpointRequestError({
+          code: "invalid_input",
+          message: `Unknown secret: ${request.secret}`,
+        });
+      }
+      // 现在只有账户令牌一种。
+      value = this.service.revealBalanceToken(request.endpointId);
+    } catch (caught) {
+      error = this.toWireError(caught, request);
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.reveal_secret.response",
+      payload: { requestId: request.requestId, value, error },
+    });
+  }
+
   private async handleForgetCatalog(
     request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.forget_catalog.request" }>,
   ): Promise<void> {
@@ -808,6 +850,7 @@ export class ApiEndpointSession {
           ...(request.baseUrls !== undefined ? { baseUrls: request.baseUrls } : {}),
           ...(request.templateId !== undefined ? { templateId: request.templateId } : {}),
           balance: request.balance,
+          ...(request.balanceToken !== undefined ? { balanceToken: request.balanceToken } : {}),
           ...requestExtrasOf(request),
         },
         signal,

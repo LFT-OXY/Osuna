@@ -179,6 +179,8 @@ const INBOUND_PERMISSION = {
   "provider.api_endpoint.set_balance_auto_refresh.request": "daemon.manage",
   // 用表单里的 key 当场查，和测试连接同一级。
   "provider.api_endpoint.check_balance.request": "daemon.manage",
+  // 读回账户令牌原文，同 reveal_key。
+  "provider.api_endpoint.reveal_secret.request": "daemon.manage",
   // 读本机别的软件的配置（含 key，只发打码的）与导入，和保存同一级。
   "provider.api_endpoint.import_scan.request": "daemon.manage",
   "provider.api_endpoint.import.request": "daemon.manage",
@@ -458,6 +460,7 @@ const OUTBOUND_PERMISSION = {
   "provider.api_endpoint.read_balance.response": "daemon.read",
   "provider.api_endpoint.set_balance_auto_refresh.response": "daemon.manage",
   "provider.api_endpoint.check_balance.response": "daemon.manage",
+  "provider.api_endpoint.reveal_secret.response": "daemon.manage",
   "provider.api_endpoint.import_scan.response": "daemon.manage",
   "provider.api_endpoint.import.response": "daemon.manage",
   "provider.api_endpoint.import_discovery.response": "daemon.manage",

@@ -2801,6 +2801,25 @@ export const fr: TranslationResources = {
           check: "Vérifier le solde",
           nothingToAsk:
             "Aucune URL du solde à interroger, et le solde de ce fournisseur n’est pas connu",
+          token: "Jeton du compte",
+          tokenInfo:
+            "Ce avec quoi l'URL du solde est interrogée à la place de la clé quand elle demande le jeton propre au compte : le jeton d'accès système d'un relais new-api, ou le jeton de connexion d'un panneau sub2api (un JWT, envoyé en Bearer). Sur AiHubMix, son jeton d'accès système affiche le solde de tout le compte sans URL du solde. Gardé sur cet hôte seulement et utilisé pour rien d'autre.",
+          tokenPlaceholder: "Facultatif · le jeton d'accès système ou de connexion du compte",
+          tokenSavedPlaceholder: "Enregistré : {{mask}}",
+          tokenRemove: "Retirer",
+          userId: "ID utilisateur",
+          userIdInfo:
+            "Votre ID utilisateur sur un relais new-api, affiché dans les paramètres personnels du site. Envoyé en New-Api-User seulement pour interroger le solde, jamais avec une requête de chat. Un en-tête New-Api-User sur ce point de terminaison marche aussi ; ce champ l'emporte.",
+          userIdPlaceholder: "Facultatif · new-api seulement",
+          fixNewApiKeyQuery:
+            "…/api/usage/token prend la clé d'API, pas ce jeton. Pour le solde du compte, new-api utilise /api/user/self ; sub2api utilise /api/v1/user/profile.",
+          fixSub2apiKeyQuery:
+            "…/v1/usage prend la clé d'API, pas ce jeton. Pour le solde du compte, un panneau sub2api utilise /api/v1/user/profile.",
+          fixNoUrl:
+            "Le jeton a besoin d'une URL du solde : un relais new-api utilise /api/user/self ; un panneau sub2api utilise /api/v1/user/profile.",
+          fixUserId:
+            "Un relais new-api demande aussi votre ID utilisateur (dans les paramètres personnels du site) : remplissez ID utilisateur ci-dessous.",
+          useUrl: "Utiliser {{url}}",
         },
         extras: {
           advanced: "Avancé",
@@ -3058,6 +3077,15 @@ export const fr: TranslationResources = {
             "Cette clé n'a pas de limite, et AiHubMix ne dit à une clé que ce qui lui reste. Pour voir le solde du compte, ajoutez le jeton d'accès du compte dans les réglages de ce point d'accès (AiHubMix → Paramètres → Générer un jeton d'accès système), ou donnez une limite à la clé dans la console AiHubMix.",
           notAsked:
             "Pas encore lu : l'actualisation automatique est désactivée. Appuyez sur Actualiser pour le lire.",
+          tokenOnKeyUrl:
+            "Cette URL du solde prend la clé d'API, pas le jeton du compte. Mettez {{url}} pour le solde du compte, ou retirez le jeton pour celui de la clé.",
+          newApiUserMissing:
+            "Le relais demande votre ID utilisateur : remplissez ID utilisateur dans les paramètres de ce point de terminaison (affiché dans les paramètres personnels du site).",
+        },
+        window: {
+          fiveHours: "5 heures",
+          oneDay: "1 jour",
+          sevenDays: "7 jours",
         },
         autoRefresh: {
           label: "Actualiser automatiquement le solde et l'usage du forfait",

@@ -90,6 +90,7 @@ export interface ApiEndpointConnectionSheetProps {
   onFetchModels: ConnectionFormDeps["fetchModels"];
   onTestConnection: ConnectionFormDeps["testConnection"];
   onCheckBalance: ConnectionFormDeps["checkBalance"];
+  onRevealBalanceToken: ConnectionFormDeps["revealBalanceToken"];
   // 保存成功：新建时调用方进入详情页，编辑时只关掉弹窗。
   onSaved: (result: Extract<ConnectionSaveResult, { status: "saved" }>) => void;
   onClose: () => void;
@@ -127,6 +128,7 @@ export function ApiEndpointConnectionSheet({
   onFetchModels,
   onTestConnection,
   onCheckBalance,
+  onRevealBalanceToken,
   onSaved,
   onClose,
 }: ApiEndpointConnectionSheetProps) {
@@ -144,6 +146,7 @@ export function ApiEndpointConnectionSheet({
       fetchModels: onFetchModels,
       testConnection: onTestConnection,
       checkBalance: onCheckBalance,
+      revealBalanceToken: onRevealBalanceToken,
     },
     {
       isKeyOptional,

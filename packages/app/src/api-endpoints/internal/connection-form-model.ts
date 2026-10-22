@@ -52,10 +52,14 @@ import type { CooldownSettingsProblem } from "@getpaseo/protocol/api-endpoint/co
 import {
   balanceFieldPlaceholder,
   balanceFieldsOf,
+  balanceFixOf,
   balanceSettingsOf,
+  balanceTokenRequest,
+  fieldAfterUsing,
   hasBalanceSettings,
   type BalanceCheck,
   type BalanceFields,
+  type BalanceFix,
 } from "./balance-settings-form";
 
 /*
@@ -138,6 +142,11 @@ export const MAX_ICON_BYTES = 1 << 20;
 
 export type ConnectionRevealKeyResult =
   | { status: "revealed"; apiKey: string | null }
+  | { status: "failed"; message: string };
+
+// 读回账户令牌原文：没存令牌时 value 为 null。
+export type ConnectionRevealSecretResult =
+  | { status: "revealed"; value: string | null }
   | { status: "failed"; message: string };
 
 export type ConnectionDetectRequest = Omit<ApiEndpointDetectFormatsRequest, "type" | "requestId">;
@@ -449,6 +458,20 @@ export interface ConnectionFormState {
   balanceCheck: BalanceCheck;
   // 从「填写余额查询地址」打开：光标放在余额查询地址上。
   focusesBalance: boolean;
+  // 「改用 …」换了地址与取值写法时加一，框里的字按新值重新带进去。
+  balanceUrlGeneration: number;
+  balanceFieldGeneration: number;
+  balanceUserIdText: string;
+  // 账户令牌：存了的打码（移除后为 null），框里显示的字（打的或读回的），显示与读回中的状态。
+  balanceTokenMask: string | null;
+  hasSavedBalanceToken: boolean;
+  balanceTokenBoxValue: string;
+  balanceTokenBoxGeneration: number;
+  isBalanceTokenVisible: boolean;
+  isRevealingBalanceToken: boolean;
+  balanceTokenRevealError: string | null;
+  // 令牌与地址对不上、缺用户 ID 的提示。
+  balanceFix: BalanceFix | null;
 }
 
 export interface ConnectionFormDeps {
@@ -472,6 +495,7 @@ export interface ConnectionFormDeps {
     request: ConnectionBalanceCheckRequest,
     signal: AbortSignal,
   ) => Promise<ConnectionBalanceCheckResult>;
+  revealBalanceToken: (endpointId: string) => Promise<ConnectionRevealSecretResult>;
 }
 
 export interface ConnectionFormModel {
@@ -538,6 +562,12 @@ export interface ConnectionFormModel {
   setBalanceUrl(value: string): void;
   setBalanceMethod(value: BalanceFields["balanceMethod"]): void;
   setBalanceField(value: string): void;
+  setBalanceUserId(value: string): void;
+  setBalanceToken(value: string): void;
+  toggleBalanceTokenVisible(): void;
+  removeBalanceToken(): void;
+  // 「改用 …」：把余额查询地址换成账户查询。
+  useBalanceUrl(url: string): void;
   // 「查询余额」：用表单里还没保存的值当场查一次；再按一次重来。
   checkBalance(): void;
   detect(): void;
@@ -622,7 +652,19 @@ interface Values {
   balanceUrlText: string;
   balanceMethod: BalanceFields["balanceMethod"];
   balanceFieldText: string;
+  balanceUserIdText: string;
   balanceCheck: BalanceCheck;
+  balanceUrlGeneration: number;
+  balanceFieldGeneration: number;
+  // 打的令牌；读回来没改的不算。
+  balanceTokenText: string;
+  balanceTokenBoxValue: string;
+  balanceTokenBoxGeneration: number;
+  isBalanceTokenVisible: boolean;
+  isBalanceTokenRevealed: boolean;
+  isRevealingBalanceToken: boolean;
+  balanceTokenRevealError: string | null;
+  balanceTokenRemoved: boolean;
 }
 
 // 粘贴的 curl 给「自定义」填的地址与它的格式。
@@ -677,8 +719,10 @@ export function createConnectionFormModel(
   const seededIcon = keyOwner?.icon ?? null;
   const seededCooldown = cooldownFieldsOf(keyOwner?.cooldownSettings);
   const seededBalance = balanceFieldsOf(keyOwner?.balance);
+  const savedTokenMask = keyOwner?.balanceTokenMask ?? null;
   const focusesBalance = canSetBalance && seed.mode === "edit" && seed.focus === "balance";
-  const hasSeededBalance = canSetBalance && hasBalanceSettings(seededBalance);
+  const hasSeededBalance =
+    canSetBalance && (hasBalanceSettings(seededBalance) || savedTokenMask !== null);
   const seededExtras = seededRequestExtras({
     keyOwner,
     isCustom: seededTemplate === null,
@@ -725,6 +769,16 @@ export function createConnectionFormModel(
     ...seededCooldown,
     ...seededBalance,
     balanceCheck: { status: "idle" },
+    balanceUrlGeneration: 0,
+    balanceFieldGeneration: 0,
+    balanceTokenText: "",
+    balanceTokenBoxValue: "",
+    balanceTokenBoxGeneration: 0,
+    isBalanceTokenVisible: false,
+    isBalanceTokenRevealed: false,
+    isRevealingBalanceToken: false,
+    balanceTokenRevealError: null,
+    balanceTokenRemoved: false,
   };
   let state = derive(values);
   const extrasAtOpen = extrasNow();
@@ -816,6 +870,38 @@ export function createConnectionFormModel(
       balanceFieldPlaceholder: balanceFieldPlaceholder(next.balanceUrlText),
       balanceCheck: next.balanceCheck,
       focusesBalance,
+      ...deriveBalanceToken(next),
+    };
+  }
+
+  /** 账户令牌与用户 ID 这几栏的样子，和令牌、地址对不上的提示。 */
+  function deriveBalanceToken(next: Values) {
+    const mask = next.balanceTokenRemoved ? null : savedTokenMask;
+    const hasToken = next.balanceTokenText.trim() !== "" || mask !== null;
+    return {
+      balanceUrlGeneration: next.balanceUrlGeneration,
+      balanceFieldGeneration: next.balanceFieldGeneration,
+      balanceUserIdText: next.balanceUserIdText,
+      balanceTokenMask: mask,
+      hasSavedBalanceToken: mask !== null,
+      balanceTokenBoxValue: next.balanceTokenBoxValue,
+      balanceTokenBoxGeneration: next.balanceTokenBoxGeneration,
+      isBalanceTokenVisible: next.isBalanceTokenVisible,
+      isRevealingBalanceToken: next.isRevealingBalanceToken,
+      balanceTokenRevealError: next.balanceTokenRevealError,
+      balanceFix: balanceFixOf({
+        hasToken,
+        balanceUrl: next.balanceUrlText,
+        userId: next.balanceUserIdText,
+        addresses: [
+          next.urls.openai_chat,
+          next.urls.anthropic_messages,
+          next.urls.openai_responses,
+        ],
+        headerNames: next.headerRows
+          .filter((row) => row.value.trim() !== "")
+          .map((row) => row.name),
+      }),
     };
   }
 
@@ -1257,11 +1343,20 @@ export function createConnectionFormModel(
     return { cooldownSettings: now.value };
   }
 
-  /** 余额设置只在改过时整份带上；没改的省略，daemon 留着那家原来的（复制时由 daemon 拷）。老主机不带。 */
-  function savedBalanceRequest(): Pick<ConnectionSaveRequest, "balance"> {
+  /**
+   * 余额设置只在改过时整份带上；没改的省略，daemon 留着那家原来的（复制时由 daemon 拷）。账户令牌打了或移除了才带。
+   * 老主机不带。
+   */
+  function savedBalanceRequest(): Pick<ConnectionSaveRequest, "balance" | "balanceToken"> {
     if (!canSetBalance) return {};
     const now = balanceSettingsOf(values);
-    return equal(now, balanceAtOpen) ? {} : { balance: now };
+    return {
+      ...(equal(now, balanceAtOpen) ? {} : { balance: now }),
+      ...balanceTokenRequest({
+        typed: values.balanceTokenText,
+        removed: values.balanceTokenRemoved,
+      }),
+    };
   }
 
   /** 「查询余额」：表单里的 key、各格式地址、模板、请求头与余额设置，都还没保存。 */
@@ -1269,9 +1364,15 @@ export function createConnectionFormModel(
     const outcome = await deps.checkBalance(
       {
         ...keyOwnerRequest(),
+        // 复制时打了 key 也带原来那家的 id：没动的账户令牌用它存的。
+        ...(keyOwner ? { endpointId: keyOwner.id } : {}),
         baseUrls: checkedUrlsOf(values),
         ...(values.template ? { templateId: values.template.id } : {}),
         balance: balanceSettingsOf(values),
+        ...balanceTokenRequest({
+          typed: values.balanceTokenText,
+          removed: values.balanceTokenRemoved,
+        }),
         ...typedExtrasRequest(),
         ...insecureTlsRequest(),
       },
@@ -1517,6 +1618,27 @@ export function createConnectionFormModel(
       detecting: false,
       detectError: null,
     };
+  }
+
+  async function runTokenReveal(endpointId: string): Promise<void> {
+    const outcome = await deps.revealBalanceToken(endpointId);
+    if (!values.isRevealingBalanceToken) return;
+    if (outcome.status === "failed") {
+      update({ isRevealingBalanceToken: false, balanceTokenRevealError: outcome.message });
+      return;
+    }
+    // 等的时候已经打了新令牌，或其实没存：只把框里的显示出来。
+    if (values.balanceTokenText !== "" || outcome.value === null) {
+      update({ isRevealingBalanceToken: false, isBalanceTokenVisible: true });
+      return;
+    }
+    update({
+      isRevealingBalanceToken: false,
+      isBalanceTokenVisible: true,
+      isBalanceTokenRevealed: true,
+      balanceTokenBoxValue: outcome.value,
+      balanceTokenBoxGeneration: values.balanceTokenBoxGeneration + 1,
+    });
   }
 
   async function runReveal(endpointId: string): Promise<void> {
@@ -1809,6 +1931,65 @@ export function createConnectionFormModel(
     },
     setBalanceField(value) {
       update({ balanceFieldText: value });
+    },
+    setBalanceUserId(value) {
+      update({ balanceUserIdText: value });
+    },
+    setBalanceToken(value) {
+      update({
+        balanceTokenText: value,
+        balanceTokenBoxValue: value,
+        isRevealingBalanceToken: false,
+        balanceTokenRevealError: null,
+      });
+    },
+    toggleBalanceTokenVisible() {
+      if (values.isRevealingBalanceToken) return;
+      if (values.isBalanceTokenVisible) {
+        // 读回来又没改的原令牌不留在框里（同 key）。
+        const clearsBox = values.isBalanceTokenRevealed && values.balanceTokenText === "";
+        update({
+          isBalanceTokenVisible: false,
+          isBalanceTokenRevealed: false,
+          ...(clearsBox
+            ? {
+                balanceTokenBoxValue: "",
+                balanceTokenBoxGeneration: values.balanceTokenBoxGeneration + 1,
+              }
+            : {}),
+        });
+        return;
+      }
+      const readsSaved =
+        seed.mode === "edit" &&
+        savedTokenMask !== null &&
+        !values.balanceTokenRemoved &&
+        values.balanceTokenText === "";
+      if (readsSaved) {
+        update({ isRevealingBalanceToken: true, balanceTokenRevealError: null });
+        void runTokenReveal(seed.endpoint.id);
+        return;
+      }
+      update({ isBalanceTokenVisible: true, balanceTokenRevealError: null });
+    },
+    removeBalanceToken() {
+      update({
+        balanceTokenRemoved: true,
+        balanceTokenText: "",
+        balanceTokenBoxValue: "",
+        balanceTokenBoxGeneration: values.balanceTokenBoxGeneration + 1,
+        isBalanceTokenRevealed: false,
+        isRevealingBalanceToken: false,
+        balanceTokenRevealError: null,
+      });
+    },
+    useBalanceUrl(url) {
+      update({
+        balanceUrlText: url,
+        balanceUrlGeneration: values.balanceUrlGeneration + 1,
+        balanceFieldText: fieldAfterUsing(values.balanceFieldText),
+        balanceFieldGeneration: values.balanceFieldGeneration + 1,
+      });
     },
     checkBalance() {
       if (!canSetBalance) return;

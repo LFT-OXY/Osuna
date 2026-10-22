@@ -1692,17 +1692,17 @@ if (held) return this.lastBalances.standIn(settings, notAskedReading(endpoint.id
 ### 2. Signatures
 - `LastBalanceReadings` (`api-endpoints/balance-last.ts`), built by the service on `api-endpoints/balance-readings.json`:
   - `keep(settings: BalanceSettings, reading)`; `standIn(settings, reading) → reading`; `forget(endpointId)`.
-  - `BalanceSettings = { endpoint: Pick<StoredApiEndpoint, "baseUrls" | "balance">, apiKey }`.
+  - `BalanceSettings = { endpoint: Pick<StoredApiEndpoint, "baseUrls" | "balance">, apiKey, balanceToken }`.
 - Wire: `ApiEndpointBalanceReadingSchema.stale?: ApiEndpointBalanceFailure`.
 
 ### 3. Contracts
-- File: `{ readings: { [endpointId]: { fingerprint, readAt, items } } }`. `fingerprint` = sha256 of `{ baseUrls, apiKey, balance? }` (`balance` only when set, so readings kept before ticket 05 still match), first 32 hex; never the key or a token.
+- File: `{ readings: { [endpointId]: { fingerprint, readAt, items, windows? } } }`. `fingerprint` = sha256 of `{ baseUrls, apiKey, balance?, balanceToken? }` (`balance` and the token only when set, so readings kept before tickets 05 and 06 still match), first 32 hex; never the key or a token.
 - `keep` stores only `status: "ok"` readings with at least one item; an empty `ok` (Ollama without purchased credits) and every failure leave the previous entry alone (magpie returns early on no windows and no balance).
 - `standIn` replaces a reading whose `failure.reason === "temporary"` (429, 408, 5xx, timeout, deadline, network error, and `not_asked`) with `{ status: "ok", items, readAt: <last readAt>, failure: null, stale: <this time's failure> }`. Other readings pass through unchanged.
 - Invalidation is lazy: a fingerprint mismatch at `standIn` drops the entry and returns the failure; `delete` calls `forget`. Renaming or saving unchanged settings keeps it.
 - In `readBalances`: fresh read → `keep` → `standIn`, except when `unsendableHeader(extras) !== null` (a settings problem; magpie's `passing` doesn't match it either). The result, stale or not, goes into `keptBalances` for the minute.
 - App: `stale` with `hint: "not_asked"` → caption "Not refreshed · last read {time}" (muted); any other `stale` → "Couldn't read just now · last read {time}" (`statusWarning`, testID `api-endpoint-balance-stale`). The row needs nothing: the reading is `ok`.
-- Later tickets: the token and user ID (ticket 06) go into `fingerprintOf` beside `balance` (ticket 05); plan windows (ticket 08) go into the stored entry, with magpie's `elapsed` and expired-window note.
+- Later tickets: the token (ticket 06) is in `fingerprintOf`, the user ID rides in `balance`; ticket 06's `windows` are stored with the entry; plan windows (ticket 08) add magpie's `elapsed` and expired-window note.
 
 ### 4. Validation & Error Matrix
 - File missing → no last readings. Unreadable or schema-invalid → empty, one warn line. Write failure → warn only; the reading is still returned and memory updated.
@@ -1779,5 +1779,53 @@ got = String(value);
 ```ts
 if (!DECIMAL.test(value.trim())) return null; // what Go's ParseFloat reads
 got = plainNumber(value); // FormatFloat(n, 'f', -1, 64): shortest digits, no exponent
+```
+
+## Scenario: an account's balance asked with its own token (endpoint-balance ticket 06, magpie `provider/balance.go` `keyQueryOf` / `keyNotToken` / `balanceAuthorization`, `sub2api_usage.go`)
+
+### 1. Scope / Trigger
+- A new secret beside the key (stored, masked on the wire, revealed on demand), a new RPC, new optional fields on save, check, endpoint, failure and reading.
+
+### 2. Signatures
+- Protocol: `ApiEndpointBalanceSettingsSchema` gains `userId?`; `ApiEndpoint.balanceTokenMask?`; `ApiEndpointSaveRequest.balanceToken?` and `ApiEndpointCheckBalanceRequest.balanceToken?`; failure `useUrl?`; hints `token_on_key_url`, `new_api_user_missing`; reading `windows?: ApiEndpointBalanceWindow[]` (`{ id, label, usedPct?, remainingPct?, resetsAt?, used?, limit?, unit? }` — `ProviderUsageWindowSchema`'s names written out again, because `messages.ts` imports `rpc-schemas.ts` and deriving would make a cycle).
+- `provider.api_endpoint.reveal_secret.request { endpointId, secret }` → `.response { requestId, value: string | null, error }` (`daemon.manage`). `secret` is a wire string; the session checks it against `API_ENDPOINT_SECRETS` (`["balance_token"]`, ticket 10's AK/SK join it) and answers `invalid_input` for any other, then calls the per-secret service method (`revealBalanceToken`).
+- Store: `keys.json` `{ keys, balanceTokens? }`; `getBalanceToken(id)`, `setBalanceToken(id, token | null)`, `removeSecrets(id)` on delete (`removeApiKey` stays key-only: import replacing a keyless endpoint keeps the token).
+- Shared paths: `protocol/api-endpoint/balance-settings.ts` `NEW_API_BALANCE_QUERIES`, `SUB2API_BALANCE_QUERIES` (`{ account, key }`) and `balanceUrlPath(url)`; the daemon's `TOKEN_QUERIES`, the editor's `balanceFixOf` and `defaultBalanceField` all read them.
+
+### 3. Contracts
+- `balanceToken` on save: non-empty (trimmed) replaces, `""` clears, omitted keeps; a copy without it takes the source's. On check: omitted uses the saved one of `endpointId`, `""` means none. The editor sends a duplicate's `endpointId` on check even with a typed key, so the source's token is used.
+- Token as `Authorization` (whole header): contains a space → as is; `eyJ…` with three dot parts → `Bearer <token>`; else bare. A token equal to the key (optionally `Bearer `-prefixed) counts as no token.
+- With a Balance URL: the endpoint's headers go along, then `Authorization` is the token. AiHubMix with a token and no Balance URL: `aihubmix_account` (`https://aihubmix.com/api/user/self`), only `Authorization`, `Accept`, UA; `data.quota / 500000`.
+- `balance.userId` → `New-Api-User` on Balance URL requests only, replacing any case variant from the endpoint's headers. Never on chat requests (it is not a header).
+- Token + path `/api/usage/token` or `/v1/usage` → `failed wrong_url`, `hint: token_on_key_url`, `useUrl` = same origin + the account query, nothing sent.
+- Account query without a token and without an own `Authorization`/`Cookie` header → asks `origin + prefix + key query` (query string and hash dropped); a field equal to the account default becomes empty so the key query's default applies.
+- `/v1/usage` (after that rewrite) also reads `rate_limits` → windows `5h`, `1d`, `7d` in that order, `limit > 0` only, `usedPct` clamped 0–100, `resetsAt` ISO or null, `unit: "USD"`. No `remaining` and no field of the user's → one item = `max(0, min(limit − used))` USD.
+- `success:false` whose message mentions `new-api-user` (any case) → `hint: new_api_user_missing` on the `token_rejected` failure.
+- The token joins the redaction secrets; no log line, list, read or check reply carries it.
+
+### 4. Validation & Error Matrix
+- `reveal_secret` unknown `secret` → `invalid_input`; unknown endpoint → `not_found`.
+- AiHubMix account reply `success` not true and no message → `token_rejected` "AiHubMix didn't take the access token".
+
+### 5. Good/Base/Bad Cases
+- Good: `/api/user/self` + token `abc` + userId `42` → `Authorization: abc`, `New-Api-User: 42`, `$5.00`.
+- Base: `/api/user/self` with no token → asks `/api/usage/token` with `Bearer <key>`.
+- Bad: token + `/v1/usage` → no request, `useUrl: <origin>/api/v1/user/profile`.
+
+### 6. Tests Required
+- `daemon-e2e/api-endpoint-balance.e2e.test.ts` (account-token tests and the AiHubMix one in "other known vendors"): header forms, header vs user ID, no user ID on test_connection's chat request, hint, both key queries refused, key-query fallback, own Authorization kept, key-as-token, sub2api windows with and without `remaining`, mask/reveal/no token in list, read, check, log (logger at `trace`) and `endpoints.json`, save keep/clear/copy, check typed/cleared/saved, token change drops the last reading and `balance-readings.json` has no token.
+- Protocol: token on save/check, mask and userId on endpoint, `reveal_secret`, reading with windows and `useUrl`, older reading.
+- App `connection-form-model.test.ts` "the account's balance token and user ID"; browser `Balance` › "a token beside the key's own query…", "sub2api's key query shows…".
+
+### 7. Wrong vs Correct
+#### Wrong
+```ts
+// the user's Authorization header wins over the token, and the token goes as Bearer always
+headers = withUserHeaders({ authorization: `Bearer ${token}`, ...base }, extras);
+```
+#### Correct
+```ts
+headers = withoutHeader(withUserHeaders(base, extras), "authorization");
+headers.authorization = balanceAuthorization(source.token);
 ```
 

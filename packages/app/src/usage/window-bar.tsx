@@ -26,9 +26,12 @@ export function UsageWindowBar({
   onTogglePin,
   pinLabel,
   pinTestID,
+  count,
 }: {
   window: UsageWindow;
   displayAs: UsageDisplayAs;
+  /** Osuna：百分比前写出的用量，如「$15.00 / $20.00」（接口余额的限额窗口）。 */
+  count?: string;
   /** Whether the row pins the window to the sidebar. When false the row is a plain bar. */
   pinnable: boolean;
   pinned: boolean;
@@ -48,7 +51,8 @@ export function UsageWindowBar({
   const isAtRisk = runsOut != null;
   const trailing = runsOut ?? formatResetLabel(window.resetsAt);
 
-  const value = shownPct != null ? formatDisplayPct(shownPct, displayAs) : "—";
+  const percent = shownPct != null ? formatDisplayPct(shownPct, displayAs) : "—";
+  const value = count ? `${count} · ${percent}` : percent;
   const accessibilityState = useMemo(() => ({ checked: pinned }), [pinned]);
   const content = {
     label: window.label,

@@ -8,6 +8,7 @@ import {
   type ApiEndpointBalanceHint,
   type ApiEndpointBalanceItem,
   type ApiEndpointBalancePart,
+  type ApiEndpointBalanceWindow,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 
 /*
@@ -27,7 +28,21 @@ const HINT_KEYS: Record<ApiEndpointBalanceHint, string> = {
   siliconflow_retired: "settings.apiEndpoints.balance.hint.siliconflowRetired",
   aihubmix_no_limit: "settings.apiEndpoints.balance.hint.aihubmixNoLimit",
   not_asked: "settings.apiEndpoints.balance.hint.notAsked",
+  token_on_key_url: "settings.apiEndpoints.balance.hint.tokenOnKeyUrl",
+  new_api_user_missing: "settings.apiEndpoints.balance.hint.newApiUserMissing",
 };
+
+const WINDOW_KEYS: Record<string, string> = {
+  "5h": "settings.apiEndpoints.balance.window.fiveHours",
+  "1d": "settings.apiEndpoints.balance.window.oneDay",
+  "7d": "settings.apiEndpoints.balance.window.sevenDays",
+};
+
+/** 限额窗口的名字按界面语言写；daemon 以后多出的窗口写它给的 label。 */
+export function windowLabel(input: { t: TFunction; window: ApiEndpointBalanceWindow }): string {
+  const key = WINDOW_KEYS[input.window.id];
+  return key ? input.t(key) : input.window.label;
+}
 
 const PART_KEYS: Record<ApiEndpointBalancePart, string> = {
   granted: "settings.apiEndpoints.balance.part.granted",
@@ -46,7 +61,9 @@ export function hintOf(input: {
   failure: ApiEndpointBalanceFailure | null;
 }): string | null {
   const hint = API_ENDPOINT_BALANCE_HINTS.find((candidate) => candidate === input.failure?.hint);
-  return hint ? input.t(HINT_KEYS[hint]) : null;
+  if (!hint) return null;
+  // 令牌配错地址：写出该改用的地址（daemon 总会给）。
+  return input.t(HINT_KEYS[hint], { url: input.failure?.useUrl ?? "" });
 }
 
 export function failureTitle(input: {

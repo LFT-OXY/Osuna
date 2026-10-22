@@ -4,14 +4,21 @@ import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { RotateCw } from "lucide-react-native";
-import type { ApiEndpointBalanceReading } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type {
+  ApiEndpointBalanceReading,
+  ApiEndpointBalanceWindow,
+} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { Button } from "@/components/ui/button";
 import { Text as UiText } from "@/components/ui/text";
 import { settingsStyles } from "@/styles/settings";
+import { useAppSettings } from "@/hooks/use-settings";
+import { formatAmount } from "@/usage/format";
+import type { UsageDisplayAs } from "@/usage/preferences";
+import { UsageWindowBar } from "@/usage/window-bar";
 import { openExternalUrl } from "@/utils/open-external-url";
 import { relativeAgo } from "./reopen-hints-copy";
-import { failureTitle, hintOf, itemLabel } from "./balance-copy";
+import { failureTitle, hintOf, itemLabel, windowLabel } from "./balance-copy";
 import type { EndpointBalances } from "./use-endpoint-balances";
 
 /**
@@ -196,8 +203,67 @@ function BalanceBody({
           </Text>
         </View>
       ))}
+      {reading.windows && reading.windows.length > 0 ? (
+        <BalanceWindows windows={reading.windows} />
+      ) : null}
     </>
   );
+}
+
+/** 限额窗口（如 sub2api key 的 5 小时 / 1 天 / 7 天）：套餐用量的窗口条，已用 / 剩余照套餐用量的选择，百分比前写用量。 */
+function BalanceWindows({ windows }: { windows: ApiEndpointBalanceWindow[] }) {
+  const { t, i18n } = useTranslation();
+  const { settings } = useAppSettings();
+  const displayAs = settings.usage.displayAs;
+  const shown = useMemo(
+    () =>
+      windows.map((window) => ({
+        window: { ...window, label: windowLabel({ t, window }) },
+        count: windowCount({ window, displayAs, locale: i18n.language }),
+      })),
+    [displayAs, i18n.language, t, windows],
+  );
+  return (
+    <View style={[styles.windows, settingsStyles.rowBorder]} testID="api-endpoint-balance-windows">
+      {shown.map(({ window, count }) => (
+        <UsageWindowBar
+          key={window.id}
+          window={window}
+          count={count}
+          displayAs={displayAs}
+          pinnable={false}
+          pinned={false}
+          onTogglePin={noop}
+          pinLabel=""
+          pinTestID=""
+        />
+      ))}
+    </View>
+  );
+}
+
+function noop() {}
+
+/** 「$15.00 / $20.00」：已用（或剩余）与上限，照 magpie quotaCount；没有上限时不写。 */
+function windowCount(input: {
+  window: ApiEndpointBalanceWindow;
+  displayAs: UsageDisplayAs;
+  locale: string;
+}): string | undefined {
+  const { window, displayAs, locale } = input;
+  const limit = window.limit ?? null;
+  if (limit === null || limit <= 0) return undefined;
+  const used = Math.max(0, window.used ?? 0);
+  const shown = displayAs === "remaining" ? Math.max(0, limit - used) : used;
+  const format = (value: number) => amountIn({ value, unit: window.unit ?? null, locale });
+  return `${format(shown)} / ${format(limit)}`;
+}
+
+/** 美元按界面语言写成货币，别的单位写在数后面。 */
+function amountIn(input: { value: number; unit: string | null; locale: string }): string {
+  if (input.unit === "USD") return formatAmount(input.value, "usd", input.locale);
+  const amount = formatAmount(input.value, "credits", input.locale);
+  return input.unit ? `${amount} ${input.unit}` : amount;
 }
 
 function Notice({ text, testID }: { text: string; testID: string }) {
@@ -297,6 +363,10 @@ const styles = StyleSheet.create((theme) => ({
   },
   noticeText: {
     flex: 1,
+  },
+  windows: {
+    paddingVertical: theme.spacing[2],
+    paddingHorizontal: theme.spacing[4],
   },
   failure: {
     flexDirection: "column",

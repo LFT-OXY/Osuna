@@ -380,6 +380,7 @@ function ConnectionSheet({
     | "fetchModels"
     | "testConnection"
     | "checkBalance"
+    | "revealBalanceToken"
   >;
   setSheet: Dispatch<SetStateAction<ConnectionSheetState>>;
   onSaved: (result: Extract<ConnectionSaveResult, { status: "saved" }>) => void;
@@ -450,6 +451,7 @@ function ConnectionSheet({
       onFetchModels={endpoints.fetchModels}
       onTestConnection={endpoints.testConnection}
       onCheckBalance={endpoints.checkBalance}
+      onRevealBalanceToken={endpoints.revealBalanceToken}
       onSaved={onSaved}
       onClose={closeForm}
     />

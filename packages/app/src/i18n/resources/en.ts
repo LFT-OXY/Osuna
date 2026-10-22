@@ -2806,6 +2806,25 @@ export const en = {
             "Where the amount is in the reply, e.g. data.balance. It can be a sum with + - * / and brackets, e.g. data.total / 500000. “$” or “¥” in front adds the sign; “%” after it shows a percent with a bar. Several, each with a label, go apart by “;”, e.g. 5h: a.used / a.cap %; $credits.left. A list's items are a.*.used, or a[status=active].used for those that match, in sum(), max(), min() or count(). Left empty, new-api, sub2api and credit grants addresses are read as the placeholder shows.",
           check: "Check balance",
           nothingToAsk: "No balance URL to ask, and this vendor's balance isn't known",
+          token: "Account token",
+          tokenInfo:
+            "What the balance URL is asked with in place of the key when it wants the account's own token: a new-api relay's system access token, or a sub2api panel's login token (a JWT, sent as a Bearer). On AiHubMix, its system access token shows the whole account's balance with no balance URL. Kept on this host only and used for nothing else.",
+          tokenPlaceholder: "Optional · the account's system access token or login token",
+          tokenSavedPlaceholder: "Saved: {{mask}}",
+          tokenRemove: "Remove",
+          userId: "User ID",
+          userIdInfo:
+            "Your user ID on a new-api relay, shown in the site's personal settings. Sent as New-Api-User only when the balance is asked, never with a chat request. A New-Api-User header on this endpoint works too; this field wins over it.",
+          userIdPlaceholder: "Optional · new-api only",
+          fixNewApiKeyQuery:
+            "…/api/usage/token takes the API key, not this token. For the account's balance, new-api uses /api/user/self; sub2api uses /api/v1/user/profile.",
+          fixSub2apiKeyQuery:
+            "…/v1/usage takes the API key, not this token. For the account's balance, a sub2api panel uses /api/v1/user/profile.",
+          fixNoUrl:
+            "The token needs a balance URL: a new-api relay uses /api/user/self; a sub2api panel uses /api/v1/user/profile.",
+          fixUserId:
+            "A new-api relay also wants your user ID (shown in the site's personal settings): fill in User ID below.",
+          useUrl: "Use {{url}}",
         },
         extras: {
           advanced: "Advanced",
@@ -3051,6 +3070,15 @@ export const en = {
           aihubmixNoLimit:
             "This key has no limit, and AiHubMix only tells a key what is left on it. To see the account's balance, add the account's access token in this endpoint's settings (AiHubMix → Settings → Generate System Access Token), or give the key a limit in the AiHubMix console.",
           notAsked: "Not read yet: auto refresh is off. Press Refresh to read it.",
+          tokenOnKeyUrl:
+            "This balance URL takes the API key, not the account token. Set it to {{url}} for the account's balance, or remove the token for the key's own.",
+          newApiUserMissing:
+            "The relay wants your user ID: fill in User ID in this endpoint's settings (shown in the site's personal settings).",
+        },
+        window: {
+          fiveHours: "5 hours",
+          oneDay: "1 day",
+          sevenDays: "7 days",
         },
         autoRefresh: {
           label: "Auto-refresh balance and plan usage",
