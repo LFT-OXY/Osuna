@@ -322,6 +322,11 @@ export function createControlGeometry(theme: Theme) {
       outlineStyle: "solid" as const,
       outlineWidth: CONTROL_FOCUS_RING_WIDTH,
     },
+    // 出错的框在聚焦时外圈也换危险色，不让蓝色外圈和红色边框叠成两种状态。
+    controlInvalid: {
+      borderColor: theme.colors.statusDanger,
+      outlineColor: theme.colors.statusDanger,
+    },
     controlFocusRingColor: {
       outlineColor: theme.colors.accent,
     },

@@ -171,6 +171,30 @@ describe("API endpoint models over the daemon RPC", () => {
     expect(rejected.error?.message).toContain("HTTP 401");
   });
 
+  test("a failed fetch says why without the request address", async () => {
+    const rejected = await client.apiEndpointFetchModels({
+      provider: "claude",
+      baseUrl: upstream.baseUrl,
+      apiKey: "sk-wrong",
+    });
+    expect(rejected.error?.code).toBe("upstream_error");
+    expect(rejected.error?.message).toBe("HTTP 401: missing key · /v1/models");
+
+    // 关掉的端口：连不上。
+    const closed = createServer();
+    await new Promise<void>((resolve) => closed.listen(0, "127.0.0.1", resolve));
+    const port = (closed.address() as AddressInfo).port;
+    await new Promise<void>((resolve) => closed.close(() => resolve()));
+    const unreachable = await client.apiEndpointFetchModels({
+      provider: "claude",
+      baseUrl: `http://127.0.0.1:${port}/api`,
+      apiKey: TYPED_KEY,
+    });
+    expect(unreachable.error?.code).toBe("upstream_unreachable");
+    expect(unreachable.error?.message).toContain("ECONNREFUSED");
+    expect(unreachable.error?.message).not.toMatch(/https?:\/\//);
+  });
+
   test("lists with no key headers when there is neither a typed nor a saved key", async () => {
     const fetched = await client.apiEndpointFetchModels({
       provider: "claude",

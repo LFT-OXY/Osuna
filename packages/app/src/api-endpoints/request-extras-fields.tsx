@@ -100,16 +100,18 @@ function HeadersField({
         info={t("settings.apiEndpoints.form.extras.headersInfo")}
         testID="api-endpoint-connection-headers-info"
       />
-      {state.headerRows.map((row) => (
-        <HeaderRowField
-          key={row.id}
-          row={row}
-          model={model}
-          size={size}
-          isCompact={isCompact}
-          isInvalid={problem !== null && problem.name === row.name.trim()}
-        />
-      ))}
+      <View style={isCompact ? styles.headerPairs : styles.headerRows}>
+        {state.headerRows.map((row) => (
+          <HeaderRowField
+            key={row.id}
+            row={row}
+            model={model}
+            size={size}
+            isCompact={isCompact}
+            isInvalid={problem !== null && problem.name === row.name.trim()}
+          />
+        ))}
+      </View>
       {problem ? (
         <Text
           variant="caption"
@@ -120,7 +122,7 @@ function HeadersField({
           {headerProblemText(t, problem)}
         </Text>
       ) : null}
-      <View style={styles.adds}>
+      <View style={isCompact ? [styles.adds, styles.addsAfterPairs] : styles.adds}>
         <Button
           variant="outline"
           size="sm"
@@ -244,7 +246,10 @@ function HeaderRowField({
   const isStacked = isCompact || row.isJson;
   if (isStacked) {
     return (
-      <View style={styles.stackedRow} testID={`api-endpoint-connection-header-${id}`}>
+      <View
+        style={isCompact ? styles.headerPair : styles.stackedRow}
+        testID={`api-endpoint-connection-header-${id}`}
+      >
         <View style={styles.inlineRow}>
           {nameInput}
           {actions}
@@ -381,8 +386,23 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     gap: theme.spacing[2],
   },
+  headerRows: {
+    gap: theme.spacing[2],
+  },
+  // 窄窗口里名和值上下两行：组内收紧、组间拉开，看得出哪两行是一对。
+  headerPairs: {
+    gap: theme.spacing[4],
+  },
+  headerPair: {
+    gap: theme.spacing[1],
+  },
+  // 宽窗口按 JSON 编辑时名和值也上下两行，间距照旧。
   stackedRow: {
     gap: theme.spacing[2],
+  },
+  // 「添加请求头」与最后一组的距离和组间一样，不像那一组的一部分。
+  addsAfterPairs: {
+    marginTop: theme.spacing[2],
   },
   rowActions: {
     flexDirection: "row",

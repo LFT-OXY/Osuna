@@ -298,11 +298,7 @@ export function ApiEndpointModelsSection({
           <AdaptiveTextInput
             style={styles.searchInput}
             onChangeText={setQuery}
-            placeholder={
-              entries.length > 0
-                ? t("settings.apiEndpoints.models.searchPlaceholder", { total: entries.length })
-                : t("settings.apiEndpoints.models.search")
-            }
+            placeholder={searchPlaceholder(t, entries.length)}
             accessibilityLabel={t("settings.apiEndpoints.models.search")}
             autoCapitalize="none"
             autoCorrect={false}
@@ -428,6 +424,12 @@ function ModelsCaption({
 }
 
 /** 每种语言一整句：「刚刚拉取」「5分钟前拉取」，不是前缀拼上「刚刚」。 */
+function searchPlaceholder(t: TFunction, count: number): string {
+  if (count === 0) return t("settings.apiEndpoints.models.search");
+  if (count === 1) return t("settings.apiEndpoints.models.searchPlaceholderOne", { count });
+  return t("settings.apiEndpoints.models.searchPlaceholderMany", { count });
+}
+
 function fetchedCopy(input: { t: TFunction; ago: string | null }): string {
   if (input.ago === null) return input.t("settings.apiEndpoints.models.fetchedJustNow");
   return input.t("settings.apiEndpoints.models.fetchedAgo", { time: input.ago });

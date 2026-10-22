@@ -25,6 +25,7 @@ const theme = {
     accent: "#20744A",
     borderAccent: "#2F3534",
     borderInput: "#d4d4d8",
+    statusDanger: "#dc2626",
   },
   fontSize: {
     xs: 10,
@@ -70,6 +71,15 @@ describe("control geometry", () => {
       outlineOffset: 1,
       outlineStyle: "solid",
       outlineWidth: 2,
+    });
+  });
+
+  it("draws an invalid field's border and focus ring in one danger color", () => {
+    const geometry = createControlGeometry(theme);
+
+    expect(geometry.controlInvalid).toEqual({
+      borderColor: "#dc2626",
+      outlineColor: "#dc2626",
     });
   });
 

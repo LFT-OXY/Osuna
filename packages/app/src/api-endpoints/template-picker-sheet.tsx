@@ -147,7 +147,7 @@ export function TemplatePickerSheet({
             </View>
             <View style={styles.grid}>
               {section.rows.map((row) => (
-                <View key={row.template.id} style={isCompact ? styles.cellFull : styles.cellThird}>
+                <View key={row.template.id} style={isCompact ? styles.cellFull : styles.cellHalf}>
                   <TemplateTile row={row} endpoints={endpoints} onPick={handlePick} />
                 </View>
               ))}
@@ -271,9 +271,9 @@ const styles = StyleSheet.create((theme) => ({
   cellFull: {
     width: "100%",
   },
-  // 宽窗口三个一行（照 magpie 的添加面板）；格子之间留空，绿点不会看成是右边那格的。
-  cellThird: {
-    width: "33.333%",
+  // 宽窗口两个一行，区域、套餐类说明放得下一行；格子之间留空，绿点不会看成是右边那格的。
+  cellHalf: {
+    width: "50%",
     paddingRight: theme.spacing[4],
   },
   // 品牌图标底块：浅色、深色下都看得出（添加窗口顶上的图标同一档）。

@@ -2,6 +2,7 @@
 import { mkdtempSync } from "node:fs";
 import { chmod, mkdir, rm, utimes, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Locator, WebSocketRoute } from "@playwright/test";
@@ -37,6 +38,8 @@ import { gotoWorkspace } from "../support/helpers/launcher";
 import { expectSavedSelection } from "../support/helpers/model-memory";
 import { openGlobalNewWorkspaceComposer } from "../support/helpers/new-workspace";
 import { seedWorkspace } from "../support/helpers/seed-client";
+import { installLoginUsage } from "../support/helpers/usage-login";
+import { openUsagePageFromShell } from "../support/helpers/usage-page";
 import { daemonWsRoutePattern } from "../support/helpers/daemon-port";
 import { getServerId } from "../support/helpers/server-id";
 import {
@@ -152,6 +155,28 @@ function statusesOf(results: { status: string }[]): string[] {
 
 function countOf(items: unknown[]): () => number {
   return () => items.length;
+}
+
+// 窄窗口的模板选择窗口是滑上来的：几块的位置要在同一帧里量，分开量会量到滑动中的不同位置。
+async function templateTileOriginsInOneFrame(
+  page: Page,
+  templateIds: string[],
+): Promise<({ x: number; y: number } | null)[]> {
+  return page.evaluate((testIds) => {
+    const origins: ({ x: number; y: number } | null)[] = [];
+    for (const id of testIds) {
+      let origin: { x: number; y: number } | null = null;
+      for (const node of document.querySelectorAll(`[data-testid="api-endpoint-template-${id}"]`)) {
+        const rect = node.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          origin = { x: rect.x, y: rect.y };
+          break;
+        }
+      }
+      origins.push(origin);
+    }
+    return origins;
+  }, templateIds);
 }
 
 // 自动检测每种格式一行，这里取那一行的结论。
@@ -783,6 +808,32 @@ test.describe("Settings API endpoints", () => {
     });
   });
 
+  test("a model the vendor lists with a window of a million tokens or more carries its size beside the name; a smaller one carries none", async ({
+    page,
+  }) => {
+    relay.goodModels = ["wide-window", "huge-window", "narrow-window"];
+    relay.goodModelContexts = {
+      "wide-window": 1_048_576,
+      "huge-window": 2_000_000,
+      "narrow-window": 200_000,
+    };
+    const endpointId = await seedApiEndpoint(client, {
+      name: "Good relay",
+      baseUrls: [{ format: "openai_chat", url: `${relay.origin}/good/v1` }],
+      models: ["wide-window"],
+    });
+    await openEndpointDetail(page, endpointId);
+    const context = (modelId: string) =>
+      page.getByTestId(`api-endpoint-model-context-${modelId}`).filter({ visible: true });
+
+    await expect(context("wide-window")).toHaveText("1M");
+    await expect(context("huge-window")).toHaveText("2M");
+    await expect(
+      page.getByTestId("api-endpoint-model-narrow-window").filter({ visible: true }),
+    ).toBeVisible();
+    await expect(context("narrow-window")).toHaveCount(0);
+  });
+
   test("Forget fetched list empties the list and its time; a failed forget stays in place", async ({
     page,
   }) => {
@@ -820,6 +871,36 @@ test.describe("Settings API endpoints", () => {
       await expect(models.getByTestId("api-endpoint-model-family-claude")).toHaveCount(0);
       await expect(modelSwitch(page, "gpt-5")).toBeChecked();
       expect(await selectedModelsOf(endpointId)).toEqual(["gpt-5"]);
+    });
+  });
+
+  test("a failed fetch on the endpoint page says why without the request address", async ({
+    page,
+  }) => {
+    const rejected = await seedApiEndpoint(client, {
+      name: "Wrong key",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: [],
+      apiKey: "sk-wrong",
+    });
+    const unreachable = await seedApiEndpoint(client, {
+      name: "Gone relay",
+      baseUrls: [{ format: "anthropic_messages", url: `http://127.0.0.1:${await closedPort()}` }],
+      models: [],
+    });
+    const failed = page.getByTestId("api-endpoint-models-failed").filter({ visible: true });
+
+    await test.step("a rejected key", async () => {
+      await openEndpointDetail(page, rejected);
+      await expect(failed).toContainText("HTTP 401: Invalid API key · /v1/models");
+      await expect(failed).not.toContainText(/https?:\/\//);
+    });
+
+    await test.step("an address that does not answer", async () => {
+      await page.getByTestId("settings-api-endpoints-breadcrumb").filter({ visible: true }).click();
+      await openEndpointRow(page, unreachable);
+      await expect(failed).toContainText("ECONNREFUSED");
+      await expect(failed).not.toContainText(/https?:\/\//);
     });
   });
 
@@ -1477,12 +1558,19 @@ test.describe("Settings API endpoints", () => {
     await expect(error).toHaveCount(0);
     expect(await hostList()).toEqual(["*-PREVIEW"]);
 
-    await section
-      .getByTestId("api-endpoints-disabled-model-*-PREVIEW")
-      .getByRole("button", { name: "Enable *-PREVIEW" })
-      .click();
+    // 「启用」被主机拒绝：原因就地写出，条目和它命中的模型都留着；再点一次成功，条目才消失。
+    const enable = entry.getByRole("button", { name: "Enable *-PREVIEW" });
+    host.failing = true;
+    await enable.click();
+    await expect(error).toContainText("EACCES: permission denied");
+    await expect(entry).toContainText("good-relay/gemini-3-preview");
+    expect(await hostList()).toEqual(["*-PREVIEW"]);
+
+    host.failing = false;
+    await enable.click();
     await expect.poll(hostList).toEqual([]);
     await expect(section.getByTestId("api-endpoints-disabled-model-*-PREVIEW")).toHaveCount(0);
+    await expect(error).toHaveCount(0);
 
     // 从选单里挑：只禁这一家的这个模型（接口标识/模型）。
     await section.getByTestId("api-endpoints-disabled-models-add").click();
@@ -1790,6 +1878,62 @@ test.describe("Settings API endpoints", () => {
       await expect(connectionForm(page)).toHaveCount(0);
       expect((await client.apiEndpointList("claude")).endpoints[0]?.hasApiKey).toBe(true);
     });
+  });
+
+  test("a long key shown in a narrow window can be read in full, and Hide masks it again", async ({
+    page,
+  }) => {
+    const longKey = `sk-e2e-${"0123456789abcdef".repeat(7)}-end`;
+    expect(longKey.length).toBeGreaterThan(100);
+    const endpointId = await seedApiEndpoint(client, {
+      name: "Good relay",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["claude-sonnet-4-5"],
+      apiKey: longKey,
+    });
+    await openEndpointDetail(page, endpointId);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByTestId("api-endpoint-edit-connection").filter({ visible: true }).click();
+    const key = page.getByTestId("api-endpoint-connection-api-key");
+    const show = page.getByTestId("api-endpoint-connection-show-key");
+
+    await show.click();
+    await expect(key).toHaveValue(longKey);
+    await expect(show).toHaveText("Hide");
+    // 框里不滚动就能读全：没有横向或纵向溢出。
+    const overflow = await key.evaluate((node) => ({
+      x: node.scrollWidth - node.clientWidth,
+      y: node.scrollHeight - node.clientHeight,
+    }));
+    expect(overflow.x).toBeLessThanOrEqual(0);
+    // 留 1px：行高取整后 scrollHeight 可能比 clientHeight 多出不到一像素。
+    expect(overflow.y).toBeLessThanOrEqual(1);
+    // 框不伸到按钮底下。
+    const keyBox = await key.boundingBox();
+    const showBox = await show.boundingBox();
+    if (!keyBox || !showBox) throw new Error("The key box or Show is not laid out");
+    expect(keyBox.x + keyBox.width).toBeLessThanOrEqual(showBox.x);
+
+    await show.click();
+    await expect(key).toHaveValue("");
+    await expect(key).toHaveAttribute("type", "password");
+    await expect(show).toHaveText("Show");
+
+    // 打了新 key 再显示：换成多行框后字还在，删字后框跟着变矮。
+    await key.fill(longKey);
+    await show.click();
+    await expect(key).toHaveValue(longKey);
+    const tall = await key.boundingBox();
+    if (!tall) throw new Error("The key box is not laid out");
+    await key.fill("sk-short");
+    await expect(key).toHaveValue("sk-short");
+    await expect
+      .poll(async () => (await key.boundingBox())?.height ?? Infinity)
+      .toBeLessThan(tall.height);
+    // 多行框里按回车不会把换行带进 key。
+    await key.press("End");
+    await key.press("Enter");
+    await expect(key).toHaveValue("sk-short");
   });
 
   test("a custom endpoint's icon: a built-in one, or a picture kept by the host; a picture too large or not a picture says why", async ({
@@ -2186,6 +2330,91 @@ test.describe("Templates", () => {
       await expect(page.getByTestId("api-endpoint-connection-name")).toHaveValue("");
       await expect(page.getByTestId("api-endpoint-connection-detect")).toBeVisible();
       await expect(page.getByTestId("api-endpoint-connection-template")).toHaveCount(0);
+    });
+  });
+
+  // 区域、套餐类的说明最长；宽窗口两个一行时它们放得下一行。
+  const PLAN_NOTE_TEMPLATES = [
+    "kimi-code",
+    "xiaomi",
+    "baidu-qianfan",
+    "tencent-cloud",
+    "huaweicloud",
+    "volcengine",
+    "qwen",
+    "qwen-token-plan",
+    "bailian-token-plan",
+  ];
+
+  for (const language of ["en", "zh-CN"] as const) {
+    test(`at 1280 the template list reads each region or plan note in full, two to a row (${language})`, async ({
+      page,
+    }) => {
+      await page.addInitScript((value) => {
+        localStorage.setItem("@paseo:app-settings", JSON.stringify({ language: value }));
+      }, language);
+      await openApiEndpointsPage(page);
+      await page.getByTestId("api-endpoints-empty-add").click();
+      await expect(templatePicker(page)).toBeVisible();
+      for (const id of PLAN_NOTE_TEMPLATES) {
+        const tile = page.getByTestId(`api-endpoint-template-${id}`);
+        await expect(tile).toBeVisible();
+        expect(await clippedTextsOf(tile), id).toEqual([]);
+      }
+      const [left, right, next] = await templateTileOriginsInOneFrame(page, [
+        "anthropic",
+        "openai",
+        "deepseek",
+      ]);
+      expect(right?.y ?? Infinity).toBe(left?.y ?? 0);
+      expect(next?.x ?? Infinity).toBe(left?.x ?? 0);
+    });
+  }
+
+  test("at 390 the template list stays one to a row", async ({ page }) => {
+    await openApiEndpointsPage(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByTestId("api-endpoints-empty-add").click();
+    await expect(templatePicker(page)).toBeVisible();
+    const [first, second] = await templateTileOriginsInOneFrame(page, ["anthropic", "openai"]);
+    expect(second?.x ?? Infinity).toBe(first?.x ?? 0);
+    expect(second?.y ?? 0).toBeGreaterThan(first?.y ?? Infinity);
+  });
+
+  test("the template list and an endpoint's row show the brand's icon; one without a brand icon shows its first letter", async ({
+    page,
+  }) => {
+    // DeepSeek 的鲸鱼是它自己的蓝色；小米 MiMo 的商标缩到图标大小认不出，只写首字。
+    const deepseekBlue = '[fill="#4D6BFE"]';
+    const deepseekId = await seedApiEndpoint(client, {
+      name: "DeepSeek",
+      baseUrls: [{ format: "openai_chat", url: `${relay.origin}/good/v1` }],
+      models: ["gpt-5"],
+      templateId: "deepseek",
+    });
+    const customId = await seedApiEndpoint(client, {
+      name: "Home relay",
+      baseUrls: [{ format: "openai_chat", url: `${relay.origin}/good/v1` }],
+      models: ["gpt-5"],
+    });
+    await openApiEndpointsPage(page);
+
+    await test.step("an endpoint from a template shows its brand; a custom one its first letter", async () => {
+      await expect(row(page, deepseekId).locator(deepseekBlue)).toHaveCount(1);
+      await expect(row(page, deepseekId).getByText("D", { exact: true })).toHaveCount(0);
+      await expect(row(page, customId).locator(deepseekBlue)).toHaveCount(0);
+      await expect(row(page, customId).getByText("H", { exact: true })).toBeVisible();
+    });
+
+    await test.step("the template list shows each brand the same way", async () => {
+      await page.getByTestId("api-endpoints-add-button").filter({ visible: true }).click();
+      await expect(templatePicker(page)).toBeVisible();
+      const deepseek = page.getByTestId("api-endpoint-template-deepseek");
+      await expect(deepseek.locator(deepseekBlue)).toHaveCount(1);
+      await expect(deepseek.getByText("D", { exact: true })).toHaveCount(0);
+      const xiaomi = page.getByTestId("api-endpoint-template-xiaomi");
+      await xiaomi.scrollIntoViewIfNeeded();
+      await expect(xiaomi.getByText("X", { exact: true })).toBeVisible();
     });
   });
 
@@ -2799,6 +3028,10 @@ test.describe("Checking an API endpoint before saving it", () => {
     await expect(page.getByTestId("api-endpoint-connection-models-field-error")).toContainText(
       "HTTP 401",
     );
+    // 原因不露原样请求地址（地址就在上面的输入框里）。
+    await expect(page.getByTestId("api-endpoint-connection-models-field-error")).not.toContainText(
+      /https?:\/\//,
+    );
     await expect(page.getByTestId("api-endpoint-connection-catalog")).toHaveCount(0);
 
     await page.getByTestId("api-endpoint-connection-api-key").fill(RELAY_KEY);
@@ -3032,6 +3265,26 @@ test.describe("An endpoint's headers, extra body and key header", () => {
       "anthropic-workspace-id",
     );
     await expect(suggested).toHaveCount(0);
+  });
+
+  test("at 390 a header's name and value read as one pair: the gap between pairs is wider than inside one", async ({
+    page,
+  }) => {
+    await openApiEndpointsPage(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByTestId("api-endpoints-empty-add").filter({ visible: true }).click();
+    await page.getByTestId("api-endpoint-template-custom").click();
+    await page.getByTestId("api-endpoint-connection-advanced-toggle").click();
+    await page.getByTestId("api-endpoint-connection-add-header").click();
+    const name0 = await boxOf(page.getByTestId("api-endpoint-connection-header-name-0"));
+    const value0 = await boxOf(page.getByTestId("api-endpoint-connection-header-value-0"));
+    const name1 = await boxOf(page.getByTestId("api-endpoint-connection-header-name-1"));
+    // 窄窗口里名和值上下两行。
+    expect(value0.y).toBeGreaterThan(name0.y + name0.height - 1);
+    // testID 落在框里的文字上，框的上下留白两边一样，相减就抵消了。
+    const inside = value0.y - (name0.y + name0.height);
+    const between = name1.y - (value0.y + value0.height);
+    expect(between - inside).toBeGreaterThanOrEqual(8);
   });
 });
 
@@ -5272,6 +5525,15 @@ async function openEndpointRow(page: Page, endpointId: string): Promise<void> {
   await expect(page.getByTestId("api-endpoint-detail").filter({ visible: true })).toBeVisible();
 }
 
+/** 刚关掉的本机端口：连上去被拒。 */
+async function closedPort(): Promise<number> {
+  const server = createServer();
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address() as AddressInfo;
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  return port;
+}
+
 async function openEndpointDetail(page: Page, endpointId: string): Promise<void> {
   await openApiEndpointsPage(page);
   await openEndpointRow(page, endpointId);
@@ -5634,6 +5896,44 @@ test.describe("Vendor status pages", () => {
     await expect(deepseekLink.getByTestId("api-endpoint-row-vendor-status-text")).toHaveCount(0);
   });
 
+  test("the status pages are asked only while the Usage page or the API endpoints page is open, every five minutes", async ({
+    page,
+  }) => {
+    // 用量页的订阅卡片要有一个账号才挂上；用 daemon 端真实的用量来源给它一个。
+    const usage = await installLoginUsage({
+      status: "available",
+      windows: [{ id: "weekly", label: "Weekly", shortLabel: "wk", summary: true, usedPct: 54 }],
+    });
+    try {
+      await page.clock.install();
+      const asked = await answerVendorStatus(page, {
+        payload: { autoUpdate: true, vendors: [], endpointVendors: {}, error: null },
+      });
+      const serverId = getServerId();
+      // 页面关着时问过的话，打开页面后第一次答之前就已经到了，次数会多出来（同一条连接按顺序到）。
+      const expectAsked = (times: number) => expect.poll(() => asked.count).toBe(times);
+
+      await gotoAppShell(page);
+      await page.clock.fastForward("11:00");
+      await openUsagePageFromShell(page);
+      await expect(page.getByTestId("usage-plan-usage-card")).toContainText("Weekly");
+      await expectAsked(1);
+      await page.clock.fastForward("05:01");
+      await expectAsked(2);
+
+      await openSettings(page);
+      await openSettingsHost(page, serverId);
+      await openSettingsHostSection(page, serverId, "providers");
+      await page.clock.fastForward("11:00");
+      await openSettingsHostSection(page, serverId, "api-endpoints");
+      await expectAsked(3);
+      await page.clock.fastForward("05:01");
+      await expectAsked(4);
+    } finally {
+      await usage.cleanup();
+    }
+  });
+
   test("a failed status request leaves the list as it is", async ({ page }) => {
     const official = await seedApiEndpoint(client, {
       name: "Anthropic official",
@@ -5826,6 +6126,30 @@ test.describe("Import from other apps", () => {
     await expect(list).toContainText("My Codex Relay");
     await expect(list).toContainText("My Relay");
   });
+
+  for (const language of ["en", "zh-CN"] as const) {
+    test(`at 390 an entry's facts wrap without a line starting with the · separator (${language})`, async ({
+      page,
+    }) => {
+      await page.addInitScript((value) => {
+        localStorage.setItem("@paseo:app-settings", JSON.stringify({ language: value }));
+      }, language);
+      await writeImportSources();
+      await openApiEndpointsPage(page);
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.getByTestId("api-endpoints-import-button").click();
+      for (const ref of ["claude/team", "mine"]) {
+        // 窄窗口里导入窗口是底部弹出的那份，按条目自己的标记找。
+        const facts = page
+          .getByTestId(`api-endpoint-import-item-${ref}-facts`)
+          .filter({ visible: true });
+        const lines = await linesOf(facts);
+        // 390 宽放不下一行，否则这条测不到折行。
+        expect(lines.length).toBeGreaterThan(1);
+        for (const line of lines) expect(line.startsWith("·"), line).toBe(false);
+      }
+    });
+  }
 
   test("a scan that fails says why and can be tried again", async ({ page }) => {
     const scan = { fails: true };
@@ -6115,4 +6439,42 @@ async function failImportPickAt(page: Page, index: number): Promise<void> {
       server.send(JSON.stringify({ ...request, message: { ...request.message, picks } }));
     });
   });
+}
+
+// 被省略号截断的文字：scrollWidth 比可见宽度大；多 1 像素是取整误差。
+async function clippedTextsOf(locator: Locator): Promise<string[]> {
+  return locator.evaluate((root) =>
+    [root, ...root.querySelectorAll("*")]
+      .filter((el) => el.scrollWidth > el.clientWidth + 1)
+      .map((el) => el.textContent ?? ""),
+  );
+}
+
+// 按渲染出来的行切文字：逐字取位置，纵坐标变了就是新的一行；空白不算。
+async function linesOf(locator: Locator): Promise<string[]> {
+  return locator.evaluate((root) => {
+    const lines: { top: number; text: string }[] = [];
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const text = node.textContent ?? "";
+      for (let i = 0; i < text.length; i += 1) {
+        if (/\s/.test(text[i])) continue;
+        const range = document.createRange();
+        range.setStart(node, i);
+        range.setEnd(node, i + 1);
+        const top = Math.round(range.getBoundingClientRect().top);
+        const last = lines.at(-1);
+        // 同一行里的字纵坐标差不过几像素，换行要差一整个行高。
+        if (last && Math.abs(last.top - top) < 4) last.text += text[i];
+        else lines.push({ top, text: text[i] });
+      }
+    }
+    return lines.map((line) => line.text);
+  });
+}
+
+async function boxOf(locator: Locator): Promise<{ y: number; height: number }> {
+  const box = await locator.boundingBox();
+  if (!box) throw new Error("not laid out");
+  return box;
 }

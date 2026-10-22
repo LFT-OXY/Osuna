@@ -6,4 +6,3 @@
 {"file": "docs/testing.md", "reason": "确定性、真实依赖优先、测试组织"}
 {"file": "docs/glossary.md", "reason": "术语表 Import 两条与新增三条"}
 {"file": "docs/i18n.md", "reason": "单复数与新增文案"}
-{"file": ".atw/tasks/10-21-endpoint-management-ux-followups/issues/01-merge-main-and-green-ci.md", "reason": "ATW current ticket"}

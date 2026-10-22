@@ -115,14 +115,14 @@ export async function fetchUpstreamModels(input: {
           ok: false,
           error: {
             code: "upstream_timeout",
-            message: `No response from ${url} within ${Math.round(input.timeoutMs / 1000)}s`,
+            message: `No response within ${Math.round(input.timeoutMs / 1000)}s`,
           },
         };
       }
       attempts.push({ kind: "network", url, detail: describeNetworkError(error) });
     }
   }
-  return { ok: false, error: summarize(attempts, redact) };
+  return { ok: false, error: summarize({ attempts, base, redact }) };
 }
 
 function buildHeaders(input: {
@@ -271,7 +271,13 @@ function listedEfforts(entry: Record<string, unknown>): string[] {
  * 两个地址都失败时挑最有用的原因：鉴权、服务端错误这类非 404/405 的状态码优先；
  * 都连不上是 unreachable；其余（404、不是模型列表）视为不支持列出模型。
  */
-function summarize(attempts: FailedAttempt[], redact: (text: string) => string): UpstreamFailure {
+function summarize(input: {
+  attempts: FailedAttempt[];
+  base: string;
+  redact: (text: string) => string;
+}): UpstreamFailure {
+  const { attempts, base, redact } = input;
+  const describe = (attempt: FailedAttempt) => describeAttempt({ attempt, base });
   const httpError = attempts.find(
     (attempt): attempt is Extract<FailedAttempt, { kind: "http" }> =>
       attempt.kind === "http" && attempt.status !== 404 && attempt.status !== 405,
@@ -279,25 +285,38 @@ function summarize(attempts: FailedAttempt[], redact: (text: string) => string):
   if (httpError) {
     return {
       code: "upstream_error",
-      message: redact(describeAttempt(httpError)),
+      message: redact(describe(httpError)),
       status: httpError.status,
     };
   }
+  const message = redact([...new Set(attempts.map(describe))].join("\n"));
   if (attempts.every((attempt) => attempt.kind === "network")) {
-    return {
-      code: "upstream_unreachable",
-      message: redact(attempts.map(describeAttempt).join("\n")),
-    };
+    return { code: "upstream_unreachable", message };
   }
-  return { code: "models_unsupported", message: redact(attempts.map(describeAttempt).join("\n")) };
+  return { code: "models_unsupported", message };
 }
 
-function describeAttempt(attempt: FailedAttempt): string {
-  const prefix = `GET ${attempt.url}:`;
+/**
+ * 不写「GET <地址>」（界面上已有地址，报错里不露原样请求地址），只把 base 后面问的路径接在原因后，
+ * 如「HTTP 401: Invalid API key · /v1/models」；与 app 里测试结果的 conciseUpstreamMessage 同一写法。
+ */
+function describeAttempt(input: { attempt: FailedAttempt; base: string }): string {
+  const { attempt, base } = input;
+  // 连不上时两个地址的原因一样，不必分路径。
+  if (attempt.kind === "network") return attempt.detail;
+  let reason = attempt.detail;
   if (attempt.kind === "http") {
-    return attempt.detail
-      ? `${prefix} HTTP ${attempt.status}: ${attempt.detail}`
-      : `${prefix} HTTP ${attempt.status}`;
+    reason = attempt.detail
+      ? `HTTP ${attempt.status}: ${attempt.detail}`
+      : `HTTP ${attempt.status}`;
   }
-  return `${prefix} ${attempt.detail}`;
+  const path = askedPath({ url: attempt.url, base });
+  return path === "" ? reason : `${reason} · ${path}`;
+}
+
+function askedPath(input: { url: string; base: string }): string {
+  const { url, base } = input;
+  // Azure 先问的部署名地址在 base 之上，只取路径；查询串不写。
+  if (url.startsWith(base)) return url.slice(base.length).split("?")[0] ?? "";
+  return URL.canParse(url) ? new URL(url).pathname : "";
 }

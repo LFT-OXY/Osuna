@@ -70,7 +70,7 @@ type FormTextInputProps = AdaptiveTextInputProps & {
   size?: FieldControlSize;
   /** 框内、文字前的固定前缀（如货币符号），不属于输入的值。 */
   prefix?: string;
-  /** 校验没过：边框换成危险色，聚焦环照旧。 */
+  /** 校验没过：边框和聚焦环都换成危险色。 */
   invalid?: boolean;
 };
 
@@ -303,7 +303,7 @@ const formInputStyles = StyleSheet.create((theme) => {
       ...geometry.controlDisabled,
     },
     controlInvalid: {
-      borderColor: theme.colors.statusDanger,
+      ...createControlGeometry(theme).controlInvalid,
     },
     input: {
       flex: 1,

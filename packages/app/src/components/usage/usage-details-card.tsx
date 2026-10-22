@@ -1,6 +1,15 @@
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Pressable, Text, useWindowDimensions, View, type ViewStyle } from "react-native";
+import {
+  Pressable,
+  Text,
+  useWindowDimensions,
+  View,
+  type LayoutChangeEvent,
+  type StyleProp,
+  type TextStyle,
+  type ViewStyle,
+} from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { ScrollView } from "@/components/ui/scroll-view";
 import { UsageCard } from "@/components/usage/usage-card";
@@ -25,8 +34,22 @@ import { formatUsageDay, formatUsageMonth } from "@/usage-stats/range-label";
 import { usageSourceColor, usageSourceLabel } from "@/usage-stats/sources";
 import { totalUsageTokens } from "@/usage-stats/totals";
 
-/** Below this the table scrolls sideways rather than squeezing its columns. */
-const TABLE_MIN_WIDTH = 672;
+/**
+ * Column floors, each including the gap on its left. Full widths hold a
+ * nine-digit grouped count (~76px at this size). When the card is narrower than
+ * the full table, counts shorten to `180.2K` and the condensed floors apply, so
+ * a wide window shows every column without sliding; below even those the table
+ * scrolls sideways rather than squeezing its columns.
+ */
+const FULL_COLUMNS = { first: 120, number: 92, small: 56 } as const;
+const CONDENSED_COLUMNS = { first: 104, number: 64, small: 56 } as const;
+
+function tableMinWidth(
+  columns: typeof FULL_COLUMNS | typeof CONDENSED_COLUMNS,
+  numberColumns: number,
+): number {
+  return columns.first + columns.number * numberColumns + columns.small;
+}
 
 /**
  * The rows scroll inside the card instead of growing it: a month of days would
@@ -58,6 +81,63 @@ function toggleKey(current: ReadonlySet<string>, key: string): ReadonlySet<strin
   const next = new Set(current);
   if (!next.delete(key)) next.add(key);
   return next;
+}
+
+type UsageTableKind = "daily" | "monthly";
+
+const NUMBER_COLUMNS: Record<UsageTableKind, number> = {
+  // Total, input, output, cache, reasoning, cost.
+  daily: 6,
+  // Total, input, output, cache, cost.
+  monthly: 5,
+};
+
+/** Column styles and the number format, which narrow together. */
+interface TableLayout {
+  table: StyleProp<ViewStyle>;
+  first: StyleProp<TextStyle>;
+  number: StyleProp<TextStyle>;
+  small: StyleProp<TextStyle>;
+  formatTokens: (value: number) => string;
+}
+
+function tableStyle(kind: UsageTableKind, isCondensed: boolean): StyleProp<ViewStyle> {
+  if (kind === "daily") return isCondensed ? styles.dailyTableCondensed : styles.dailyTable;
+  return isCondensed ? styles.monthlyTableCondensed : styles.monthlyTable;
+}
+
+/** Measures the card and switches to the condensed layout when the full table would not fit. */
+function useTableLayout(kind: UsageTableKind, locale: string) {
+  const fullWidth = tableMinWidth(FULL_COLUMNS, NUMBER_COLUMNS[kind]);
+  const [isCondensed, setIsCondensed] = useState(false);
+  const onLayout = useCallback(
+    (event: LayoutChangeEvent) => {
+      const { width } = event.nativeEvent.layout;
+      // A hidden or not-yet-laid-out table reports 0; keep the last real answer.
+      if (width > 0) setIsCondensed(width < fullWidth);
+    },
+    [fullWidth],
+  );
+  const layout = useMemo<TableLayout>(() => {
+    const table = tableStyle(kind, isCondensed);
+    if (!isCondensed) {
+      return {
+        table,
+        first: styles.firstColumn,
+        number: styles.numberColumn,
+        small: styles.smallColumn,
+        formatTokens: (value) => formatGroupedNumber(value, locale),
+      };
+    }
+    return {
+      table,
+      first: [styles.firstColumn, styles.firstColumnCondensed],
+      number: [styles.numberColumn, styles.numberColumnCondensed],
+      small: styles.smallColumn,
+      formatTokens: formatUsageTokensCompact,
+    };
+  }, [isCondensed, kind, locale]);
+  return { layout, onLayout };
 }
 
 interface UsageDetailsCardProps {
@@ -199,25 +279,22 @@ function UsageDailyTable({
 }) {
   const { t } = useTranslation();
   const days = useMemo(() => report.days.toReversed(), [report.days]);
+  const { layout, onLayout } = useTableLayout("daily", locale);
 
   if (days.length === 0) return <UsageDetailsEmpty testID="usage-details-daily-empty" />;
 
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={TABLE_CONTENT_STYLE}
-    >
-      <View style={styles.table} testID="usage-details-daily">
-        <View style={styles.headRow}>
-          <Text style={[styles.headCell, styles.firstColumn]}>{t("usage.columns.date")}</Text>
-          <Text style={[styles.headCell, styles.numberColumn]}>{t("usage.columns.total")}</Text>
-          <Text style={[styles.headCell, styles.numberColumn]}>{t("usage.columns.input")}</Text>
-          <Text style={[styles.headCell, styles.numberColumn]}>{t("usage.columns.output")}</Text>
-          <Text style={[styles.headCell, styles.numberColumn]}>{t("usage.columns.cache")}</Text>
-          <Text style={[styles.headCell, styles.numberColumn]}>{t("usage.columns.reasoning")}</Text>
-          <Text style={[styles.headCell, styles.smallColumn]}>{t("usage.columns.sessions")}</Text>
-          <Text style={[styles.headCell, styles.numberColumn]}>{t("usage.columns.cost")}</Text>
+    <ScrollView horizontal contentContainerStyle={TABLE_CONTENT_STYLE} onLayout={onLayout}>
+      <View style={layout.table} testID="usage-details-daily">
+        <View style={styles.headRow} testID="usage-details-daily-head">
+          <Text style={[styles.headCell, layout.first]}>{t("usage.columns.date")}</Text>
+          <Text style={[styles.headCell, layout.number]}>{t("usage.columns.total")}</Text>
+          <Text style={[styles.headCell, layout.number]}>{t("usage.columns.input")}</Text>
+          <Text style={[styles.headCell, layout.number]}>{t("usage.columns.output")}</Text>
+          <Text style={[styles.headCell, layout.number]}>{t("usage.columns.cache")}</Text>
+          <Text style={[styles.headCell, layout.number]}>{t("usage.columns.reasoning")}</Text>
+          <Text style={[styles.headCell, layout.small]}>{t("usage.columns.sessions")}</Text>
+          <Text style={[styles.headCell, layout.number]}>{t("usage.columns.cost")}</Text>
         </View>
         {days.map((day) => (
           <View key={day.day}>
@@ -226,6 +303,7 @@ function UsageDailyTable({
               label={formatUsageDay(day.day, locale)}
               isOpen={openDays.has(day.day)}
               locale={locale}
+              layout={layout}
               total={totalUsageTokens(day.totals)}
               cells={[
                 day.totals.input,
@@ -250,6 +328,7 @@ function UsageDayRow({
   label,
   isOpen,
   locale,
+  layout,
   total,
   cells,
   sessionCount,
@@ -260,6 +339,7 @@ function UsageDayRow({
   label: string;
   isOpen: boolean;
   locale: string;
+  layout: TableLayout;
   total: number;
   cells: readonly number[];
   sessionCount: number;
@@ -277,20 +357,16 @@ function UsageDayRow({
       style={styles.row}
       testID={`usage-details-day-${day}`}
     >
-      <Text style={[styles.dateCell, styles.firstColumn]}>{`${isOpen ? "▾" : "▸"} ${label}`}</Text>
-      <Text style={[styles.totalCell, styles.numberColumn]}>
-        {formatGroupedNumber(total, locale)}
-      </Text>
+      <Text style={[styles.dateCell, layout.first]}>{`${isOpen ? "▾" : "▸"} ${label}`}</Text>
+      <Text style={[styles.totalCell, layout.number]}>{layout.formatTokens(total)}</Text>
       {cells.map((value, index) => (
         // The column list is fixed, so its position is its identity.
-        <Text key={DAILY_CELL_IDS[index]} style={[styles.cell, styles.numberColumn]}>
-          {formatGroupedNumber(value, locale)}
+        <Text key={DAILY_CELL_IDS[index]} style={[styles.cell, layout.number]}>
+          {layout.formatTokens(value)}
         </Text>
       ))}
-      <Text style={[styles.cell, styles.smallColumn]}>
-        {formatGroupedNumber(sessionCount, locale)}
-      </Text>
-      <Text style={[styles.cell, styles.numberColumn]}>{formatUsageCost(estimatedCost)}</Text>
+      <Text style={[styles.cell, layout.small]}>{formatGroupedNumber(sessionCount, locale)}</Text>
+      <Text style={[styles.cell, layout.number]}>{formatUsageCost(estimatedCost)}</Text>
     </Pressable>
   );
 }
@@ -300,48 +376,43 @@ const DAILY_CELL_IDS = ["input", "output", "cache", "reasoning"] as const;
 function UsageMonthlyTable({ report, locale }: { report: MergedUsageReport; locale: string }) {
   const { t } = useTranslation();
   const months = useMemo(() => report.months.toReversed(), [report.months]);
+  const { layout, onLayout } = useTableLayout("monthly", locale);
 
   if (months.length === 0) return <UsageDetailsEmpty testID="usage-details-monthly-empty" />;
 
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={TABLE_CONTENT_STYLE}
-    >
-      <View style={styles.table} testID="usage-details-monthly">
+    <ScrollView horizontal contentContainerStyle={TABLE_CONTENT_STYLE} onLayout={onLayout}>
+      <View style={layout.table} testID="usage-details-monthly">
         <View style={styles.headRow}>
-          <Text style={[styles.headCell, styles.firstColumn]}>{t("usage.columns.month")}</Text>
-          <Text style={[styles.headCell, styles.numberColumn]}>{t("usage.columns.total")}</Text>
-          <Text style={[styles.headCell, styles.numberColumn]}>{t("usage.columns.input")}</Text>
-          <Text style={[styles.headCell, styles.numberColumn]}>{t("usage.columns.output")}</Text>
-          <Text style={[styles.headCell, styles.numberColumn]}>{t("usage.columns.cache")}</Text>
-          <Text style={[styles.headCell, styles.smallColumn]}>{t("usage.columns.sessions")}</Text>
-          <Text style={[styles.headCell, styles.numberColumn]}>{t("usage.columns.cost")}</Text>
+          <Text style={[styles.headCell, layout.first]}>{t("usage.columns.month")}</Text>
+          <Text style={[styles.headCell, layout.number]}>{t("usage.columns.total")}</Text>
+          <Text style={[styles.headCell, layout.number]}>{t("usage.columns.input")}</Text>
+          <Text style={[styles.headCell, layout.number]}>{t("usage.columns.output")}</Text>
+          <Text style={[styles.headCell, layout.number]}>{t("usage.columns.cache")}</Text>
+          <Text style={[styles.headCell, layout.small]}>{t("usage.columns.sessions")}</Text>
+          <Text style={[styles.headCell, layout.number]}>{t("usage.columns.cost")}</Text>
         </View>
         {months.map((month) => (
           <View key={month.month} style={styles.row} testID={`usage-details-month-${month.month}`}>
-            <Text style={[styles.dateCell, styles.firstColumn]}>
+            <Text style={[styles.dateCell, layout.first]}>
               {formatUsageMonth(month.month, locale)}
             </Text>
-            <Text style={[styles.totalCell, styles.numberColumn]}>
-              {formatGroupedNumber(totalUsageTokens(month.totals), locale)}
+            <Text style={[styles.totalCell, layout.number]}>
+              {layout.formatTokens(totalUsageTokens(month.totals))}
             </Text>
-            <Text style={[styles.cell, styles.numberColumn]}>
-              {formatGroupedNumber(month.totals.input, locale)}
+            <Text style={[styles.cell, layout.number]}>
+              {layout.formatTokens(month.totals.input)}
             </Text>
-            <Text style={[styles.cell, styles.numberColumn]}>
-              {formatGroupedNumber(month.totals.output, locale)}
+            <Text style={[styles.cell, layout.number]}>
+              {layout.formatTokens(month.totals.output)}
             </Text>
-            <Text style={[styles.cell, styles.numberColumn]}>
-              {formatGroupedNumber(month.totals.cachedInput + month.totals.cacheWrite, locale)}
+            <Text style={[styles.cell, layout.number]}>
+              {layout.formatTokens(month.totals.cachedInput + month.totals.cacheWrite)}
             </Text>
-            <Text style={[styles.cell, styles.smallColumn]}>
+            <Text style={[styles.cell, layout.small]}>
               {formatGroupedNumber(month.sessionCount, locale)}
             </Text>
-            <Text style={[styles.cell, styles.numberColumn]}>
-              {formatUsageCost(month.estimatedCost)}
-            </Text>
+            <Text style={[styles.cell, layout.number]}>{formatUsageCost(month.estimatedCost)}</Text>
           </View>
         ))}
       </View>
@@ -480,8 +551,25 @@ function UsageDetailsEmpty({ testID }: { testID: string }) {
 const styles = StyleSheet.create((theme) => {
   const palette = theme.colors.usage;
   return {
-    table: {
-      minWidth: TABLE_MIN_WIDTH,
+    // Width 0 plus grow: the card sets the table's width, not its longest header word.
+    dailyTable: {
+      minWidth: tableMinWidth(FULL_COLUMNS, NUMBER_COLUMNS.daily),
+      width: 0,
+      flexGrow: 1,
+    },
+    dailyTableCondensed: {
+      minWidth: tableMinWidth(CONDENSED_COLUMNS, NUMBER_COLUMNS.daily),
+      width: 0,
+      flexGrow: 1,
+    },
+    monthlyTable: {
+      minWidth: tableMinWidth(FULL_COLUMNS, NUMBER_COLUMNS.monthly),
+      width: 0,
+      flexGrow: 1,
+    },
+    monthlyTableCondensed: {
+      minWidth: tableMinWidth(CONDENSED_COLUMNS, NUMBER_COLUMNS.monthly),
+      width: 0,
       flexGrow: 1,
     },
     headRow: {
@@ -507,23 +595,30 @@ const styles = StyleSheet.create((theme) => {
       flexGrow: 2,
       flexShrink: 1,
       flexBasis: 0,
-      minWidth: 120,
+      minWidth: FULL_COLUMNS.first,
       textAlign: "left",
+    },
+    firstColumnCondensed: {
+      minWidth: CONDENSED_COLUMNS.first,
     },
     numberColumn: {
       flexGrow: 1,
       flexShrink: 1,
       flexBasis: 0,
-      // A nine-digit grouped count is ~76px at this size; below that it wraps
-      // onto a second line instead of letting the table scroll sideways.
-      minWidth: 84,
+      minWidth: FULL_COLUMNS.number,
+      // Keeps two right-aligned headers from reading as one word ("ReasoningSessions").
+      paddingLeft: theme.spacing[2],
       textAlign: "right",
+    },
+    numberColumnCondensed: {
+      minWidth: CONDENSED_COLUMNS.number,
     },
     smallColumn: {
       flexGrow: 1,
       flexShrink: 1,
       flexBasis: 0,
-      minWidth: 48,
+      minWidth: FULL_COLUMNS.small,
+      paddingLeft: theme.spacing[2],
       textAlign: "right",
     },
     dateCell: {
