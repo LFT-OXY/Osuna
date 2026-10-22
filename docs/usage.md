@@ -245,6 +245,17 @@ with what is in the form: its Balance URL, method, field, key, account token,
 user ID, base URLs and headers, saved or not. Its answer is not kept for the
 minute nor as the last reading.
 
+"Detect URL", under the Balance URL in the edit dialog, is the only request that
+guesses an address, and only when you press it. With the form's key, base URLs
+and headers (never the account token) it asks `GET <site>/api/usage/token`
+(new-api), then `GET <site>/v1/usage` (sub2api), and stops at the first that
+answers with a balance, filling that address into the form with its default
+field. The site is the scheme and host of the first http(s) base URL, taken in
+the order Chat, Anthropic, Responses. When neither answers, each address's
+reason stays under the button. Nothing is saved, kept for the minute, or taken
+as the last reading, and the daemon never sends these two requests on its own:
+not when listing, reading balances or starting.
+
 It carries the key as `Authorization: Bearer`, `Accept: application/json`,
 `User-Agent: Osuna/<version>` and the endpoint's own **Headers**, which can
 replace that user agent. When it is sent depends on the "Auto-refresh balance

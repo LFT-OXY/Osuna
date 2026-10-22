@@ -1829,3 +1829,45 @@ headers = withoutHeader(withUserHeaders(base, extras), "authorization");
 headers.authorization = balanceAuthorization(source.token);
 ```
 
+## Scenario: Detect URL — a user-pressed guess at the balance URL (endpoint-balance ticket 07; magpie has no counterpart)
+
+### 1. Scope / Trigger
+- New RPC carrying the form's unsaved key and addresses to an address the user never typed; the only balance request that guesses, so when it may be sent is part of the contract.
+
+### 2. Signatures
+- `provider.api_endpoint.detect_balance_url.request { endpointId?, apiKey?, baseUrls?, templateId?, ...ApiEndpointRequestExtras }` → `.response { requestId, detected: { url, field } | null, attempts: { url, reading: ApiEndpointBalanceReading }[], error }` (`daemon.manage`, cancellable through `cancel`, gated by `apiEndpointBalance`).
+- Server `balance.ts` `balanceSiteOf(baseUrls) → string | null`; service `detectBalanceUrl(ApiEndpointBalanceFormInput, signal)`. `ApiEndpointBalanceFormInput` is the form values shared with `checkBalance` (`formBalanceValues` resolves key, addresses and extras for both; session `balanceFormOf` copies them off either request).
+- App: `ConnectionFormDeps.detectBalanceUrl`, state `balanceDetect: idle | detecting | found { url, reading } | missed { attempts } | failed { message }`, `canDetectBalanceUrl`.
+
+### 3. Contracts
+- Site = origin of the first http(s) base URL in the order Chat, Anthropic, Responses (magpie editor's `origin(draft.chat || draft.anthropic || draft.responses)`); path prefixes are dropped (see the task's `research/decisions.md`).
+- Tries `NEW_API_BALANCE_QUERIES.key` then `SUB2API_BALANCE_QUERIES.key` on the site, each through `readEndpointBalance` with `balance: { url }`, `balanceToken: null`, a fresh `BALANCE_READ_TIMEOUT_MS`; stops at the first `status: "ok"`. `detected.field` is `defaultBalanceField(url)`.
+- `attempts` lists every try in order (the last is the hit). Nothing touches `keptBalances` or `LastBalanceReadings`; the daemon never calls it from list, read_balance or startup.
+- App on `found`: URL filled (generation bumped), method `GET`, field through `fieldAfterUsing`. `missed` / `failed` stay until pressed again or the dialog closes; closing aborts the request.
+
+### 4. Validation & Error Matrix
+- No key (typed or saved) → `error.code: "invalid_input"`, `attempts: []`, nothing sent.
+- No http(s) base URL → `invalid_input`, nothing sent.
+- Unknown `endpointId` → `not_found`; aborted → `cancelled` (app maps to `idle`).
+- Each failed try keeps its own `reading.failure` (404 → `wrong_url`, 401 → `token_rejected`, key masked).
+
+### 5. Good/Base/Bad Cases
+- Good: new-api site answers `/api/usage/token` → one attempt, `detected.field: "$data.total_available / 500000"`.
+- Base: `/api/usage/token` 404, `/v1/usage` `{ remaining: 3.5 }` → two attempts, `detected.url` ends `/v1/usage`.
+- Bad: wrong key → `detected: null`, two `token_rejected` attempts.
+
+### 6. Tests Required
+- `daemon-e2e/api-endpoint-balance.e2e.test.ts` › "detecting the balance address…": new-api first try (headers, UA, nothing saved), sub2api second, neither with masked key, edited endpoint uses the saved key and never the token, no key / no site refused, never sent on list / read / restart.
+- Protocol `messages.api-endpoint.test.ts`: request, found, rejection.
+- App `connection-form-model.test.ts` › "detecting the balance address"; browser `Balance` › "Detect URL fills in…".
+
+### 7. Wrong vs Correct
+#### Wrong
+```ts
+// 填了令牌就用令牌试：两个 key 级地址只认 key，令牌在这里一定被拒（工单 06 的 token_on_key_url）
+readEndpointBalance({ ..., balanceToken: this.store.getBalanceToken(id) });
+```
+#### Correct
+```ts
+readEndpointBalance({ endpoint: { id, baseUrls, balance: { url } }, apiKey, balanceToken: null, ... });
+```

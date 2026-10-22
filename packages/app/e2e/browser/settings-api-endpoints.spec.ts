@@ -6744,6 +6744,45 @@ test.describe("Balance", () => {
     expect(listed.endpoints.find((endpoint) => endpoint.id === id)?.balance).toBeUndefined();
   });
 
+  test("Detect URL fills in the balance URL it found and shows the balance; neither answering says why for each", async ({
+    page,
+  }) => {
+    const id = await seedRelay();
+    await openEndpointDetail(page, id);
+    await page.getByTestId("api-endpoint-edit-connection").filter({ visible: true }).click();
+    await page.getByTestId("api-endpoint-connection-advanced-toggle").click();
+    const detect = page.getByTestId("api-endpoint-connection-detect-balance-url");
+    const result = page.getByTestId("api-endpoint-connection-detect-balance-result");
+
+    // 假中转站没有 new-api 的 /api/usage/token，sub2api 的 /v1/usage 只给限额窗口：余额是剩得最少的 5 小时窗口。
+    await detect.click();
+    await expect(result).toContainText("Found a sub2api site; the Balance URL is filled in");
+    await expect(result).toContainText("Balance $5.00");
+    await expect(page.getByTestId("api-endpoint-connection-balance-url-input")).toHaveValue(
+      `${relay.origin}/v1/usage`,
+    );
+    await expect(page.getByTestId("api-endpoint-connection-balance-field-input")).toHaveAttribute(
+      "placeholder",
+      "$remaining",
+    );
+
+    await page.getByTestId("api-endpoint-connection-api-key").fill("sk-wrong");
+    await detect.click();
+    await expect(result).toContainText(
+      "Neither new-api's nor sub2api's balance query answered with a balance",
+    );
+    const attempts = result.getByTestId("api-endpoint-connection-detect-balance-attempt");
+    await expect(attempts).toHaveCount(2);
+    await expect(attempts.nth(0)).toContainText("/api/usage/token: Token rejected");
+    await expect(attempts.nth(1)).toContainText("/v1/usage: Token rejected");
+    await expect(attempts.nth(1)).toContainText("Invalid API key");
+
+    // 只填不存：取消后这家没有余额设置。
+    await page.getByRole("button", { name: "Cancel" }).click();
+    const listed = await client.apiEndpointList("claude");
+    expect(listed.endpoints.find((endpoint) => endpoint.id === id)?.balance).toBeUndefined();
+  });
+
   test("an endpoint with no known balance query offers to fill in its balance URL, opening the editor at it", async ({
     page,
   }) => {

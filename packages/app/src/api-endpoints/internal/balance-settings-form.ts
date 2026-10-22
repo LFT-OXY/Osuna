@@ -12,6 +12,7 @@ import {
 import type {
   ApiEndpointBalanceReading,
   ApiEndpointBalanceSettings,
+  ApiEndpointBalanceUrlAttempt,
   ApiEndpointSaveRequest,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 
@@ -32,6 +33,17 @@ export type BalanceCheck =
   | { status: "idle" }
   | { status: "checking" }
   | { status: "done"; reading: ApiEndpointBalanceReading }
+  | { status: "failed"; message: string };
+
+/**
+ * 「自动识别」：没按过、识别中、试中了（地址已填进表单，带它查出的读数）、都不中（每个试过的地址与原因）、
+ * 请求本身没成立（断线、主机拒收）。
+ */
+export type BalanceDetect =
+  | { status: "idle" }
+  | { status: "detecting" }
+  | { status: "found"; url: string; reading: ApiEndpointBalanceReading }
+  | { status: "missed"; attempts: ApiEndpointBalanceUrlAttempt[] }
   | { status: "failed"; message: string };
 
 export function balanceFieldsOf(settings: ApiEndpointBalanceSettings | undefined): BalanceFields {

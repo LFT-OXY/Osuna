@@ -45,6 +45,7 @@ import {
   type ApiEndpointTestConnectionResult,
   type ApiEndpointVendorStatusResponse,
   type ApiEndpointBalanceReading,
+  type ApiEndpointBalanceUrlAttempt,
   type ApiEndpointImportItem,
   type ApiEndpointImportPick,
   type ApiEndpointImportSource,
@@ -338,6 +339,7 @@ import {
   BALANCE_KEPT_MS,
   BALANCE_PAGE_TIMEOUT_MS,
   BALANCE_READ_TIMEOUT_MS,
+  balanceSiteOf,
   notAskedReading,
   readEndpointBalance,
   type BalanceVendorId,
@@ -403,7 +405,12 @@ import {
 } from "./insecure-tls.js";
 import { storedRequestExtras, unsendableHeader, type RequestExtras } from "./request-extras.js";
 import { LastBalanceReadings } from "./balance-last.js";
-import { balanceMethodOf } from "@getpaseo/protocol/api-endpoint/balance-settings";
+import {
+  balanceMethodOf,
+  defaultBalanceField,
+  NEW_API_BALANCE_QUERIES,
+  SUB2API_BALANCE_QUERIES,
+} from "@getpaseo/protocol/api-endpoint/balance-settings";
 import { endpointKnowsModel, settleModelSettings } from "./model-settings.js";
 import {
   cleanAutoPickRules,
@@ -546,12 +553,16 @@ export interface ApiEndpointSaveInput extends ApiEndpointRequestExtrasInput {
   balanceToken?: string;
 }
 
-/** 「查询余额」带的表单值：key 与地址省略即用 endpointId 那家存的。 */
-export interface ApiEndpointCheckBalanceInput extends ApiEndpointRequestExtrasInput {
+/** 「查询余额」与「自动识别」带的表单值：key 与地址省略即用 endpointId 那家存的。 */
+export interface ApiEndpointBalanceFormInput extends ApiEndpointRequestExtrasInput {
   endpointId?: string;
   apiKey?: string;
   baseUrls?: { format: string; url: string }[];
   templateId?: string;
+}
+
+/** 「查询余额」带的表单值：key 与地址省略即用 endpointId 那家存的。 */
+export interface ApiEndpointCheckBalanceInput extends ApiEndpointBalanceFormInput {
   balance: ApiEndpointBalanceSettings;
   // 表单里的账户令牌：undefined 用 endpointId 那家存的，空白即没有。
   balanceToken?: string;
@@ -3499,18 +3510,7 @@ export class ApiEndpointService {
     input: ApiEndpointCheckBalanceInput,
     signal: AbortSignal,
   ): Promise<ApiEndpointBalanceReading> {
-    const apiKey = this.resolveRequestKey(input);
-    const saved = input.endpointId ? findEndpoint(this.readState(), input.endpointId) : null;
-    const formUrls = input.baseUrls?.flatMap(({ format, url }) => {
-      const known = API_ENDPOINT_REQUEST_FORMATS.find((candidate) => candidate === format);
-      return known === undefined ? [] : [{ format: known, url }];
-    });
-    const baseUrls = formUrls ?? saved?.baseUrls ?? [];
-    const extras = this.requestExtras({
-      ...input,
-      baseUrl: baseUrls[0]?.url ?? "",
-      ...(input.baseUrls === undefined ? {} : { baseUrls }),
-    });
+    const { apiKey, saved, baseUrls, extras } = this.formBalanceValues(input);
     // 表单的值照保存时的样子读（方法不是 GET、POST 的同样拒收），只是不存。
     const { balance } = savedBalanceSettings({ requested: input.balance, base: null });
     const balanceToken = this.checkedBalanceToken(input.balanceToken, saved);
@@ -3530,6 +3530,81 @@ export class ApiEndpointService {
       if (!signal.aborted) throw error;
       throw new ApiEndpointRequestError({ code: "cancelled", message: "Request cancelled" });
     }
+  }
+
+  /**
+   * 编辑窗口的「自动识别」：用表单里的 key（从不用账户令牌）依次问站点上 new-api 与 sub2api 的 key 级余额查询，
+   * 取第一个查出余额的，回它的地址与默认取值写法。只在用户按下时问；不进 1 分钟缓存，也不记作上次读数。只有取消才抛错。
+   */
+  async detectBalanceUrl(
+    input: ApiEndpointBalanceFormInput,
+    signal: AbortSignal,
+  ): Promise<{
+    detected: { url: string; field: string } | null;
+    attempts: ApiEndpointBalanceUrlAttempt[];
+  }> {
+    const { apiKey, baseUrls, extras } = this.formBalanceValues(input);
+    if (!apiKey) {
+      throw new ApiEndpointRequestError({
+        code: "invalid_input",
+        message: "An API key is needed to detect the balance address",
+      });
+    }
+    const site = balanceSiteOf(baseUrls);
+    if (site === null) {
+      throw new ApiEndpointRequestError({
+        code: "invalid_input",
+        message: "No http or https address to find the site on",
+      });
+    }
+    const attempts: ApiEndpointBalanceUrlAttempt[] = [];
+    for (const query of [NEW_API_BALANCE_QUERIES.key, SUB2API_BALANCE_QUERIES.key]) {
+      const url = site + query;
+      let reading: ApiEndpointBalanceReading;
+      try {
+        reading = await readEndpointBalance({
+          endpoint: { id: input.endpointId ?? "", baseUrls, balance: { url } },
+          apiKey,
+          balanceToken: null,
+          extras,
+          userAgent: this.userAgent,
+          now: this.now,
+          vendorUrls: this.balanceUrls,
+          signal,
+          deadline: AbortSignal.timeout(BALANCE_READ_TIMEOUT_MS),
+        });
+      } catch (error) {
+        if (!signal.aborted) throw error;
+        throw new ApiEndpointRequestError({ code: "cancelled", message: "Request cancelled" });
+      }
+      attempts.push({ url, reading });
+      if (reading.status === "ok") {
+        return { detected: { url, field: defaultBalanceField(url) ?? "" }, attempts };
+      }
+    }
+    return { detected: null, attempts };
+  }
+
+  /** 「查询余额」与「自动识别」用的表单值：key、各格式地址与请求头等附加项，表单没给的用 endpointId 那家存的。 */
+  private formBalanceValues(input: ApiEndpointBalanceFormInput): {
+    apiKey: string | null;
+    saved: StoredApiEndpoint | null;
+    baseUrls: StoredApiEndpoint["baseUrls"];
+    extras: RequestExtras;
+  } {
+    const apiKey = this.resolveRequestKey(input);
+    const saved = input.endpointId ? findEndpoint(this.readState(), input.endpointId) : null;
+    const formUrls = input.baseUrls?.flatMap(({ format, url }) => {
+      const known = API_ENDPOINT_REQUEST_FORMATS.find((candidate) => candidate === format);
+      return known === undefined ? [] : [{ format: known, url }];
+    });
+    const baseUrls = formUrls ?? saved?.baseUrls ?? [];
+    const extras = this.requestExtras({
+      ...input,
+      baseUrl: baseUrls[0]?.url ?? "",
+      ...(input.baseUrls === undefined ? {} : { baseUrls }),
+    });
+    return { apiKey, saved, baseUrls, extras };
   }
 
   /**

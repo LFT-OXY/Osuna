@@ -722,6 +722,10 @@ type ApiEndpointCheckBalancePayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.check_balance.response" }
 >["payload"];
+type ApiEndpointDetectBalanceUrlPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.detect_balance_url.response" }
+>["payload"];
 type ApiEndpointSetBalanceAutoRefreshPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.set_balance_auto_refresh.response" }
@@ -6729,6 +6733,23 @@ export class DaemonClient {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId,
       message: { type: "provider.api_endpoint.check_balance.request", ...options },
+    });
+  }
+
+  /**
+   * 编辑窗口「高级」里的「自动识别」：用表单里还没保存的 key、地址与请求头依次试 new-api 与 sub2api 的 key 级余额地址。
+   * 可以用 apiEndpointCancel 按 requestId 取消。只有声明了 apiEndpointBalance 的 daemon 认。
+   */
+  async apiEndpointDetectBalanceUrl(
+    options: Omit<
+      Extract<SessionInboundMessage, { type: "provider.api_endpoint.detect_balance_url.request" }>,
+      "type" | "requestId"
+    >,
+    requestId?: string,
+  ): Promise<ApiEndpointDetectBalanceUrlPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.detect_balance_url.request", ...options },
     });
   }
 

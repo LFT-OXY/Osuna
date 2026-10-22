@@ -2799,6 +2799,10 @@ export const fr: TranslationResources = {
           fieldInfo:
             "Où se trouve le montant dans la réponse, p. ex. data.balance. Ce peut être un calcul avec + - * / et des parenthèses, p. ex. data.total / 500000. « $ » ou « ¥ » devant ajoute le symbole ; « % » après l’affiche en pourcentage avec une barre. Plusieurs, chacun avec une étiquette, se séparent par « ; », p. ex. 5h: a.used / a.cap %; $credits.left. Les éléments d’une liste s’écrivent a.*.used, ou a[status=active].used pour ceux qui correspondent, dans sum(), max(), min() ou count(). Laissé vide, les adresses new-api, sub2api et credit grants sont lues comme l’indique l’exemple.",
           check: "Vérifier le solde",
+          detect: "Détecter l'URL",
+          detectFound: "Site {{kind}} détecté ; l'URL du solde est remplie",
+          detectMissed: "Ni l'URL du solde de new-api ni celle de sub2api n'ont renvoyé de solde",
+          detectAttempt: "{{path}} : {{reason}}",
           nothingToAsk:
             "Aucune URL du solde à interroger, et le solde de ce fournisseur n’est pas connu",
           token: "Jeton du compte",

@@ -2136,6 +2136,59 @@ describe("API endpoint balance (apiEndpointBalance)", () => {
       expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
     }
   });
+  it("parses detect_balance_url with the form's values, what it found, what it tried and its rejection", () => {
+    const request = {
+      type: "provider.api_endpoint.detect_balance_url.request" as const,
+      requestId: "req-db",
+      endpointId: "ep_1",
+      apiKey: "sk-typed",
+      baseUrls: [{ format: "openai_chat", url: "https://relay.example/v1" }],
+      headers: { "X-Plain": "kept" },
+    };
+    expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+    const bare = {
+      type: "provider.api_endpoint.detect_balance_url.request" as const,
+      requestId: "r",
+    };
+    expect(SessionInboundMessageSchema.parse(bare)).toEqual(bare);
+    const failed = {
+      endpointId: "ep_1",
+      status: "failed",
+      items: [],
+      readAt: "2026-10-22T08:00:00.000Z",
+      failure: { reason: "wrong_url", detail: null, status: 404 },
+    };
+    const ok = {
+      endpointId: "ep_1",
+      status: "ok",
+      items: [{ label: null, text: "$3.50", value: 3.5, unit: "USD", ratio: null }],
+      readAt: "2026-10-22T08:00:00.000Z",
+      failure: null,
+    };
+    for (const payload of [
+      {
+        requestId: "req-db",
+        detected: { url: "https://relay.example/v1/usage", field: "$remaining" },
+        attempts: [
+          { url: "https://relay.example/api/usage/token", reading: failed },
+          { url: "https://relay.example/v1/usage", reading: ok },
+        ],
+        error: null,
+      },
+      {
+        requestId: "req-db",
+        detected: null,
+        attempts: [],
+        error: { code: "invalid_input", message: "no key" },
+      },
+    ]) {
+      const response = {
+        type: "provider.api_endpoint.detect_balance_url.response" as const,
+        payload,
+      };
+      expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+    }
+  });
   it("parses an account token on a save and a check, its mask and user ID on an endpoint, and reveal_secret", () => {
     const save = {
       type: "provider.api_endpoint.save.request" as const,

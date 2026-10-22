@@ -2769,6 +2769,11 @@ export const ja: TranslationResources = {
           fieldInfo:
             "返答の中で残高がある場所。例：data.balance。+ - * / と括弧で計算できます（例：data.total / 500000）。前に「$」「¥」で記号を付け、後ろに「%」でパーセントとバーを表示します。複数は「;」で区切り、それぞれにラベルを付けられます（例：5h: a.used / a.cap %; $credits.left）。リストの各項目は a.*.used、条件に合うものは a[status=active].used と書き、sum()、max()、min()、count() に入れます。空欄なら new-api、sub2api、credit grants のアドレスはプレースホルダーの式で読みます。",
           check: "残高を照会",
+          detect: "URL を自動識別",
+          detectFound: "{{kind}} と識別し、残高照会 URL を入力しました",
+          detectMissed:
+            "new-api と sub2api のどちらの残高照会 URL からも残高を取得できませんでした",
+          detectAttempt: "{{path}}：{{reason}}",
           nothingToAsk: "残高照会 URL がなく、このベンダーの照会方法もわかりません",
           token: "アカウントトークン",
           tokenInfo:

@@ -1,14 +1,21 @@
 // 余额查询地址、方法、取值写法与「查询余额」的编排照 magpie（https://github.com/yetone/magpie，
 // internal/gui/assets/app.js 编辑窗口的 Balance URL、Balance request method、Balance field、Check balance、
-// 账户令牌（Account balance）与 balanceFix，7597c132）。
+// 账户令牌（Account balance）与 balanceFix，7597c132）。「自动识别」是 Osuna 加的，magpie 没有。
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import React, { useCallback, useMemo } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
-import type { ApiEndpointBalanceMethod } from "@getpaseo/protocol/api-endpoint/balance-settings";
-import type { ApiEndpointBalanceReading } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import {
+  balanceUrlPath,
+  NEW_API_BALANCE_QUERIES,
+  type ApiEndpointBalanceMethod,
+} from "@getpaseo/protocol/api-endpoint/balance-settings";
+import type {
+  ApiEndpointBalanceReading,
+  ApiEndpointBalanceUrlAttempt,
+} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { Button } from "@/components/ui/button";
 import { FormTextInput } from "@/components/ui/form-field";
 import { SegmentedControl, type SegmentedControlOption } from "@/components/ui/segmented-control";
@@ -21,6 +28,7 @@ const KEY = "settings.apiEndpoints.form.balance";
 
 /**
  * 「高级」里的余额设置：方法（GET / POST）与余额查询地址同一行，取值写法的占位是按地址给的默认写法；
+ * 地址下面的「自动识别」用表单里的 key 与地址试 new-api、sub2api 的余额地址，试中就填上，结果写在按钮旁。
  * 账户令牌打码（可显示、可移除），令牌与地址对不上时就地提示并给「改用 …」；new-api 的用户 ID。
  * 「查询余额」在最后，用表单里还没保存的值当场查，结果写在按钮旁，留到再查或关掉窗口。说明都在信息提示里。
  */
@@ -78,6 +86,19 @@ export function BalanceSettingsFields({
               testID="api-endpoint-connection-balance-url-input"
             />
           </View>
+        </View>
+        <View style={styles.checkRow}>
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={model.detectBalanceUrl}
+            loading={state.balanceDetect.status === "detecting"}
+            disabled={!state.canDetectBalanceUrl}
+            testID="api-endpoint-connection-detect-balance-url"
+          >
+            {t(`${KEY}.detect`)}
+          </Button>
+          <DetectResult detect={state.balanceDetect} />
         </View>
       </View>
       <View style={styles.field} testID="api-endpoint-connection-balance-field">
@@ -263,6 +284,78 @@ function UseUrlButton({ url, model }: { url: string; model: ConnectionFormModel 
     >
       {t(`${KEY}.useUrl`, { url })}
     </Button>
+  );
+}
+
+/** 「自动识别」的结果：试中了说是哪种中转并写出查到的余额；都不中逐个写出试过的地址与原因。 */
+function DetectResult({ detect }: { detect: ConnectionFormState["balanceDetect"] }) {
+  const { t } = useTranslation();
+  if (detect.status === "idle" || detect.status === "detecting") return null;
+  if (detect.status === "failed") {
+    return (
+      <Text
+        variant="caption"
+        color="statusDanger"
+        selectable
+        style={styles.result}
+        accessibilityLiveRegion="polite"
+        testID="api-endpoint-connection-detect-balance-result"
+      >
+        {detect.message}
+      </Text>
+    );
+  }
+  if (detect.status === "found") {
+    const kind = balanceUrlPath(detect.url) === NEW_API_BALANCE_QUERIES.key ? "new-api" : "sub2api";
+    return (
+      <View
+        style={styles.result}
+        accessibilityLiveRegion="polite"
+        testID="api-endpoint-connection-detect-balance-result"
+      >
+        <Text variant="caption" color="foregroundMuted">
+          {t(`${KEY}.detectFound`, { kind })}
+        </Text>
+        <Text weight="medium" selectable>
+          {readingLine({ t, reading: detect.reading })}
+        </Text>
+      </View>
+    );
+  }
+  return (
+    <View
+      style={styles.result}
+      accessibilityLiveRegion="polite"
+      testID="api-endpoint-connection-detect-balance-result"
+    >
+      <Text variant="caption" color="statusWarning">
+        {t(`${KEY}.detectMissed`)}
+      </Text>
+      {detect.attempts.map((attempt) => (
+        <AttemptLine key={attempt.url} attempt={attempt} />
+      ))}
+    </View>
+  );
+}
+
+/** 试过的一个地址：路径与没查到的原因，对方的原话在下一行。 */
+function AttemptLine({ attempt }: { attempt: ApiEndpointBalanceUrlAttempt }) {
+  const { t } = useTranslation();
+  const detail = attempt.reading.failure?.detail ?? null;
+  return (
+    <View testID="api-endpoint-connection-detect-balance-attempt">
+      <Text variant="caption" color="foregroundMuted" selectable>
+        {t(`${KEY}.detectAttempt`, {
+          path: balanceUrlPath(attempt.url),
+          reason: failureTitle({ t, failure: attempt.reading.failure }),
+        })}
+      </Text>
+      {detail ? (
+        <Text variant="caption" color="foregroundMuted" selectable numberOfLines={2}>
+          {detail}
+        </Text>
+      ) : null}
+    </View>
   );
 }
 

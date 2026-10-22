@@ -37,6 +37,13 @@
   - 「令牌还要配余额查询地址」的提示在表单地址是 aihubmix.com 时不出：magpie 只对自定义接口给这条提示，AiHubMix 是它的已知厂商，填令牌不填地址就查账户余额。
   - sub2api 的限额窗口放在读数的 `windows`，字段名同套餐用量的窗口，另带 `used`、`limit`、`unit`；协议里另写一份而不是从 `ProviderUsageWindowSchema` 派生，因为 `messages.ts` 引用 `rpc-schemas.ts`，反过来引用会成环。窗口的配速留给工单 08 一起算；详情分区的已用 / 剩余跟随套餐用量现有的显示设置（工单 08 的切换做好后同一个选择）。
 
+- 2026-10-22 工单 07 实现时定下（magpie 没有「自动识别」，细节照 magpie 相近的写法）：
+  - 站点取表单各格式地址里依 Chat、Anthropic、Responses 先后第一个 http(s) 地址的 origin（scheme 加主机），同 magpie `errKeyUsageWithToken` 的 `u.Scheme + "://" + u.Host` 与编辑器「改用 …」的 `origin(draft.chat || draft.anthropic || draft.responses)`。工单写的「照 `keyQueryOf` 取站点」那里会保留账户查询前的路径前缀（如 `/relay/api/user/self` → `/relay/api/usage/token`）；从接口地址推不出可靠的路径前缀（`/relay/v1` 里哪段是站点说不准），所以不保留，部署在子路径下的中转站要自己填地址。magpie 只看第一个非空地址，这里遇到不是 http(s) 的会接着看下一种格式。
+  - 试中的判定是读数 `status` 为 `ok`；两个默认写法都只会出一项或 `no_value`，不会出空的 `ok`。
+  - 试中后表单填地址、方法改回 GET；取值写法同「改用 …」走 `fieldAfterUsing`：空的或 key 查询那几种写法清空、占位写出默认写法，用户自己写的别的写法留着（magpie balanceFix「An unrelated expression belongs to the user」）。工单的「把默认写法填进表单」照工单 06 的约定做成占位，效果相同。
+  - 从不用账户令牌（令牌配这两个 key 级地址只会被拒）；没有 key 或找不到站点时 daemon 拒收（`invalid_input`），界面上按钮此时本就不可点。
+  - 英文界面名叫「Detect URL」，不叫「Auto-detect」：同一个窗口顶上已有识别请求格式的「Auto-detect」。
+
 ## magpie 出处（照做时对照）
 
 ### 按地址认的厂商余额（`provider/balance.go:41-84, 255-470`）

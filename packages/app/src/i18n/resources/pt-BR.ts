@@ -2780,6 +2780,10 @@ export const ptBR: TranslationResources = {
           fieldInfo:
             "Onde o valor está na resposta, ex.: data.balance. Pode ser uma conta com + - * / e parênteses, ex.: data.total / 500000. “$” ou “¥” na frente adiciona o símbolo; “%” depois mostra uma porcentagem com barra. Vários, cada um com rótulo, separam-se por “;”, ex.: 5h: a.used / a.cap %; $credits.left. Os itens de uma lista são a.*.used, ou a[status=active].used para os que atendem, dentro de sum(), max(), min() ou count(). Vazio, os endereços de new-api, sub2api e credit grants são lidos como mostra o exemplo.",
           check: "Consultar saldo",
+          detect: "Detectar URL",
+          detectFound: "Site {{kind}} detectado; a URL do saldo foi preenchida",
+          detectMissed: "Nem a URL do saldo do new-api nem a do sub2api retornaram um saldo",
+          detectAttempt: "{{path}}: {{reason}}",
           nothingToAsk:
             "Não há URL do saldo para consultar e o saldo deste fornecedor não é conhecido",
           token: "Token da conta",

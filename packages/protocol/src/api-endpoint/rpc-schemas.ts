@@ -1539,6 +1539,50 @@ export const ApiEndpointCheckBalanceResponseSchema = z.object({
 export type ApiEndpointCheckBalanceResponse = z.infer<typeof ApiEndpointCheckBalanceResponseSchema>;
 
 /**
+ * 自动识别余额地址（编辑窗口「高级」里的「自动识别」，magpie 没有）：用表单里还没保存的 key、地址与请求头，依次试
+ * new-api 的 /api/usage/token 与 sub2api 的 /v1/usage（拼在这家地址的站点上：Chat、Anthropic、Responses 里第一个
+ * http(s) 地址的 scheme 加主机），取第一个查出余额的。只在用户按下时发，不进 1 分钟缓存与上次读数，不用账户令牌。
+ * key 与附加项的规则同 check_balance。没有 key 或没有站点的拒收（invalid_input）。可以用 cancel 按 requestId 取消。
+ * 只有声明了 apiEndpointBalance 的 daemon 认它。
+ */
+export const ApiEndpointDetectBalanceUrlRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.detect_balance_url.request"),
+  requestId: z.string(),
+  endpointId: z.string().optional(),
+  apiKey: z.string().optional(),
+  baseUrls: z.array(ApiEndpointBaseUrlSchema).optional(),
+  templateId: z.string().optional(),
+  ...ApiEndpointRequestExtrasSchema.shape,
+});
+export type ApiEndpointDetectBalanceUrlRequest = z.infer<
+  typeof ApiEndpointDetectBalanceUrlRequestSchema
+>;
+
+/** 试过的一个地址与它的读数（查出余额的 status 为 ok）。 */
+export const ApiEndpointBalanceUrlAttemptSchema = z.object({
+  url: z.string(),
+  reading: ApiEndpointBalanceReadingSchema,
+});
+export type ApiEndpointBalanceUrlAttempt = z.infer<typeof ApiEndpointBalanceUrlAttemptSchema>;
+
+/**
+ * attempts 依试的先后，试中就停（最后一个是试中的）。detected 是试中的地址与它的默认取值写法，都不中为 null。
+ * 请求本身被拒（找不到接口、没有 key 或站点、被取消）时 attempts 为空，原因在 error。
+ */
+export const ApiEndpointDetectBalanceUrlResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.detect_balance_url.response"),
+  payload: z.object({
+    requestId: z.string(),
+    detected: z.object({ url: z.string(), field: z.string() }).nullable(),
+    attempts: z.array(ApiEndpointBalanceUrlAttemptSchema),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointDetectBalanceUrlResponse = z.infer<
+  typeof ApiEndpointDetectBalanceUrlResponseSchema
+>;
+
+/**
  * 从别的软件导入（Import）：daemon 只读地读本机别的软件的配置（ADR 0013）。每条发现照 Osuna 会加的那家给出，
  * key 打码，原文留在 daemon，导入时按指纹找回。线上的 status、skip、off 是字符串，daemon 以后多一种老客户端照样解析。
  * status：new（新的）、added（已添加）、name_taken（名称已被占用）、other_key（同一家、key 不同）。

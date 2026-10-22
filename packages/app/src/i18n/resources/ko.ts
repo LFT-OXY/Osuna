@@ -2756,6 +2756,10 @@ export const ko: TranslationResources = {
           fieldInfo:
             "응답에서 잔액이 있는 위치입니다(예: data.balance). + - * /와 괄호로 계산할 수 있습니다(예: data.total / 500000). 앞에 “$”나 “¥”를 붙이면 기호가 붙고, 뒤에 “%”를 붙이면 막대와 함께 백분율로 표시합니다. 여러 개는 “;”로 나누고 각각 라벨을 붙일 수 있습니다(예: 5h: a.used / a.cap %; $credits.left). 목록의 각 항목은 a.*.used, 조건에 맞는 항목은 a[status=active].used로 쓰고 sum(), max(), min(), count()에 넣습니다. 비워 두면 new-api, sub2api, credit grants 주소는 자리 표시자의 식으로 읽습니다.",
           check: "잔액 조회",
+          detect: "URL 자동 감지",
+          detectFound: "{{kind}}(으)로 확인되어 잔액 조회 URL을 채웠습니다",
+          detectMissed: "new-api와 sub2api의 잔액 조회 URL 모두 잔액을 돌려주지 않았습니다",
+          detectAttempt: "{{path}}: {{reason}}",
           nothingToAsk: "잔액 조회 URL이 없고 이 공급자의 조회 방법도 알 수 없습니다",
           token: "계정 토큰",
           tokenInfo:

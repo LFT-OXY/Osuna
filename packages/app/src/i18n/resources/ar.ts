@@ -2737,6 +2737,10 @@ export const ar: TranslationResources = {
           fieldInfo:
             "مكان المبلغ في الرد، مثل data.balance. يمكن أن يكون حسابًا بـ + - * / والأقواس، مثل data.total / 500000. ‏«$» أو «¥» في أوله يضيف الرمز؛ و«%» في آخره يعرضه نسبة مئوية مع شريط. عدة قيم، لكل منها تسمية، تُفصل بـ «;»، مثل 5h: a.used / a.cap %; $credits.left. عناصر القائمة a.*.used، أو a[status=active].used لما يطابق الشرط، داخل sum() أو max() أو min() أو count(). إن تُرك فارغًا تُقرأ عناوين new-api وsub2api وcredit grants كما في المثال.",
           check: "الاستعلام عن الرصيد",
+          detect: "اكتشاف العنوان",
+          detectFound: "تم التعرّف على موقع {{kind}}، وأُدخل عنوان الرصيد",
+          detectMissed: "لم يُرجع عنوان رصيد new-api ولا عنوان رصيد sub2api أي رصيد",
+          detectAttempt: "{{path}}: {{reason}}",
           nothingToAsk: "لا يوجد عنوان رصيد للسؤال، وطريقة معرفة رصيد هذا المورّد غير معروفة",
           token: "رمز الحساب",
           tokenInfo:

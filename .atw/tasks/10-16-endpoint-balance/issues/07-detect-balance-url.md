@@ -4,15 +4,15 @@
 
 **Blocked by:** 05
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
-- [ ] 新 RPC 接受未保存的表单值，依次试 `/api/usage/token`、`/v1/usage`（拼在这家地址的站点根上，规则照 magpie `keyQueryOf` 取站点的方式），取第一个回出可用读数的。
-- [ ] 进行中、成功、失败三种状态，失败信息留在原处直到重试或关掉。
-- [ ] 端到端测试：只有 new-api 中、只有 sub2api 中、都不中；daemon 不在列表读取或开机时发这两个请求。
-- [ ] `docs/usage.md` 写进「自动识别」（按下才发、试哪两个地址）。
-- [ ] 9 种语言的新文字齐全。
-- [ ] 浏览器测试：识别成功填入、都不中的提示。
-- [ ] UI：编辑窗口高级区 / 识别成功与都不中 / 1280 与 390 — 结果就地显示。
+- [x] 新 RPC 接受未保存的表单值，依次试 `/api/usage/token`、`/v1/usage`（拼在这家地址的站点根上：依 Chat、Anthropic、Responses 第一个 http(s) 地址的 origin，同 magpie `errKeyUsageWithToken` 与编辑器「改用 …」；`keyQueryOf` 那样保留路径前缀从接口地址推不出，见 `research/decisions.md`），取第一个回出可用读数的。
+- [x] 进行中、成功、失败三种状态，失败信息留在原处直到重试或关掉。
+- [x] 端到端测试：只有 new-api 中、只有 sub2api 中、都不中；daemon 不在列表读取或开机时发这两个请求。
+- [x] `docs/usage.md` 写进「自动识别」（按下才发、试哪两个地址）。
+- [x] 9 种语言的新文字齐全。
+- [x] 浏览器测试：识别成功填入、都不中的提示。
+- [x] UI：编辑窗口高级区 / 识别成功与都不中 / 1280 与 390 — 结果就地显示。
 
 参考：prd 第 5 条，用户故事 21、22。
 

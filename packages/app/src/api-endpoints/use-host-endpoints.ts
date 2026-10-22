@@ -36,6 +36,8 @@ import type {
   ConnectionTestResult,
   ConnectionBalanceCheckRequest,
   ConnectionBalanceCheckResult,
+  ConnectionBalanceDetectRequest,
+  ConnectionBalanceDetectResult,
 } from "./internal/connection-form-model";
 import { CONNECTION_ICON_ERROR_CODES } from "./internal/connection-form-model";
 import {
@@ -157,6 +159,11 @@ export interface UseHostEndpointsResult {
     request: ConnectionBalanceCheckRequest,
     signal: AbortSignal,
   ) => Promise<ConnectionBalanceCheckResult>;
+  // 编辑窗口「高级」里的「自动识别」余额地址；只在声明了 apiEndpointBalance 的主机上用。
+  detectBalanceUrl: (
+    request: ConnectionBalanceDetectRequest,
+    signal: AbortSignal,
+  ) => Promise<ConnectionBalanceDetectResult>;
   // 编辑窗口账户令牌的「显示」；只在声明了 apiEndpointBalance 的主机上用。
   revealBalanceToken: (endpointId: string) => Promise<ConnectionRevealSecretResult>;
 }
@@ -551,6 +558,29 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     [client, t],
   );
 
+  const detectBalanceUrl = useCallback(
+    async (
+      request: ConnectionBalanceDetectRequest,
+      signal: AbortSignal,
+    ): Promise<ConnectionBalanceDetectResult> => {
+      if (!client) return { status: "failed", message: t("workspace.terminal.hostDisconnected") };
+      const requestId = createUpstreamRequestId();
+      const unlink = linkAbortToCancel(signal, () => client.apiEndpointCancel(requestId));
+      try {
+        const response = await client.apiEndpointDetectBalanceUrl(request, requestId);
+        if (signal.aborted || response.error?.code === "cancelled") return { status: "cancelled" };
+        if (response.error) return { status: "failed", message: response.error.message };
+        return { status: "done", detected: response.detected, attempts: response.attempts };
+      } catch (error) {
+        if (signal.aborted) return { status: "cancelled" };
+        return { status: "failed", message: toErrorMessage(error) };
+      } finally {
+        unlink();
+      }
+    },
+    [client, t],
+  );
+
   const revealKey = useCallback(
     async (endpointId: string): Promise<ConnectionRevealKeyResult> => {
       if (!client) return { status: "failed", message: t("workspace.terminal.hostDisconnected") };
@@ -651,6 +681,7 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     fetchModels,
     testConnection,
     checkBalance,
+    detectBalanceUrl,
     revealBalanceToken,
   };
 }

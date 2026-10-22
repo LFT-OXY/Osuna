@@ -2780,6 +2780,10 @@ export const ru: TranslationResources = {
           fieldInfo:
             "Где в ответе сумма, например data.balance. Можно считать с + - * / и скобками, например data.total / 500000. «$» или «¥» впереди добавляет знак; «%» в конце показывает процент с полосой. Несколько значений, каждое с меткой, разделяются «;», например 5h: a.used / a.cap %; $credits.left. Элементы списка — a.*.used, подходящие под условие — a[status=active].used, внутри sum(), max(), min() или count(). Если пусто, адреса new-api, sub2api и credit grants читаются, как показано в подсказке.",
           check: "Проверить баланс",
+          detect: "Определить URL",
+          detectFound: "Найден сайт {{kind}}; URL баланса заполнен",
+          detectMissed: "Ни URL баланса new-api, ни URL баланса sub2api не вернули баланс",
+          detectAttempt: "{{path}}: {{reason}}",
           nothingToAsk: "Нет URL баланса, а способ узнать баланс этого поставщика неизвестен",
           token: "Токен аккаунта",
           tokenInfo:

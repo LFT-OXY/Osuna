@@ -14,6 +14,8 @@ import {
   type ApiEndpointTemplateRegion,
   type ApiEndpointTestConnectionRequest,
   type ApiEndpointCheckBalanceRequest,
+  type ApiEndpointDetectBalanceUrlRequest,
+  type ApiEndpointBalanceUrlAttempt,
   type ApiEndpointBalanceReading,
   type ApiEndpointTestConnectionResult,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
@@ -58,6 +60,7 @@ import {
   fieldAfterUsing,
   hasBalanceSettings,
   type BalanceCheck,
+  type BalanceDetect,
   type BalanceFields,
   type BalanceFix,
 } from "./balance-settings-form";
@@ -193,6 +196,22 @@ export type ConnectionBalanceCheckRequest = Omit<
 // failed：请求本身没成立（断线、主机拒收）；查不到余额写在 done 的读数里。
 export type ConnectionBalanceCheckResult =
   | { status: "done"; reading: ApiEndpointBalanceReading }
+  | { status: "failed"; message: string }
+  | { status: "cancelled" };
+
+// 「自动识别」余额地址：表单里还没保存的 key、地址与请求头。
+export type ConnectionBalanceDetectRequest = Omit<
+  ApiEndpointDetectBalanceUrlRequest,
+  "type" | "requestId"
+>;
+
+// failed：请求本身没成立（断线、主机拒收）；都不中时 done 的 detected 为 null。
+export type ConnectionBalanceDetectResult =
+  | {
+      status: "done";
+      detected: { url: string; field: string } | null;
+      attempts: ApiEndpointBalanceUrlAttempt[];
+    }
   | { status: "failed"; message: string }
   | { status: "cancelled" };
 
@@ -456,6 +475,9 @@ export interface ConnectionFormState {
   balanceFieldText: string;
   balanceFieldPlaceholder: string;
   balanceCheck: BalanceCheck;
+  balanceDetect: BalanceDetect;
+  // 有 key、有地址且不在识别中时「自动识别」可点。
+  canDetectBalanceUrl: boolean;
   // 从「填写余额查询地址」打开：光标放在余额查询地址上。
   focusesBalance: boolean;
   // 「改用 …」换了地址与取值写法时加一，框里的字按新值重新带进去。
@@ -495,6 +517,10 @@ export interface ConnectionFormDeps {
     request: ConnectionBalanceCheckRequest,
     signal: AbortSignal,
   ) => Promise<ConnectionBalanceCheckResult>;
+  detectBalanceUrl: (
+    request: ConnectionBalanceDetectRequest,
+    signal: AbortSignal,
+  ) => Promise<ConnectionBalanceDetectResult>;
   revealBalanceToken: (endpointId: string) => Promise<ConnectionRevealSecretResult>;
 }
 
@@ -570,6 +596,7 @@ export interface ConnectionFormModel {
   useBalanceUrl(url: string): void;
   // 「查询余额」：用表单里还没保存的值当场查一次；再按一次重来。
   checkBalance(): void;
+  detectBalanceUrl(): void;
   detect(): void;
   // 「逐个模型」：表单里的模型（前 30 个）在每种格式上各问一次。
   detectEachModel(): void;
@@ -654,6 +681,7 @@ interface Values {
   balanceFieldText: string;
   balanceUserIdText: string;
   balanceCheck: BalanceCheck;
+  balanceDetect: BalanceDetect;
   balanceUrlGeneration: number;
   balanceFieldGeneration: number;
   // 打的令牌；读回来没改的不算。
@@ -707,6 +735,7 @@ export function createConnectionFormModel(
   let pendingFetch: AbortController | null = null;
   let pendingTest: AbortController | null = null;
   let pendingBalanceCheck: AbortController | null = null;
+  let pendingBalanceDetect: AbortController | null = null;
   const seededTemplate = templateOf(seed, templates);
   const seededRegion = seededTemplate ? initialRegionOf(seed, seededTemplate) : null;
   const seededUrls = initialUrlsOf({
@@ -769,6 +798,7 @@ export function createConnectionFormModel(
     ...seededCooldown,
     ...seededBalance,
     balanceCheck: { status: "idle" },
+    balanceDetect: { status: "idle" },
     balanceUrlGeneration: 0,
     balanceFieldGeneration: 0,
     balanceTokenText: "",
@@ -869,6 +899,9 @@ export function createConnectionFormModel(
       balanceFieldText: next.balanceFieldText,
       balanceFieldPlaceholder: balanceFieldPlaceholder(next.balanceUrlText),
       balanceCheck: next.balanceCheck,
+      balanceDetect: next.balanceDetect,
+      canDetectBalanceUrl:
+        canSetBalance && hasKey && hasValidUrls && next.balanceDetect.status !== "detecting",
       focusesBalance,
       ...deriveBalanceToken(next),
     };
@@ -1359,22 +1392,29 @@ export function createConnectionFormModel(
     };
   }
 
-  /** 「查询余额」：表单里的 key、各格式地址、模板、请求头与余额设置，都还没保存。 */
+  /** 「查询余额」与「自动识别」问的表单值：key、各格式地址、模板、请求头与证书设置，都还没保存。 */
+  function balanceFormRequest(): ConnectionBalanceDetectRequest {
+    return {
+      ...keyOwnerRequest(),
+      // 复制时打了 key 也带原来那家的 id：没动的账户令牌用它存的。
+      ...(keyOwner ? { endpointId: keyOwner.id } : {}),
+      baseUrls: checkedUrlsOf(values),
+      ...(values.template ? { templateId: values.template.id } : {}),
+      ...typedExtrasRequest(),
+      ...insecureTlsRequest(),
+    };
+  }
+
+  /** 「查询余额」：表单里的值加上余额设置与账户令牌。 */
   async function runBalanceCheck(controller: AbortController): Promise<void> {
     const outcome = await deps.checkBalance(
       {
-        ...keyOwnerRequest(),
-        // 复制时打了 key 也带原来那家的 id：没动的账户令牌用它存的。
-        ...(keyOwner ? { endpointId: keyOwner.id } : {}),
-        baseUrls: checkedUrlsOf(values),
-        ...(values.template ? { templateId: values.template.id } : {}),
+        ...balanceFormRequest(),
         balance: balanceSettingsOf(values),
         ...balanceTokenRequest({
           typed: values.balanceTokenText,
           removed: values.balanceTokenRemoved,
         }),
-        ...typedExtrasRequest(),
-        ...insecureTlsRequest(),
       },
       controller.signal,
     );
@@ -1384,6 +1424,40 @@ export function createConnectionFormModel(
     else if (outcome.status === "done") {
       update({ balanceCheck: { status: "done", reading: outcome.reading } });
     } else update({ balanceCheck: { status: "failed", message: outcome.message } });
+  }
+
+  /**
+   * 「自动识别」：试中就把地址填进表单；取值写法同「改用 …」，空的或 key 查询那几种写法让位给默认写法（占位写出），
+   * 用户自己写的别的写法留着。
+   */
+  async function runBalanceDetect(controller: AbortController): Promise<void> {
+    const outcome = await deps.detectBalanceUrl(balanceFormRequest(), controller.signal);
+    if (pendingBalanceDetect !== controller) return;
+    pendingBalanceDetect = null;
+    if (outcome.status === "cancelled") {
+      update({ balanceDetect: { status: "idle" } });
+      return;
+    }
+    if (outcome.status === "failed") {
+      update({ balanceDetect: { status: "failed", message: outcome.message } });
+      return;
+    }
+    const found = outcome.detected;
+    const hitAttempt = found
+      ? outcome.attempts.find((attempt) => attempt.url === found.url)
+      : undefined;
+    if (!found || !hitAttempt) {
+      update({ balanceDetect: { status: "missed", attempts: outcome.attempts } });
+      return;
+    }
+    update({
+      balanceUrlText: found.url,
+      balanceUrlGeneration: values.balanceUrlGeneration + 1,
+      balanceMethod: "GET",
+      balanceFieldText: fieldAfterUsing(values.balanceFieldText),
+      balanceFieldGeneration: values.balanceFieldGeneration + 1,
+      balanceDetect: { status: "found", url: found.url, reading: hitAttempt.reading },
+    });
   }
 
   /** 改一行请求头。 */
@@ -1999,6 +2073,13 @@ export function createConnectionFormModel(
       update({ balanceCheck: { status: "checking" } });
       void runBalanceCheck(controller);
     },
+    detectBalanceUrl() {
+      if (!state.canDetectBalanceUrl) return;
+      const controller = new AbortController();
+      pendingBalanceDetect = controller;
+      update({ balanceDetect: { status: "detecting" } });
+      void runBalanceDetect(controller);
+    },
     cancelDetect() {
       if (!pendingDetect) return;
       abortPendingDetect();
@@ -2020,6 +2101,8 @@ export function createConnectionFormModel(
       abortPendingTest();
       pendingBalanceCheck?.abort();
       pendingBalanceCheck = null;
+      pendingBalanceDetect?.abort();
+      pendingBalanceDetect = null;
       pendingIcon = null;
       closed = true;
       listeners.clear();

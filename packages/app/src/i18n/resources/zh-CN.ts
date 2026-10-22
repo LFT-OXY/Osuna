@@ -2762,6 +2762,10 @@ export const zhCN: TranslationResources = {
           fieldInfo:
             "余额在回复里的位置，如 data.balance。可以用 + - * / 和括号计算，如 data.total / 500000。前面加「$」「¥」带上符号；后面加「%」显示成百分比并带进度条。几项用「;」分开，每项可加标签，如 5h: a.used / a.cap %; $credits.left。列表的每一项写 a.*.used，只要符合条件的写 a[status=active].used，放进 sum()、max()、min() 或 count()。不填时，new-api、sub2api 与 credit grants 的地址按占位里的写法取。",
           check: "查询余额",
+          detect: "自动识别",
+          detectFound: "认出是 {{kind}}，已填入余额查询地址",
+          detectMissed: "new-api 与 sub2api 的余额查询地址都没查到余额",
+          detectAttempt: "{{path}}：{{reason}}",
           nothingToAsk: "没填余额查询地址，也没认出这家的余额查法",
           token: "账户令牌",
           tokenInfo:

@@ -160,6 +160,27 @@ export function balanceVendorOf(baseUrls: StoredApiEndpoint["baseUrls"]): Balanc
   return null;
 }
 
+// 找站点用的地址先后，照 magpie 编辑器的「改用 …」（draft.chat || draft.anthropic || draft.responses）。
+const SITE_FORMAT_ORDER = ["openai_chat", "anthropic_messages", "openai_responses"] as const;
+
+/**
+ * 这家的站点（scheme 加主机），「自动识别」把 key 级余额查询拼在它上面：各格式地址依 Chat、Anthropic、Responses 的
+ * 先后，取第一个 http(s) 地址的 origin（同 magpie errKeyUsageWithToken 的 u.Scheme + "://" + u.Host）；都不是为 null。
+ */
+export function balanceSiteOf(baseUrls: StoredApiEndpoint["baseUrls"]): string | null {
+  for (const format of SITE_FORMAT_ORDER) {
+    const url = baseUrls.find((entry) => entry.format === format)?.url;
+    if (url === undefined) continue;
+    try {
+      const parsed = new URL(url.trim());
+      if (parsed.protocol === "http:" || parsed.protocol === "https:") return parsed.origin;
+    } catch {
+      // 读不懂的地址跳过，看下一种格式。
+    }
+  }
+  return null;
+}
+
 export interface ReadBalanceInput {
   endpoint: Pick<StoredApiEndpoint, "id" | "baseUrls" | "balance">;
   apiKey: string | null;

@@ -954,16 +954,15 @@ describe("API endpoint balance at an address the user gave", () => {
     return fake;
   }
 
-  beforeEach(async () => {
-    clock = NOW;
-    const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-balance-custom-"));
-    tempRoots.push(root);
-    deepseek = await startDeepSeek();
-    relay = await startRelay();
-    logLines = [];
+  let root: string;
+
+  // 留着 home：重启后读回同一份接口。
+  async function startDaemon() {
     daemon = await createTestPaseoDaemon({
       daemonVersion: VERSION,
       logger: pino({ level: "trace" }, { write: (line: string) => logLines.push(line) }),
+      paseoHomeRoot: path.join(root, "home"),
+      cleanup: false,
       apiEndpoints: {
         env: { CLAUDE_CONFIG_DIR: path.join(root, "claude"), CODEX_HOME: path.join(root, "codex") },
         homeDir: root,
@@ -974,6 +973,17 @@ describe("API endpoint balance at an address the user gave", () => {
     client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.17.0" });
     await client.connect();
     await client.fetchAgents({ subscribe: {} });
+  }
+
+  beforeEach(async () => {
+    clock = NOW;
+    root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-balance-custom-"));
+    tempRoots.push(root);
+    await mkdir(path.join(root, "home"));
+    deepseek = await startDeepSeek();
+    relay = await startRelay();
+    logLines = [];
+    await startDaemon();
   });
 
   afterEach(async () => {
@@ -1287,6 +1297,139 @@ describe("API endpoint balance at an address the user gave", () => {
       });
       expect(answer.reading).toBeNull();
       expect(answer.error?.code).toBe("not_found");
+    });
+  });
+
+  // 「自动识别」（工单 07）：依次试 new-api 与 sub2api 的 key 级地址，拼在表单地址的站点上。
+  describe("detecting the balance address with the form's values", () => {
+    const NEW_API_TOKEN_USAGE = {
+      code: true,
+      data: { total_available: 5_000_000, total_granted: 6_000_000, total_used: 1_000_000 },
+    };
+
+    function formUrls() {
+      return [
+        { format: "anthropic_messages", url: `${relay.origin}/relay/anthropic` },
+        { format: "openai_chat", url: `${relay.origin}/relay/v1` },
+      ];
+    }
+
+    type Attempts = Awaited<ReturnType<DaemonClient["apiEndpointDetectBalanceUrl"]>>["attempts"];
+
+    function triedUrls(attempts: Attempts) {
+      return attempts.map((attempt) => attempt.url);
+    }
+
+    function triedReasons(attempts: Attempts) {
+      return attempts.map((attempt) => [attempt.url, attempt.reading.failure?.reason]);
+    }
+
+    function requestTo(url: string) {
+      return relay.requests.find((request) => request.url === url);
+    }
+
+    function balancePaths() {
+      return relay.requests
+        .map((request) => request.url.split("?")[0])
+        .filter((url) => url === "/api/usage/token" || url === "/v1/usage");
+    }
+
+    test("a new-api site answers the first try: its address and default field come back, nothing saved", async () => {
+      relay.replies["/api/usage/token"] = (response) =>
+        sendJson(response, 200, NEW_API_TOKEN_USAGE);
+      const answer = await client.apiEndpointDetectBalanceUrl({
+        apiKey: RELAY_KEY,
+        baseUrls: formUrls(),
+        headers: { "X-Plain": "kept" },
+      });
+      expect(answer.error).toBeNull();
+      expect(answer.detected).toEqual({
+        url: `${relay.origin}/api/usage/token`,
+        field: "$data.total_available / 500000",
+      });
+      expect(answer.attempts).toHaveLength(1);
+      expect(answer.attempts[0]?.url).toBe(`${relay.origin}/api/usage/token`);
+      expect(answer.attempts[0]?.reading.status).toBe("ok");
+      expect(answer.attempts[0]?.reading.items[0]?.text).toBe("$10.00");
+      expect(balancePaths()).toEqual(["/api/usage/token"]);
+      const [sent] = relay.requests;
+      expect(sent?.method).toBe("GET");
+      expect(sent?.headers.authorization).toBe(`Bearer ${RELAY_KEY}`);
+      expect(sent?.headers["user-agent"]).toBe(`Osuna/${VERSION}`);
+      expect(sent?.headers["x-plain"]).toBe("kept");
+      expect((await client.apiEndpointList("claude")).endpoints).toHaveLength(0);
+    });
+
+    test("a sub2api site answers the second try, after new-api's address is not there", async () => {
+      relay.replies["/v1/usage"] = (response) => sendJson(response, 200, { remaining: 3.5 });
+      const answer = await client.apiEndpointDetectBalanceUrl({
+        apiKey: RELAY_KEY,
+        baseUrls: formUrls(),
+      });
+      expect(answer.detected).toEqual({ url: `${relay.origin}/v1/usage`, field: "$remaining" });
+      expect(triedUrls(answer.attempts)).toEqual([
+        `${relay.origin}/api/usage/token`,
+        `${relay.origin}/v1/usage`,
+      ]);
+      expect(answer.attempts[0]?.reading.failure?.reason).toBe("wrong_url");
+      expect(answer.attempts[1]?.reading.items[0]?.text).toBe("$3.50");
+      expect(balancePaths()).toEqual(["/api/usage/token", "/v1/usage"]);
+    });
+
+    test("neither answering says why for each address, the key masked", async () => {
+      relay.replies["/v1/usage"] = (response) =>
+        sendJson(response, 401, { error: { message: `bad key ${RELAY_KEY}` } });
+      const answer = await client.apiEndpointDetectBalanceUrl({
+        apiKey: RELAY_KEY,
+        baseUrls: formUrls(),
+      });
+      expect(answer.error).toBeNull();
+      expect(answer.detected).toBeNull();
+      expect(triedReasons(answer.attempts)).toEqual([
+        [`${relay.origin}/api/usage/token`, "wrong_url"],
+        [`${relay.origin}/v1/usage`, "token_rejected"],
+      ]);
+      expect(JSON.stringify(answer)).not.toContain(RELAY_KEY);
+    });
+
+    test("an endpoint being edited is tried with its saved key, never its account token, its settings kept", async () => {
+      relay.replies["/api/usage/token"] = (response) =>
+        sendJson(response, 200, NEW_API_TOKEN_USAGE);
+      const id = await savedRelayId({
+        balance: { url: `${relay.origin}/query`, field: "balance" },
+        balanceToken: "new-api-access-token-123",
+      });
+      const answer = await client.apiEndpointDetectBalanceUrl({
+        endpointId: id,
+        baseUrls: formUrls(),
+      });
+      expect(answer.detected?.url).toBe(`${relay.origin}/api/usage/token`);
+      const asked = requestTo("/api/usage/token");
+      expect(asked?.headers.authorization).toBe(`Bearer ${RELAY_KEY}`);
+      expect((await listed(id))?.balance?.url).toBe(`${relay.origin}/query`);
+    });
+
+    test("no key, or no address to find the site on, is refused without asking", async () => {
+      const keyless = await client.apiEndpointDetectBalanceUrl({ baseUrls: formUrls() });
+      expect(keyless.error?.code).toBe("invalid_input");
+      expect(keyless.attempts).toEqual([]);
+      const siteless = await client.apiEndpointDetectBalanceUrl({
+        apiKey: RELAY_KEY,
+        baseUrls: [{ format: "anthropic_messages", url: "not an address" }],
+      });
+      expect(siteless.error?.code).toBe("invalid_input");
+      expect(balancePaths()).toEqual([]);
+    });
+
+    test("the daemon never tries these addresses on its own: not when listing, reading or starting", async () => {
+      const id = await savedRelayId({ baseUrl: `${relay.origin}/relay/anthropic` });
+      await client.apiEndpointList("claude");
+      await read(id, { force: true });
+      await client.close();
+      await daemon.close();
+      await startDaemon();
+      expect((await client.apiEndpointList("claude")).endpoints).toHaveLength(1);
+      expect(balancePaths()).toEqual([]);
     });
   });
   // 账户余额：用这家自己的账户令牌问（工单 06）。

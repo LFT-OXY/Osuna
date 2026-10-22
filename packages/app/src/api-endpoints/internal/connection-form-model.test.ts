@@ -20,6 +20,8 @@ import {
   type ConnectionIconResult,
   type ConnectionBalanceCheckRequest,
   type ConnectionBalanceCheckResult,
+  type ConnectionBalanceDetectRequest,
+  type ConnectionBalanceDetectResult,
   type ConnectionRevealSecretResult,
 } from "./connection-form-model";
 import { curlOf, type CurlCommand } from "./curl-command";
@@ -54,6 +56,8 @@ function fakeDeps() {
   const testAnswers: Deferred<ConnectionTestResult>[] = [];
   const balanceChecks: { request: ConnectionBalanceCheckRequest; signal: AbortSignal }[] = [];
   const balanceAnswers: Deferred<ConnectionBalanceCheckResult>[] = [];
+  const balanceDetects: { request: ConnectionBalanceDetectRequest; signal: AbortSignal }[] = [];
+  const balanceDetectAnswers: Deferred<ConnectionBalanceDetectResult>[] = [];
   const tokenReveals: string[] = [];
   let tokenRevealAnswer = deferred<ConnectionRevealSecretResult>();
   const deps: ConnectionFormDeps = {
@@ -99,6 +103,12 @@ function fakeDeps() {
       balanceAnswers.push(answer);
       return answer.promise;
     },
+    detectBalanceUrl: (request, signal) => {
+      balanceDetects.push({ request, signal });
+      const answer = deferred<ConnectionBalanceDetectResult>();
+      balanceDetectAnswers.push(answer);
+      return answer.promise;
+    },
   };
   return {
     deps,
@@ -116,6 +126,10 @@ function fakeDeps() {
     balanceChecks,
     answerBalanceCheck(index: number, result: ConnectionBalanceCheckResult) {
       balanceAnswers[index]?.resolve(result);
+    },
+    balanceDetects,
+    answerBalanceDetect(index: number, result: ConnectionBalanceDetectResult) {
+      balanceDetectAnswers[index]?.resolve(result);
     },
     reveals,
     tokenReveals,
@@ -2985,6 +2999,150 @@ describe("connection form: balance settings and checking the balance", () => {
     older.setBalanceUrl("https://relay.example/q");
     await older.submit();
     expect(fake.saves[1]).not.toHaveProperty("balance");
+  });
+});
+
+describe("connection form: detecting the balance address", () => {
+  const FOUND_READING = {
+    endpointId: "ep_1",
+    status: "ok",
+    items: [{ label: null, text: "$3.50", value: 3.5, unit: "USD", ratio: null }],
+    readAt: "2026-10-22T08:00:00.000Z",
+    failure: null,
+  };
+  const MISSED_READING = {
+    endpointId: "ep_1",
+    status: "failed",
+    items: [],
+    readAt: "2026-10-22T08:00:00.000Z",
+    failure: { reason: "wrong_url", detail: null, status: 404 },
+  };
+
+  it("tries with the form's unsaved key and addresses, never the token, and fills in what it found", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "edit", endpoint: { ...SAVED_ENDPOINT, balanceTokenMask: "tok…en" } },
+      fake.deps,
+      WITH_BALANCE,
+    );
+    model.setApiKey("sk-typed");
+    model.setBalanceMethod("POST");
+    model.setBalanceField("$data.total_available");
+    expect(model.getState().canDetectBalanceUrl).toBe(true);
+    model.detectBalanceUrl();
+    expect(model.getState().balanceDetect).toEqual({ status: "detecting" });
+    expect(model.getState().canDetectBalanceUrl).toBe(false);
+    expect(fake.balanceDetects[0]?.request).toEqual({
+      endpointId: "ep_1",
+      apiKey: "sk-typed",
+      baseUrls: [
+        { format: "anthropic_messages", url: "https://relay.example" },
+        { format: "openai_chat", url: "https://relay.example/v1" },
+      ],
+    });
+    const before = model.getState();
+    fake.answerBalanceDetect(0, {
+      status: "done",
+      detected: { url: "https://relay.example/v1/usage", field: "$remaining" },
+      attempts: [
+        { url: "https://relay.example/api/usage/token", reading: MISSED_READING },
+        { url: "https://relay.example/v1/usage", reading: FOUND_READING },
+      ],
+    });
+    await flush();
+    const after = model.getState();
+    expect(after).toMatchObject({
+      balanceUrlText: "https://relay.example/v1/usage",
+      balanceMethod: "GET",
+      balanceFieldText: "",
+      balanceFieldPlaceholder: "$remaining",
+      balanceDetect: {
+        status: "found",
+        url: "https://relay.example/v1/usage",
+        reading: FOUND_READING,
+      },
+    });
+    expect(after.balanceUrlGeneration).toBe(before.balanceUrlGeneration + 1);
+    expect(after.balanceFieldGeneration).toBe(before.balanceFieldGeneration + 1);
+    expect(fake.saves).toHaveLength(0);
+  });
+
+  it("a field of the user's own is kept when the address is found, as Use … keeps it", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "edit", endpoint: SAVED_ENDPOINT },
+      fake.deps,
+      WITH_BALANCE,
+    );
+    model.setBalanceField("$data.left * 2");
+    model.detectBalanceUrl();
+    fake.answerBalanceDetect(0, {
+      status: "done",
+      detected: { url: "https://relay.example/v1/usage", field: "$remaining" },
+      attempts: [{ url: "https://relay.example/v1/usage", reading: FOUND_READING }],
+    });
+    await flush();
+    expect(model.getState()).toMatchObject({
+      balanceUrlText: "https://relay.example/v1/usage",
+      balanceFieldText: "$data.left * 2",
+    });
+  });
+
+  it("neither found leaves the form as it was and says why for each, until tried again; closing cancels one in flight", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      {
+        mode: "edit",
+        endpoint: { ...SAVED_ENDPOINT, balance: { url: "https://relay.example/q" } },
+      },
+      fake.deps,
+      WITH_BALANCE,
+    );
+    model.detectBalanceUrl();
+    const attempts = [
+      { url: "https://relay.example/api/usage/token", reading: MISSED_READING },
+      { url: "https://relay.example/v1/usage", reading: MISSED_READING },
+    ];
+    fake.answerBalanceDetect(0, { status: "done", detected: null, attempts });
+    await flush();
+    expect(model.getState()).toMatchObject({
+      balanceUrlText: "https://relay.example/q",
+      balanceDetect: { status: "missed", attempts },
+    });
+    model.setBalanceField("x");
+    expect(model.getState().balanceDetect).toEqual({ status: "missed", attempts });
+    model.detectBalanceUrl();
+    fake.answerBalanceDetect(1, { status: "failed", message: "Host disconnected" });
+    await flush();
+    expect(model.getState().balanceDetect).toEqual({
+      status: "failed",
+      message: "Host disconnected",
+    });
+    model.detectBalanceUrl();
+    model.close();
+    expect(fake.balanceDetects[2]?.signal.aborted).toBe(true);
+  });
+
+  it("cannot be pressed without a key or an address, nor on an older host", () => {
+    const fake = fakeDeps();
+    const fresh = createConnectionFormModel(
+      { mode: "create", templateId: null },
+      fake.deps,
+      WITH_BALANCE,
+    );
+    expect(fresh.getState().canDetectBalanceUrl).toBe(false);
+    fresh.setApiKey("sk-1");
+    expect(fresh.getState().canDetectBalanceUrl).toBe(false);
+    fresh.setUrl("openai_chat", "https://relay.example/v1");
+    expect(fresh.getState().canDetectBalanceUrl).toBe(true);
+    const old = createConnectionFormModel(
+      { mode: "edit", endpoint: SAVED_ENDPOINT },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    expect(old.getState().canDetectBalanceUrl).toBe(false);
+    old.detectBalanceUrl();
+    expect(fake.balanceDetects).toHaveLength(0);
   });
 });
 

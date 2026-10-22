@@ -2805,6 +2805,10 @@ export const en = {
           fieldInfo:
             "Where the amount is in the reply, e.g. data.balance. It can be a sum with + - * / and brackets, e.g. data.total / 500000. “$” or “¥” in front adds the sign; “%” after it shows a percent with a bar. Several, each with a label, go apart by “;”, e.g. 5h: a.used / a.cap %; $credits.left. A list's items are a.*.used, or a[status=active].used for those that match, in sum(), max(), min() or count(). Left empty, new-api, sub2api and credit grants addresses are read as the placeholder shows.",
           check: "Check balance",
+          detect: "Detect URL",
+          detectFound: "Found a {{kind}} site; the Balance URL is filled in",
+          detectMissed: "Neither new-api's nor sub2api's balance query answered with a balance",
+          detectAttempt: "{{path}}: {{reason}}",
           nothingToAsk: "No balance URL to ask, and this vendor's balance isn't known",
           token: "Account token",
           tokenInfo:

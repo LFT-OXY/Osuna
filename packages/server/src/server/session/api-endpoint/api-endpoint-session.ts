@@ -7,6 +7,7 @@ import type {
   ApiEndpointVendorStatusResponse,
   ApiEndpointReadBalanceResponse,
   ApiEndpointCheckBalanceResponse,
+  ApiEndpointDetectBalanceUrlResponse,
   ApiEndpointImportScanResponse,
   ApiEndpointImportDiscoveryResponse,
   ApiEndpointImportResponse,
@@ -20,6 +21,7 @@ import type { SessionInboundMessage, SessionOutboundMessage } from "../../messag
 import {
   ApiEndpointRequestError,
   type ApiEndpointAgentSettingsInput,
+  type ApiEndpointBalanceFormInput,
   type ApiEndpointSaveInput,
   type ApiEndpointService,
   type ApiEndpointRequestExtrasInput,
@@ -53,6 +55,7 @@ export type ApiEndpointRequest = Extract<
       | "provider.api_endpoint.read_balance.request"
       | "provider.api_endpoint.set_balance_auto_refresh.request"
       | "provider.api_endpoint.check_balance.request"
+      | "provider.api_endpoint.detect_balance_url.request"
       | "provider.api_endpoint.reveal_secret.request"
       | "provider.api_endpoint.import_scan.request"
       | "provider.api_endpoint.import.request"
@@ -93,6 +96,7 @@ const API_ENDPOINT_REQUEST_TYPES: Record<ApiEndpointRequest["type"], true> = {
   "provider.api_endpoint.read_balance.request": true,
   "provider.api_endpoint.set_balance_auto_refresh.request": true,
   "provider.api_endpoint.check_balance.request": true,
+  "provider.api_endpoint.detect_balance_url.request": true,
   "provider.api_endpoint.reveal_secret.request": true,
   "provider.api_endpoint.import_scan.request": true,
   "provider.api_endpoint.import.request": true,
@@ -122,6 +126,51 @@ function savedBalanceOf(
     ...(request.balance !== undefined ? { balance: request.balance } : {}),
     ...(request.balanceToken !== undefined ? { balanceToken: request.balanceToken } : {}),
   };
+}
+
+/** 「查询余额」与「自动识别」请求里的表单值：给了才带。 */
+function balanceFormOf(
+  request: Extract<
+    ApiEndpointRequest,
+    {
+      type:
+        | "provider.api_endpoint.check_balance.request"
+        | "provider.api_endpoint.detect_balance_url.request";
+    }
+  >,
+): ApiEndpointBalanceFormInput {
+  return {
+    ...(request.endpointId !== undefined ? { endpointId: request.endpointId } : {}),
+    ...(request.apiKey !== undefined ? { apiKey: request.apiKey } : {}),
+    ...(request.baseUrls !== undefined ? { baseUrls: request.baseUrls } : {}),
+    ...(request.templateId !== undefined ? { templateId: request.templateId } : {}),
+    ...requestExtrasOf(request),
+  };
+}
+
+/** 余额的几种请求，由 handleBalance 分发。 */
+type BalanceRequest = Extract<
+  ApiEndpointRequest,
+  {
+    type:
+      | "provider.api_endpoint.read_balance.request"
+      | "provider.api_endpoint.set_balance_auto_refresh.request"
+      | "provider.api_endpoint.check_balance.request"
+      | "provider.api_endpoint.detect_balance_url.request"
+      | "provider.api_endpoint.reveal_secret.request";
+  }
+>;
+
+const BALANCE_REQUEST_TYPES: Record<BalanceRequest["type"], true> = {
+  "provider.api_endpoint.read_balance.request": true,
+  "provider.api_endpoint.set_balance_auto_refresh.request": true,
+  "provider.api_endpoint.check_balance.request": true,
+  "provider.api_endpoint.detect_balance_url.request": true,
+  "provider.api_endpoint.reveal_secret.request": true,
+};
+
+function isBalanceRequest(request: ApiEndpointRequest): request is BalanceRequest {
+  return Object.hasOwn(BALANCE_REQUEST_TYPES, request.type);
 }
 
 export function isApiEndpointRequest(msg: SessionInboundMessage): msg is ApiEndpointRequest {
@@ -158,6 +207,7 @@ export class ApiEndpointSession {
 
   /** `connectionSignal`：发起请求的连接断开时触发，上游请求随之取消。 */
   async handle(request: ApiEndpointRequest, connectionSignal: AbortSignal): Promise<void> {
+    if (isBalanceRequest(request)) return this.handleBalance(request, connectionSignal);
     switch (request.type) {
       case "provider.api_endpoint.list.request":
         return this.handleList(request);
@@ -189,16 +239,27 @@ export class ApiEndpointSession {
         return this.handleForgetCatalog(request);
       case "provider.api_endpoint.vendor_status.request":
         return this.handleVendorStatus(request);
+      default:
+        return this.handleAddingAids(request, connectionSignal);
+    }
+  }
+
+  /** 余额：读、自动刷新开关、编辑窗口的「查询余额」与「自动识别」、读回账户令牌。 */
+  private async handleBalance(
+    request: BalanceRequest,
+    connectionSignal: AbortSignal,
+  ): Promise<void> {
+    switch (request.type) {
       case "provider.api_endpoint.read_balance.request":
         return this.handleReadBalance(request, connectionSignal);
       case "provider.api_endpoint.set_balance_auto_refresh.request":
         return this.handleSetBalanceAutoRefresh(request);
       case "provider.api_endpoint.check_balance.request":
         return this.handleCheckBalance(request, connectionSignal);
+      case "provider.api_endpoint.detect_balance_url.request":
+        return this.handleDetectBalanceUrl(request, connectionSignal);
       case "provider.api_endpoint.reveal_secret.request":
         return this.handleRevealSecret(request);
-      default:
-        return this.handleAddingAids(request, connectionSignal);
     }
   }
 
@@ -845,13 +906,9 @@ export class ApiEndpointSession {
     try {
       const reading = await this.service.checkBalance(
         {
-          ...(request.endpointId !== undefined ? { endpointId: request.endpointId } : {}),
-          ...(request.apiKey !== undefined ? { apiKey: request.apiKey } : {}),
-          ...(request.baseUrls !== undefined ? { baseUrls: request.baseUrls } : {}),
-          ...(request.templateId !== undefined ? { templateId: request.templateId } : {}),
+          ...balanceFormOf(request),
           balance: request.balance,
           ...(request.balanceToken !== undefined ? { balanceToken: request.balanceToken } : {}),
-          ...requestExtrasOf(request),
         },
         signal,
       );
@@ -863,6 +920,30 @@ export class ApiEndpointSession {
     }
     this.host.emit({
       type: "provider.api_endpoint.check_balance.response",
+      payload: { requestId: request.requestId, ...payload },
+    });
+  }
+
+  /** 「自动识别」余额地址：可以用 cancel 取消；都不中写在 attempts 里，请求本身被拒时 attempts 为空。 */
+  private async handleDetectBalanceUrl(
+    request: Extract<
+      ApiEndpointRequest,
+      { type: "provider.api_endpoint.detect_balance_url.request" }
+    >,
+    connectionSignal: AbortSignal,
+  ): Promise<void> {
+    const { signal, release } = this.trackUpstreamRequest(request.requestId, connectionSignal);
+    let payload: Omit<ApiEndpointDetectBalanceUrlResponse["payload"], "requestId">;
+    try {
+      const found = await this.service.detectBalanceUrl(balanceFormOf(request), signal);
+      payload = { ...found, error: null };
+    } catch (caught) {
+      payload = { detected: null, attempts: [], error: this.toWireError(caught, request) };
+    } finally {
+      release();
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.detect_balance_url.response",
       payload: { requestId: request.requestId, ...payload },
     });
   }
