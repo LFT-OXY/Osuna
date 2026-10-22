@@ -157,6 +157,28 @@ function countOf(items: unknown[]): () => number {
   return () => items.length;
 }
 
+// 窄窗口的模板选择窗口是滑上来的：几块的位置要在同一帧里量，分开量会量到滑动中的不同位置。
+async function templateTileOriginsInOneFrame(
+  page: Page,
+  templateIds: string[],
+): Promise<({ x: number; y: number } | null)[]> {
+  return page.evaluate((testIds) => {
+    const origins: ({ x: number; y: number } | null)[] = [];
+    for (const id of testIds) {
+      let origin: { x: number; y: number } | null = null;
+      for (const node of document.querySelectorAll(`[data-testid="api-endpoint-template-${id}"]`)) {
+        const rect = node.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          origin = { x: rect.x, y: rect.y };
+          break;
+        }
+      }
+      origins.push(origin);
+    }
+    return origins;
+  }, templateIds);
+}
+
 // 自动检测每种格式一行，这里取那一行的结论。
 function detectionTags(page: Page): Locator[] {
   return ["anthropic_messages", "openai_chat", "openai_responses"].map((format) =>
@@ -2339,9 +2361,11 @@ test.describe("Templates", () => {
         await expect(tile).toBeVisible();
         expect(await clippedTextsOf(tile), id).toEqual([]);
       }
-      const left = await page.getByTestId("api-endpoint-template-anthropic").boundingBox();
-      const right = await page.getByTestId("api-endpoint-template-openai").boundingBox();
-      const next = await page.getByTestId("api-endpoint-template-deepseek").boundingBox();
+      const [left, right, next] = await templateTileOriginsInOneFrame(page, [
+        "anthropic",
+        "openai",
+        "deepseek",
+      ]);
       expect(right?.y ?? Infinity).toBe(left?.y ?? 0);
       expect(next?.x ?? Infinity).toBe(left?.x ?? 0);
     });
@@ -2352,8 +2376,7 @@ test.describe("Templates", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.getByTestId("api-endpoints-empty-add").click();
     await expect(templatePicker(page)).toBeVisible();
-    const first = await page.getByTestId("api-endpoint-template-anthropic").boundingBox();
-    const second = await page.getByTestId("api-endpoint-template-openai").boundingBox();
+    const [first, second] = await templateTileOriginsInOneFrame(page, ["anthropic", "openai"]);
     expect(second?.x ?? Infinity).toBe(first?.x ?? 0);
     expect(second?.y ?? 0).toBeGreaterThan(first?.y ?? Infinity);
   });
