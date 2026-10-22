@@ -4,14 +4,14 @@
 
 **Blocked by:** 01, 02, 03, 04, 05, 06, 07, 08, 09, 10, 11, 12
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** doing
 
 - [ ] 1280 与 390、浅色与深色下，列表页、详情分区的各种状态、编辑窗口高级区、Codex 重置卡与确认框的截图齐全，由主会话拍摄并给用户看过。
-- [ ] 中文界面新文字全是中文，用词与 `docs/glossary.md` 一致，没有「额度」作标签；英文界面没有露出翻译键名；开关是 Switch，次要操作不是蓝色链接。
-- [ ] `docs/glossary.md` 的 **Balance**、**Plan usage** 按最终界面核对，本任务的界面名词都已收录。
-- [ ] `docs/usage.md`「Outbound requests」覆盖本任务的全部新请求；`docs/data-model.md` 覆盖新字段、新机密、主机开关、上次读数文件。
-- [ ] 借鉴 magpie 的文件头有 MIT 声明，`THIRD_PARTY_NOTICES` 覆盖。
-- [ ] 9 种语言的 i18n 测试通过。
+- [x] 中文界面新文字全是中文，用词与 `docs/glossary.md` 一致，没有「额度」作标签；英文界面没有露出翻译键名；开关是 Switch，次要操作不是蓝色链接。
+- [x] `docs/glossary.md` 的 **Balance**、**Plan usage** 按最终界面核对，本任务的界面名词都已收录。
+- [x] `docs/usage.md`「Outbound requests」覆盖本任务的全部新请求；`docs/data-model.md` 覆盖新字段、新机密、主机开关、上次读数文件。
+- [x] 借鉴 magpie 的文件头有 MIT 声明，`THIRD_PARTY_NOTICES` 覆盖。
+- [x] 9 种语言的 i18n 测试通过。
 
 参考：prd UI and Design、Acceptance Criteria、第 31–33 条。
 

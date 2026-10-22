@@ -1,3 +1,5 @@
+// 打开页面 30 秒内不算要求重读照 magpie（https://github.com/yetone/magpie，internal/gui/assets/app.js 的 quotasAskedAt 与 QUOTAS_OPEN_GAP，7597c132）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 /**
  * 每台主机每家接口上次用户要求读余额的时刻（照 magpie quotasAskedAt / QUOTAS_OPEN_GAP）：只在内存里，读时查，不渲染。
  * 上次要求之后 30 秒内再打开页面不算要求，切页面来回不让 daemon 重读；列表页与详情页共用。

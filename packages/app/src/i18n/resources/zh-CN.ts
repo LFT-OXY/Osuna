@@ -3021,14 +3021,14 @@ export const zhCN: TranslationResources = {
         rowUnavailable: "余额查不到",
         rowNeedsAccessKey: "需要 AccessKey",
         needsAccessKeyVolcengine:
-          "需要 AccessKey：火山方舟只把这个套餐的窗口告诉账号的 AccessKey ID 与 Secret Access Key，请在这家接口设置的「高级」里填写。",
+          "火山方舟只把这个套餐的窗口告诉账号的 AccessKey ID 与 Secret Access Key，请在这家接口设置的「高级」里填写。",
         needsAccessKeyTencent:
-          "需要 AccessKey：腾讯云只把 Token Plan 企业版的用量告诉账号的 SecretId 与 SecretKey，请在这家接口设置的「高级」里填写。",
+          "腾讯云只把 Token Plan 企业版的用量告诉账号的 SecretId 与 SecretKey，请在这家接口设置的「高级」里填写。",
         fillAccessKey: "填写 AccessKey",
         planTier: "档位：{{tier}}",
         planStopped: "套餐已停用：{{status}}",
         teamPlanStopped: "团队 {{team}} 的套餐已停用：{{status}}",
-        unreadTeams: "读不到这些团队的额度：{{teams}}",
+        unreadTeams: "读不到这些团队的套餐用量：{{teams}}",
         rowAmount: "余额 {{amount}}",
         rowWindowUsed: "{{window}}已用 {{percent}}",
         rowWindowLeft: "{{window}}剩 {{percent}}",

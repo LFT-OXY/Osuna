@@ -1112,6 +1112,19 @@ fields in internal/gui/assets/app.js:
   packages/app/src/api-endpoints/internal/balance-settings-form.ts
   packages/app/src/api-endpoints/balance-settings-fields.tsx
 
+An endpoint's last reading (kept when a read fails for a while, with a
+fingerprint of the address and key in place of either, and dropped once they
+change) follows keepLast, passing and keyTag in magpie's
+internal/provider/quota_last.go:
+
+  packages/server/src/server/api-endpoints/balance-last.ts
+
+Opening an endpoint's page again within 30 seconds of the last ask not counting
+as asking again follows quotasAskedAt and QUOTAS_OPEN_GAP in magpie's
+internal/gui/assets/app.js:
+
+  packages/app/src/api-endpoints/internal/balance-reads.ts
+
 An account's balance asked with its own token (the token as the whole
 Authorization, a JWT as a Bearer; a token that is only the key asked as the key;
 an account query without a token asking the same site's key query; a token
@@ -1139,11 +1152,13 @@ miniMaxCount, readOpenCodeGo, planBody and zhipuRefused in magpie's
 internal/provider/planquota.go, zhipuEnvelope in zhipu_envelope.go and
 OpenCodeSession and openCodeNewID in opencode_client.go; a window's pace follows
 Pace in internal/provider/window_pace.go and Bounds in window_holds.go, and how
-it is written follows quotaPace and paceNumber in internal/gui/assets/app.js:
+it is written follows quotaPace and paceNumber in internal/gui/assets/app.js, and
+a window's used share and its limit follow quotaCount there:
 
   packages/server/src/server/api-endpoints/balance-plan.ts
   packages/server/src/server/api-endpoints/window-pace.ts
   packages/app/src/api-endpoints/internal/balance-windows.ts
+  packages/app/src/api-endpoints/balance-section.tsx
 
 Command Code's and Ollama Cloud's plan windows (Command Code's 5-hour and
 weekly windows and the month's credits measured against its plan, the plan read

@@ -1,3 +1,5 @@
+// 窗口的已用与上限（windowCount）照 magpie（https://github.com/yetone/magpie，internal/gui/assets/app.js 的 quotaCount，7597c132）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import React, { useCallback, useMemo } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
@@ -196,18 +198,21 @@ function BalanceBody({
   if (reading.status === "needs_access_key") {
     return (
       <View style={settingsStyles.row}>
-        <UiText
-          variant="caption"
-          color="foregroundMuted"
-          style={styles.noticeText}
+        <View
+          style={[styles.noticeText, styles.failure]}
           testID="api-endpoint-balance-needs-access-key"
         >
-          {t(
-            accessKeyVendor === "tencent"
-              ? "settings.apiEndpoints.balance.needsAccessKeyTencent"
-              : "settings.apiEndpoints.balance.needsAccessKeyVolcengine",
-          )}
-        </UiText>
+          <UiText variant="caption" color="statusWarning">
+            {t("settings.apiEndpoints.balance.rowNeedsAccessKey")}
+          </UiText>
+          <UiText variant="caption" color="foregroundMuted">
+            {t(
+              accessKeyVendor === "tencent"
+                ? "settings.apiEndpoints.balance.needsAccessKeyTencent"
+                : "settings.apiEndpoints.balance.needsAccessKeyVolcengine",
+            )}
+          </UiText>
+        </View>
         {onFillAccessKey ? (
           <Button
             variant="outline"

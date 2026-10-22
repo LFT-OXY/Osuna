@@ -3026,9 +3026,9 @@ export const ko: TranslationResources = {
         rowUnavailable: "잔액을 가져올 수 없음",
         rowNeedsAccessKey: "AccessKey 필요",
         needsAccessKeyVolcengine:
-          "AccessKey 필요: Volcengine Ark는 이 플랜의 창을 계정의 AccessKey ID와 Secret Access Key에만 알려 줍니다. 이 엔드포인트 설정의 고급에서 입력하세요.",
+          "Volcengine Ark는 이 플랜의 창을 계정의 AccessKey ID와 Secret Access Key에만 알려 줍니다. 이 엔드포인트 설정의 고급에서 입력하세요.",
         needsAccessKeyTencent:
-          "AccessKey 필요: Tencent Cloud는 Token Plan Enterprise의 사용량을 계정의 SecretId와 SecretKey에만 알려 줍니다. 이 엔드포인트 설정의 고급에서 입력하세요.",
+          "Tencent Cloud는 Token Plan Enterprise의 사용량을 계정의 SecretId와 SecretKey에만 알려 줍니다. 이 엔드포인트 설정의 고급에서 입력하세요.",
         fillAccessKey: "AccessKey 입력",
         planTier: "등급: {{tier}}",
         planStopped: "플랜 중지됨: {{status}}",

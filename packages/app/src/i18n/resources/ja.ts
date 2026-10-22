@@ -3043,9 +3043,9 @@ export const ja: TranslationResources = {
         rowUnavailable: "残高を取得できません",
         rowNeedsAccessKey: "AccessKey が必要",
         needsAccessKeyVolcengine:
-          "AccessKey が必要：Volcengine Ark はこのプランのウィンドウをアカウントの AccessKey ID と Secret Access Key にだけ返します。このエンドポイントの設定の「詳細」で入力してください。",
+          "Volcengine Ark はこのプランのウィンドウをアカウントの AccessKey ID と Secret Access Key にだけ返します。このエンドポイントの設定の「詳細」で入力してください。",
         needsAccessKeyTencent:
-          "AccessKey が必要：Tencent Cloud は Token Plan Enterprise の使用量をアカウントの SecretId と SecretKey にだけ返します。このエンドポイントの設定の「詳細」で入力してください。",
+          "Tencent Cloud は Token Plan Enterprise の使用量をアカウントの SecretId と SecretKey にだけ返します。このエンドポイントの設定の「詳細」で入力してください。",
         fillAccessKey: "AccessKey を入力",
         planTier: "プラン：{{tier}}",
         planStopped: "プランは停止中：{{status}}",

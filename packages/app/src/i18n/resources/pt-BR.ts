@@ -3054,14 +3054,14 @@ export const ptBR: TranslationResources = {
         rowUnavailable: "Saldo indisponível",
         rowNeedsAccessKey: "Precisa de AccessKey",
         needsAccessKeyVolcengine:
-          "Precisa de AccessKey: o Volcengine Ark só informa as janelas deste plano ao AccessKey ID e à Secret Access Key da conta. Preencha-os em Avançado, nas configurações deste endpoint.",
+          "O Volcengine Ark só informa as janelas deste plano ao AccessKey ID e à Secret Access Key da conta. Preencha-os em Avançado, nas configurações deste endpoint.",
         needsAccessKeyTencent:
-          "Precisa de AccessKey: a Tencent Cloud só informa o uso de um Token Plan Enterprise ao SecretId e à SecretKey da conta. Preencha-os em Avançado, nas configurações deste endpoint.",
+          "A Tencent Cloud só informa o uso de um Token Plan Enterprise ao SecretId e à SecretKey da conta. Preencha-os em Avançado, nas configurações deste endpoint.",
         fillAccessKey: "Preencher AccessKey",
         planTier: "Nível: {{tier}}",
         planStopped: "Plano parado: {{status}}",
         teamPlanStopped: "Plano da equipe {{team}} parado: {{status}}",
-        unreadTeams: "Sem cota lida para: {{teams}}",
+        unreadTeams: "Não foi possível ler o uso do plano de: {{teams}}",
         rowAmount: "Saldo {{amount}}",
         rowWindowUsed: "{{window}} {{percent}} usado",
         rowWindowLeft: "{{window}} {{percent}} restante",

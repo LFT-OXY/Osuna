@@ -1,3 +1,5 @@
+// 用掉重置的结果说法（resetOutcomeText）照 magpie（https://github.com/yetone/magpie，internal/provider/codex_resets.go 的 ResetOutcome.Text，7597c132）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import { createHash } from "node:crypto";
 import type { AgentUsageSession } from "../../agent/agent-sdk-types.js";
 import type { UsageScope } from "@getpaseo/plugin/server/usage";

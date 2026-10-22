@@ -3000,14 +3000,14 @@ export const ar: TranslationResources = {
         rowUnavailable: "الرصيد غير متاح",
         rowNeedsAccessKey: "يلزم AccessKey",
         needsAccessKeyVolcengine:
-          "يلزم AccessKey: لا يكشف Volcengine Ark نوافذ هذه الخطة إلا لـ AccessKey ID وSecret Access Key الخاصين بالحساب. أدخلهما في «متقدّم» ضمن إعدادات نقطة النهاية هذه.",
+          "لا يكشف Volcengine Ark نوافذ هذه الخطة إلا لـ AccessKey ID وSecret Access Key الخاصين بالحساب. أدخلهما في «متقدّم» ضمن إعدادات نقطة النهاية هذه.",
         needsAccessKeyTencent:
-          "يلزم AccessKey: لا تكشف Tencent Cloud استخدام Token Plan Enterprise إلا لـ SecretId وSecretKey الخاصين بالحساب. أدخلهما في «متقدّم» ضمن إعدادات نقطة النهاية هذه.",
+          "لا تكشف Tencent Cloud استخدام Token Plan Enterprise إلا لـ SecretId وSecretKey الخاصين بالحساب. أدخلهما في «متقدّم» ضمن إعدادات نقطة النهاية هذه.",
         fillAccessKey: "إدخال AccessKey",
         planTier: "المستوى: {{tier}}",
         planStopped: "الخطة متوقفة: {{status}}",
         teamPlanStopped: "خطة الفريق {{team}} متوقفة: {{status}}",
-        unreadTeams: "تعذّرت قراءة الحصة لـ: {{teams}}",
+        unreadTeams: "تعذّرت قراءة استخدام الخطة لـ: {{teams}}",
         rowAmount: "الرصيد {{amount}}",
         rowWindowUsed: "{{window}}: مستخدم {{percent}}",
         rowWindowLeft: "{{window}}: متبقٍ {{percent}}",

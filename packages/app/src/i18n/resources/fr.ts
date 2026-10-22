@@ -3080,14 +3080,14 @@ export const fr: TranslationResources = {
         rowUnavailable: "Solde indisponible",
         rowNeedsAccessKey: "AccessKey requise",
         needsAccessKeyVolcengine:
-          "AccessKey requise : Volcengine Ark ne donne les fenêtres de ce forfait qu'à l'AccessKey ID et à la Secret Access Key du compte. Renseignez-les dans Avancé, dans les réglages de ce point d'accès.",
+          "Volcengine Ark ne donne les fenêtres de ce forfait qu'à l'AccessKey ID et à la Secret Access Key du compte. Renseignez-les dans Avancé, dans les réglages de ce point d'accès.",
         needsAccessKeyTencent:
-          "AccessKey requise : Tencent Cloud ne donne l'utilisation d'un Token Plan Enterprise qu'au SecretId et à la SecretKey du compte. Renseignez-les dans Avancé, dans les réglages de ce point d'accès.",
+          "Tencent Cloud ne donne l'utilisation d'un Token Plan Enterprise qu'au SecretId et à la SecretKey du compte. Renseignez-les dans Avancé, dans les réglages de ce point d'accès.",
         fillAccessKey: "Renseigner l'AccessKey",
         planTier: "Niveau : {{tier}}",
         planStopped: "Forfait arrêté : {{status}}",
         teamPlanStopped: "Forfait de l'équipe {{team}} arrêté : {{status}}",
-        unreadTeams: "Aucun quota lu pour : {{teams}}",
+        unreadTeams: "Impossible de lire l’utilisation du forfait de : {{teams}}",
         rowAmount: "Solde {{amount}}",
         rowWindowUsed: "{{window}} {{percent}} utilisé",
         rowWindowLeft: "{{window}} {{percent}} restant",

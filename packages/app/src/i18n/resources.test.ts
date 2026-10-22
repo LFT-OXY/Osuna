@@ -90,6 +90,13 @@ const zhCNEnglishAllowlist = {
   ],
   // 提供方自己定的功能名（Claude Code 的 Ultra Code）。
   providerFeatures: ["settings.apiEndpoints.agent.ultraCode"],
+  // 云厂商控制台自己的字段名，中文控制台同样写英文（火山方舟、腾讯云）。
+  cloudFieldNames: [
+    "settings.apiEndpoints.form.balance.volcAccessKeyId",
+    "settings.apiEndpoints.form.balance.volcSecretAccessKey",
+    "settings.apiEndpoints.form.balance.tencentSecretId",
+    "settings.apiEndpoints.form.balance.tencentSecretKey",
+  ],
   namedThemes: [
     "settings.appearance.theme.options.zinc",
     "settings.appearance.theme.options.midnight",

@@ -3074,14 +3074,14 @@ export const en = {
         rowUnavailable: "Balance unavailable",
         rowNeedsAccessKey: "Needs AccessKey",
         needsAccessKeyVolcengine:
-          "Needs AccessKey: Volcengine Ark tells this plan's windows only to the account's AccessKey ID and Secret Access Key. Fill them in under Advanced in this endpoint's settings.",
+          "Volcengine Ark tells this plan's windows only to the account's AccessKey ID and Secret Access Key. Fill them in under Advanced in this endpoint's settings.",
         needsAccessKeyTencent:
-          "Needs AccessKey: Tencent Cloud tells a Token Plan Enterprise's usage only to the account's SecretId and SecretKey. Fill them in under Advanced in this endpoint's settings.",
+          "Tencent Cloud tells a Token Plan Enterprise's usage only to the account's SecretId and SecretKey. Fill them in under Advanced in this endpoint's settings.",
         fillAccessKey: "Fill in AccessKey",
         planTier: "Tier: {{tier}}",
         planStopped: "Plan stopped: {{status}}",
         teamPlanStopped: "{{team}}'s plan stopped: {{status}}",
-        unreadTeams: "No quota read for: {{teams}}",
+        unreadTeams: "Couldn't read plan usage for: {{teams}}",
         rowAmount: "Balance {{amount}}",
         rowWindowUsed: "{{window}} {{percent}} used",
         rowWindowLeft: "{{window}} {{percent}} left",

@@ -69,6 +69,9 @@ const SEALED_VENDOR_ORIGINS = [
   // 火山方舟与腾讯云的开放平台（balance-plan.ts 的 volcengine_open、tencent_open）：带的是云账号密钥的签名。
   "https://open.volcengineapi.com/",
   "https://tokenhub.tencentcloudapi.com/",
+  // 用例里火山方舟、腾讯云 Token Plan 接口自己的地址：打开详情页会拉模型清单，带着 key 去问。
+  "https://ark.cn-beijing.volces.com/",
+  "https://tokenhub.tencentmaas.com/",
 ];
 
 const realFetch = globalThis.fetch;

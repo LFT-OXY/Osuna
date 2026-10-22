@@ -3050,14 +3050,14 @@ export const ru: TranslationResources = {
         rowUnavailable: "Баланс недоступен",
         rowNeedsAccessKey: "Нужен AccessKey",
         needsAccessKeyVolcengine:
-          "Нужен AccessKey: Volcengine Ark сообщает окна этого тарифа только AccessKey ID и Secret Access Key аккаунта. Укажите их в разделе «Дополнительно» в настройках этого эндпоинта.",
+          "Volcengine Ark сообщает окна этого тарифа только AccessKey ID и Secret Access Key аккаунта. Укажите их в разделе «Дополнительно» в настройках этого эндпоинта.",
         needsAccessKeyTencent:
-          "Нужен AccessKey: Tencent Cloud сообщает использование Token Plan Enterprise только SecretId и SecretKey аккаунта. Укажите их в разделе «Дополнительно» в настройках этого эндпоинта.",
+          "Tencent Cloud сообщает использование Token Plan Enterprise только SecretId и SecretKey аккаунта. Укажите их в разделе «Дополнительно» в настройках этого эндпоинта.",
         fillAccessKey: "Указать AccessKey",
         planTier: "Уровень: {{tier}}",
         planStopped: "Тариф остановлен: {{status}}",
         teamPlanStopped: "Тариф команды {{team}} остановлен: {{status}}",
-        unreadTeams: "Не удалось прочитать квоту для: {{teams}}",
+        unreadTeams: "Не удалось прочитать использование тарифа для: {{teams}}",
         rowAmount: "Баланс {{amount}}",
         rowWindowUsed: "{{window}}: использовано {{percent}}",
         rowWindowLeft: "{{window}}: осталось {{percent}}",

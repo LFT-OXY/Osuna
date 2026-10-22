@@ -3071,14 +3071,14 @@ export const es: TranslationResources = {
         rowUnavailable: "Saldo no disponible",
         rowNeedsAccessKey: "Falta AccessKey",
         needsAccessKeyVolcengine:
-          "Falta AccessKey: Volcengine Ark solo da las ventanas de este plan al AccessKey ID y la Secret Access Key de la cuenta. Rellénalos en Avanzado, en la configuración de este endpoint.",
+          "Volcengine Ark solo da las ventanas de este plan al AccessKey ID y la Secret Access Key de la cuenta. Rellénalos en Avanzado, en la configuración de este endpoint.",
         needsAccessKeyTencent:
-          "Falta AccessKey: Tencent Cloud solo da el uso de un Token Plan Enterprise al SecretId y la SecretKey de la cuenta. Rellénalos en Avanzado, en la configuración de este endpoint.",
+          "Tencent Cloud solo da el uso de un Token Plan Enterprise al SecretId y la SecretKey de la cuenta. Rellénalos en Avanzado, en la configuración de este endpoint.",
         fillAccessKey: "Rellenar AccessKey",
         planTier: "Nivel: {{tier}}",
         planStopped: "Plan detenido: {{status}}",
         teamPlanStopped: "Plan del equipo {{team}} detenido: {{status}}",
-        unreadTeams: "Sin cuota leída para: {{teams}}",
+        unreadTeams: "No se pudo leer el uso del plan de: {{teams}}",
         rowAmount: "Saldo {{amount}}",
         rowWindowUsed: "{{window}} {{percent}} usado",
         rowWindowLeft: "{{window}} {{percent}} restante",
