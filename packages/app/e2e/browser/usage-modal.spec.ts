@@ -18,6 +18,7 @@ import {
 import {
   installLoginUsage,
   installCodexWindowUsage,
+  installResetUsage,
   expectCodexReportedWindows,
   refreshLoginUsage,
   hoverUsageWindow,
@@ -516,6 +517,101 @@ for (const theme of ["light", "dark"] as const) {
       }
     });
   }
+}
+
+// Osuna 工单 12：卡片上用掉一次重置。假的套餐用量来源能用掉重置，结果与之后的读数由测试决定。
+function resetReport(input: { usedPct: number; count: number }) {
+  return {
+    status: "available" as const,
+    planLabel: "plus",
+    windows: [
+      {
+        id: "five_hour",
+        label: "5-hour",
+        usedPct: input.usedPct,
+        remainingPct: 100 - input.usedPct,
+      },
+    ],
+    resets: {
+      count: input.count,
+      until: new Date(Date.now() + 3 * 86400_000).toISOString(),
+    },
+  };
+}
+
+for (const layout of RESETS_LAYOUTS) {
+  test(`using a reset asks first, says what failed, and shows what it did at ${layout.size}`, async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    const source = await installResetUsage(resetReport({ usedPct: 82, count: 2 }), {
+      error: "Codex refused the reset (HTTP 403)",
+    });
+    try {
+      await page.setViewportSize(layout.viewport);
+      await gotoAppShell(page);
+      await layout.revealSidebar(page);
+      await expect(usageItem(page)).toBeVisible({ timeout: 30_000 });
+      await openUsageFromItem(page);
+      const resets = usageModal(page).getByTestId("usage-resets");
+      const use = resets.getByRole("button", { name: "Use a reset", exact: true });
+      await expect(use).toBeVisible();
+      await qaScreenshot(page, `usage-modal-reset-use-button-${layout.size}-light`);
+
+      // 先问：写明是哪个账号、不能撤回、用掉最早过期的那张；取消就什么都不发
+      await use.click();
+      // 手机上是底部弹层，测试 ID 不在装正文的那一层，按文字找
+      await expect(page.getByText("Use a Codex reset?")).toBeVisible();
+      await expect(
+        page.getByText(
+          "Codex has 2 resets. Using one starts its windows again at once, as if none of them had been used. It can't be undone.",
+        ),
+      ).toBeVisible();
+      await expect(
+        page.getByText(/^The one used is the one that runs out first, .+\.$/),
+      ).toBeVisible();
+      const confirm = page.getByTestId("usage-resets-use-confirm");
+      await expect(confirm).toBeInViewport({ ratio: 1 });
+      await qaScreenshot(page, `usage-modal-reset-confirm-${layout.size}-light`);
+      await page.getByTestId("usage-resets-use-cancel").click();
+      await expect(confirm).toHaveCount(0);
+      expect(await source.consumed()).toBe(0);
+
+      // 失败：原因留在框里，再按一次就重试
+      await use.click();
+      await page.getByTestId("usage-resets-use-confirm").click();
+      await expect(page.getByTestId("usage-resets-use-error")).toHaveText(
+        "Couldn't use a reset: Codex refused the reset (HTTP 403)",
+      );
+      expect(await source.consumed()).toBe(1);
+      await qaScreenshot(page, `usage-modal-reset-failed-${layout.size}-light`);
+
+      await source.setAnswer({
+        code: "reset",
+        windows: 2,
+        after: resetReport({ usedPct: 0, count: 1 }),
+        delayMs: 2_000,
+      });
+      await page.getByTestId("usage-resets-use-confirm").click();
+      // 进行中：按钮转圈且按不动
+      await expect(page.getByTestId("usage-resets-use-confirm")).toBeDisabled();
+      await qaScreenshot(page, `usage-modal-reset-consuming-${layout.size}-light`);
+      await expect(confirm).toHaveCount(0);
+      expect(await source.consumed()).toBe(2);
+      await expect(resets.getByTestId("usage-resets-result")).toContainText(
+        "2 windows started again",
+      );
+      // 卡片随即换成用掉之后的读数
+      await expect(resets.getByTestId("usage-resets-summary")).toHaveText(
+        /^1 reset left · Soonest expires .+/,
+      );
+      await qaScreenshot(page, `usage-modal-reset-done-${layout.size}-light`);
+      await resets.getByTestId("usage-resets-result-dismiss").click();
+      await expect(resets.getByTestId("usage-resets-result")).toHaveCount(0);
+    } finally {
+      await source.cleanup();
+    }
+  });
 }
 
 for (const theme of ["light", "dark"] as const) {

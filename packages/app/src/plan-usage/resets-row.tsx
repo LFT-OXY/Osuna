@@ -7,16 +7,125 @@ import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { Button } from "@/components/ui/button";
+import { Text as UiText } from "@/components/ui/text";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { isWeb } from "@/constants/platform";
 import { resetsLine, resetTimeText } from "@/api-endpoints/balance-copy";
-import type { AvailableUsageReport, UsageReport } from "@/usage/types";
+import { useHostFeature } from "@/runtime/host-features";
+import type { UsageResetOutcome } from "@getpaseo/protocol/messages";
+import type { AvailableUsageReport, UsageReportEntry } from "@/usage/types";
+import { canConsumeReset, RESET_USE_KEY, resetOutcomeLine } from "./reset-consume";
+import { ResetConsumeSheet } from "./reset-consume-sheet";
+import { useResetConsume } from "./use-reset-consume";
 
 type UsageResets = NonNullable<AvailableUsageReport["resets"]>;
 
-/** 有重置次数的报告才有这一行。 */
-export function UsageResetsRow({ report }: { report: UsageReport }) {
-  if (report.status !== "available" || !report.resets || report.resets.count <= 0) return null;
-  return <ResetsRow resets={report.resets} />;
+/**
+ * 有重置次数的报告才有这一行；能用的来源再带「用掉一次重置」。用掉之后次数归零时，结果那一句仍留着。
+ */
+export function UsageResetsRow({ serverId, entry }: { serverId: string; entry: UsageReportEntry }) {
+  // COMPAT(planUsageResets): added in v0.17.0, remove gate after 2027-04-22. 老主机不认用掉重置。
+  const hostSupports = useHostFeature(serverId, "planUsageResets");
+  const [isAsking, setIsAsking] = useState(false);
+  const { state, consume, dismiss, clearFailure } = useResetConsume({
+    serverId,
+    reportId: entry.id,
+  });
+  const ask = useCallback(() => {
+    // 上一次的结果在再问一次时收起
+    dismiss();
+    setIsAsking(true);
+  }, [dismiss]);
+  // 手机上确认框卸下时也会回调这里，所以只收起失败，刚用完的结果留着
+  const close = useCallback(() => {
+    setIsAsking(false);
+    clearFailure();
+  }, [clearFailure]);
+  const confirm = useCallback(() => consume(() => setIsAsking(false)), [consume]);
+  const report = entry.report;
+  const resets =
+    report.status === "available" && report.resets && report.resets.count > 0
+      ? report.resets
+      : null;
+  const offersUse = canConsumeReset({ entry, hostSupports });
+  if (!resets && state.status !== "done") return null;
+  return (
+    <View style={styles.container} testID="usage-resets">
+      {resets ? <ResetsRow resets={resets} /> : null}
+      {offersUse ? (
+        <View style={styles.actions}>
+          <UseResetButton until={resets?.until ?? null} onPress={ask} />
+        </View>
+      ) : null}
+      {state.status === "done" ? (
+        <ConsumeOutcome outcome={state.outcome} onDismiss={dismiss} />
+      ) : null}
+      {isAsking ? (
+        <ResetConsumeSheet entry={entry} state={state} onConfirm={confirm} onClose={close} />
+      ) : null}
+    </View>
+  );
+}
+
+/** 「用掉一次重置」：桌面上悬停说明用掉哪一张（照 magpie 的按钮提示），读屏也读这一句。 */
+function UseResetButton({ until, onPress }: { until: string | null; onPress: () => void }) {
+  const { t, i18n } = useTranslation();
+  const hint = until
+    ? t(`${RESET_USE_KEY}.hintSoonest`, {
+        when: resetTimeText({ iso: until, locale: i18n.language }),
+      })
+    : t(`${RESET_USE_KEY}.hintNoExpiry`);
+  return (
+    <Tooltip delayDuration={300} enabledOnDesktop enabledOnMobile={false}>
+      <TooltipTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          onPress={onPress}
+          accessibilityHint={hint}
+          testID="usage-resets-use"
+        >
+          {t(`${RESET_USE_KEY}.action`)}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="top">
+        <Text style={styles.tooltipText}>{hint}</Text>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** 用掉之后的结果，留到再用一次或关掉。 */
+function ConsumeOutcome({
+  outcome,
+  onDismiss,
+}: {
+  outcome: UsageResetOutcome;
+  onDismiss: () => void;
+}) {
+  const { t } = useTranslation();
+  const line = resetOutcomeLine({ t, outcome });
+  return (
+    <View style={styles.resultRow} testID="usage-resets-result">
+      <UiText
+        variant="caption"
+        color={line.tone === "success" ? "statusSuccess" : "foregroundMuted"}
+        selectable
+        style={styles.result}
+      >
+        {line.text}
+      </UiText>
+      <Button
+        variant="ghost"
+        size="sm"
+        onPress={onDismiss}
+        style={styles.toggle}
+        testID="usage-resets-result-dismiss"
+      >
+        {t("common.actions.dismiss")}
+      </Button>
+    </View>
+  );
 }
 
 const KEY = "settings.apiEndpoints.balance.resets";
@@ -55,7 +164,7 @@ function ResetsRow({ resets }: { resets: UsageResets }) {
     [isOpen],
   );
   return (
-    <View style={styles.container} testID="usage-resets">
+    <View style={styles.container}>
       <View style={styles.row}>
         <Text style={styles.summary} testID="usage-resets-summary">
           {resetsLine({ t, resets })}
@@ -124,5 +233,21 @@ const styles = StyleSheet.create((theme) => ({
   card: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
+  },
+  actions: {
+    flexDirection: "row",
+  },
+  resultRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+  },
+  result: {
+    flex: 1,
+  },
+  tooltipText: {
+    color: theme.colors.popoverForeground,
+    fontSize: theme.fontSize.sm,
+    maxWidth: 320,
   },
 }));

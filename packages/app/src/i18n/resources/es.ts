@@ -3159,6 +3159,28 @@ export const es: TranslationResources = {
           eachWeeklyNever: "El reinicio semanal no vence",
           showEach: "Mostrar cuándo vence cada reinicio",
           hideEach: "Ocultar cuándo vence cada reinicio",
+          use: {
+            action: "Usar un reinicio",
+            confirmTitle: "¿Usar un reinicio de {{source}}?",
+            confirmOne:
+              "{{who}} tiene 1 reinicio. Al usarlo, sus ventanas empiezan de nuevo al instante, como si no se hubiera usado ninguna. No se puede deshacer.",
+            confirmMany:
+              "{{who}} tiene {{count}} reinicios. Al usar uno, sus ventanas empiezan de nuevo al instante, como si no se hubiera usado ninguna. No se puede deshacer.",
+            confirmSoonest: "Se usa el que vence primero, {{when}}.",
+            confirmIdle:
+              "Todavía no se ha usado ninguna de sus ventanas, así que no hay nada que empezar de nuevo.",
+            hintSoonest:
+              "Usa el reinicio que vence primero ({{when}}), nunca uno que dure más. Las ventanas de esta cuenta empiezan de nuevo al instante, como si no se hubiera usado ninguna. Se te pregunta antes de usar nada.",
+            hintNoExpiry:
+              "Usa uno de sus reinicios; ninguno vence. Las ventanas de esta cuenta empiezan de nuevo al instante, como si no se hubiera usado ninguna. Se te pregunta antes de usar nada.",
+            outcomeResetOne: "1 ventana empezó de nuevo",
+            outcomeResetMany: "{{count}} ventanas empezaron de nuevo",
+            outcomeNothingToReset:
+              "Nada que empezar de nuevo: no se ha usado ninguna ventana y el reinicio se conserva",
+            outcomeNoCredit: "No quedan reinicios en la cuenta",
+            outcomeAlreadyRedeemed: "Ese reinicio ya se había usado",
+            failed: "No se pudo usar un reinicio: {{error}}",
+          },
         },
         autoRefresh: {
           label: "Actualizar saldo y uso del plan automáticamente",

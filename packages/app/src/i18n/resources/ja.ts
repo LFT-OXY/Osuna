@@ -3130,6 +3130,27 @@ export const ja: TranslationResources = {
           eachWeeklyNever: "週リセット：期限なし",
           showEach: "各リセットの期限を表示",
           hideEach: "各リセットの期限を隠す",
+          use: {
+            action: "リセットを1回使う",
+            confirmTitle: "{{source}} のリセットを使いますか？",
+            confirmOne:
+              "{{who}} にはリセットが 1 回あります。使うと各ウィンドウがすぐに最初からになり、使っていない状態に戻ります。元に戻せません。",
+            confirmMany:
+              "{{who}} にはリセットが {{count}} 回あります。1 回使うと各ウィンドウがすぐに最初からになり、使っていない状態に戻ります。元に戻せません。",
+            confirmSoonest: "使うのは最も早く期限が切れるものです（{{when}} に期限切れ）。",
+            confirmIdle: "まだどのウィンドウも使われていないため、最初からにするものがありません。",
+            hintSoonest:
+              "最も早く期限が切れるリセット（{{when}}）を使い、長く残るものは先に使いません。このアカウントのウィンドウはすぐに最初からになり、使っていない状態に戻ります。使う前に確認します。",
+            hintNoExpiry:
+              "リセットを 1 回使います（どれも期限なし）。このアカウントのウィンドウはすぐに最初からになり、使っていない状態に戻ります。使う前に確認します。",
+            outcomeResetOne: "1 つのウィンドウが最初からになりました",
+            outcomeResetMany: "{{count}} 個のウィンドウが最初からになりました",
+            outcomeNothingToReset:
+              "使われたウィンドウがないため何もしていません。リセットは残っています",
+            outcomeNoCredit: "このアカウントにはリセットが残っていません",
+            outcomeAlreadyRedeemed: "そのリセットはすでに使われています",
+            failed: "リセットを使えませんでした：{{error}}",
+          },
         },
         autoRefresh: {
           label: "残高とプラン使用量を自動更新",

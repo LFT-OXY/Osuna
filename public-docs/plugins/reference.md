@@ -349,7 +349,7 @@ SVG or URL.
 `server.registerUsageSource()`. Import its contract and helpers from
 `@getpaseo/plugin/server/usage`.
 
-A source implements two calls:
+A source implements two calls, and a third optional one:
 
 ```ts
 interface UsageAccount {
@@ -370,6 +370,15 @@ interface UsageSourceRegistration {
   input: ZodType;
   discover(scope: UsageScope): Promise<UsageAccount[]>;
   fetch(input: unknown): Promise<UsageReport>;
+  // Uses the account's reset that expires soonest. Throw, using none, when you can't tell which.
+  consumeReset?(input: unknown): Promise<UsageResetOutcome>;
+}
+
+// `code` is the vendor's word: "reset" (`windows` started again), "nothing_to_reset" (none was
+// used, the reset is kept), "no_credit" or "already_redeemed". Others are shown as given.
+interface UsageResetOutcome {
+  code: string;
+  windows: number;
 }
 
 type UsageReport =
@@ -414,6 +423,10 @@ Inputs name credential stores; never put credentials in inputs or reports. Paseo
 input against your schema before calling `fetch()`. The same key in any scope is the same report;
 fetches share a five-minute cache only when their ordered login inputs match. Each login fetch
 has a 20-second deadline.
+
+`consumeReset()` gets the input of the login the card last showed, only after the user confirms,
+and Paseo then re-reads that account past the cache. Using a reset can't be undone; never call it
+on your own.
 
 Built-in session routes:
 

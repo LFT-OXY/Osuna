@@ -25,6 +25,9 @@ test("lists reports from usage sources", async () => {
       async listLegacyUsage() {
         return { fetchedAt: "2026-01-01T00:00:00.000Z", providers: [] };
       },
+      async consumeUsageReset(): Promise<never> {
+        throw new Error("not used");
+      },
     },
     logger: pino({ level: "silent" }),
   });
@@ -48,6 +51,9 @@ test("surfaces a legacy usage-list failure as an rpc_error envelope", async () =
       async listLegacyUsage(): Promise<never> {
         throw new Error("quota service down");
       },
+      async consumeUsageReset(): Promise<never> {
+        throw new Error("not used");
+      },
     },
     logger: pino({ level: "silent" }),
   });
@@ -69,6 +75,60 @@ test("request failures terminate with an error response and no updates", async (
     {
       type: "usage.list_reports.response",
       payload: { requestId: "failed", error: "Plugin runtime is unavailable" },
+    },
+  ]);
+});
+
+test("answers a used reset with its outcome and the account read afresh, or the failure", async () => {
+  const emitted: SessionOutboundMessage[] = [];
+  const entry = {
+    id: "codex:work",
+    account: {},
+    fetchedAt: "2026-01-01T00:00:00.000Z",
+    sourceId: "codex",
+    sourceLabel: "Codex",
+    report: { status: "available" as const, windows: [] },
+  };
+  const outcome = { code: "reset", windows: 2, message: "2 windows started again" };
+  const usage = new UsageSession({
+    emit: (message) => emitted.push(message),
+    runtime: {
+      async listUsageReports() {
+        return [];
+      },
+      async listLegacyUsage() {
+        return { fetchedAt: "2026-01-01T00:00:00.000Z", providers: [] };
+      },
+      async consumeUsageReset(reportId) {
+        if (reportId !== "codex:work") throw new Error(`Unknown usage report: ${reportId}`);
+        return { outcome, entry };
+      },
+    },
+    logger: pino({ level: "silent" }),
+  });
+  await usage.handleConsumeReset({
+    type: "usage.reset.consume.request",
+    requestId: "ok",
+    reportId: "codex:work",
+  });
+  await usage.handleConsumeReset({
+    type: "usage.reset.consume.request",
+    requestId: "bad",
+    reportId: "codex:gone",
+  });
+  expect(emitted).toEqual([
+    {
+      type: "usage.reset.consume.response",
+      payload: { requestId: "ok", outcome, report: entry, error: null },
+    },
+    {
+      type: "usage.reset.consume.response",
+      payload: {
+        requestId: "bad",
+        outcome: null,
+        report: null,
+        error: "Unknown usage report: codex:gone",
+      },
     },
   ]);
 });

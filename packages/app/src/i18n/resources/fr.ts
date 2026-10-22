@@ -3168,6 +3168,28 @@ export const fr: TranslationResources = {
           eachWeeklyNever: "La réinitialisation hebdomadaire n'expire pas",
           showEach: "Afficher l'expiration de chaque réinitialisation",
           hideEach: "Masquer l'expiration de chaque réinitialisation",
+          use: {
+            action: "Utiliser une réinitialisation",
+            confirmTitle: "Utiliser une réinitialisation {{source}} ?",
+            confirmOne:
+              "{{who}} a 1 réinitialisation. L'utiliser fait repartir ses fenêtres de zéro immédiatement, comme si aucune n'avait été utilisée. C'est irréversible.",
+            confirmMany:
+              "{{who}} a {{count}} réinitialisations. En utiliser une fait repartir ses fenêtres de zéro immédiatement, comme si aucune n'avait été utilisée. C'est irréversible.",
+            confirmSoonest: "Celle utilisée est celle qui expire en premier, {{when}}.",
+            confirmIdle:
+              "Aucune de ses fenêtres n'a encore été utilisée : il n'y a rien à faire repartir.",
+            hintSoonest:
+              "Utilise la réinitialisation qui expire en premier ({{when}}), jamais une qui dure plus longtemps. Les fenêtres de ce compte repartent de zéro immédiatement, comme si aucune n'avait été utilisée. Une confirmation vous est demandée avant.",
+            hintNoExpiry:
+              "Utilise l'une de ses réinitialisations ; aucune n'expire. Les fenêtres de ce compte repartent de zéro immédiatement, comme si aucune n'avait été utilisée. Une confirmation vous est demandée avant.",
+            outcomeResetOne: "1 fenêtre est repartie de zéro",
+            outcomeResetMany: "{{count}} fenêtres sont reparties de zéro",
+            outcomeNothingToReset:
+              "Rien à faire repartir : aucune fenêtre n'a été utilisée, la réinitialisation est conservée",
+            outcomeNoCredit: "Plus aucune réinitialisation sur le compte",
+            outcomeAlreadyRedeemed: "Cette réinitialisation a déjà été utilisée",
+            failed: "Impossible d'utiliser une réinitialisation : {{error}}",
+          },
         },
         autoRefresh: {
           label: "Actualiser automatiquement le solde et l'usage du forfait",

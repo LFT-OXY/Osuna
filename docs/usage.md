@@ -191,6 +191,18 @@ token, `ChatGPT-Account-Id` and `User-Agent: Osuna/<version>`, for when each
 one expires. It waits 4 seconds; on any failure the card shows the count alone.
 The sign-in file is read, never written.
 
+**Use a reset** on the card is the one place Osuna uses a CLI's sign-in to change
+the account rather than read it; the sign-in itself is still only read. It sends
+nothing until you confirm. Then it reads the same list again, picks the
+available reset that expires soonest (ones without an expiry last), and sends
+`POST chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume` with the same
+headers and a body of `{credit_id, redeem_request_id}`, where
+`redeem_request_id` is a fresh random UUID so a retried request uses one reset
+at most. If the list can't be read, it uses none and says so. The answer's
+`code` (`reset` with `windows_reset`, `nothing_to_reset`, `no_credit`,
+`already_redeemed`) is shown on the card, and the account is read again past
+the 5-minute cache. Osuna never uses a reset on its own.
+
 ### API endpoints
 
 These go to the base URLs of one API endpoint and carry its key, unless it has

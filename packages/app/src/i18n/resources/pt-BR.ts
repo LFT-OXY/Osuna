@@ -3143,6 +3143,27 @@ export const ptBR: TranslationResources = {
           eachWeeklyNever: "O reinício semanal não vence",
           showEach: "Mostrar quando cada reinício vence",
           hideEach: "Ocultar quando cada reinício vence",
+          use: {
+            action: "Usar um reinício",
+            confirmTitle: "Usar um reinício do {{source}}?",
+            confirmOne:
+              "{{who}} tem 1 reinício. Ao usá-lo, as janelas recomeçam na hora, como se nenhuma tivesse sido usada. Não dá para desfazer.",
+            confirmMany:
+              "{{who}} tem {{count}} reinícios. Ao usar um, as janelas recomeçam na hora, como se nenhuma tivesse sido usada. Não dá para desfazer.",
+            confirmSoonest: "O usado é o que vence primeiro, {{when}}.",
+            confirmIdle: "Nenhuma das janelas foi usada ainda, então não há nada para recomeçar.",
+            hintSoonest:
+              "Usa o reinício que vence primeiro ({{when}}), nunca um que dure mais. As janelas desta conta recomeçam na hora, como se nenhuma tivesse sido usada. Você confirma antes de qualquer uso.",
+            hintNoExpiry:
+              "Usa um dos reinícios; nenhum vence. As janelas desta conta recomeçam na hora, como se nenhuma tivesse sido usada. Você confirma antes de qualquer uso.",
+            outcomeResetOne: "1 janela recomeçou",
+            outcomeResetMany: "{{count}} janelas recomeçaram",
+            outcomeNothingToReset:
+              "Nada para recomeçar: nenhuma janela foi usada, e o reinício foi mantido",
+            outcomeNoCredit: "Não há mais reinícios na conta",
+            outcomeAlreadyRedeemed: "Esse reinício já tinha sido usado",
+            failed: "Não foi possível usar um reinício: {{error}}",
+          },
         },
         autoRefresh: {
           label: "Atualizar saldo e uso do plano automaticamente",

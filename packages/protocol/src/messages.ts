@@ -1993,6 +1993,16 @@ export const ProviderUpgradeRequestSchema = z.object({
   provider: z.string(),
 });
 
+/**
+ * 用掉这个账号的一次重置（最早过期的那张），之后跳过缓存重读这个账号。不可撤回，客户端先问用户。
+ * 只有声明了 planUsageResets 的 daemon 认；报告带 consumesResets 的来源才能用。
+ */
+export const UsageResetConsumeRequestSchema = z.object({
+  type: z.literal("usage.reset.consume.request"),
+  requestId: z.string(),
+  reportId: z.string(),
+});
+
 export const UsageListReportsRequestMessageSchema = z.object({
   type: z.literal("usage.list_reports.request"),
   agentId: z.string().optional(),
@@ -3642,6 +3652,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ProviderVersionCheckRequestSchema,
   ProviderUpgradeRequestSchema,
   UsageListReportsRequestMessageSchema,
+  UsageResetConsumeRequestSchema,
   ResumeAgentRequestMessageSchema,
   ImportAgentRequestMessageSchema,
   RefreshAgentRequestMessageSchema,
@@ -4198,6 +4209,9 @@ export const ServerInfoStatusPayloadSchema = z
         // 接口带 balanceTokenMask，保存与 check_balance 带 balanceToken（账户令牌），支持 reveal_secret；读数带 windows；
         // 支持 detect_balance_url（编辑窗口的「自动识别」余额地址）。
         apiEndpointBalance: z.boolean().optional(),
+        // COMPAT(planUsageResets): added in v0.17.0, remove gate after 2027-04-22.
+        // 任务 10-16-endpoint-balance：usage.reset.consume（套餐用量卡片上「用掉一次重置」），报告带 consumesResets。
+        planUsageResets: z.boolean().optional(),
         // COMPAT(providerVersions): added in v0.14.0, remove gate after 2027-04-01.
         // 快照带内置提供方的已装版本 version；daemon 支持 provider.version.check.* 与 provider.upgrade.*。
         providerVersions: z.boolean().optional(),
@@ -6842,6 +6856,8 @@ export const UsageReportEntrySchema = z.object({
   sourceId: z.string(),
   sourceLabel: z.string(),
   icon: z.string().optional(),
+  // 来源能从这里用掉一次重置（usage.reset.consume）；老 daemon 与不能用的来源不发。
+  consumesResets: z.boolean().optional(),
   report: UsageReportSchema,
   loginErrors: z
     .array(
@@ -6855,6 +6871,29 @@ export const UsageReportEntrySchema = z.object({
     )
     .optional(),
 });
+/**
+ * 用掉一次重置的结果。code 是厂商的说法：reset（windows 个窗口从头开始）、nothing_to_reset（没有窗口用过，
+ * 这张留着）、no_credit（已没有重置）、already_redeemed 或 already_used（这张已经用过）；别的照原样转。message 是英文说明。
+ */
+export const UsageResetOutcomeSchema = z.object({
+  code: z.string().min(1),
+  windows: z.number().int().nonnegative(),
+  message: z.string().optional(),
+});
+export type UsageResetOutcome = z.infer<typeof UsageResetOutcomeSchema>;
+
+export const UsageResetConsumeResponseSchema = z.object({
+  type: z.literal("usage.reset.consume.response"),
+  payload: z.object({
+    requestId: z.string(),
+    outcome: UsageResetOutcomeSchema.nullable(),
+    // 用掉之后重读的这个账号；重读失败时是带失败原因的报告，不是 null。
+    report: UsageReportEntrySchema.nullable(),
+    error: z.string().nullable(),
+  }),
+});
+export type UsageResetConsumePayload = z.infer<typeof UsageResetConsumeResponseSchema>["payload"];
+
 export const UsageListReportsUpdateMessageSchema = z.object({
   type: z.literal("usage.list_reports.update"),
   payload: z.object({ requestId: z.string(), report: UsageReportEntrySchema }),
@@ -7563,6 +7602,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ProviderUpgradeResponseSchema,
   UsageListReportsUpdateMessageSchema,
   UsageListReportsResponseMessageSchema,
+  UsageResetConsumeResponseSchema,
   ListCommandsResponseSchema,
   ListTerminalsResponseSchema,
   TerminalsChangedSchema,

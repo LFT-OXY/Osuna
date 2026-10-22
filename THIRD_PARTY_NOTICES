@@ -1195,6 +1195,20 @@ internal/gui/assets/app.js:
   plugins/codex-usage-source/server/resets.ts
   packages/app/src/plan-usage/resets-row.tsx
 
+Using one of a Codex account's resets from its card (the list read again to
+name the one that expires soonest and none used when it can't be read, the
+consume request with a random UUID v4 as its idempotency key, the four outcome
+codes and their words, the confirmation that says it can't be undone, which one
+is used and when no window has been used yet) follows useCodexReset,
+consumeCodexReset, newRedeemID, codexResetCreditsWire.first and
+ResetOutcome.Text in magpie's internal/provider/codex_resets.go and askReset,
+resetOutcome and resetUseTitle in internal/gui/assets/app.js:
+
+  plugins/codex-usage-source/server/resets.ts
+  packages/server/src/server/plugins/usage-sources/index.ts
+  packages/app/src/plan-usage/reset-consume.ts
+  packages/app/src/plan-usage/reset-consume-sheet.tsx
+
 Import from other apps (the five sources and where each keeps its file, how a
 CC Switch, Claude Code, Codex, Alma or OpenCode entry becomes an endpoint, a
 template's when the URLs are its own, entries of one account merged, Osuna's own

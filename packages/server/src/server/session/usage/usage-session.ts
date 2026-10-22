@@ -1,4 +1,7 @@
-import type { ListUsageReportsOptions } from "../../plugins/usage-sources/index.js";
+import type {
+  ListUsageReportsOptions,
+  UsageResetResult,
+} from "../../plugins/usage-sources/index.js";
 import type pino from "pino";
 import type { ProviderUsage, UsageReportEntry } from "@getpaseo/protocol/messages";
 import type { SessionInboundMessage, SessionOutboundMessage } from "../../messages.js";
@@ -8,6 +11,7 @@ export interface UsageSessionOptions {
   runtime?: {
     listUsageReports(options: ListUsageReportsOptions): Promise<UsageReportEntry[]>;
     listLegacyUsage(): Promise<{ fetchedAt: string; providers: ProviderUsage[] }>;
+    consumeUsageReset(reportId: string): Promise<UsageResetResult>;
   };
   logger: pino.Logger;
 }
@@ -39,6 +43,30 @@ export class UsageSession {
         type: "usage.list_reports.response",
         payload: {
           requestId: msg.requestId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
+  }
+
+  async handleConsumeReset(
+    msg: Extract<SessionInboundMessage, { type: "usage.reset.consume.request" }>,
+  ): Promise<void> {
+    try {
+      if (!this.options.runtime) throw new Error("Plugin runtime is unavailable");
+      const { outcome, entry } = await this.options.runtime.consumeUsageReset(msg.reportId);
+      this.options.emit({
+        type: "usage.reset.consume.response",
+        payload: { requestId: msg.requestId, outcome, report: entry, error: null },
+      });
+    } catch (error) {
+      this.options.logger.warn({ err: error, reportId: msg.reportId }, "Usage reset failed");
+      this.options.emit({
+        type: "usage.reset.consume.response",
+        payload: {
+          requestId: msg.requestId,
+          outcome: null,
+          report: null,
           error: error instanceof Error ? error.message : String(error),
         },
       });

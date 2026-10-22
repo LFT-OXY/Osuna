@@ -550,6 +550,9 @@ export interface SessionOptions {
       reportIds?: string[];
     }): Promise<UsageReportEntry[]>;
     listLegacyUsage(): Promise<{ fetchedAt: string; providers: ProviderUsage[] }>;
+    consumeUsageReset(
+      reportId: string,
+    ): Promise<import("./plugins/usage-sources/index.js").UsageResetResult>;
   };
   orchestrationSkills?: import("./orchestration-skills/index.js").OrchestrationSkills;
   mcpBaseUrl?: string | null;
@@ -3090,6 +3093,8 @@ export class Session {
         return this.usageSession.handleLegacyList(msg);
       case "usage.list_reports.request":
         return this.usageSession.handleListReports(msg);
+      case "usage.reset.consume.request":
+        return this.usageSession.handleConsumeReset(msg);
       case "provider.version.check.request":
         return this.providerCatalogSession.handleProviderVersionCheckRequest(msg);
       case "provider.upgrade.request":

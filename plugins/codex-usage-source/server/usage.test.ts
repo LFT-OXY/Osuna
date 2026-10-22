@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { fetchUsage, discover } from "./usage.js";
+import { consumeReset, fetchUsage, discover } from "./usage.js";
 
 import { inputSchema, type CodexUsageInput } from "../shared/input.js";
 
@@ -589,5 +589,151 @@ test("reading resets leaves auth.json byte for byte unchanged", async () => {
         ),
   );
   expect(report).toMatchObject({ resets: { count: 1, until: null, each: [{ until: null }] } });
+  expect(await readFile(authPath, "utf8")).toBe(before);
+});
+
+const CONSUME_URL = `${RESETS_URL}/consume`;
+
+function resetList(credits: Array<{ id: string; status: string; expires_at: string | null }>) {
+  return new Response(JSON.stringify({ available_count: credits.length, credits }), {
+    status: 200,
+  });
+}
+
+/** 一个账号的重置清单与用掉请求；记下每次请求。 */
+function resetsVendor(options: {
+  list: () => Response | Promise<Response>;
+  consume?: Record<string, unknown>;
+}) {
+  const asked: { url: string; method: string; headers: Headers; body: unknown }[] = [];
+  const fetchApi = async (url: string | URL | Request, init?: RequestInit) => {
+    asked.push({
+      url: String(url),
+      method: init?.method ?? "GET",
+      headers: new Headers(init?.headers),
+      body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined,
+    });
+    if (String(url) === CONSUME_URL)
+      return new Response(JSON.stringify(options.consume ?? { code: "reset", windows_reset: 2 }));
+    return options.list();
+  };
+  return { asked, fetchApi: fetchApi as typeof fetch };
+}
+
+test("using a reset spends the one that expires soonest, with a fresh idempotency id", async () => {
+  await writeAuth("fixture-use", "account-use");
+  const vendor = resetsVendor({
+    list: () =>
+      resetList([
+        { id: "never", status: "available", expires_at: null },
+        { id: "late", status: "available", expires_at: "2026-11-30T08:00:00Z" },
+        { id: "used", status: "redeemed", expires_at: "2026-10-01T08:00:00Z" },
+        { id: "soon", status: "available", expires_at: "2026-10-25T14:30:00Z" },
+      ]),
+  });
+  const outcome = await consumeReset(authInput(fixtureHome), vendor.fetchApi, {}, "Osuna/9.9.9");
+  expect(outcome).toEqual({ code: "reset", windows: 2 });
+  expect(vendor.asked.map((request) => [request.method, request.url])).toEqual([
+    ["GET", RESETS_URL],
+    ["POST", CONSUME_URL],
+  ]);
+  const consume = vendor.asked[1]!;
+  expect(consume.body).toEqual({ credit_id: "soon", redeem_request_id: expect.any(String) });
+  const id = (consume.body as { redeem_request_id: string }).redeem_request_id;
+  expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  expect(consume.headers.get("Authorization")).toBe("Bearer fixture-use");
+  expect(consume.headers.get("ChatGPT-Account-Id")).toBe("account-use");
+  expect(consume.headers.get("User-Agent")).toBe("Osuna/9.9.9");
+  expect(consume.headers.get("Content-Type")).toBe("application/json");
+
+  await consumeReset(authInput(fixtureHome), vendor.fetchApi);
+  const again = (vendor.asked[3]!.body as { redeem_request_id: string }).redeem_request_id;
+  expect(again).not.toBe(id);
+});
+
+test("using a reset passes on each of the vendor's outcomes", async () => {
+  for (const [answer, outcome] of [
+    [
+      { code: "reset", windows_reset: 1 },
+      { code: "reset", windows: 1 },
+    ],
+    [
+      { code: "nothing_to_reset", windows_reset: 0 },
+      { code: "nothing_to_reset", windows: 0 },
+    ],
+    [{ code: "no_credit" }, { code: "no_credit", windows: 0 }],
+    [{ code: "already_redeemed" }, { code: "already_redeemed", windows: 0 }],
+  ] as const) {
+    const vendor = resetsVendor({
+      list: () => resetList([{ id: "a", status: "available", expires_at: null }]),
+      consume: answer,
+    });
+    expect(await consumeReset(authInput(fixtureHome), vendor.fetchApi)).toEqual(outcome);
+  }
+});
+
+test("using a reset spends none when the list has none left", async () => {
+  const vendor = resetsVendor({
+    list: () => resetList([{ id: "used", status: "redeemed", expires_at: null }]),
+  });
+  expect(await consumeReset(authInput(fixtureHome), vendor.fetchApi)).toEqual({
+    code: "no_credit",
+    windows: 0,
+  });
+  expect(vendor.asked.map((request) => request.url)).toEqual([RESETS_URL]);
+});
+
+test("using a reset spends none when the list can't be read", async () => {
+  for (const list of [
+    () => new Response("bad gateway", { status: 502 }),
+    () => new Response("<html>Just a moment</html>", { status: 200 }),
+    () => {
+      throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
+    },
+  ]) {
+    const vendor = resetsVendor({ list });
+    await expect(consumeReset(authInput(fixtureHome), vendor.fetchApi)).rejects.toThrow(
+      "Couldn't read which reset runs out first, so none was used",
+    );
+    expect(vendor.asked.map((request) => request.url)).toEqual([RESETS_URL]);
+  }
+});
+
+test("a rejected or empty answer to using a reset is an error", async () => {
+  const rejected = resetsVendor({
+    list: () => resetList([{ id: "a", status: "available", expires_at: null }]),
+  });
+  const fetchApi = (async (url: string | URL | Request, init?: RequestInit) =>
+    String(url) === CONSUME_URL
+      ? new Response("forbidden", { status: 403 })
+      : rejected.fetchApi(url, init)) as typeof fetch;
+  await expect(consumeReset(authInput(fixtureHome), fetchApi)).rejects.toThrow(
+    "Codex refused the reset (HTTP 403)",
+  );
+  const empty = resetsVendor({
+    list: () => resetList([{ id: "a", status: "available", expires_at: null }]),
+    consume: {},
+  });
+  await expect(consumeReset(authInput(fixtureHome), empty.fetchApi)).rejects.toThrow(
+    "Codex's answer to the reset said nothing",
+  );
+});
+
+test("using a reset leaves auth.json byte for byte unchanged", async () => {
+  const authPath = join(fixtureHome, "auth.json");
+  const before = JSON.stringify({
+    tokens: {
+      id_token: "fixture-id",
+      access_token: "fixture-use",
+      refresh_token: "fixture-refresh",
+      account_id: "fixture-account",
+    },
+    last_refresh: "2026-07-04T20:35:00Z",
+  });
+  await writeFile(authPath, before);
+  const vendor = resetsVendor({
+    list: () => resetList([{ id: "a", status: "available", expires_at: null }]),
+  });
+  await consumeReset(authInput(fixtureHome), vendor.fetchApi);
   expect(await readFile(authPath, "utf8")).toBe(before);
 });

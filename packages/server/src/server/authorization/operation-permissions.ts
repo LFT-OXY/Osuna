@@ -250,6 +250,8 @@ const INBOUND_PERMISSION = {
   // Refreshing reaches the network and rewrites the cached table, like any other
   // daemon-level setting change.
   "usage.pricing.refresh.request": "daemon.manage",
+  // 用掉一次重置改变的是账号状态，不只是读
+  "usage.reset.consume.request": "daemon.manage",
   validate_branch_request: "workspace.read",
   voice_audio_chunk: "workspace.write",
   wait_for_finish_request: "workspace.read",
@@ -527,6 +529,7 @@ const OUTBOUND_PERMISSION = {
   "usage.agent.turns.list.response": "daemon.read",
   "usage.pricing.list.response": "daemon.read",
   "usage.pricing.refresh.response": "daemon.manage",
+  "usage.reset.consume.response": "daemon.manage",
   "usage.pricing.updated": "daemon.read",
   "usage.updated": "daemon.read",
   validate_branch_response: "workspace.read",

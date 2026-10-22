@@ -149,7 +149,7 @@ export function UsageCard({
         </View>
       ) : null}
 
-      <UsageResetsRow report={usage} />
+      <UsageResetsRow serverId={serverId} entry={entry} />
 
       {details.length > 0 ? (
         <View style={styles.details}>

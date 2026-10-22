@@ -577,6 +577,10 @@ type ProviderUpgradePayload = Extract<
   SessionOutboundMessage,
   { type: "provider.upgrade.response" }
 >["payload"];
+type UsageResetConsumePayload = Extract<
+  SessionOutboundMessage,
+  { type: "usage.reset.consume.response" }
+>["payload"];
 interface UsageListReportsPayload {
   requestId: string;
   reports: UsageReportEntry[];
@@ -5644,6 +5648,17 @@ export class DaemonClient {
         ...(options?.providers ? { providers: options.providers } : {}),
         ...(options?.force ? { force: true } : {}),
       },
+    });
+  }
+
+  /**
+   * 用掉这个账号最早过期的一次重置（不可撤回，先问用户），回结果与重读后的报告。
+   * 只有声明了 planUsageResets 的 daemon 认。
+   */
+  async consumeUsageReset(reportId: string, requestId?: string): Promise<UsageResetConsumePayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "usage.reset.consume.request", reportId },
     });
   }
 

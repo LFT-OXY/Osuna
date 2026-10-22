@@ -2060,3 +2060,52 @@ volcSign({ ..., host: open.host });
   throw error;
 }
 ```
+
+## Scenario: Using a Codex reset from the plan usage card (endpoint-balance ticket 12, magpie `provider/codex_resets.go` `useCodexReset` / `consumeCodexReset` / `newRedeemID`)
+
+### 1. Scope / Trigger
+- First Osuna request that changes an account with a CLI's sign-in (the sign-in file itself is still only read). A new optional plugin SDK call crosses plugin process → daemon registry → protocol RPC → app.
+
+### 2. Signatures
+- Plugin SDK: `UsageSourceRegistration.consumeReset?(input): Promise<UsageResetOutcome>`, `UsageResetOutcome { code: string; windows: number }`.
+- Plugin process: request `{ type: "usage.consume_reset"; requestId; sourceId; input }`; ready metadata `usageSources[].consumesResets?: boolean` (set when the source has `consumeReset`). Runtime: `PluginRuntime.consumeUsageReset(pluginId, sourceId, input)`.
+- Registry: `UsageSourceRegistry.consumeReset(reportId): Promise<UsageResetResult>` (`{ outcome, entry }`); `PluginManager.consumeUsageReset(reportId)`.
+- RPC: `usage.reset.consume.request { requestId, reportId }` → `usage.reset.consume.response { requestId, outcome: { code, windows, message? } | null, report: UsageReportEntry | null, error: string | null }`. Permission `daemon.manage` (it changes the account). Client: `DaemonClient.consumeUsageReset(reportId)`.
+- Capability: `server_info.features.planUsageResets`, declared only when the daemon has a plugin runtime. Report entries carry `consumesResets?: true` when their source can.
+- Codex: `consumeReset(input, fetchApi, lookup, userAgent)` in `server/usage.ts`, `consumeSoonestReset({ headers, fetchApi })` in `server/resets.ts`.
+
+### 3. Contracts
+- Codex reads the list again (`readCards`, same 4 s timeout), picks the first available card (soonest, never-expiring last, stable order), then `POST …/wham/rate-limit-reset-credits/consume` with the list's headers + `Content-Type: application/json`, body `{ credit_id, redeem_request_id: randomUUID() }` — a fresh v4 per call; it is the vendor's idempotency key.
+- The registry calls the source with the login whose report the card last showed (`answeredBy`, set in `fetchWithFallback` when a login answers `available`; falls back to the first login), then deletes the account's cache **and pending** entries (a read started before the reset would otherwise answer the forced read with old windows) and returns `fetchId(id, known, true)`.
+- `message` is magpie's `ResetOutcome.Text` in English (`resetOutcomeText`); the app translates `reset` / `nothing_to_reset` / `no_credit` / `already_redeemed` / `already_used` itself and shows `message` (else `code`) for anything else.
+
+### 4. Validation & Error Matrix
+| Condition | Result |
+| --- | --- |
+| list unreadable (non-2xx, HTML, wrong shape, network, timeout) | throws "Couldn't read which reset runs out first, so none was used"; no POST |
+| list has no available card | `{ code: "no_credit", windows: 0 }`; no POST |
+| consume non-2xx | throws `Codex refused the reset (HTTP <status>)` |
+| consume 2xx without `code` | throws "Codex's answer to the reset said nothing" |
+| unknown report id / source without `consumeReset` | response `error`, `outcome: null`, `report: null` |
+| failure of any kind | cache untouched |
+
+### 5. Good/Base/Bad Cases
+- Good: 2 windows used, confirm → `reset`/2, card re-read shows 0% and one reset fewer. Base: no window used → `nothing_to_reset`, reset kept. Bad: list times out → nothing spent, the error stays in the confirmation sheet.
+
+### 6. Tests Required
+- `plugins/codex-usage-source/server/usage.test.ts`: picks the soonest, UUID v4 that differs per call, UA/account/Content-Type headers, four outcome codes passed through, none left → no POST, unreadable list → no POST, 403 / empty answer throw, `auth.json` byte-identical.
+- `usage-sources/index.test.ts`: uses the answering login, re-reads past the cache, words per code (unknown passed through), sources without it refuse and don't set `consumesResets`, a failure leaves the cache.
+- `session/usage/usage-session.test.ts`: success and error payloads.
+- `e2e/browser/usage-modal.spec.ts` "using a reset asks first…": a fake plugin (`installResetUsage`) at 1280/390 — confirmation text, cancel sends nothing, failure in the sheet, in-progress button disabled, success line + updated card, Dismiss.
+
+### 7. Wrong vs Correct
+#### Wrong
+```ts
+// 让厂商自己挑：可能用掉更久的那张
+await fetch(`${RESETS_URL}/consume`, { method: "POST", body: "{}" });
+```
+#### Correct
+```ts
+const soonest = cards[0]; // 自己点名最早过期的那张；清单读不到就一张都不用
+body: JSON.stringify({ credit_id: soonest.id, redeem_request_id: randomUUID() }),
+```

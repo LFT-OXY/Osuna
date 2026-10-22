@@ -59,6 +59,16 @@ export interface UsageResets {
   each?: UsageReset[];
 }
 
+/**
+ * What using a reset did. `code` is the vendor's word for it: "reset" (`windows` started again),
+ * "nothing_to_reset" (no window was used, so the reset is kept), "no_credit" (none left) or
+ * "already_redeemed"; any other word is passed through as said.
+ */
+export interface UsageResetOutcome {
+  code: string;
+  windows: number;
+}
+
 export type UsageProblem =
   | { kind: "expired"; expiresAt: string; refreshedBy?: string }
   | { kind: "rejected"; status: number; refreshedBy?: string }
@@ -106,6 +116,12 @@ export interface UsageSourceRegistration {
   discover(scope: UsageScope): Promise<UsageAccount[]>;
   /** Re-reads the login store; never writes it. */
   fetch(input: unknown): Promise<UsageReport>;
+  /**
+   * Uses one of the account's resets, the one that expires soonest; throws when it can't tell
+   * which, using none. It can't be undone: the daemon calls it only after the user confirms, then
+   * reads the account afresh. Reads the login store like `fetch`, never writes it.
+   */
+  consumeReset?(input: unknown): Promise<UsageResetOutcome>;
 }
 
 export function windowFromUsedPct(input: {

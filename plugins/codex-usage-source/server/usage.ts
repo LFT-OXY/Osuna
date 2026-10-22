@@ -1,4 +1,4 @@
-import { readResets } from "./resets.js";
+import { consumeSoonestReset, readResets } from "./resets.js";
 import { discoverOmp, piAuthPath, readHarness, readJson, type StoreLookup } from "./stores.js";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -11,6 +11,7 @@ import {
   toneFromUsedPct,
   windowFromReportedDuration,
   type UsageReport,
+  type UsageResetOutcome,
   type UsageWindow,
 } from "@getpaseo/plugin/server/usage";
 import { z } from "zod";
@@ -184,6 +185,27 @@ function usageWindows({
       }),
     ];
   });
+}
+
+/**
+ * 用掉这个账号最早过期的一次重置，用同一份 Codex 登录（只读登录文件，不写）。
+ * 这是 Osuna 用 CLI 的登录改变账号状态的唯一一处：只在用户确认后由 daemon 调用。
+ */
+export async function consumeReset(
+  input: CodexUsageInput,
+  fetchApi: typeof fetch = fetch,
+  lookup: StoreLookup = {},
+  userAgent = "Osuna",
+): Promise<UsageResetOutcome> {
+  const auth = await readAuth(input, lookup);
+  if (!auth) throw new Error("Codex login store no longer exists");
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${auth.token}`,
+    Accept: "application/json",
+    "User-Agent": userAgent,
+  };
+  if (auth.accountId) headers["ChatGPT-Account-Id"] = auth.accountId;
+  return consumeSoonestReset({ headers, fetchApi });
 }
 
 export async function fetchUsage(

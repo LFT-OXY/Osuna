@@ -3114,6 +3114,27 @@ export const ko: TranslationResources = {
           eachWeeklyNever: "주간 리셋: 만료 없음",
           showEach: "리셋별 만료 시간 보기",
           hideEach: "리셋별 만료 시간 숨기기",
+          use: {
+            action: "리셋 1회 사용",
+            confirmTitle: "{{source}} 리셋을 사용할까요?",
+            confirmOne:
+              "{{who}}에 리셋이 1회 있습니다. 사용하면 모든 창이 즉시 처음부터 다시 시작되어 아무것도 쓰지 않은 상태가 됩니다. 되돌릴 수 없습니다.",
+            confirmMany:
+              "{{who}}에 리셋이 {{count}}회 있습니다. 1회 사용하면 모든 창이 즉시 처음부터 다시 시작되어 아무것도 쓰지 않은 상태가 됩니다. 되돌릴 수 없습니다.",
+            confirmSoonest: "가장 먼저 만료되는 리셋을 사용합니다({{when}} 만료).",
+            confirmIdle: "아직 사용한 창이 없어 다시 시작할 것이 없습니다.",
+            hintSoonest:
+              "가장 먼저 만료되는 리셋({{when}})을 사용하며, 더 오래 남는 리셋을 먼저 쓰지 않습니다. 이 계정의 창이 즉시 다시 시작되어 아무것도 쓰지 않은 상태가 됩니다. 사용 전에 확인합니다.",
+            hintNoExpiry:
+              "리셋 하나를 사용합니다(만료 없음). 이 계정의 창이 즉시 다시 시작되어 아무것도 쓰지 않은 상태가 됩니다. 사용 전에 확인합니다.",
+            outcomeResetOne: "창 1개가 다시 시작되었습니다",
+            outcomeResetMany: "창 {{count}}개가 다시 시작되었습니다",
+            outcomeNothingToReset:
+              "사용한 창이 없어 다시 시작할 것이 없습니다. 리셋은 그대로 남아 있습니다",
+            outcomeNoCredit: "이 계정에 남은 리셋이 없습니다",
+            outcomeAlreadyRedeemed: "이미 사용된 리셋입니다",
+            failed: "리셋을 사용하지 못했습니다: {{error}}",
+          },
         },
         autoRefresh: {
           label: "잔액과 요금제 사용량 자동 새로고침",

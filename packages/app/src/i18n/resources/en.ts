@@ -3161,6 +3161,28 @@ export const en = {
           eachWeeklyNever: "Weekly reset never expires",
           showEach: "Show when each reset expires",
           hideEach: "Hide when each reset expires",
+          use: {
+            action: "Use a reset",
+            confirmTitle: "Use a {{source}} reset?",
+            confirmOne:
+              "{{who}} has 1 reset. Using it starts its windows again at once, as if none of them had been used. It can't be undone.",
+            confirmMany:
+              "{{who}} has {{count}} resets. Using one starts its windows again at once, as if none of them had been used. It can't be undone.",
+            confirmSoonest: "The one used is the one that runs out first, {{when}}.",
+            confirmIdle:
+              "None of its windows has been used yet, so there is nothing to start again.",
+            hintSoonest:
+              "Uses the reset that runs out first ({{when}}), never one that lasts longer. This account's windows start again at once, as if none had been used. You're asked before anything is used.",
+            hintNoExpiry:
+              "Uses one of its resets; none of them runs out. This account's windows start again at once, as if none had been used. You're asked before anything is used.",
+            outcomeResetOne: "1 window started again",
+            outcomeResetMany: "{{count}} windows started again",
+            outcomeNothingToReset:
+              "Nothing to start again — no window has been used, and the reset is kept",
+            outcomeNoCredit: "No reset left on the account",
+            outcomeAlreadyRedeemed: "That reset was already used",
+            failed: "Couldn't use a reset: {{error}}",
+          },
         },
         autoRefresh: {
           label: "Auto-refresh balance and plan usage",

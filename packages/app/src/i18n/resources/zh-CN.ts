@@ -3108,6 +3108,26 @@ export const zhCN: TranslationResources = {
           eachWeeklyNever: "周重置不过期",
           showEach: "展开每次重置的过期时间",
           hideEach: "收起每次重置的过期时间",
+          use: {
+            action: "用掉一次重置",
+            confirmTitle: "用掉一次 {{source}} 重置？",
+            confirmOne:
+              "{{who}} 还有 1 次重置。用掉后它的窗口立刻从头开始，就像都没用过一样。用掉后不能撤回。",
+            confirmMany:
+              "{{who}} 还有 {{count}} 次重置。用掉一次后它的窗口立刻从头开始，就像都没用过一样。用掉后不能撤回。",
+            confirmSoonest: "用掉的是最早过期的那次（{{when}} 过期）。",
+            confirmIdle: "它的窗口都还没用过，现在用掉没有窗口可以从头开始。",
+            hintSoonest:
+              "用掉最早过期的那次（{{when}} 过期），不会先用掉更久的。这个账号的窗口立刻从头开始，就像都没用过一样；用之前会先问你。",
+            hintNoExpiry:
+              "用掉其中一次；这些重置都不过期。这个账号的窗口立刻从头开始，就像都没用过一样；用之前会先问你。",
+            outcomeResetOne: "1 个窗口已从头开始",
+            outcomeResetMany: "{{count}} 个窗口已从头开始",
+            outcomeNothingToReset: "没有窗口用过，不必从头开始，这次重置留着",
+            outcomeNoCredit: "这个账号已没有重置",
+            outcomeAlreadyRedeemed: "这次重置已经用过了",
+            failed: "没能用掉重置：{{error}}",
+          },
         },
         autoRefresh: {
           label: "自动刷新余额与套餐用量",
