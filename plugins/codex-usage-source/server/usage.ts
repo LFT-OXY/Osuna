@@ -1,3 +1,4 @@
+import { readResets } from "./resets.js";
 import { discoverOmp, piAuthPath, readHarness, readJson, type StoreLookup } from "./stores.js";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -49,6 +50,7 @@ const responseSchema = z.object({
     .nullish(),
   code_review_rate_limit: rateLimitSchema.nullish(),
   credits: z.object({ balance: number.optional() }).nullish(),
+  rate_limit_reset_credits: z.object({ available_count: number.optional() }).nullish(),
 });
 
 interface Auth {
@@ -188,6 +190,8 @@ export async function fetchUsage(
   input: CodexUsageInput,
   fetchApi: typeof fetch = fetch,
   lookup: StoreLookup = {},
+  /** Osuna 自己的身份，写在 Osuna 新加的请求上（重置清单）；wham/usage 照上游原样。 */
+  userAgent = "Osuna",
 ): Promise<UsageReport> {
   const auth = await readAuth(input, lookup);
   if (!auth) throw new Error("Codex login store no longer exists");
@@ -233,6 +237,11 @@ export async function fetchUsage(
     }),
   ];
   const balance = usage.credits?.balance;
+  const resets = await readResets({
+    count: usage.rate_limit_reset_credits?.available_count,
+    headers: { ...headers, "User-Agent": userAgent },
+    fetchApi,
+  });
   return {
     status: "available",
     planLabel: usage.plan_type,
@@ -250,6 +259,7 @@ export async function fetchUsage(
             },
           ],
     details: [],
+    ...(resets ? { resets } : {}),
   };
 }
 

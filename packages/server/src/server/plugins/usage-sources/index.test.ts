@@ -36,6 +36,24 @@ test("discovery preserves account IDs and updates input after token rotation", a
   expect(refreshed[0]?.report.windows[0]?.label).toBe("new");
 });
 
+test("a report's resets reach the client as the source gave them", async () => {
+  const registry = new UsageSourceRegistry();
+  const resets = {
+    count: 2,
+    until: "2026-10-25T14:30:00.000Z",
+    each: [{ until: "2026-10-25T14:30:00.000Z" }, { until: null }],
+  };
+  registry.register(
+    source({
+      id: "codex",
+      discover: async () => [{ key: "work", input: {} }],
+      fetch: async () => ({ status: "available", windows: [], resets }),
+    }),
+  );
+  const [entry] = await registry.listReports();
+  expect(entry?.report).toEqual({ status: "available", windows: [], resets });
+});
+
 test("coalesces per account, caches errors, and refreshes only requested IDs", async () => {
   let now = 0;
   const counts = new Map<string, number>();

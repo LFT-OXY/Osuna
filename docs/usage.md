@@ -180,6 +180,17 @@ does not ask again; refresh does. Nothing is looked up at startup, on a timer,
 or for a CLI that is disabled, not installed, or whose version could not be read. The price table switch does not
 cover it.
 
+### Codex's resets
+
+The Codex plan usage card reads `chatgpt.com/backend-api/wham/usage` with
+Codex's own sign-in (`auth.json`) whenever the card is shown, at most once in 5
+minutes per account unless you press Refresh. When that answer says the ChatGPT
+account holds resets, the same read sends `GET
+chatgpt.com/backend-api/wham/rate-limit-reset-credits` with the same bearer
+token, `ChatGPT-Account-Id` and `User-Agent: Osuna/<version>`, for when each
+one expires. It waits 4 seconds; on any failure the card shows the count alone.
+The sign-in file is read, never written.
+
 ### API endpoints
 
 These go to the base URLs of one API endpoint and carry its key, unless it has

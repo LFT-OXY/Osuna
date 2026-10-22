@@ -306,7 +306,8 @@ Paseo provides `@getpaseo/plugin`, `@getpaseo/plugin/server`,
 `@getpaseo/plugin/server/provider`, `@getpaseo/plugin/server/acp`, and `zod` to server code. Backend
 contributions run in a daemon subprocess with Node access to the host machine. Keep filesystem,
 process, credential, and other machine-local work under `server/`. A plugin without
-`index.server.ts` starts no subprocess.
+`index.server.ts` starts no subprocess. `server.appVersion` is the daemon's version; name it in
+your own outbound requests' `User-Agent` rather than posing as another app.
 
 ### Providers
 
@@ -378,9 +379,22 @@ type UsageReport =
       windows: UsageWindow[];
       balances?: UsageBalance[];
       details?: UsageDetail[];
+      resets?: UsageResets;
     }
   | { status: "unavailable"; problem: UsageProblem }
   | { status: "error"; error: string };
+
+// Resets the account holds, each starting its windows over early. `until` is when the soonest
+// expires; `each` lists them soonest first, ones that never expire last. Leave `each` out
+// unless it lists exactly `count` resets.
+interface UsageResets {
+  count: number;
+  until: string | null;
+  byWindow?: boolean;
+  fiveHour?: number;
+  weekly?: number;
+  each?: { until: string | null; window?: string }[];
+}
 
 type UsageProblem =
   | { kind: "expired"; expiresAt: string; refreshedBy?: string }

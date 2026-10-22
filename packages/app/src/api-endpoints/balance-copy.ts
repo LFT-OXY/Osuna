@@ -112,6 +112,18 @@ export function resetsLine(input: { t: TFunction; resets: ApiEndpointBalanceRese
   return t(`${RESET_KEY}.left`, { resets: parts.join(" · ") });
 }
 
+/** 「Oct 25, 07:04 PM」：最早那次重置的过期时间；空格换成不断行空格，窄处整段一起换行。 */
+export function resetTimeText(input: { iso: string; locale: string }): string {
+  return new Date(input.iso)
+    .toLocaleString(input.locale, {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+    .replace(/\s/g, "\u00a0");
+}
+
 /** 窗口用量的单位：美元以外认得的翻译，别的照 daemon 给的写。 */
 export function windowUnitLabel(input: { t: TFunction; unit: string }): string {
   if (input.unit === "videos") return input.t("settings.apiEndpoints.balance.window.unitVideos");

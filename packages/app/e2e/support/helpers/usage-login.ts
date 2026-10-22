@@ -69,8 +69,11 @@ export async function hoverUsageWindow(page: Page, window: string) {
     .hover();
 }
 
-/** Exercises the built-in Codex adapter through the real plugin loader and daemon transport. */
-export async function installCodexWindowUsage(payload: unknown) {
+/**
+ * Exercises the built-in Codex adapter through the real plugin loader and daemon transport.
+ * `resetCredits` answers the resets list (wham/rate-limit-reset-credits); every other URL gets `payload`.
+ */
+export async function installCodexWindowUsage(payload: unknown, resetCredits?: unknown) {
   const directory = await mkdtemp(path.join(tmpdir(), "usage-codex-windows-"));
   const client = await connectNewWorkspaceDaemonClient({ ownProjects: false });
   const previous = await client.getDaemonConfig();
@@ -92,6 +95,7 @@ export async function installCodexWindowUsage(payload: unknown) {
       JSON.stringify({ tokens: { access_token: "fixture-codex" } }),
     );
     await writeFile(path.join(directory, "payload.json"), JSON.stringify(payload));
+    await writeFile(path.join(directory, "resets.json"), JSON.stringify(resetCredits ?? null));
     await writeFile(
       path.join(directory, "paseo-plugin.json"),
       JSON.stringify({ id: "codex-window-qa", requirements: pluginRequirements }),
@@ -105,7 +109,7 @@ import {inputSchema} from "./shared/input.js";
 export default function contribute(server) {
   server.registerUsageSource({id: "codex-window-qa", label: "Codex", input: inputSchema,
     discover: (scope) => discover(scope, {home: ${JSON.stringify(directory)}, env: {CODEX_HOME: ${JSON.stringify(directory)}}}),
-    fetch: (input) => fetchUsage(input, async () => Response.json(JSON.parse(await readFile(${JSON.stringify(path.join(directory, "payload.json"))}, "utf8")))),
+    fetch: (input) => fetchUsage(input, async (url) => Response.json(JSON.parse(await readFile(String(url).endsWith("/rate-limit-reset-credits") ? ${JSON.stringify(path.join(directory, "resets.json"))} : ${JSON.stringify(path.join(directory, "payload.json"))}, "utf8")))),
   });
   return () => {};
 }`,

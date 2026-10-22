@@ -8,6 +8,7 @@ import { gotoAppShell } from "../support/helpers/app";
 import { addConnectedHostAndReload } from "../support/helpers/hosts";
 import { startIsolatedHostDaemon } from "../support/helpers/isolated-host-daemon";
 import { getServerId } from "../support/helpers/server-id";
+import { openUsagePageFromShell } from "../support/helpers/usage-page";
 import { seedSidebarFooterPreferences } from "../support/helpers/sidebar-nav-settings";
 import {
   installUsageReportsFixture,
@@ -35,6 +36,8 @@ import {
   refreshAllUsage,
   togglePin,
   usageItem,
+  usageModal,
+  closeUsage,
 } from "../support/helpers/usage-sidebar-item";
 
 const emptyHome = path.join(tmpdir(), `paseo-usage-empty-${randomUUID()}`);
@@ -426,6 +429,93 @@ for (const shape of ["seven-day-only", "Spark"] as const) {
       await source.cleanup();
     }
   });
+}
+
+// Osuna 工单 11：ChatGPT 账号持有的重置次数，走真实的 Codex 来源（假的 wham 回复）。
+// 小屏要先打开侧边栏才有用量入口，进了用量页侧边栏会收起，所以两种视口各给一条走法。
+const RESETS_LAYOUTS = [
+  {
+    size: "1280",
+    viewport: { width: 1280, height: 800 },
+    revealSidebar: async (_page: Page) => {},
+    openUsagePage: openUsagePageFromShell,
+  },
+  {
+    size: "390",
+    viewport: { width: 390, height: 844 },
+    revealSidebar: openCompactSidebar,
+    openUsagePage: async (page: Page) => {
+      await page.locator('[data-testid="sidebar-usage-stats"]:visible').first().click();
+      await expect(page).toHaveURL(/\/usage$/);
+    },
+  },
+];
+
+for (const theme of ["light", "dark"] as const) {
+  for (const layout of RESETS_LAYOUTS) {
+    test(`Codex resets show on the plan usage card and the usage page at ${layout.size} ${theme}`, async ({
+      page,
+    }) => {
+      test.setTimeout(120_000);
+      await page.addInitScript((value) => {
+        const key = "@paseo:app-settings";
+        const current = JSON.parse(localStorage.getItem(key) ?? "{}");
+        localStorage.setItem(key, JSON.stringify({ ...current, theme: value }));
+      }, theme);
+      const soonest = new Date(Date.now() + 3 * 86400_000).toISOString();
+      const source = await installCodexWindowUsage(
+        {
+          plan_type: "plus",
+          rate_limit: {
+            primary_window: { used_percent: 82, limit_window_seconds: 18000 },
+            secondary_window: { used_percent: 47, limit_window_seconds: 604800 },
+          },
+          rate_limit_reset_credits: { available_count: 2 },
+        },
+        {
+          available_count: 2,
+          credits: [
+            { id: "lasting", status: "available", expires_at: null },
+            { id: "soonest", status: "available", expires_at: soonest },
+          ],
+        },
+      );
+      try {
+        await page.setViewportSize(layout.viewport);
+        await gotoAppShell(page);
+        await layout.revealSidebar(page);
+        await expect(usageItem(page)).toBeVisible({ timeout: 30_000 });
+        await openUsageFromItem(page);
+        const resets = usageModal(page).getByTestId("usage-resets");
+        await expect(resets.getByTestId("usage-resets-summary")).toHaveText(
+          /^2 resets left · Soonest expires .+/,
+        );
+        await expect(resets.getByTestId("usage-resets-card")).toHaveCount(0);
+        await qaScreenshot(page, `usage-modal-codex-resets-${layout.size}-${theme}`);
+        await resets.getByRole("button", { name: "Show when each reset expires" }).click();
+        await expect(resets.getByTestId("usage-resets-card")).toHaveText([
+          /^Reset 1 expires .+/,
+          "Reset 2 never expires",
+        ]);
+        await qaScreenshot(page, `usage-modal-codex-resets-expanded-${layout.size}-${theme}`);
+        await resets.getByRole("button", { name: "Hide when each reset expires" }).click();
+        await expect(resets.getByTestId("usage-resets-card")).toHaveCount(0);
+
+        await closeUsage(page);
+        await expect(usageModal(page)).toHaveCount(0);
+        await layout.openUsagePage(page);
+        const onPage = page.getByTestId("usage-resets").first();
+        await expect(onPage.getByTestId("usage-resets-summary")).toHaveText(
+          /^2 resets left · Soonest expires .+/,
+          { timeout: 30_000 },
+        );
+        await onPage.scrollIntoViewIfNeeded();
+        await qaScreenshot(page, `usage-page-codex-resets-${layout.size}-${theme}`);
+      } finally {
+        await source.cleanup();
+      }
+    });
+  }
 }
 
 for (const theme of ["light", "dark"] as const) {

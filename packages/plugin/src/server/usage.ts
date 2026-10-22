@@ -38,6 +38,27 @@ export interface UsageDetail {
   tone?: UsageWindow["tone"];
 }
 
+/** One reset: when it expires (null: never), and for resets counted by window, whose ("fiveHour", "weekly"). */
+export interface UsageReset {
+  until: string | null;
+  window?: string;
+}
+
+/**
+ * Resets the account holds, each starting its windows over early: `until` is when the soonest
+ * expires (null when none does or that couldn't be read); `each` lists them soonest first, ones
+ * that never expire last, left out when the vendor didn't say. `byWindow` counts them per window
+ * (`fiveHour`, `weekly`) instead of in `count` alone.
+ */
+export interface UsageResets {
+  count: number;
+  until: string | null;
+  byWindow?: boolean;
+  fiveHour?: number;
+  weekly?: number;
+  each?: UsageReset[];
+}
+
 export type UsageProblem =
   | { kind: "expired"; expiresAt: string; refreshedBy?: string }
   | { kind: "rejected"; status: number; refreshedBy?: string }
@@ -50,6 +71,7 @@ export type UsageReport =
       windows: UsageWindow[];
       balances?: UsageBalance[];
       details?: UsageDetail[];
+      resets?: UsageResets;
     }
   | { status: "unavailable"; problem: UsageProblem }
   | { status: "error"; error: string };

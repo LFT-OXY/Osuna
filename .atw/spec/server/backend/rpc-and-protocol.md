@@ -2013,3 +2013,50 @@ volcSign({ ..., host: "open.volcengineapi.com" });
 const open = new URL(input.openUrl);
 volcSign({ ..., host: open.host });
 ```
+
+## Scenario: Codex resets on the plan usage card (endpoint-balance ticket 11, magpie `provider/codex_resets.go` `codexResets` / `codexResetCreditsWire`, `subscription_usage.go` `codexWindows`)
+
+### 1. Scope / Trigger
+- A plugin usage source's report gains a field that crosses plugin SDK → daemon registry → protocol → app, and the plugin context gains the daemon version.
+
+### 2. Signatures
+- Plugin SDK `@getpaseo/plugin/server/usage`: `UsageResets { count; until: string | null; byWindow?; fiveHour?; weekly?; each?: UsageReset[] }`, `UsageReset { until: string | null; window? }`; available `UsageReport.resets?`.
+- `PluginServerContext.appVersion: string` (`plugin-process.ts` passes the `initialize` message's `appVersion`). Name it in a plugin's own requests: `Osuna/${server.appVersion}`.
+- Codex: `fetchUsage(input, fetchApi, lookup, userAgent)`; `readResets({ count, headers, fetchApi }) → UsageResets | undefined` in `plugins/codex-usage-source/server/resets.ts`.
+
+### 3. Contracts
+- Count: `wham/usage` → `rate_limit_reset_credits.available_count` (magpie's JSON tag; the ticket's "available" is the Go field name). `<= 0` or absent → no `resets`, no second request.
+- List: `GET https://chatgpt.com/backend-api/wham/rate-limit-reset-credits`, same bearer + `ChatGPT-Account-Id` as `wham/usage`, `User-Agent` = Osuna's (the `wham/usage` request keeps upstream's browser UA; tracked in task `10-22-endpoint-requests-user-agent`), `AbortSignal.timeout(4000)`.
+- Cards: `status === "available"` and a non-empty `id`; `expires_at` counts only when RFC3339 (else never expires); soonest first, never-expiring last; `until` = first card's; `each` only when `cards.length === count`.
+- Protocol: `UsageReportSchema` available branch `resets: ApiEndpointBalanceResetsSchema.optional()` (same shape as an endpoint reading's). Old apps drop it; no capability gate for display.
+
+### 4. Validation & Error Matrix
+| List request | Result |
+| --- | --- |
+| 2xx, cards = count | `{ count, until, each }` |
+| 2xx, cards ≠ count | `{ count, until }` |
+| non-2xx, HTML / bad JSON (`SyntaxError`), wrong shape (`ZodError`), network (`TypeError`), timeout / abort (`DOMException`) | `{ count, until: null }` |
+| any other throw | rethrown → the report fails as before |
+
+### 5. Good/Base/Bad Cases
+- Good: 2 resets, list of 2 → line + expandable cards. Base: list times out → "2 resets left" alone. Bad: list of 1 for a count of 2 → that one is not shown as if it were both.
+
+### 6. Tests Required
+- `plugins/codex-usage-source/server/usage.test.ts`: count + list (order, UA, account header, a non-RFC3339 date counts as never), list failures keep the count, count mismatch drops `each`, no resets → one request, `auth.json` byte-identical.
+- `plugins/usage-sources/index.test.ts`: a report's `resets` passes the registry's `UsageReportSchema.parse`.
+- `e2e/browser/usage-modal.spec.ts` "Codex resets show on the plan usage card…": real Codex adapter through `installCodexWindowUsage(payload, resetCredits)`, modal + usage page, 1280/390 × light/dark.
+
+### 7. Wrong vs Correct
+#### Wrong
+```ts
+} catch {
+  return null; // 吞掉一切，连写错的代码也当成「清单读不到」
+}
+```
+#### Correct
+```ts
+} catch (error) {
+  if (isListFailure(error)) return null; // 超时、连不上、不是 JSON、不是清单的形状
+  throw error;
+}
+```

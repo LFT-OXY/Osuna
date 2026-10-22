@@ -1183,6 +1183,18 @@ the editor's access key fields in internal/gui/assets/app.js:
   packages/app/src/api-endpoints/balance-settings-fields.tsx
   packages/app/src/api-endpoints/internal/balance-settings-form.ts
 
+A Codex account's resets on its plan usage card (the count read from the usage
+reading, the resets list asked once for when each expires within 4 seconds and
+left out on a failure, the soonest first and ones that never expire last, each
+listed only when they are as many as the count, and the line and per-reset
+lines the card shows) follow codexResets, codexResetCreditsWire,
+sortResetCards and codexResetDetailsTimeout in magpie's
+internal/provider/codex_resets.go and resetsWords and resetsEach in
+internal/gui/assets/app.js:
+
+  plugins/codex-usage-source/server/resets.ts
+  packages/app/src/plan-usage/resets-row.tsx
+
 Import from other apps (the five sources and where each keeps its file, how a
 CC Switch, Claude Code, Codex, Alma or OpenCode entry becomes an endpoint, a
 template's when the URLs are its own, entries of one account merged, Osuna's own

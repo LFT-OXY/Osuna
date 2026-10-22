@@ -160,6 +160,7 @@ import {
   ApiEndpointReadIconResponseSchema,
   ApiEndpointTestConnectionRequestSchema,
   ApiEndpointTestConnectionResponseSchema,
+  ApiEndpointBalanceResetsSchema,
 } from "./api-endpoint/rpc-schemas.js";
 import {
   CodexSessionListModelProvidersRequestSchema,
@@ -6828,6 +6829,8 @@ export const UsageReportSchema = z.discriminatedUnion("status", [
     windows: z.array(ProviderUsageWindowSchema),
     balances: z.array(ProviderUsageBalanceSchema).optional(),
     details: z.array(ProviderUsageDetailSchema).optional(),
+    // 账号还有几次重置（Codex 的 ChatGPT 账号），形状同接口读数的 resets；老 daemon 与没有重置的来源不发。
+    resets: ApiEndpointBalanceResetsSchema.optional(),
   }),
   z.object({ status: z.literal("unavailable"), problem: UsageProblemSchema }),
   z.object({ status: z.literal("error"), error: z.string() }),

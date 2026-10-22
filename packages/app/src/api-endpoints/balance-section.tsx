@@ -28,6 +28,7 @@ import {
   hintOf,
   itemLabel,
   resetsLine,
+  resetTimeText,
   windowLabel,
   windowUnitLabel,
 } from "./balance-copy";
@@ -418,14 +419,7 @@ function noop() {}
 /** 还有几次重置，最早什么时候过期（照 magpie 的重置卡，只显示：重置要到厂商自己的页面上用）。 */
 function ResetsRows({ resets }: { resets: ApiEndpointBalanceResets }) {
   const { t, i18n } = useTranslation();
-  const soonest = resets.until
-    ? new Date(resets.until).toLocaleString(i18n.language, {
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : null;
+  const soonest = resets.until ? resetTimeText({ iso: resets.until, locale: i18n.language }) : null;
   return (
     <View style={styles.resets} testID="api-endpoint-balance-resets">
       <UiText weight="medium" selectable testID="api-endpoint-balance-resets-count">
