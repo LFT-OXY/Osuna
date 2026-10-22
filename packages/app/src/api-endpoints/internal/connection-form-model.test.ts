@@ -2990,6 +2990,55 @@ describe("connection form: balance settings and checking the balance", () => {
     expect(fake.balanceChecks[1]?.signal.aborted).toBe(true);
   });
 
+  it("a new balance address drops the check made at the old one, and a check in flight there", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "edit", endpoint: SAVED_ENDPOINT },
+      fake.deps,
+      WITH_BALANCE,
+    );
+    model.setBalanceUrl("https://relay.example/q");
+    model.checkBalance();
+    fake.answerBalanceCheck(0, { status: "done", reading: READING });
+    await flush();
+    model.setBalanceUrl("https://relay.example/q");
+    expect(model.getState().balanceCheck).toEqual({ status: "done", reading: READING });
+    model.setBalanceUrl("https://relay.example/other");
+    expect(model.getState().balanceCheck).toEqual({ status: "idle" });
+
+    model.checkBalance();
+    model.useBalanceUrl("https://relay.example/api/user/self");
+    expect(model.getState().balanceCheck).toEqual({ status: "idle" });
+    expect(fake.balanceChecks[1]?.signal.aborted).toBe(true);
+    fake.answerBalanceCheck(1, { status: "done", reading: READING });
+    await flush();
+    expect(model.getState().balanceCheck).toEqual({ status: "idle" });
+  });
+
+  it("Detect URL filling in an address drops the check made before it; editing that address drops what it found", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "edit", endpoint: SAVED_ENDPOINT },
+      fake.deps,
+      WITH_BALANCE,
+    );
+    model.setBalanceUrl("https://relay.example/q");
+    model.checkBalance();
+    fake.answerBalanceCheck(0, { status: "done", reading: READING });
+    await flush();
+    model.detectBalanceUrl();
+    fake.answerBalanceDetect(0, {
+      status: "done",
+      detected: { url: "https://relay.example/v1/usage", field: "$remaining" },
+      attempts: [{ url: "https://relay.example/v1/usage", reading: READING }],
+    });
+    await flush();
+    expect(model.getState().balanceCheck).toEqual({ status: "idle" });
+    expect(model.getState().balanceDetect.status).toBe("found");
+    model.setBalanceUrl("https://relay.example/v1/usage2");
+    expect(model.getState().balanceDetect).toEqual({ status: "idle" });
+  });
+
   it("a copy carries the original's settings without sending them, and an older host gets none", async () => {
     const fake = fakeDeps();
     const source = { ...SAVED_ENDPOINT, balance: { url: "https://relay.example/q" } };

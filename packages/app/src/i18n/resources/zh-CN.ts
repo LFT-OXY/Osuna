@@ -3012,6 +3012,8 @@ export const zhCN: TranslationResources = {
         loading: "正在读余额…",
         readJustNow: "刚刚读取",
         readAgo: "{{time}}读取",
+        failedJustNow: "刚刚读取失败",
+        failedAgo: "{{time}}读取失败",
         staleTemporary: "暂时查不到，显示{{time}}的读数",
         staleNotAsked: "没有刷新，显示{{time}}的读数",
         staleMomentAgo: "刚才",

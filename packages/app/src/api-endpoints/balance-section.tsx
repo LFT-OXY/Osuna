@@ -87,6 +87,7 @@ export function ApiEndpointBalanceSection({
   );
   const readAt = reading?.readAt ?? null;
   const stale = staleOf(reading);
+  const failed = reading?.status === "failed";
   const caption = useMemo(
     () =>
       readAt === null ? null : (
@@ -101,10 +102,11 @@ export function ApiEndpointBalanceSection({
             t,
             ago: relativeAgo({ since: new Date(readAt), now, locale: i18n.language }),
             stale,
+            failed,
           })}
         </UiText>
       ),
-    [i18n.language, now, readAt, stale, t],
+    [failed, i18n.language, now, readAt, stale, t],
   );
   return (
     <SettingsSection
@@ -583,14 +585,27 @@ function staleOf(reading: ApiEndpointBalanceReading | undefined): StaleKind | nu
   return stale.hint === "not_asked" ? "notAsked" : "temporary";
 }
 
-/** 每种语言一整句：「刚刚读取」「5分钟前读取」；上次的读数写「暂时查不到，显示5分钟前的读数」。 */
-function readAtCopy(input: { t: TFunction; ago: string | null; stale: StaleKind | null }): string {
-  const { t, ago, stale } = input;
+/**
+ * 每种语言一整句：「刚刚读取」「5分钟前读取」；上次的读数写「暂时查不到，显示5分钟前的读数」；
+ * 这次读失败了写「刚刚读取失败」，不让失败看着像读成了。
+ */
+function readAtCopy(input: {
+  t: TFunction;
+  ago: string | null;
+  stale: StaleKind | null;
+  failed: boolean;
+}): string {
+  const { t, ago, stale, failed } = input;
   if (stale !== null) {
     const time = ago ?? t("settings.apiEndpoints.balance.staleMomentAgo");
     return stale === "temporary"
       ? t("settings.apiEndpoints.balance.staleTemporary", { time })
       : t("settings.apiEndpoints.balance.staleNotAsked", { time });
+  }
+  if (failed) {
+    return ago === null
+      ? t("settings.apiEndpoints.balance.failedJustNow")
+      : t("settings.apiEndpoints.balance.failedAgo", { time: ago });
   }
   if (ago === null) return t("settings.apiEndpoints.balance.readJustNow");
   return t("settings.apiEndpoints.balance.readAgo", { time: ago });

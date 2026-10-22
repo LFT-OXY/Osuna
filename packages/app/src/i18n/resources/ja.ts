@@ -3034,6 +3034,8 @@ export const ja: TranslationResources = {
         loading: "残高を読み込み中…",
         readJustNow: "たった今取得",
         readAgo: "{{time}}に取得",
+        failedJustNow: "たった今取得に失敗",
+        failedAgo: "{{time}}に取得失敗",
         staleTemporary: "今は取得できません · {{time}}の値",
         staleNotAsked: "未更新 · {{time}}の値",
         staleMomentAgo: "少し前",

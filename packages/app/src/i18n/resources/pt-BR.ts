@@ -3045,6 +3045,8 @@ export const ptBR: TranslationResources = {
         loading: "Lendo o saldo…",
         readJustNow: "Lido agora mesmo",
         readAgo: "Lido {{time}}",
+        failedJustNow: "Falha ao ler agora mesmo",
+        failedAgo: "Falha ao ler {{time}}",
         staleTemporary: "Não foi possível ler agora · lido {{time}}",
         staleNotAsked: "Não atualizado · lido {{time}}",
         staleMomentAgo: "há um instante",

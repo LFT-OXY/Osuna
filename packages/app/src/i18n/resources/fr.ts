@@ -3071,6 +3071,8 @@ export const fr: TranslationResources = {
         loading: "Lecture du solde…",
         readJustNow: "Lu à l’instant",
         readAgo: "Lu {{time}}",
+        failedJustNow: "Échec de lecture à l’instant",
+        failedAgo: "Échec de lecture {{time}}",
         staleTemporary: "Lecture impossible pour l’instant · relevé {{time}}",
         staleNotAsked: "Non actualisé · relevé {{time}}",
         staleMomentAgo: "il y a un instant",

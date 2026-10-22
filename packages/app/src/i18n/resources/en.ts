@@ -3065,6 +3065,8 @@ export const en = {
         loading: "Reading the balance…",
         readJustNow: "Read just now",
         readAgo: "Read {{time}}",
+        failedJustNow: "Read failed just now",
+        failedAgo: "Read failed {{time}}",
         staleTemporary: "Couldn't read just now · last read {{time}}",
         staleNotAsked: "Not refreshed · last read {{time}}",
         staleMomentAgo: "a moment ago",

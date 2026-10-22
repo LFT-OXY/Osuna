@@ -1560,6 +1560,23 @@ export function createConnectionFormModel(
     };
   }
 
+  /**
+   * 余额查询地址换成 url：「查询余额」的结果读的是旧地址，连同正在查的那次一起作废；没变就什么都不动。
+   */
+  function balanceUrlPatch(url: string): Partial<Values> {
+    if (url === values.balanceUrlText) return {};
+    pendingBalanceCheck?.abort();
+    pendingBalanceCheck = null;
+    return { balanceUrlText: url, balanceCheck: { status: "idle" } };
+  }
+
+  /** 用户自己换了地址：「自动识别」说的「已填入」那个地址也不再是表单里的了。 */
+  function typedBalanceUrlPatch(url: string): Partial<Values> {
+    const patch = balanceUrlPatch(url);
+    if (!("balanceUrlText" in patch) || values.balanceDetect.status !== "found") return patch;
+    return { ...patch, balanceDetect: { status: "idle" } };
+  }
+
   /** 「查询余额」：表单里的值加上余额设置与账户令牌。 */
   async function runBalanceCheck(controller: AbortController): Promise<void> {
     const outcome = await deps.checkBalance(
@@ -1606,7 +1623,7 @@ export function createConnectionFormModel(
       return;
     }
     update({
-      balanceUrlText: found.url,
+      ...balanceUrlPatch(found.url),
       balanceUrlGeneration: values.balanceUrlGeneration + 1,
       balanceMethod: "GET",
       balanceFieldText: fieldAfterUsing(values.balanceFieldText),
@@ -2183,7 +2200,7 @@ export function createConnectionFormModel(
       update({ noFailRest: value });
     },
     setBalanceUrl(value) {
-      update({ balanceUrlText: value });
+      update(typedBalanceUrlPatch(value));
     },
     setBalanceMethod(value) {
       update({ balanceMethod: value });
@@ -2299,7 +2316,7 @@ export function createConnectionFormModel(
     },
     useBalanceUrl(url) {
       update({
-        balanceUrlText: url,
+        ...typedBalanceUrlPatch(url),
         balanceUrlGeneration: values.balanceUrlGeneration + 1,
         balanceFieldText: fieldAfterUsing(values.balanceFieldText),
         balanceFieldGeneration: values.balanceFieldGeneration + 1,

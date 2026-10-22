@@ -3041,6 +3041,8 @@ export const ru: TranslationResources = {
         loading: "Чтение баланса…",
         readJustNow: "Прочитано только что",
         readAgo: "Прочитано {{time}}",
+        failedJustNow: "Не удалось прочитать только что",
+        failedAgo: "Не удалось прочитать {{time}}",
         staleTemporary: "Сейчас недоступно · прочитано {{time}}",
         staleNotAsked: "Не обновлялось · прочитано {{time}}",
         staleMomentAgo: "только что",

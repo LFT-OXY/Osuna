@@ -6683,6 +6683,10 @@ test.describe("Balance", () => {
     await expect(failure.getByTestId("api-endpoint-balance-failure-detail")).toHaveText(
       "Authentication Fails, Your api key: *** is invalid",
     );
+    // 标题下不写「刚刚读取」，免得失败看着像读成了。
+    await expect(balanceSection(page).getByTestId("api-endpoint-balance-read-at")).toHaveText(
+      "Read failed just now",
+    );
   });
 
   test("a relay it cannot read says so, a DeepSeek endpoint with no key says it has none, and DeepSeek that cannot be reached is temporarily unavailable", async ({
@@ -6737,6 +6741,11 @@ test.describe("Balance", () => {
     await check.click();
     await expect(result).toContainText("Token rejected: the vendor refused the key (HTTP 401)");
     await expect(result).toContainText("Invalid API key");
+    // 地址一换，旧地址的结果就不留着。
+    await page
+      .getByTestId("api-endpoint-connection-balance-url-input")
+      .fill(`${relay.origin}/balance/other`);
+    await expect(result).toHaveCount(0);
 
     // 只看不存：取消后这家没有余额设置。
     await page.getByRole("button", { name: "Cancel" }).click();

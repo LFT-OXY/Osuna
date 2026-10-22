@@ -3017,6 +3017,8 @@ export const ko: TranslationResources = {
         loading: "잔액을 읽는 중…",
         readJustNow: "방금 읽음",
         readAgo: "{{time}}에 읽음",
+        failedJustNow: "방금 읽지 못함",
+        failedAgo: "{{time}}에 읽지 못함",
         staleTemporary: "지금은 가져올 수 없음 · {{time}}에 읽은 값",
         staleNotAsked: "새로 고치지 않음 · {{time}}에 읽은 값",
         staleMomentAgo: "조금 전",

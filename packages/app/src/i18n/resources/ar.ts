@@ -2991,6 +2991,8 @@ export const ar: TranslationResources = {
         loading: "جارٍ قراءة الرصيد…",
         readJustNow: "قُرئ للتو",
         readAgo: "قُرئ {{time}}",
+        failedJustNow: "تعذّرت القراءة للتو",
+        failedAgo: "تعذّرت القراءة {{time}}",
         staleTemporary: "تعذّرت القراءة الآن · قُرئ {{time}}",
         staleNotAsked: "لم يُحدَّث · قُرئ {{time}}",
         staleMomentAgo: "قبل لحظات",
