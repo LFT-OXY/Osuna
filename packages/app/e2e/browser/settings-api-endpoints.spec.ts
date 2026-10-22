@@ -2311,6 +2311,53 @@ test.describe("Templates", () => {
     });
   });
 
+  // 区域、套餐类的说明最长；宽窗口两个一行时它们放得下一行。
+  const PLAN_NOTE_TEMPLATES = [
+    "kimi-code",
+    "xiaomi",
+    "baidu-qianfan",
+    "tencent-cloud",
+    "huaweicloud",
+    "volcengine",
+    "qwen",
+    "qwen-token-plan",
+    "bailian-token-plan",
+  ];
+
+  for (const language of ["en", "zh-CN"] as const) {
+    test(`at 1280 the template list reads each region or plan note in full, two to a row (${language})`, async ({
+      page,
+    }) => {
+      await page.addInitScript((value) => {
+        localStorage.setItem("@paseo:app-settings", JSON.stringify({ language: value }));
+      }, language);
+      await openApiEndpointsPage(page);
+      await page.getByTestId("api-endpoints-empty-add").click();
+      await expect(templatePicker(page)).toBeVisible();
+      for (const id of PLAN_NOTE_TEMPLATES) {
+        const tile = page.getByTestId(`api-endpoint-template-${id}`);
+        await expect(tile).toBeVisible();
+        expect(await clippedTextsOf(tile), id).toEqual([]);
+      }
+      const left = await page.getByTestId("api-endpoint-template-anthropic").boundingBox();
+      const right = await page.getByTestId("api-endpoint-template-openai").boundingBox();
+      const next = await page.getByTestId("api-endpoint-template-deepseek").boundingBox();
+      expect(right?.y ?? Infinity).toBe(left?.y ?? 0);
+      expect(next?.x ?? Infinity).toBe(left?.x ?? 0);
+    });
+  }
+
+  test("at 390 the template list stays one to a row", async ({ page }) => {
+    await openApiEndpointsPage(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByTestId("api-endpoints-empty-add").click();
+    await expect(templatePicker(page)).toBeVisible();
+    const first = await page.getByTestId("api-endpoint-template-anthropic").boundingBox();
+    const second = await page.getByTestId("api-endpoint-template-openai").boundingBox();
+    expect(second?.x ?? Infinity).toBe(first?.x ?? 0);
+    expect(second?.y ?? 0).toBeGreaterThan(first?.y ?? Infinity);
+  });
+
   test("the template list and an endpoint's row show the brand's icon; one without a brand icon shows its first letter", async ({
     page,
   }) => {
@@ -6369,6 +6416,15 @@ async function failImportPickAt(page: Page, index: number): Promise<void> {
       server.send(JSON.stringify({ ...request, message: { ...request.message, picks } }));
     });
   });
+}
+
+// 被省略号截断的文字：scrollWidth 比可见宽度大；多 1 像素是取整误差。
+async function clippedTextsOf(locator: Locator): Promise<string[]> {
+  return locator.evaluate((root) =>
+    [root, ...root.querySelectorAll("*")]
+      .filter((el) => el.scrollWidth > el.clientWidth + 1)
+      .map((el) => el.textContent ?? ""),
+  );
 }
 
 // 按渲染出来的行切文字：逐字取位置，纵坐标变了就是新的一行；空白不算。
