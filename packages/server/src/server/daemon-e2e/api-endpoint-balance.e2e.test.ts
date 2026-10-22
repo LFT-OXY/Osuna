@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import {
   createServer,
   type IncomingHttpHeaders,
@@ -603,5 +603,178 @@ describe("API endpoint balance of the other known vendors", () => {
       expect((await readAt(baseUrl, apiKey)).status).toBe("unsupported");
     }
     expect(requests).toHaveLength(0);
+  });
+});
+
+/*
+ * 工单 03：什么时候查。daemon 对每家的读数缓存 1 分钟，刷新（force）跳过缓存，保存这家后缓存作废。
+ * 「自动刷新余额与套餐用量」关着时照 magpie quota_asked.go：不是用户要求的读取不发请求，回缓存里的读数。
+ * 时钟可控，不真等。
+ */
+describe("when the API endpoint balance is read", () => {
+  let daemon: TestPaseoDaemon;
+  let client: DaemonClient;
+  let deepseek: FakeDeepSeek;
+  let clock = NOW;
+  let root: string;
+
+  async function startDaemon() {
+    daemon = await createTestPaseoDaemon({
+      daemonVersion: VERSION,
+      paseoHomeRoot: path.join(root, "home"),
+      cleanup: false,
+      apiEndpoints: {
+        env: { CLAUDE_CONFIG_DIR: path.join(root, "claude"), CODEX_HOME: path.join(root, "codex") },
+        homeDir: root,
+        now: () => new Date(clock),
+        balanceUrls: { deepseek: deepseek.balanceUrl },
+      },
+    });
+    client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.17.0" });
+    await client.connect();
+    await client.fetchAgents({ subscribe: {} });
+  }
+
+  beforeEach(async () => {
+    clock = NOW;
+    root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-balance-timing-"));
+    tempRoots.push(root);
+    await mkdir(path.join(root, "home"));
+    deepseek = await startDeepSeek();
+    await startDaemon();
+  });
+
+  afterEach(async () => {
+    await client?.close();
+    await daemon?.close();
+    await Promise.all(servers.splice(0).map(closeServer));
+    await Promise.all(tempRoots.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  });
+
+  async function saveDeepSeek(): Promise<string> {
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: "DeepSeek",
+      baseUrl: "https://api.deepseek.com/anthropic",
+      apiKey: KEY,
+      models: [{ id: "deepseek-chat" }],
+      defaultModelId: "deepseek-chat",
+    });
+    expect(saved.error).toBeNull();
+    if (!saved.endpoint) throw new Error("Expected a saved endpoint");
+    return saved.endpoint.id;
+  }
+
+  async function read(endpointId: string, options: { asked?: boolean; force?: boolean } = {}) {
+    const answer = await client.apiEndpointReadBalance({ endpointIds: [endpointId], ...options });
+    expect(answer.error).toBeNull();
+    return answer.readings[0]!;
+  }
+
+  async function listedAutoRefresh(): Promise<boolean | undefined> {
+    const listed = await client.apiEndpointList("claude");
+    expect(listed.error).toBeNull();
+    return listed.balanceAutoRefresh;
+  }
+
+  async function setAutoRefresh(enabled: boolean) {
+    const answer = await client.apiEndpointSetBalanceAutoRefresh({ enabled });
+    expect(answer.error).toBeNull();
+  }
+
+  test("a reading is kept for a minute, then asked again", async () => {
+    const id = await saveDeepSeek();
+    const first = await read(id);
+    clock = NOW + 59_000;
+    expect(await read(id)).toEqual(first);
+    expect(deepseek.requests).toHaveLength(1);
+    clock = NOW + 60_000;
+    const next = await read(id);
+    expect(deepseek.requests).toHaveLength(2);
+    expect(next.readAt).toBe(new Date(NOW + 60_000).toISOString());
+  });
+
+  test("a refresh asks again within the minute", async () => {
+    const id = await saveDeepSeek();
+    await read(id);
+    clock = NOW + 10_000;
+    const forced = await read(id, { force: true });
+    expect(deepseek.requests).toHaveLength(2);
+    expect(forced.readAt).toBe(new Date(NOW + 10_000).toISOString());
+  });
+
+  test("saving the endpoint drops its kept reading", async () => {
+    const id = await saveDeepSeek();
+    await read(id);
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      endpointId: id,
+      name: "DeepSeek renamed",
+      baseUrl: "https://api.deepseek.com/anthropic",
+      models: [{ id: "deepseek-chat" }],
+      defaultModelId: "deepseek-chat",
+    });
+    expect(saved.error).toBeNull();
+    await read(id);
+    expect(deepseek.requests).toHaveLength(2);
+  });
+
+  test("auto refresh is on by default; turned off, it is listed off and stays off after a restart", async () => {
+    expect(await listedAutoRefresh()).toBe(true);
+    await setAutoRefresh(false);
+    expect(await listedAutoRefresh()).toBe(false);
+    await client.close();
+    await daemon.close();
+    await startDaemon();
+    expect(await listedAutoRefresh()).toBe(false);
+    await setAutoRefresh(true);
+    expect(await listedAutoRefresh()).toBe(true);
+  });
+
+  test("with auto refresh on, a timed read goes out", async () => {
+    const id = await saveDeepSeek();
+    const reading = await read(id);
+    expect(reading.status).toBe("ok");
+    expect(deepseek.requests).toHaveLength(1);
+  });
+
+  test("with auto refresh off, a timed read asks nothing and says it was not asked for", async () => {
+    const id = await saveDeepSeek();
+    await setAutoRefresh(false);
+    const reading = await read(id);
+    expect(reading).toEqual({
+      endpointId: id,
+      status: "failed",
+      items: [],
+      readAt: null,
+      failure: { reason: "temporary", detail: null, status: null, hint: "not_asked" },
+    });
+    expect(deepseek.requests).toHaveLength(0);
+  });
+
+  test("with auto refresh off, opening a page and refreshing read; a timed read keeps the last reading however old", async () => {
+    const id = await saveDeepSeek();
+    await setAutoRefresh(false);
+    const opened = await read(id, { asked: true });
+    expect(opened.status).toBe("ok");
+    expect(deepseek.requests).toHaveLength(1);
+    clock = NOW + 5 * 60_000;
+    expect(await read(id)).toEqual(opened);
+    expect(deepseek.requests).toHaveLength(1);
+    // 打开页面也守 1 分钟缓存；过了一分钟才再问。
+    const reopened = await read(id, { asked: true });
+    expect(deepseek.requests).toHaveLength(2);
+    expect(reopened.readAt).toBe(new Date(NOW + 5 * 60_000).toISOString());
+    await read(id, { force: true });
+    expect(deepseek.requests).toHaveLength(3);
+  });
+
+  test("the daemon asks no balance when it starts", async () => {
+    await saveDeepSeek();
+    await client.close();
+    await daemon.close();
+    await startDaemon();
+    await client.apiEndpointList("claude");
+    expect(deepseek.requests).toHaveLength(0);
   });
 });

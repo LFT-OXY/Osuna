@@ -35,6 +35,7 @@ const HINT_KEYS: Record<ApiEndpointBalanceHint, string> = {
   opencode_no_balance: "settings.apiEndpoints.balance.hint.opencodeNoBalance",
   siliconflow_retired: "settings.apiEndpoints.balance.hint.siliconflowRetired",
   aihubmix_no_limit: "settings.apiEndpoints.balance.hint.aihubmixNoLimit",
+  not_asked: "settings.apiEndpoints.balance.hint.notAsked",
 };
 
 const PART_KEYS: Record<ApiEndpointBalancePart, string> = {

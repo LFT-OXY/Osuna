@@ -111,6 +111,10 @@ const OPENCODE_CONSOLE = "https://opencode.ai/console";
 const FORMAT_ORDER = ["openai_chat", "openai_responses", "anthropic_messages"] as const;
 
 export const BALANCE_READ_TIMEOUT_MS = 15_000;
+// 一次读余额请求（整页刷新）最多等这么久，照 magpie 单卡刷新的 30 秒（gui/usage.go）。
+export const BALANCE_PAGE_TIMEOUT_MS = 30_000;
+// 每家的读数留这么久，照 magpie keyBalanceCache。
+export const BALANCE_KEPT_MS = 60_000;
 const MAX_BODY_CHARS = 1 << 20;
 const MAX_DETAIL_CHARS = 200;
 
@@ -134,7 +138,21 @@ export interface ReadBalanceInput {
   now: () => Date;
   // 只给测试：把厂商表里的真实地址换成本机假服务。
   vendorUrls?: Partial<Record<BalanceVendorId, string>>;
+  // 连接断了：抛错，不回读数。
   signal: AbortSignal;
+  // 整页的期限到了：和单次超时一样算暂时查不到。
+  deadline: AbortSignal;
+}
+
+/** 「自动刷新余额与套餐用量」关着、这次不是用户要求的读取、也还没有读数：什么都不发（照 magpie errNotAsked）。 */
+export function notAskedReading(endpointId: string): ApiEndpointBalanceReading {
+  return {
+    endpointId,
+    status: "failed",
+    items: [],
+    readAt: null,
+    failure: { reason: "temporary", detail: null, status: null, hint: "not_asked" },
+  };
 }
 
 /** 读一家的余额：认不出或没有 key 时什么都不发（magpie 同样不查没 key 的）。 */
@@ -198,7 +216,11 @@ export async function readEndpointBalance(
       url: input.vendorUrls?.[vendor.id] ?? BALANCE_VENDOR_URLS[vendor.id],
       init: {
         headers,
-        signal: AbortSignal.any([input.signal, AbortSignal.timeout(BALANCE_READ_TIMEOUT_MS)]),
+        signal: AbortSignal.any([
+          input.signal,
+          AbortSignal.timeout(BALANCE_READ_TIMEOUT_MS),
+          input.deadline,
+        ]),
       },
       uncheckedHosts: input.extras.uncheckedHosts,
     });

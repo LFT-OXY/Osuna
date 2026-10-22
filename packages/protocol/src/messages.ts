@@ -128,6 +128,8 @@ import {
   ApiEndpointVendorStatusResponseSchema,
   ApiEndpointReadBalanceRequestSchema,
   ApiEndpointReadBalanceResponseSchema,
+  ApiEndpointSetBalanceAutoRefreshRequestSchema,
+  ApiEndpointSetBalanceAutoRefreshResponseSchema,
   ApiEndpointImportScanRequestSchema,
   ApiEndpointImportScanResponseSchema,
   ApiEndpointImportRequestSchema,
@@ -3782,6 +3784,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ApiEndpointForgetCatalogRequestSchema,
   ApiEndpointVendorStatusRequestSchema,
   ApiEndpointReadBalanceRequestSchema,
+  ApiEndpointSetBalanceAutoRefreshRequestSchema,
   ApiEndpointImportScanRequestSchema,
   ApiEndpointImportRequestSchema,
   ApiEndpointImportDiscoveryRequestSchema,
@@ -4179,7 +4182,8 @@ export const ServerInfoStatusPayloadSchema = z
         // import_link_preview、import_link_icon 与 import_link（桌面端收到的导入链接）。
         apiEndpointManagement: z.boolean().optional(),
         // COMPAT(apiEndpointBalance): added in v0.17.0, remove gate after 2027-04-22.
-        // 任务 10-16-endpoint-balance：read_balance（接口的余额），接口列表行与详情页的「余额与套餐用量」。
+        // 任务 10-16-endpoint-balance：read_balance（接口的余额，1 分钟缓存、asked 与 force），接口列表行与详情页的
+        // 「余额与套餐用量」；列表带 balanceAutoRefresh，支持 set_balance_auto_refresh（自动刷新余额与套餐用量）。
         apiEndpointBalance: z.boolean().optional(),
         // COMPAT(providerVersions): added in v0.14.0, remove gate after 2027-04-01.
         // 快照带内置提供方的已装版本 version；daemon 支持 provider.version.check.* 与 provider.upgrade.*。
@@ -7602,6 +7606,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ApiEndpointForgetCatalogResponseSchema,
   ApiEndpointVendorStatusResponseSchema,
   ApiEndpointReadBalanceResponseSchema,
+  ApiEndpointSetBalanceAutoRefreshResponseSchema,
   ApiEndpointImportScanResponseSchema,
   ApiEndpointImportResponseSchema,
   ApiEndpointImportDiscoveryResponseSchema,

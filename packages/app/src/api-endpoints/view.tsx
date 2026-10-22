@@ -36,12 +36,13 @@ import { ApiEndpointDetailHeader } from "./detail-header";
 import { ApiEndpointsListSection, NoticeCard, type ListManagement } from "./host-list-section";
 import { endpointVendorNotices } from "./internal/vendor-status";
 import { useVendorStatus } from "./use-vendor-status";
+import { ApiEndpointBalanceAutoRefreshSection } from "./balance-auto-refresh-section";
 import { useEndpointBalances } from "./use-endpoint-balances";
 import { ApiEndpointBalanceSection } from "./balance-section";
 import { AgentApiEndpointsFrame, AgentApiEndpointsSection } from "./agent-section";
 import { selectAgentApiEndpointsView, type AgentIssueAction } from "./internal/agent-settings";
 import type { ConnectionFormSeed, ConnectionSaveResult } from "./internal/connection-form-model";
-import { findHostEndpoint } from "./internal/host-list";
+import { balanceAutoRefreshOf, findHostEndpoint } from "./internal/host-list";
 import { ApiEndpointDisabledModelsSection } from "./disabled-models-section";
 import {
   ApiEndpointNameDisplayRow,
@@ -505,9 +506,13 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
   // 这一页开着时每 5 分钟问一次厂商官方状态页；问不到只是不出提示。
   const vendorStatus = useVendorStatus({ serverId });
   const vendorNotices = useMemo(() => endpointVendorNotices(vendorStatus), [vendorStatus]);
-  // 打开这一页时读一次开着的接口的余额；关着的接口只在它自己的详情页读。
+  // 打开这一页时读开着的接口的余额，开关开着时每分钟再读；关着的接口只在它自己的详情页读。
   const enabledIds = useMemo(() => enabledEndpointIds(endpoints.state), [endpoints.state]);
-  const balances = useEndpointBalances({ serverId, endpointIds: enabledIds });
+  const balances = useEndpointBalances({
+    serverId,
+    endpointIds: enabledIds,
+    autoRefresh: balanceAutoRefreshOf(endpoints.state),
+  });
   const balanceReadings = balances.status === "ready" ? balances.readings : NO_BALANCES;
   // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机不发 key 打码与默认模型落在哪家。
   const management = useMemo<ListManagement | undefined>(
@@ -605,6 +610,13 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
           allEndpoints={endpoints.state.endpoints}
           disabledModels={endpoints.state.disabledModels}
           testID="api-endpoints-endpoint-names"
+        />
+      ) : null}
+      {/* 主机没声明 apiEndpointBalance 时余额为 off，也就没有自动刷新开关。 */}
+      {balances.status !== "off" && endpoints.state.status === "ready" ? (
+        <ApiEndpointBalanceAutoRefreshSection
+          value={endpoints.state.balanceAutoRefresh}
+          onSave={endpoints.setBalanceAutoRefresh}
         />
       ) : null}
       <ConnectionSheet
@@ -799,9 +811,13 @@ function ApiEndpointDetailSections({
     hasManagement,
   });
   const { entries: providerEntries } = useProvidersSnapshot(serverId);
-  // 打开详情页时读一次这家的余额（关着的接口也读）。
+  // 打开详情页时读这家的余额（关着的接口也读），开关开着时每分钟再读。
   const balanceIds = useMemo(() => [endpoint.id], [endpoint.id]);
-  const balances = useEndpointBalances({ serverId, endpointIds: balanceIds });
+  const balances = useEndpointBalances({
+    serverId,
+    endpointIds: balanceIds,
+    autoRefresh: balanceAutoRefreshOf(hostEndpoints.state),
+  });
   // 「接口名显示方式」的预览：这家第一个模型在选单里叫什么（magpie 的 Agents’ lists show）。
   const hostState = hostEndpoints.state;
   const nameDisplayRow = useMemo(() => {

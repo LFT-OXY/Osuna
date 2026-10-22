@@ -3041,6 +3041,13 @@ export const fr: TranslationResources = {
             "SiliconFlow a retiré sa requête de solde et n'a pas encore d'API pour la remplacer. Consultez le solde et les bons sur sa console (sur le site chinois : 余额充值 → 代金券).",
           aihubmixNoLimit:
             "Cette clé n'a pas de limite, et AiHubMix ne dit à une clé que ce qui lui reste. Pour voir le solde du compte, ajoutez le jeton d'accès du compte dans les réglages de ce point d'accès (AiHubMix → Paramètres → Générer un jeton d'accès système), ou donnez une limite à la clé dans la console AiHubMix.",
+          notAsked:
+            "Pas encore lu : l'actualisation automatique est désactivée. Appuyez sur Actualiser pour le lire.",
+        },
+        autoRefresh: {
+          label: "Actualiser automatiquement le solde et l'usage du forfait",
+          hint: "Toutes les minutes tant que la liste des points d'accès ou la page d'un point d'accès est ouverte. Désactivé : seulement à l'ouverture de l'une d'elles, ou en appuyant sur Actualiser sur la page d'un point d'accès.",
+          saveFailed: "Impossible de modifier l'actualisation automatique : {{message}}",
         },
       },
       models: {

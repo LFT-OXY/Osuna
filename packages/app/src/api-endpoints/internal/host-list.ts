@@ -44,6 +44,8 @@ export type HostEndpointsLoadState =
       endpointNameDisplay: ApiEndpointNameDisplay;
       // 接口名显示方式管不到的 Agent（provider）：如用 API key 接的 Codex，模型列表里本来就没有接口名。
       endpointNamesUnreached: string[];
+      // 「自动刷新余额与套餐用量」，整台主机共用；缺省开。
+      balanceAutoRefresh: boolean;
     };
 
 export function selectHostEndpointsState(input: {
@@ -64,6 +66,8 @@ export function selectHostEndpointsState(input: {
       endpointNameDisplay: nameDisplayOf(input.data.endpointNameDisplay),
       // COMPAT(apiEndpointNameDisplay): added in v0.17.0, remove fallback after 2027-04-20. 老主机不发，当谁都管得到。
       endpointNamesUnreached: input.data.endpointNamesUnreached ?? [],
+      // COMPAT(apiEndpointBalance): added in v0.17.0, remove fallback after 2027-04-22. 老主机不发；那时页面上不读余额，开关也不出。
+      balanceAutoRefresh: input.data.balanceAutoRefresh ?? true,
     };
   }
   if (input.error) return { status: "error", message: input.error.message };
@@ -314,4 +318,9 @@ export function previewAgentSettlements(input: {
       if (first === undefined) return { provider, kind: "official" };
       return { provider, kind: "defaultChanged", from: agent.defaultModelId, to: first };
     });
+}
+
+/** 「自动刷新余额与套餐用量」；列表还没读到时当开着（那时也没有接口可读）。 */
+export function balanceAutoRefreshOf(state: HostEndpointsLoadState): boolean {
+  return state.status === "ready" ? state.balanceAutoRefresh : true;
 }

@@ -3015,6 +3015,13 @@ export const ptBR: TranslationResources = {
             "A SiliconFlow desativou a consulta de saldo e ainda não tem outra API. Veja o saldo e os cupons no console dela (no site da China: 余额充值 → 代金券).",
           aihubmixNoLimit:
             "Esta chave não tem limite, e a AiHubMix só informa a uma chave quanto resta nela. Para ver o saldo da conta, informe o token de acesso da conta nas configurações deste endpoint (AiHubMix → Configurações → Gerar token de acesso do sistema), ou defina um limite para a chave no console da AiHubMix.",
+          notAsked:
+            "Ainda não lido: a atualização automática está desligada. Toque em Atualizar para ler.",
+        },
+        autoRefresh: {
+          label: "Atualizar saldo e uso do plano automaticamente",
+          hint: "A cada minuto enquanto a lista de endpoints ou a página de um endpoint estiver aberta. Desligado: só ao abrir uma delas ou ao tocar em Atualizar na página de um endpoint.",
+          saveFailed: "Não foi possível alterar a atualização automática: {{message}}",
         },
       },
       models: {

@@ -145,6 +145,8 @@ const EndpointsFileSchema = z.object({
   endpointNameDisplay: z.string().optional(),
   // 发现提示里点了「忽略」的那几条的指纹（HMAC，不含 key 原文）；没有即一条都没忽略。
   ignoredImports: z.array(z.string()).optional(),
+  // 「自动刷新余额与套餐用量」关着时存 false；没有即开着。
+  balanceAutoRefresh: z.boolean().optional(),
 });
 
 /** v0.15.0 及以前：接口按提供方各存一份，每个提供方一家「当前启用」。读时换算，写时升级。 */
@@ -187,6 +189,7 @@ export interface ApiEndpointState {
   // 接口名显示方式；always 不存。
   endpointNameDisplay?: Exclude<ApiEndpointNameDisplay, "always">;
   ignoredImports?: string[];
+  balanceAutoRefresh?: boolean;
 }
 
 /** 文件里的接口名显示方式：没有或认不出的当 always，always 不放进状态。 */
@@ -368,8 +371,14 @@ export class ApiEndpointStore {
       return { endpoints: [], agents: { claude: OFFICIAL_AGENT, codex: OFFICIAL_AGENT } };
     }
     if (content.kind === "legacy") return upgradeLegacyFile(content.file);
-    const { agents, longConversations, disabledModels, endpointNameDisplay, ignoredImports } =
-      content.file;
+    const {
+      agents,
+      longConversations,
+      disabledModels,
+      endpointNameDisplay,
+      ignoredImports,
+      balanceAutoRefresh,
+    } = content.file;
     return {
       endpoints: content.file.endpoints,
       agents: {
@@ -380,6 +389,7 @@ export class ApiEndpointStore {
       ...(disabledModels === undefined ? {} : { disabledModels }),
       ...storedNameDisplay(endpointNameDisplay),
       ...(ignoredImports === undefined ? {} : { ignoredImports }),
+      ...(balanceAutoRefresh === undefined ? {} : { balanceAutoRefresh }),
     };
   }
 

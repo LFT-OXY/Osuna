@@ -176,6 +176,7 @@ const INBOUND_PERMISSION = {
   "provider.api_endpoint.list_templates.request": "daemon.read",
   "provider.api_endpoint.vendor_status.request": "daemon.read",
   "provider.api_endpoint.read_balance.request": "daemon.read",
+  "provider.api_endpoint.set_balance_auto_refresh.request": "daemon.manage",
   // 读本机别的软件的配置（含 key，只发打码的）与导入，和保存同一级。
   "provider.api_endpoint.import_scan.request": "daemon.manage",
   "provider.api_endpoint.import.request": "daemon.manage",
@@ -453,6 +454,7 @@ const OUTBOUND_PERMISSION = {
   "provider.api_endpoint.list_templates.response": "daemon.read",
   "provider.api_endpoint.vendor_status.response": "daemon.read",
   "provider.api_endpoint.read_balance.response": "daemon.read",
+  "provider.api_endpoint.set_balance_auto_refresh.response": "daemon.manage",
   "provider.api_endpoint.import_scan.response": "daemon.manage",
   "provider.api_endpoint.import.response": "daemon.manage",
   "provider.api_endpoint.import_discovery.response": "daemon.manage",

@@ -333,7 +333,13 @@ import {
 } from "./catalog-merge.js";
 import { CatalogRefreshSchedule, type CatalogRefreshOutcome } from "./catalog-refresh.js";
 import { VendorStatusPages, vendorOfBaseUrls, type VendorId } from "./vendor-status.js";
-import { readEndpointBalance, type BalanceVendorId } from "./balance.js";
+import {
+  BALANCE_KEPT_MS,
+  BALANCE_PAGE_TIMEOUT_MS,
+  notAskedReading,
+  readEndpointBalance,
+  type BalanceVendorId,
+} from "./balance.js";
 import type { DataFileSystem } from "./last-good.js";
 import {
   defaultImportSourcePaths,
@@ -870,6 +876,7 @@ export type ApiEndpointListResult = Required<
     | "disabledModels"
     | "endpointNameDisplay"
     | "endpointNamesUnreached"
+    | "balanceAutoRefresh"
   >
 >;
 
@@ -954,6 +961,11 @@ export class ApiEndpointService {
   // 发现提示上次真读别的软件的结果（不含 OpenCode）与时刻：一分钟内照用，导入之后丢掉。
   private discoveryRead: DiscoveryRead | null = null;
   private readonly isAutoUpdate: () => boolean;
+  // 每家最近一次读到的余额与读的时刻：一分钟内照用；保存或删掉这家时丢掉。只在内存里，开机为空。
+  private readonly keptBalances = new Map<
+    string,
+    { reading: ApiEndpointBalanceReading; at: number }
+  >();
   private readonly readCodexSignIn: ReadCodexSignIn;
   // 最近一次判断出的 Codex 登录方式；还没判断过、或一直判断不出时为 null，按接管记录现在的接法。
   private codexSignIn: CodexSignIn | null = null;
@@ -1135,6 +1147,7 @@ export class ApiEndpointService {
       disabledModels: state.disabledModels ?? [],
       endpointNameDisplay: endpointNameDisplayOf(state),
       endpointNamesUnreached: this.endpointNamesUnreached(state),
+      balanceAutoRefresh: state.balanceAutoRefresh !== false,
     };
   }
 
@@ -1410,6 +1423,7 @@ export class ApiEndpointService {
    */
   async save(provider: string, input: ApiEndpointSaveInput): Promise<ApiEndpoint> {
     const saved = await this.saveQueued(provider, input);
+    this.keptBalances.delete(saved.endpoint.id);
     if (!saved.fetchesList) return saved.endpoint;
     const supported = requireProvider(provider);
     await this.fetchListAfterSave({ provider: supported, endpointId: saved.endpoint.id });
@@ -1663,6 +1677,7 @@ export class ApiEndpointService {
       });
       this.store.removeApiKey(endpointId);
       this.cooldowns.clear(endpointId);
+      this.keptBalances.delete(endpointId);
       return { activeEndpointId: agentTargetEndpoint(next, supported)?.id ?? null };
     });
   }
@@ -2575,6 +2590,15 @@ export class ApiEndpointService {
     });
   }
 
+  /** 「自动刷新余额与套餐用量」：关着存 false，开着不存。只管读余额，不碰 CLI，但照别的主机设置一样走 commit。 */
+  setBalanceAutoRefresh(input: { enabled: boolean }): Promise<void> {
+    return this.exclusiveFollowing(async () => {
+      const state = this.readState();
+      const { balanceAutoRefresh: _previous, ...rest } = state;
+      await this.commit(state, input.enabled ? rest : { ...rest, balanceAutoRefresh: false });
+    });
+  }
+
   /**
    * 接口名显示方式管不到的 Agent（magpie noNamesSaid / agent.NoNames）：开着、用 API key 接的 Codex，
    * 它的 /model 只列光秃秃的名字（模型目录），本来就不带接口名。
@@ -3382,15 +3406,28 @@ export class ApiEndpointService {
    */
   async readBalances(input: {
     endpointIds: readonly string[];
+    // 用户要求的读取（打开页面）；force（刷新）也算。
+    asked: boolean;
+    // 刷新：不用留着的读数。
+    force: boolean;
     signal: AbortSignal;
   }): Promise<ApiEndpointBalanceReading[]> {
     const state = this.readState();
     const endpoints = [...new Set(input.endpointIds)].flatMap(
       (id) => findEndpoint(state, id) ?? [],
     );
+    // 照 magpie quota_asked.go：开关关着时只有用户要求的读取发请求，别的回留着的读数，不论多旧。
+    const held = state.balanceAutoRefresh === false && !input.asked && !input.force;
+    const deadline = AbortSignal.timeout(BALANCE_PAGE_TIMEOUT_MS);
     return Promise.all(
-      endpoints.map((endpoint) =>
-        readEndpointBalance({
+      endpoints.map(async (endpoint) => {
+        const kept = this.keptBalances.get(endpoint.id);
+        const isFresh = kept !== undefined && this.now().getTime() - kept.at < BALANCE_KEPT_MS;
+        const usesKept = kept !== undefined && !input.force && (isFresh || held);
+        if (usesKept) return kept.reading;
+        if (held) return notAskedReading(endpoint.id);
+        const at = this.now().getTime();
+        const reading = await readEndpointBalance({
           endpoint,
           apiKey: this.store.getApiKey(endpoint.id),
           extras: storedRequestExtras(endpoint),
@@ -3398,8 +3435,11 @@ export class ApiEndpointService {
           now: this.now,
           vendorUrls: this.balanceUrls,
           signal: input.signal,
-        }),
-      ),
+          deadline,
+        });
+        this.keptBalances.set(endpoint.id, { reading, at });
+        return reading;
+      }),
     );
   }
 
@@ -3539,7 +3579,10 @@ export class ApiEndpointService {
     if (found.key === null && this.store.getApiKey(endpoint.id) !== null) {
       this.store.removeApiKey(endpoint.id);
     }
-    if (replaceIndex !== null) this.cooldowns.clear(endpoint.id);
+    if (replaceIndex !== null) {
+      this.cooldowns.clear(endpoint.id);
+      this.keptBalances.delete(endpoint.id);
+    }
     return { endpointId: endpoint.id, name: endpoint.name };
   }
 

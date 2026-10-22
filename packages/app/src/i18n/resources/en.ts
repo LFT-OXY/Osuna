@@ -3036,6 +3036,12 @@ export const en = {
             "SiliconFlow retired its balance query and has no API in its place yet. See the balance and vouchers on its console (on the China site: 余额充值 → 代金券).",
           aihubmixNoLimit:
             "This key has no limit, and AiHubMix only tells a key what is left on it. To see the account's balance, add the account's access token in this endpoint's settings (AiHubMix → Settings → Generate System Access Token), or give the key a limit in the AiHubMix console.",
+          notAsked: "Not read yet: auto refresh is off. Press Refresh to read it.",
+        },
+        autoRefresh: {
+          label: "Auto-refresh balance and plan usage",
+          hint: "Every minute while the endpoint list or an endpoint's page is open. Off: only when you open one of them, or press Refresh on an endpoint's page.",
+          saveFailed: "Couldn't change auto-refresh: {{message}}",
         },
       },
       models: {

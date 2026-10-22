@@ -2986,6 +2986,12 @@ export const zhCN: TranslationResources = {
             "硅基流动的余额查询接口已下线，暂时没有替代接口，请去控制台看余额与代金券（国内站在「余额充值 → 代金券」）。",
           aihubmixNoLimit:
             "这把 key 没设上限，AiHubMix 只告诉 key 它自己还剩多少。要看账户余额，请在这家的设置里填账户令牌（AiHubMix → 设置 → 生成系统访问令牌），或在 AiHubMix 控制台给 key 设上限。",
+          notAsked: "还没读过：「自动刷新余额与套餐用量」关着，点刷新读一次。",
+        },
+        autoRefresh: {
+          label: "自动刷新余额与套餐用量",
+          hint: "接口列表页或接口详情页开着时每分钟读一次。关掉后只在打开这些页面、或在详情页点刷新时读。",
+          saveFailed: "改不了自动刷新：{{message}}",
         },
       },
       models: {

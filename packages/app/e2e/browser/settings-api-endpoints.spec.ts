@@ -6533,10 +6533,96 @@ test.describe("Balance", () => {
     await expect(row(page, relayOnly).getByTestId("api-endpoint-row-balance")).toHaveCount(0);
 
     await deepseekAnswers(401, { error: { message: "Authentication Fails" } });
+    // daemon 留着读数一分钟；保存这家后作废，重开页面才再问。
+    await client.apiEndpointSave({
+      provider: "claude",
+      endpointId: deepseek,
+      name: "DeepSeek",
+      baseUrls: [{ format: "openai_chat", url: "https://api.deepseek.com/v1" }],
+      models: [{ id: "deepseek-chat" }],
+    });
     await page.reload();
     await expect(row(page, deepseek).getByTestId("api-endpoint-row-balance")).toHaveText(
       "Balance unavailable",
     );
+  });
+
+  /** 页面发出的一次读余额：读哪几家、算不算用户要求、是不是刷新。 */
+  interface BalanceRead {
+    endpointIds: string[];
+    asked: boolean;
+    force: boolean;
+  }
+
+  function recordBalanceReads(page: Page): BalanceRead[] {
+    const reads: BalanceRead[] = [];
+    page.on("websocket", (socket) =>
+      socket.on("framesent", ({ payload }) => {
+        if (typeof payload !== "string" || !payload.includes("read_balance.request")) return;
+        const request = (
+          JSON.parse(payload) as {
+            message: { endpointIds: string[]; asked?: boolean; force?: boolean };
+          }
+        ).message;
+        reads.push({
+          endpointIds: request.endpointIds,
+          asked: request.asked === true,
+          force: request.force === true,
+        });
+      }),
+    );
+    return reads;
+  }
+
+  test("auto refresh on: the list reads its enabled endpoints when opened and every minute; off: only when a page is opened or Refresh is pressed", async ({
+    page,
+  }) => {
+    await deepseekAnswers(200, balanceOf("110.00"));
+    const on = await seedDeepSeek("DeepSeek");
+    const off = await seedDeepSeek("DeepSeek off");
+    await client.apiEndpointSetEndpointState({ endpointId: off, enabled: false });
+    await page.clock.install();
+    const reads = recordBalanceReads(page);
+    await openApiEndpointsPage(page);
+
+    const autoRefresh = page.getByTestId("api-endpoints-balance-auto-refresh-switch");
+    await expect(autoRefresh).toBeChecked();
+    await expect(row(page, on).getByTestId("api-endpoint-row-balance")).toHaveText(
+      "Balance ¥110.00",
+    );
+    // 关着的接口不随列表读。
+    await expect(row(page, off).getByTestId("api-endpoint-row-balance")).toHaveCount(0);
+    expect(reads).toEqual([{ endpointIds: [on], asked: true, force: false }]);
+    await page.clock.fastForward("01:00");
+    await expect.poll(() => reads.length).toBe(2);
+    expect(reads[1]).toEqual({ endpointIds: [on], asked: false, force: false });
+
+    await autoRefresh.click();
+    await expect(autoRefresh).not.toBeChecked();
+    // 等存好、列表读回来：开关不再是灰的。
+    await expect(autoRefresh).toBeEnabled();
+    expect((await client.apiEndpointList("claude")).balanceAutoRefresh).toBe(false);
+    await page.clock.fastForward("03:00");
+    // 关着的接口的详情页：打开就读这家，点刷新强制重读；开着的时候不再每分钟读。
+    await openEndpointRow(page, off);
+    await expect.poll(() => reads.length).toBe(3);
+    expect(reads[2]).toEqual({ endpointIds: [off], asked: true, force: false });
+    await page.clock.fastForward("03:00");
+    expect(reads).toHaveLength(3);
+    await balanceSection(page).getByTestId("api-endpoint-balance-refresh").click();
+    await expect.poll(() => reads.length).toBe(4);
+    expect(reads[3]).toEqual({ endpointIds: [off], asked: true, force: true });
+
+    // 回到列表再打开开关：列表恢复每分钟读一次。
+    await page.goBack();
+    await expect(page.getByTestId("api-endpoints-list")).toBeVisible();
+    await autoRefresh.click();
+    await expect(autoRefresh).toBeChecked();
+    await expect(autoRefresh).toBeEnabled();
+    const before = reads.length;
+    await page.clock.fastForward("01:00");
+    await expect.poll(() => reads.length).toBeGreaterThan(before);
+    expect(reads.at(-1)).toEqual({ endpointIds: [on], asked: false, force: false });
   });
 
   test("the endpoint page shows each balance with when it was read, and Refresh reads again", async ({

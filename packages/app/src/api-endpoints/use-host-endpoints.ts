@@ -115,6 +115,8 @@ export interface UseHostEndpointsResult {
   setDisabledModels: (models: string[]) => Promise<string | null>;
   // 设接口名显示方式；返回失败原因，成功为 null。
   setEndpointNameDisplay: (display: ApiEndpointNameDisplay) => Promise<string | null>;
+  // 设「自动刷新余额与套餐用量」；返回失败原因，成功为 null。只有声明了 apiEndpointBalance 的主机认。
+  setBalanceAutoRefresh: (enabled: boolean) => Promise<string | null>;
   // 正在改总开关或默认模型的 Agent。
   pendingAgent: string | null;
   // 改失败的原因在 actionError 里。
@@ -352,6 +354,21 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     [client, describeError, refresh, t],
   );
 
+  const setBalanceAutoRefresh = useCallback(
+    async (enabled: boolean): Promise<string | null> => {
+      if (!client) return t("workspace.terminal.hostDisconnected");
+      try {
+        const result = await client.apiEndpointSetBalanceAutoRefresh({ enabled });
+        if (result.error) return describeError(result.error);
+        await refresh();
+        return null;
+      } catch (error) {
+        return requestFailureMessage(error);
+      }
+    },
+    [client, describeError, refresh, t],
+  );
+
   const setAgentSettings = useCallback(
     (provider: string, settings: AgentSettingsChange) => {
       if (!client) return;
@@ -565,6 +582,7 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     resume,
     arrange,
     setLongConversations,
+    setBalanceAutoRefresh,
     setDisabledModels,
     setEndpointNameDisplay,
     pendingAgent,

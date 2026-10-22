@@ -379,6 +379,9 @@ interface ApiEndpointSeedClient {
   apiEndpointSetEndpointNameDisplay(options: {
     display: string;
   }): Promise<{ error: { code: string; message: string } | null }>;
+  apiEndpointSetBalanceAutoRefresh(options: {
+    enabled: boolean;
+  }): Promise<{ error: { code: string; message: string } | null }>;
   apiEndpointFetchModels(options: {
     provider: string;
     endpointId?: string;
@@ -453,6 +456,7 @@ export async function resetApiEndpoints(client: ApiEndpointSeedClient): Promise<
   await client.apiEndpointSetLongConversations({ fullContext: false, compactAt: null });
   await client.apiEndpointSetDisabledModels({ models: [] });
   await client.apiEndpointSetEndpointNameDisplay({ display: "always" });
+  await client.apiEndpointSetBalanceAutoRefresh({ enabled: true });
   const list = await client.apiEndpointList("claude");
   for (const endpoint of list.endpoints) {
     await client.apiEndpointDelete("claude", endpoint.id);

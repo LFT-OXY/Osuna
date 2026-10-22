@@ -48,6 +48,7 @@ export type ApiEndpointRequest = Extract<
       | "provider.api_endpoint.forget_catalog.request"
       | "provider.api_endpoint.vendor_status.request"
       | "provider.api_endpoint.read_balance.request"
+      | "provider.api_endpoint.set_balance_auto_refresh.request"
       | "provider.api_endpoint.import_scan.request"
       | "provider.api_endpoint.import.request"
       | "provider.api_endpoint.import_discovery.request"
@@ -85,6 +86,7 @@ const API_ENDPOINT_REQUEST_TYPES: Record<ApiEndpointRequest["type"], true> = {
   "provider.api_endpoint.forget_catalog.request": true,
   "provider.api_endpoint.vendor_status.request": true,
   "provider.api_endpoint.read_balance.request": true,
+  "provider.api_endpoint.set_balance_auto_refresh.request": true,
   "provider.api_endpoint.import_scan.request": true,
   "provider.api_endpoint.import.request": true,
   "provider.api_endpoint.import_discovery.request": true,
@@ -170,6 +172,8 @@ export class ApiEndpointSession {
         return this.handleVendorStatus(request);
       case "provider.api_endpoint.read_balance.request":
         return this.handleReadBalance(request, connectionSignal);
+      case "provider.api_endpoint.set_balance_auto_refresh.request":
+        return this.handleSetBalanceAutoRefresh(request);
       default:
         return this.handleAddingAids(request, connectionSignal);
     }
@@ -769,6 +773,8 @@ export class ApiEndpointSession {
     try {
       const readings = await this.service.readBalances({
         endpointIds: request.endpointIds,
+        asked: request.asked === true,
+        force: request.force === true,
         signal: connectionSignal,
       });
       payload = { readings, error: null };
@@ -778,6 +784,24 @@ export class ApiEndpointSession {
     this.host.emit({
       type: "provider.api_endpoint.read_balance.response",
       payload: { requestId: request.requestId, ...payload },
+    });
+  }
+
+  private async handleSetBalanceAutoRefresh(
+    request: Extract<
+      ApiEndpointRequest,
+      { type: "provider.api_endpoint.set_balance_auto_refresh.request" }
+    >,
+  ): Promise<void> {
+    let error: ApiEndpointError | null = null;
+    try {
+      await this.service.setBalanceAutoRefresh({ enabled: request.enabled });
+    } catch (caught) {
+      error = this.toWireError(caught, request);
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.set_balance_auto_refresh.response",
+      payload: { requestId: request.requestId, error },
     });
   }
 

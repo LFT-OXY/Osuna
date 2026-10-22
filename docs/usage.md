@@ -223,13 +223,27 @@ its balance, so its section says to read it on the OpenCode console.
 
 It carries the key as `Authorization: Bearer`, `Accept: application/json`,
 `User-Agent: Osuna/<version>` and the endpoint's own **Headers**, which can
-replace that user agent. It is sent once when you open the API endpoints page
-(for each endpoint that is on) or an endpoint's page (that endpoint, on or off),
-and again when you press Refresh in its "Balance and plan usage" section. It
-times out after 15 seconds, is never sent at startup, and the price table switch
-does not cover it. The answer is shown only: failover never reads it. What the
-vendor said on a failure is shown with the key and header values masked, cut to
-200 characters.
+replace that user agent. When it is sent depends on the "Auto-refresh balance
+and plan usage" switch at the bottom of the API endpoints page (on by default,
+for the whole host):
+
+| Switch | The API endpoints page (endpoints that are on)    | An endpoint's page (on or off)                    |
+| ------ | ------------------------------------------------- | ------------------------------------------------- |
+| On     | When you open it, then every minute it stays open | When you open it, then every minute it stays open |
+| Off    | When you open it                                  | When you open it                                  |
+
+Bringing the app back to the front counts as opening the page, and a page you
+can't see sends nothing. Refresh in the "Balance and plan usage" section always
+sends it. With the switch off, opening a page again within 30 seconds of the
+last read sends nothing, and the daemon refuses any read the app didn't mark as
+yours (as magpie's "When I ask"), answering with the reading it kept. The daemon
+keeps each endpoint's reading for a minute, so pages open together share one
+request; Refresh skips what it kept, and saving or deleting the endpoint drops
+it. Each request times out after 15 seconds and a whole read after 30. Nothing
+is sent at startup, and the price table switch does not cover it, nor does this
+switch cover the CLI logins' plan usage. The answer is shown only: failover
+never reads it. What the vendor said on a failure is shown with the key and
+header values masked, cut to 200 characters.
 
 "From the website" in the add or edit dialog of a custom API endpoint also runs
 only when you press it. The daemon looks for the icon of the site the endpoint's

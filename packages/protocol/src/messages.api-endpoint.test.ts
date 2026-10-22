@@ -1979,6 +1979,44 @@ describe("API endpoint balance (apiEndpointBalance)", () => {
     expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
   });
 
+  it("parses read_balance asked and forced, and set_balance_auto_refresh with the list's switch and without it", () => {
+    for (const extra of [{ asked: true }, { force: true }, {}]) {
+      const request = {
+        type: "provider.api_endpoint.read_balance.request" as const,
+        requestId: "req-rb",
+        endpointIds: ["ep_1"],
+        ...extra,
+      };
+      expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+    }
+    const set = {
+      type: "provider.api_endpoint.set_balance_auto_refresh.request" as const,
+      requestId: "req-ar",
+      enabled: false,
+    };
+    expect(SessionInboundMessageSchema.parse(set)).toEqual(set);
+    const answered = {
+      type: "provider.api_endpoint.set_balance_auto_refresh.response" as const,
+      payload: { requestId: "req-ar", error: null },
+    };
+    expect(SessionOutboundMessageSchema.parse(answered)).toEqual(answered);
+    const listed = (extra: object) => ({
+      type: "provider.api_endpoint.list.response" as const,
+      payload: {
+        requestId: "req-l",
+        provider: "claude",
+        endpoints: [],
+        activeEndpointId: null,
+        error: null,
+        ...extra,
+      },
+    });
+    expect(SessionOutboundMessageSchema.parse(listed({ balanceAutoRefresh: false }))).toEqual(
+      listed({ balanceAutoRefresh: false }),
+    );
+    expect(SessionOutboundMessageSchema.parse(listed({}))).toEqual(listed({}));
+  });
+
   it("parses a host that advertises apiEndpointBalance, and an older one without it", () => {
     const base = { status: "server_info" as const, serverId: "srv_1" };
     const current = ServerInfoStatusPayloadSchema.parse({

@@ -1640,3 +1640,46 @@ if (!isConnectionGone) throw error;
 - The prompt (ticket 27, magpie `GET /api/importapps/discovery`, `discoverLocalProviders`): `provider.api_endpoint.import_discovery` returns `{ fingerprint, sourceId, source }` for entries the dialog would preselect (`isPreselectedImport` in protocol `api-endpoint/import-offer.ts`, shared with the app's `initialImportPicks`) minus `ignoredImports`; never OpenCode. The daemon reads and settles at most once a minute (`DISCOVERY_READ_INTERVAL_MS`, injected `now`) and keeps only the candidates, never keys; a `commit` that changes endpoints or keys, an import, and the dialog's own scan replace or drop it (the browser spec calls `import_scan` after writing fake sources). `provider.api_endpoint.import_ignore` takes 64-hex fingerprints only (`invalid_input` otherwise), merges them into `ignoredImports` through `commit`, keeps the newest 500, and does not prune ones not seen now (magpie keeps them too). Its failures are `import_ignore_failed` with `params.reason`; the app words every failure itself and never shows the host's message. Review opens Import with only the prompt's fingerprints picked; a failed discovery shows no prompt; a failed Ignore keeps it with the reason.
 - Discovery prompt (ticket 27, magpie app.js:9846-9903, `gui/importapps.go:29-48`): `provider.api_endpoint.import_discovery` / `import_ignore` (`daemon.manage`). Runs on opening the API endpoints page, OpenCode excluded; the other apps' files are really read at most once a minute (injected clock), the cache keeps only fingerprints and sources and is dropped when stale or after an import. Offered = what the import dialog would preselect (one shared rule in protocol). The bar always sits at the page top (prd 42 says so; magpie's compact variant next to the add button is not used), "View" opens the dialog with only those preselected, "Ignore" stores the fingerprints in host-wide `ignoredImports` (64-hex, capped at 500, oldest dropped; not pruned, as magpie keeps them). To survive restarts the fingerprint HMAC secret is persisted in `api-endpoints/import-fingerprint-key.json` (0600, atomic); a corrupt file is regenerated with a warn line (ignored items re-prompt), an unreadable one makes discovery `unknown`. A changed key re-prompts. Failures are code + reason, localized; a failed discovery shows no bar.
 - Import links (ticket 28, magpie `importurl.go:11-160`, app.js:10139-10200, ADR 0002): only the desktop app receives `paseo://import?…`; the main process hands it to the focused window (opening one if needed, holding it until the renderer is ready); Agent links are untouched and the link is never logged. Nothing is added without the confirm dialog: `provider.api_endpoint.import_link_preview` parses and stores nothing, `import_link_icon` fetches the `icon=` picture separately so the dialog opens at once (magpie: "the dialog being open is the confirmation"; explicit `icon=` beats preset / `catalog=` icon, kept in memory, stored only when the add succeeds), `import_link` re-parses and re-validates in the daemon (`daemon.manage`). Rules as magpie: https only, http for loopback / LAN (incl. IPv4-mapped IPv6, `utils/local-host.ts`); no userinfo, non-empty query or fragment (an empty `?` / `#` is accepted and stripped); key ≤ 4096 bytes, no control chars; name cut to 80 bytes byte-safely (again after a " 2" rename); ≤ 200 models (extra dropped); unknown preset, Vertex, no address, only a Gemini address (until sub-task 7) are refused with `import_link_refused` + reason + params, never the key. Replace target = magpie `Find(id)`: same id, then an existing name equal to the link's id — never the link's name alone. `catalog=` picks the vendor icon via template `modelsDevIds` (`IconForCatalog`); facts have no field. Tests: the test daemon and the browser-test daemon both take a `fetchSite` seam that throws by default.
+
+## Scenario: when an endpoint's balance is read (endpoint-balance ticket 03, magpie `provider/quota_asked.go`, `balance.go` `KeyBalances` / `ForgetBalances`)
+
+### 1. Scope / Trigger
+- New RPC, a new optional request field pair and a host-wide setting in `endpoints.json`; the client and the daemon must agree on which reads are the user's.
+
+### 2. Signatures
+- `provider.api_endpoint.read_balance.request { endpointIds, asked?: boolean, force?: boolean }` (`daemon.read`).
+- `provider.api_endpoint.set_balance_auto_refresh.request { enabled: boolean }` → `.response { requestId, error }` (`daemon.manage`, service `setBalanceAutoRefresh` through `commit`).
+- List payload `balanceAutoRefresh?: boolean`; stored as `balanceAutoRefresh: false` only when off. All under the `apiEndpointBalance` capability.
+- Service `readBalances({ endpointIds, asked, force, signal })`; `readEndpointBalance({ …, signal, deadline })`.
+
+### 3. Contracts
+- `keptBalances` (service memory, empty at start): endpoint id → `{ reading, at }`. A read within `BALANCE_KEPT_MS` (60 s, injected `now`) of `at` returns the kept reading; `force` skips it. `save`, `delete` and an import that replaces an endpoint drop that id. Every result is kept, failures too.
+- Switch off (`state.balanceAutoRefresh === false`) and neither `asked` nor `force`: send nothing; return the kept reading however old, else `notAskedReading` = `failed`, `reason: "temporary"`, `hint: "not_asked"`, `readAt: null` (magpie `errNotAsked`; ticket 04's last reading will answer it like any temporary failure).
+- Timeouts: 15 s per request (`BALANCE_READ_TIMEOUT_MS`), 30 s for the whole RPC (`BALANCE_PAGE_TIMEOUT_MS`, the `deadline` signal). A deadline abort is a `temporary` failure; a connection abort (`signal`) still throws.
+- Nothing reads at startup; the switch doesn't touch the price table or the CLI logins' plan usage.
+
+### 4. Validation & Error Matrix
+- Unknown id → not in `readings`. Store unreadable → whole RPC `error`. Switch write failure → `error` from `toWireError`, the app shows it under the switch and the switch goes back.
+
+### 5. Good/Base/Bad Cases
+- Good: list and detail open together → one upstream request in the minute.
+- Base: switch off, page opened → `asked: true` → reads (cache still applies).
+- Bad: switch off, a timed read → no request, `not_asked` until the user opens a page or refreshes.
+
+### 6. Tests Required
+- `daemon-e2e/api-endpoint-balance.e2e.test.ts` "when the API endpoint balance is read": kept for a minute then asked again; force inside the minute; save drops it; switch default/off/restart; off + timed asks nothing; off + asked/force read, timed keeps old reading; no request at startup.
+- Browser `Balance` › "auto refresh on…": counts `read_balance` frames and their `asked`/`force` with `page.clock`.
+
+### 7. Wrong vs Correct
+#### Wrong
+```ts
+// a timed read with the switch off still reaches the vendor once the cache expires
+if (kept && isFresh) return kept.reading;
+```
+#### Correct
+```ts
+const held = state.balanceAutoRefresh === false && !input.asked && !input.force;
+const usesKept = kept !== undefined && !input.force && (isFresh || held);
+if (usesKept) return kept.reading;
+if (held) return notAskedReading(endpoint.id);
+```

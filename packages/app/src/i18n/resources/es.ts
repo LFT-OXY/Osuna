@@ -3031,6 +3031,13 @@ export const es: TranslationResources = {
             "SiliconFlow retiró su consulta de saldo y aún no tiene otra API. Consulta el saldo y los cupones en su consola (en el sitio de China: 余额充值 → 代金券).",
           aihubmixNoLimit:
             "Esta clave no tiene límite y AiHubMix solo le dice a una clave lo que le queda. Para ver el saldo de la cuenta, añade el token de acceso de la cuenta en los ajustes de este endpoint (AiHubMix → Ajustes → Generar token de acceso del sistema), o ponle un límite a la clave en la consola de AiHubMix.",
+          notAsked:
+            "Aún sin leer: la actualización automática está desactivada. Pulsa Actualizar para leerlo.",
+        },
+        autoRefresh: {
+          label: "Actualizar saldo y uso del plan automáticamente",
+          hint: "Cada minuto mientras la lista de endpoints o la página de un endpoint esté abierta. Desactivado: solo al abrir una de ellas o al pulsar Actualizar en la página de un endpoint.",
+          saveFailed: "No se pudo cambiar la actualización automática: {{message}}",
         },
       },
       models: {

@@ -713,6 +713,10 @@ type ApiEndpointReadBalancePayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.read_balance.response" }
 >["payload"];
+type ApiEndpointSetBalanceAutoRefreshPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.set_balance_auto_refresh.response" }
+>["payload"];
 type ApiEndpointImportScanPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.import_scan.response" }
@@ -6677,14 +6681,28 @@ export class DaemonClient {
     });
   }
 
-  /** 读这几家接口的余额；不存在的 id 不回。只有声明了 apiEndpointBalance 的 daemon 认。 */
+  /**
+   * 读这几家接口的余额；不存在的 id 不回。asked 是用户要求的读取（打开页面），force 是刷新（跳过 1 分钟缓存）。
+   * 只有声明了 apiEndpointBalance 的 daemon 认。
+   */
   async apiEndpointReadBalance(
-    options: { endpointIds: string[] },
+    options: { endpointIds: string[]; asked?: boolean; force?: boolean },
     requestId?: string,
   ): Promise<ApiEndpointReadBalancePayload> {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId,
       message: { type: "provider.api_endpoint.read_balance.request", ...options },
+    });
+  }
+
+  /** 设整台主机的「自动刷新余额与套餐用量」。只有声明了 apiEndpointBalance 的 daemon 认。 */
+  async apiEndpointSetBalanceAutoRefresh(
+    options: { enabled: boolean },
+    requestId?: string,
+  ): Promise<ApiEndpointSetBalanceAutoRefreshPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.set_balance_auto_refresh.request", ...options },
     });
   }
 

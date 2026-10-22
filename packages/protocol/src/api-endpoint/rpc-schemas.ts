@@ -396,6 +396,8 @@ export const ApiEndpointListResponseSchema = z.object({
     // 接口名显示方式管不到的 Agent（provider）：它的模型列表里本来就没有 Osuna 给的接口名
     // （用 API key 接的 Codex 只列光秃秃的名字）。老 daemon 不发。
     endpointNamesUnreached: z.array(z.string()).optional(),
+    // 「自动刷新余额与套餐用量」，整台主机共用；缺省开。没声明 apiEndpointBalance 的 daemon 不发。
+    balanceAutoRefresh: z.boolean().optional(),
     error: ApiEndpointErrorSchema.nullable(),
   }),
 });
@@ -791,6 +793,30 @@ export const ApiEndpointSetEndpointNameDisplayResponseSchema = z.object({
 });
 export type ApiEndpointSetEndpointNameDisplayResponse = z.infer<
   typeof ApiEndpointSetEndpointNameDisplayResponseSchema
+>;
+
+/**
+ * 设「自动刷新余额与套餐用量」（照 magpie Settings → Usage 的额度刷新：自动 / 仅手动）。主机级，缺省开；
+ * 不管价格表自动更新与 CLI 登录的套餐用量。只有声明了 apiEndpointBalance 的 daemon 认它。
+ */
+export const ApiEndpointSetBalanceAutoRefreshRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.set_balance_auto_refresh.request"),
+  requestId: z.string(),
+  enabled: z.boolean(),
+});
+export type ApiEndpointSetBalanceAutoRefreshRequest = z.infer<
+  typeof ApiEndpointSetBalanceAutoRefreshRequestSchema
+>;
+
+export const ApiEndpointSetBalanceAutoRefreshResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.set_balance_auto_refresh.response"),
+  payload: z.object({
+    requestId: z.string(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointSetBalanceAutoRefreshResponse = z.infer<
+  typeof ApiEndpointSetBalanceAutoRefreshResponseSchema
 >;
 
 /**
@@ -1327,12 +1353,14 @@ export const API_ENDPOINT_BALANCE_FAILURES = [
 export type ApiEndpointBalanceFailureReason = (typeof API_ENDPOINT_BALANCE_FAILURES)[number];
 /**
  * 失败附带的具体提示：opencode_no_balance（OpenCode 不给 key 查 Zen 的余额）、siliconflow_retired（硅基流动的
- * 余额接口已下线）、aihubmix_no_limit（AiHubMix 的 key 没设上限，要填账户令牌）。
+ * 余额接口已下线）、aihubmix_no_limit（AiHubMix 的 key 没设上限，要填账户令牌）、not_asked（「自动刷新余额与套餐用量」
+ * 关着，这次读取不是用户要求的，也还没有读数）。
  */
 export const API_ENDPOINT_BALANCE_HINTS = [
   "opencode_no_balance",
   "siliconflow_retired",
   "aihubmix_no_limit",
+  "not_asked",
 ] as const;
 export type ApiEndpointBalanceHint = (typeof API_ENDPOINT_BALANCE_HINTS)[number];
 export const API_ENDPOINT_BALANCE_PARTS = ["granted", "topped_up"] as const;
@@ -1376,11 +1404,19 @@ export const ApiEndpointBalanceReadingSchema = z.object({
 });
 export type ApiEndpointBalanceReading = z.infer<typeof ApiEndpointBalanceReadingSchema>;
 
-/** 读这几家的余额；不存在的 id 不回。只有声明了 apiEndpointBalance 的 daemon 认它。 */
+/**
+ * 读这几家的余额；不存在的 id 不回。只有声明了 apiEndpointBalance 的 daemon 认它。
+ * daemon 对每家的读数缓存 1 分钟。「自动刷新余额与套餐用量」关着时，不是用户要求的读取不发请求（照 magpie quota_asked.go），
+ * 回缓存里的读数，没有就回失败 temporary + hint not_asked。
+ */
 export const ApiEndpointReadBalanceRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.read_balance.request"),
   requestId: z.string(),
   endpointIds: z.array(z.string()),
+  // 用户要求的读取（打开页面）；省略即页面开着时的定时读取。
+  asked: z.boolean().optional(),
+  // 强制重读（刷新按钮）：跳过缓存，也算用户要求。
+  force: z.boolean().optional(),
 });
 export type ApiEndpointReadBalanceRequest = z.infer<typeof ApiEndpointReadBalanceRequestSchema>;
 
