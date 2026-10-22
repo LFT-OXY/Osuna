@@ -1334,3 +1334,37 @@ PR #16 并入后在主工作树拉取 main、重装依赖并重建，核对同�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 41: 同步 main、收尾接口管理遗留任务、修复本机依赖
+<!-- atw-session: v=2 fp=3abcac1307b8d2d6 -->
+
+**Date**: 2026-10-22
+**Task**: 同步 main、收尾接口管理遗留任务、修复本机依赖
+**Package**: app
+**Branch**: `main`
+
+### Summary
+
+拉取 PR #26 合并后的 main，删除已合并的本地分支 greet-user-await-task；核对总任务 10-16-magpie-osuna-gaps 进度（子任务 1-3 与遗留任务完成，4-9 未开始）；确认 PR #26 CI 全绿后勾上遗留任务最后一条验收项并归档（9dbf43416）；本机补 npm ci（缺 re2js）并 build:server，typecheck 通过。
+
+### Main Changes
+
+- 归档 10-21-endpoint-management-ux-followups（提交 9dbf43416，因本机缺依赖跳过钩子）
+- 删除本地分支 greet-user-await-task
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] npm run build:server 通过；npm run typecheck 通过
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 开始子任务 4：10-16-endpoint-balance（余额与套餐额度显示），先做需求确认
