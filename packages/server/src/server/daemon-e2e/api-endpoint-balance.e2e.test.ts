@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import {
   createServer,
   type IncomingHttpHeaders,
@@ -671,6 +671,13 @@ describe("when the API endpoint balance is read", () => {
     return answer.readings[0]!;
   }
 
+  function readBalanceFile(): Promise<string> {
+    return readFile(
+      path.join(root, "home", ".paseo", "api-endpoints", "balance-readings.json"),
+      "utf8",
+    );
+  }
+
   async function listedAutoRefresh(): Promise<boolean | undefined> {
     const listed = await client.apiEndpointList("claude");
     expect(listed.error).toBeNull();
@@ -767,6 +774,105 @@ describe("when the API endpoint balance is read", () => {
     expect(reopened.readAt).toBe(new Date(NOW + 5 * 60_000).toISOString());
     await read(id, { force: true });
     expect(deepseek.requests).toHaveLength(3);
+  });
+
+  test("a temporary failure (5xx, 429) gives the last reading, marked as last time's with why it was not read now", async () => {
+    const id = await saveDeepSeek();
+    const good = await read(id);
+    deepseek.reply = (response) => sendJson(response, 503, { error: { message: "busy" } });
+    clock = NOW + 5 * 60_000;
+    const stale = await read(id, { force: true });
+    expect(stale).toEqual({
+      ...good,
+      stale: { reason: "temporary", detail: "busy", status: 503 },
+    });
+    deepseek.reply = (response) => sendJson(response, 429, { error: { message: "slow down" } });
+    clock = NOW + 7 * 60_000;
+    expect(await read(id, { force: true })).toEqual({
+      ...good,
+      stale: { reason: "temporary", detail: "slow down", status: 429 },
+    });
+  });
+
+  test("the last reading stays across a restart, kept on disk without the key", async () => {
+    const id = await saveDeepSeek();
+    const good = await read(id);
+    await client.close();
+    await daemon.close();
+    const file = await readBalanceFile();
+    expect(file).toContain("¥110.00");
+    expect(file).not.toContain(KEY);
+    await startDaemon();
+    deepseek.reply = (response) => response.destroy();
+    clock = NOW + 3 * 60_000;
+    const stale = await read(id);
+    expect(stale).toMatchObject({ ...good, stale: { reason: "temporary", status: null } });
+  });
+
+  test("a failure that is not temporary does not fall back to the last reading", async () => {
+    const id = await saveDeepSeek();
+    await read(id);
+    deepseek.reply = (response) => sendJson(response, 401, { error: { message: "bad key" } });
+    const refused = await read(id, { force: true });
+    expect(refused).toMatchObject({
+      status: "failed",
+      items: [],
+      failure: { reason: "token_rejected", status: 401 },
+    });
+    expect(refused.stale).toBeUndefined();
+  });
+
+  test("changing the endpoint's address or key, or deleting it, drops its last reading", async () => {
+    const busy: Reply = (response) => sendJson(response, 503, {});
+    async function resave(id: string, change: { baseUrl?: string; apiKey?: string }) {
+      const saved = await client.apiEndpointSave({
+        provider: "claude",
+        endpointId: id,
+        name: "DeepSeek",
+        baseUrl: change.baseUrl ?? "https://api.deepseek.com/anthropic",
+        ...(change.apiKey === undefined ? {} : { apiKey: change.apiKey }),
+        models: [{ id: "deepseek-chat" }],
+        defaultModelId: "deepseek-chat",
+      });
+      expect(saved.error).toBeNull();
+    }
+    for (const change of [{ baseUrl: "https://api.deepseek.com" }, { apiKey: "sk-other-key" }]) {
+      deepseek.reply = (response) => sendJson(response, 200, DEEPSEEK_BALANCE);
+      const id = await saveDeepSeek();
+      await read(id);
+      // 只改名字不作废。
+      await resave(id, {});
+      deepseek.reply = busy;
+      expect((await read(id, { force: true })).stale).toMatchObject({ status: 503 });
+      await resave(id, change);
+      expect(await read(id, { force: true })).toMatchObject({
+        status: "failed",
+        failure: { reason: "temporary", status: 503 },
+      });
+    }
+    deepseek.reply = (response) => sendJson(response, 200, DEEPSEEK_BALANCE);
+    const id = await saveDeepSeek();
+    await read(id);
+    expect((await client.apiEndpointDelete("claude", id)).error).toBeNull();
+    await client.close();
+    await daemon.close();
+    const file = await readBalanceFile();
+    expect(file).not.toContain(id);
+  });
+
+  test("with auto refresh off, a timed read after a restart gives the last reading, marked as not read now", async () => {
+    const id = await saveDeepSeek();
+    const good = await read(id);
+    await setAutoRefresh(false);
+    await client.close();
+    await daemon.close();
+    await startDaemon();
+    const held = await read(id);
+    expect(held).toEqual({
+      ...good,
+      stale: { reason: "temporary", detail: null, status: null, hint: "not_asked" },
+    });
+    expect(deepseek.requests).toHaveLength(1);
   });
 
   test("the daemon asks no balance when it starts", async () => {

@@ -1654,7 +1654,7 @@ if (!isConnectionGone) throw error;
 
 ### 3. Contracts
 - `keptBalances` (service memory, empty at start): endpoint id → `{ reading, at }`. A read within `BALANCE_KEPT_MS` (60 s, injected `now`) of `at` returns the kept reading; `force` skips it. `save`, `delete` and an import that replaces an endpoint drop that id. Every result is kept, failures too.
-- Switch off (`state.balanceAutoRefresh === false`) and neither `asked` nor `force`: send nothing; return the kept reading however old, else `notAskedReading` = `failed`, `reason: "temporary"`, `hint: "not_asked"`, `readAt: null` (magpie `errNotAsked`; ticket 04's last reading will answer it like any temporary failure).
+- Switch off (`state.balanceAutoRefresh === false`) and neither `asked` nor `force`: send nothing; return the kept reading however old, else `notAskedReading` = `failed`, `reason: "temporary"`, `hint: "not_asked"`, `readAt: null` (magpie `errNotAsked`); with a last reading on disk that reading answers instead, `stale` = the not-asked failure (ticket 04, below).
 - Timeouts: 15 s per request (`BALANCE_READ_TIMEOUT_MS`), 30 s for the whole RPC (`BALANCE_PAGE_TIMEOUT_MS`, the `deadline` signal). A deadline abort is a `temporary` failure; a connection abort (`signal`) still throws.
 - Nothing reads at startup; the switch doesn't touch the price table or the CLI logins' plan usage.
 
@@ -1681,5 +1681,51 @@ if (kept && isFresh) return kept.reading;
 const held = state.balanceAutoRefresh === false && !input.asked && !input.force;
 const usesKept = kept !== undefined && !input.force && (isFresh || held);
 if (usesKept) return kept.reading;
-if (held) return notAskedReading(endpoint.id);
+if (held) return this.lastBalances.standIn(settings, notAskedReading(endpoint.id));
+```
+
+## Scenario: the last balance reading (endpoint-balance ticket 04, magpie `provider/quota_last.go` `keepLast` / `passing` / `keyTag`)
+
+### 1. Scope / Trigger
+- A new persisted cache file and a new optional wire field on every balance reading; the app words the reading by it.
+
+### 2. Signatures
+- `LastBalanceReadings` (`api-endpoints/balance-last.ts`), built by the service on `api-endpoints/balance-readings.json`:
+  - `keep(settings: BalanceSettings, reading)`; `standIn(settings, reading) → reading`; `forget(endpointId)`.
+  - `BalanceSettings = { endpoint: Pick<StoredApiEndpoint, "baseUrls">, apiKey }`.
+- Wire: `ApiEndpointBalanceReadingSchema.stale?: ApiEndpointBalanceFailure`.
+
+### 3. Contracts
+- File: `{ readings: { [endpointId]: { fingerprint, readAt, items } } }`. `fingerprint` = sha256 of `{ baseUrls, apiKey }`, first 32 hex; never the key or a token.
+- `keep` stores only `status: "ok"` readings with at least one item; an empty `ok` (Ollama without purchased credits) and every failure leave the previous entry alone (magpie returns early on no windows and no balance).
+- `standIn` replaces a reading whose `failure.reason === "temporary"` (429, 408, 5xx, timeout, deadline, network error, and `not_asked`) with `{ status: "ok", items, readAt: <last readAt>, failure: null, stale: <this time's failure> }`. Other readings pass through unchanged.
+- Invalidation is lazy: a fingerprint mismatch at `standIn` drops the entry and returns the failure; `delete` calls `forget`. Renaming or saving unchanged settings keeps it.
+- In `readBalances`: fresh read → `keep` → `standIn`, except when `unsendableHeader(extras) !== null` (a settings problem; magpie's `passing` doesn't match it either). The result, stale or not, goes into `keptBalances` for the minute.
+- App: `stale` with `hint: "not_asked"` → caption "Not refreshed · last read {time}" (muted); any other `stale` → "Couldn't read just now · last read {time}" (`statusWarning`, testID `api-endpoint-balance-stale`). The row needs nothing: the reading is `ok`.
+- Later tickets: balance settings (custom balance URL, method, field, token, user ID) go into `fingerprintOf`; plan windows (ticket 08) go into the stored entry, with magpie's `elapsed` and expired-window note.
+
+### 4. Validation & Error Matrix
+- File missing → no last readings. Unreadable or schema-invalid → empty, one warn line. Write failure → warn only; the reading is still returned and memory updated.
+- `token_rejected`, `wrong_url`, `no_value`, `not_offered`, unsendable header → the failure itself, no `stale`.
+
+### 5. Good/Base/Bad Cases
+- Good: read ¥110, then 503 → `ok` ¥110 with the old `readAt` and `stale.status: 503`; same after a restart.
+- Base: switch off, restart, timed read → last reading with `stale.hint: "not_asked"`, no request.
+- Bad: key changed, then 503 → `failed temporary`; the old key's balance is never shown.
+
+### 6. Tests Required
+- `daemon-e2e/api-endpoint-balance.e2e.test.ts`: 503 and 429 give the last reading with `stale`; it survives a restart and the file has no key; 401 has no `stale`; base URL or key change drops it, a rename does not; delete removes it from the file; switch off + restart + timed read gives it with `not_asked`.
+- Protocol `messages.api-endpoint.test.ts`: a reading with `stale` parses.
+- Browser `Balance` › "a temporary failure keeps showing the last reading…": stale caption, item still shown, row still shows the amount.
+
+### 7. Wrong vs Correct
+#### Wrong
+```ts
+// the old balance survives a key change: the next outage shows another key's money
+lastBalances[endpoint.id] = { readAt, items };
+```
+#### Correct
+```ts
+this.lastBalances.keep({ endpoint, apiKey }, fresh); // stores fingerprintOf({ baseUrls, apiKey })
+const reading = unsendableHeader(extras) === null ? this.lastBalances.standIn(settings, fresh) : fresh;
 ```

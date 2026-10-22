@@ -239,11 +239,14 @@ last read sends nothing, and the daemon refuses any read the app didn't mark as
 yours (as magpie's "When I ask"), answering with the reading it kept. The daemon
 keeps each endpoint's reading for a minute, so pages open together share one
 request; Refresh skips what it kept, and saving or deleting the endpoint drops
-it. Each request times out after 15 seconds and a whole read after 30. Nothing
-is sent at startup, and the price table switch does not cover it, nor does this
-switch cover the CLI logins' plan usage. The answer is shown only: failover
-never reads it. What the vendor said on a failure is shown with the key and
-header values masked, cut to 200 characters.
+it. When a read is temporarily unavailable (429, 5xx, a timeout, a network
+error), the section and the row show the last good reading with its age
+instead, kept on disk across restarts (`balance-readings.json` in
+[data-model.md](data-model.md)). Each request times out after 15 seconds and a
+whole read after 30. Nothing is sent at startup, and the price table switch
+does not cover it, nor does this switch cover the CLI logins' plan usage. The
+answer is shown only: failover never reads it. What the vendor said on a failure
+is shown with the key and header values masked, cut to 200 characters.
 
 "From the website" in the add or edit dialog of a custom API endpoint also runs
 only when you press it. The daemon looks for the icon of the site the endpoint's

@@ -6643,6 +6643,29 @@ test.describe("Balance", () => {
     await expect(item).toHaveText(/Balance.*¥98\.50/);
   });
 
+  test("a temporary failure keeps showing the last reading, marked as last time's, on the page and the row", async ({
+    page,
+  }) => {
+    await deepseekAnswers(200, balanceOf("110.00"));
+    const id = await seedDeepSeek("DeepSeek");
+    await openEndpointDetail(page, id);
+    const section = balanceSection(page);
+    await expect(section.getByTestId("api-endpoint-balance-read-at")).toHaveText("Read just now");
+
+    await deepseekAnswers(503, { error: { message: "busy" } });
+    await section.getByTestId("api-endpoint-balance-refresh").click();
+    await expect(section.getByTestId("api-endpoint-balance-stale")).toHaveText(
+      "Couldn't read just now · last read a moment ago",
+    );
+    await expect(section.getByTestId("api-endpoint-balance-item")).toHaveText(/Balance.*¥110\.00/);
+    await expect(section.getByTestId("api-endpoint-balance-failure")).toHaveCount(0);
+
+    await openApiEndpointsPage(page);
+    await expect(row(page, id).getByTestId("api-endpoint-row-balance")).toHaveText(
+      "Balance ¥110.00",
+    );
+  });
+
   test("a failed read says why on the endpoint page, with the vendor's own words and the key masked", async ({
     page,
   }) => {

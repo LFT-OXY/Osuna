@@ -399,7 +399,8 @@ import {
   releaseUncheckedHosts,
   uncheckedHostsOf,
 } from "./insecure-tls.js";
-import { storedRequestExtras, type RequestExtras } from "./request-extras.js";
+import { storedRequestExtras, unsendableHeader, type RequestExtras } from "./request-extras.js";
+import { LastBalanceReadings } from "./balance-last.js";
 import { endpointKnowsModel, settleModelSettings } from "./model-settings.js";
 import {
   cleanAutoPickRules,
@@ -966,6 +967,8 @@ export class ApiEndpointService {
     string,
     { reading: ApiEndpointBalanceReading; at: number }
   >();
+  // 每家最近一次成功的读数，存在磁盘上：暂时查不到时回它（balance-last.ts）。
+  private readonly lastBalances: LastBalanceReadings;
   private readonly readCodexSignIn: ReadCodexSignIn;
   // 最近一次判断出的 Codex 登录方式；还没判断过、或一直判断不出时为 null，按接管记录现在的接法。
   private codexSignIn: CodexSignIn | null = null;
@@ -992,6 +995,10 @@ export class ApiEndpointService {
     const userAgent = `Osuna/${options.daemonVersion}`;
     this.userAgent = userAgent;
     this.balanceUrls = options.balanceUrls;
+    this.lastBalances = new LastBalanceReadings({
+      filePath: path.join(this.store.endpointsDir, "balance-readings.json"),
+      logger: this.logger,
+    });
     this.reachesGateway = createGatewayReach({
       probe: options.probeGatewayAt ?? createGatewayProbe({ userAgent }),
     });
@@ -1678,6 +1685,7 @@ export class ApiEndpointService {
       this.store.removeApiKey(endpointId);
       this.cooldowns.clear(endpointId);
       this.keptBalances.delete(endpointId);
+      this.lastBalances.forget(endpointId);
       return { activeEndpointId: agentTargetEndpoint(next, supported)?.id ?? null };
     });
   }
@@ -3425,18 +3433,25 @@ export class ApiEndpointService {
         const isFresh = kept !== undefined && this.now().getTime() - kept.at < BALANCE_KEPT_MS;
         const usesKept = kept !== undefined && !input.force && (isFresh || held);
         if (usesKept) return kept.reading;
-        if (held) return notAskedReading(endpoint.id);
+        const apiKey = this.store.getApiKey(endpoint.id);
+        const settings = { endpoint, apiKey };
+        if (held) return this.lastBalances.standIn(settings, notAskedReading(endpoint.id));
         const at = this.now().getTime();
-        const reading = await readEndpointBalance({
+        const extras = storedRequestExtras(endpoint);
+        const fresh = await readEndpointBalance({
           endpoint,
-          apiKey: this.store.getApiKey(endpoint.id),
-          extras: storedRequestExtras(endpoint),
+          apiKey,
+          extras,
           userAgent: this.userAgent,
           now: this.now,
           vendorUrls: this.balanceUrls,
           signal: input.signal,
           deadline,
         });
+        this.lastBalances.keep(settings, fresh);
+        // 请求头发不出去也归 temporary，但那是设置的问题，不回上次读数（magpie 的 passing 同样认不出它）。
+        const reading =
+          unsendableHeader(extras) === null ? this.lastBalances.standIn(settings, fresh) : fresh;
         this.keptBalances.set(endpoint.id, { reading, at });
         return reading;
       }),

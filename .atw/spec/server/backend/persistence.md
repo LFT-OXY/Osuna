@@ -143,6 +143,12 @@ Tests: `agent-manager.test.ts` "listCommands …" — a second `AgentManager` on
 same `commandCatalogPath` reads the entry back (daemon restart), and a
 `"{ not json"` file yields `partial: true`.
 
+`api-endpoints/balance-readings.json` (`LastBalanceReadings`, endpoint-balance
+ticket 04) is the same kind of cache: unreadable means empty, a failed write
+only warns. It holds no key: each entry carries a digest of the settings it was
+read with and is dropped when they no longer match. Contract:
+rpc-and-protocol.md, "the last balance reading".
+
 ### State files keep a last good copy (`.bak` / `.bad-<time>`)
 
 `LastGoodFile<T>` (`server/api-endpoints/last-good.ts`, magpie `lastgood` /

@@ -1398,16 +1398,19 @@ export const ApiEndpointBalanceReadingSchema = z.object({
   endpointId: z.string(),
   status: z.string(),
   items: z.array(ApiEndpointBalanceItemSchema),
-  // 这次读的时刻；unsupported 为 null。
+  // 这次读的时刻；unsupported 为 null。带 stale 的是上次读数读到的时刻。
   readAt: z.string().nullable(),
   failure: ApiEndpointBalanceFailureSchema.nullable(),
+  // 有它即这是上次成功的读数（status ok）：这次暂时没读成（reason temporary，或 hint not_asked 没去读），原因在这里。
+  stale: ApiEndpointBalanceFailureSchema.optional(),
 });
 export type ApiEndpointBalanceReading = z.infer<typeof ApiEndpointBalanceReadingSchema>;
 
 /**
  * 读这几家的余额；不存在的 id 不回。只有声明了 apiEndpointBalance 的 daemon 认它。
  * daemon 对每家的读数缓存 1 分钟。「自动刷新余额与套餐用量」关着时，不是用户要求的读取不发请求（照 magpie quota_asked.go），
- * 回缓存里的读数，没有就回失败 temporary + hint not_asked。
+ * 回缓存里的读数，没有就回上次读数（带 stale），再没有就回失败 temporary + hint not_asked。
+ * 暂时查不到（429、5xx、超时、网络错误）时也回上次读数（带 stale，照 magpie quota_last.go）。
  */
 export const ApiEndpointReadBalanceRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.read_balance.request"),

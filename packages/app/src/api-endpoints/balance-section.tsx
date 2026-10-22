@@ -82,22 +82,25 @@ export function ApiEndpointBalanceSection({
     [isRefreshing, refresh, refreshLabel],
   );
   const readAt = reading?.readAt ?? null;
+  const stale = staleOf(reading);
   const caption = useMemo(
     () =>
       readAt === null ? null : (
         <UiText
           variant="caption"
-          color="foregroundMuted"
-          numberOfLines={1}
-          testID="api-endpoint-balance-read-at"
+          // 暂时查不到、显示的是上次读数：用提醒色；开关关着没去读的只是没刷新。
+          color={stale === "temporary" ? "statusWarning" : "foregroundMuted"}
+          numberOfLines={2}
+          testID={stale === null ? "api-endpoint-balance-read-at" : "api-endpoint-balance-stale"}
         >
           {readAtCopy({
             t,
             ago: relativeAgo({ since: new Date(readAt), now, locale: i18n.language }),
+            stale,
           })}
         </UiText>
       ),
-    [i18n.language, now, readAt, t],
+    [i18n.language, now, readAt, stale, t],
   );
   return (
     <SettingsSection
@@ -278,10 +281,26 @@ function failureTitle(input: { t: TFunction; failure: ApiEndpointBalanceFailure 
   return input.t("settings.apiEndpoints.balance.withStatus", { text, status });
 }
 
-/** 每种语言一整句：「刚刚读取」「5分钟前读取」。 */
-function readAtCopy(input: { t: TFunction; ago: string | null }): string {
-  if (input.ago === null) return input.t("settings.apiEndpoints.balance.readJustNow");
-  return input.t("settings.apiEndpoints.balance.readAgo", { time: input.ago });
+type StaleKind = "temporary" | "notAsked";
+
+/** 读数是不是上次的：这次暂时查不到，还是开关关着这次没去读。 */
+function staleOf(reading: ApiEndpointBalanceReading | undefined): StaleKind | null {
+  const stale = reading?.stale;
+  if (!stale) return null;
+  return stale.hint === "not_asked" ? "notAsked" : "temporary";
+}
+
+/** 每种语言一整句：「刚刚读取」「5分钟前读取」；上次的读数写「暂时查不到，显示5分钟前的读数」。 */
+function readAtCopy(input: { t: TFunction; ago: string | null; stale: StaleKind | null }): string {
+  const { t, ago, stale } = input;
+  if (stale !== null) {
+    const time = ago ?? t("settings.apiEndpoints.balance.staleMomentAgo");
+    return stale === "temporary"
+      ? t("settings.apiEndpoints.balance.staleTemporary", { time })
+      : t("settings.apiEndpoints.balance.staleNotAsked", { time });
+  }
+  if (ago === null) return t("settings.apiEndpoints.balance.readJustNow");
+  return t("settings.apiEndpoints.balance.readAgo", { time: ago });
 }
 
 const styles = StyleSheet.create((theme) => ({
