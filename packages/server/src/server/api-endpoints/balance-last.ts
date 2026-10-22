@@ -15,7 +15,7 @@ import { parseJson } from "./upstream-http.js";
 
 /*
  * 每家接口最近一次成功的余额读数，存在 api-endpoints/balance-readings.json，重启后还在：
- * 对方忙或断网（暂时查不到）时界面看上次读数，不看一句错误。只有余额各项、限额窗口与读数时间，不含 key 与令牌；
+ * 对方忙或断网（暂时查不到）时界面看上次读数，不看一句错误。只有余额各项、限额与套餐窗口和读数时间，不含 key 与令牌；
  * 每条带这家查余额用的地址、余额设置、key 与账户令牌的指纹（摘要，还原不出 key），对不上即作废（magpie 按 key 的摘要记，换了 key 自然对不上）。
  * 它是缓存，读不懂当作空的。
  */
@@ -48,10 +48,10 @@ export class LastBalanceReadings {
     this.logger = options.logger.child({ module: "api-endpoint-balance-last" });
   }
 
-  /** 记下一次成功的读数；没有余额项的不记（照 magpie：没有可显示的就不留，上一份照留）。 */
+  /** 记下一次成功的读数；没有余额项也没有窗口的不记（照 magpie：没有可显示的就不留，上一份照留）。 */
   keep(settings: BalanceSettings, reading: ApiEndpointBalanceReading): void {
-    const hasItems = reading.status === "ok" && reading.items.length > 0;
-    if (!hasItems || reading.readAt === null) return;
+    const shows = reading.items.length > 0 || (reading.windows?.length ?? 0) > 0;
+    if (reading.status !== "ok" || !shows || reading.readAt === null) return;
     this.save({
       ...this.all(),
       [reading.endpointId]: {
@@ -88,6 +88,11 @@ export class LastBalanceReadings {
       failure: null,
       stale: failure,
     };
+  }
+
+  /** 这家有没有对得上现在设置的上次读数。 */
+  has(settings: BalanceSettings, endpointId: string): boolean {
+    return this.all()[endpointId]?.fingerprint === fingerprintOf(settings);
   }
 
   /** 接口删掉了：它的上次读数作废。 */

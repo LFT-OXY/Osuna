@@ -43,7 +43,8 @@ const AGENT_CLIS = new Set(["claude", "codex", "copilot", "opencode", "pi", "omp
 const PACKAGE_MANAGERS = new Set(["npm", "pnpm", "yarn", "bun"]);
 const INSTALL_VERBS = new Set(["install", "i", "add", "update", "upgrade", "reinstall"]);
 
-// 读余额的厂商的 API 主机（packages/server/src/server/api-endpoints/balance.ts 的 BALANCE_VENDORS）。
+// 读余额的厂商的 API 主机（packages/server/src/server/api-endpoints/balance.ts 的 BALANCE_VENDORS），
+// 与读套餐窗口的厂商（balance-plan.ts 的 PLAN_VENDOR_URLS）。
 const SEALED_VENDOR_ORIGINS = [
   "https://api.deepseek.com/",
   "https://api.moonshot.cn/",
@@ -56,6 +57,13 @@ const SEALED_VENDOR_ORIGINS = [
   "https://api.commandcode.ai/",
   "https://ollama.com/",
   "https://aihubmix.com/",
+  "https://open.bigmodel.cn/",
+  "https://api.z.ai/",
+  "https://api.kimi.com/",
+  "https://api.kimi.ai/",
+  "https://api.minimaxi.com/",
+  "https://api.minimax.io/",
+  "https://opencode.ai/",
 ];
 
 const realFetch = globalThis.fetch;

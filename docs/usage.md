@@ -226,6 +226,30 @@ An endpoint on OpenCode Zen (`opencode.ai/zen` or `opencode.ai/inference`, not
 Go's `/go` or a `/custom` provider) sends nothing either: OpenCode tells no key
 its balance, so its section says to read it on the OpenCode console.
 
+An endpoint on a plan key also reads its **Plan usage** windows, beside the
+balance and on the same schedule, with or without a Balance URL. The daemon
+picks the query by the host and path of the base URLs (Chat Completions first,
+then Anthropic, then Responses):
+
+| Plan            | Base URL                                            | Request                                                                   |
+| --------------- | --------------------------------------------------- | ------------------------------------------------------------------------- |
+| GLM Coding Plan | `open.bigmodel.cn` / `api.z.ai`                     | `GET https://open.bigmodel.cn/api/monitor/usage/quota/limit` (`api.z.ai`) |
+| Kimi Code       | `api.kimi.com` / `api.kimi.ai`, path with `/coding` | `GET <base>/coding/v1/usages`, on the endpoint's own host                 |
+| MiniMax         | `api.minimaxi.com` / `api.minimax.io`               | `GET https://api.minimaxi.com/v1/token_plan/remains` (`.io`)              |
+| OpenCode Go     | `opencode.ai/zen/go` or `opencode.ai/inference/go`  | `GET https://opencode.ai/zen/go/v1/usage`                                 |
+
+These carry only the key (`Authorization: Bearer`, the bare key for GLM),
+`Accept: application/json`, `Accept-Language: en-US,en` and
+`User-Agent: Osuna/<version>`, never the endpoint's Headers. OpenCode Go's also
+carries a new `x-opencode-session` and `x-opencode-session-id`, without which
+OpenCode's gateway answers 400. A key that has no plan shows nothing: a reply
+with no windows, or a failed read of a GLM key off `/api/coding/` or of any
+MiniMax key (pay-as-you-go keys use the same address), unless the failure is
+temporary. "Check balance" and "Detect URL" don't read plan windows. Each
+window carries its pace as of the read: the share used less the share of the
+window gone by, the window starting its length before its reset, and a monthly
+one on the same day a month before.
+
 An **Account token** saved on the endpoint replaces the key as the whole
 `Authorization` header: a JWT (a sub2api login token) as `Bearer <token>`, one
 written with its scheme as is, any other (a new-api or AiHubMix system access
@@ -256,9 +280,9 @@ reason stays under the button. Nothing is saved, kept for the minute, or taken
 as the last reading, and the daemon never sends these two requests on its own:
 not when listing, reading balances or starting.
 
-It carries the key as `Authorization: Bearer`, `Accept: application/json`,
+The balance read carries the key as `Authorization: Bearer`, `Accept: application/json`,
 `User-Agent: Osuna/<version>` and the endpoint's own **Headers**, which can
-replace that user agent. When it is sent depends on the "Auto-refresh balance
+replace that user agent. When both are sent depends on the "Auto-refresh balance
 and plan usage" switch at the bottom of the API endpoints page (on by default,
 for the whole host):
 

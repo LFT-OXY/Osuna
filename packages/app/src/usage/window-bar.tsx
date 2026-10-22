@@ -9,7 +9,7 @@ import { UsageMeter } from "./meter";
 import { displayPercent, usageWindowRowLabel } from "./model";
 import type { UsageDisplayAs } from "./preferences";
 import { windowTone } from "./tone";
-import type { UsageTone, UsageWindow } from "./types";
+import type { UsageTone, UsageWindow, UsageWindowPace } from "./types";
 
 // Pinned rows carry the pinned surface; hovering an unpinned row previews it at half strength,
 // so a hover never reads as the selection. Pinned rows do not react to hover.
@@ -27,11 +27,20 @@ export function UsageWindowBar({
   pinLabel,
   pinTestID,
   count,
+  pace,
+  layout = "inline",
 }: {
   window: UsageWindow;
   displayAs: UsageDisplayAs;
   /** Osuna：百分比前写出的用量，如「$15.00 / $20.00」（接口余额的限额窗口）。 */
   count?: string;
+  /** Osuna：重置时间后写出的配速，如「配速 +12%」；over 是照这样会在重置前用完（接口的套餐窗口）。 */
+  pace?: UsageWindowPace;
+  /**
+   * Osuna：inline 是名字与数字一行、名字放不下截断；wrap 是名字照全写，数字放不下时挪到下一行靠右；stack 是名字一行、
+   * 数字总在下一行靠右（接口页的窗口名可能很长，如「Video · 24 hours」，窄屏整组同样排）。
+   */
+  layout?: UsageWindowBarLayout;
   /** Whether the row pins the window to the sidebar. When false the row is a plain bar. */
   pinnable: boolean;
   pinned: boolean;
@@ -59,6 +68,8 @@ export function UsageWindowBar({
     value,
     trailing,
     isAtRisk,
+    pace,
+    layout,
     percent: shownPct ?? 0,
     tone,
     pinned,
@@ -102,6 +113,8 @@ function WindowRowContent({
   value,
   trailing,
   isAtRisk,
+  pace,
+  layout,
   percent,
   tone,
   pinnable,
@@ -112,6 +125,8 @@ function WindowRowContent({
   value: string;
   trailing: string | null | undefined;
   isAtRisk: boolean;
+  pace: UsageWindowPace | undefined;
+  layout: UsageWindowBarLayout;
   percent: number;
   tone: UsageTone;
   pinnable: boolean;
@@ -122,14 +137,17 @@ function WindowRowContent({
       <View style={highlight} pointerEvents="none" />
       <View style={styles.contentRow}>
         <View style={styles.windowContent}>
-          <View style={styles.labelRow}>
-            <Text style={styles.label} numberOfLines={1}>
+          <View style={layout === "inline" ? styles.labelRow : styles.labelRowWrapping}>
+            <Text style={LABEL_STYLES[layout]} numberOfLines={1}>
               {label}
             </Text>
-            <Text style={styles.value}>
+            <Text style={layout === "inline" ? styles.value : styles.valueWrapping}>
               {value}
               {trailing ? (
                 <Text style={isAtRisk ? styles.atRisk : styles.reset}>{` · ${trailing}`}</Text>
+              ) : null}
+              {pace ? (
+                <Text style={pace.over ? styles.paceOver : styles.reset}>{` · ${pace.text}`}</Text>
               ) : null}
             </Text>
           </View>
@@ -140,6 +158,8 @@ function WindowRowContent({
     </>
   );
 }
+
+export type UsageWindowBarLayout = "inline" | "wrap" | "stack";
 
 const ThemedPin = withUnistyles(Pin);
 
@@ -210,6 +230,29 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
   },
+  labelRowWrapping: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    columnGap: theme.spacing[2],
+  },
+  labelWhole: {
+    flexShrink: 0,
+    maxWidth: "100%",
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+  },
+  labelLine: {
+    width: "100%",
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+  },
+  valueWrapping: {
+    marginLeft: "auto",
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.medium,
+  },
   value: {
     color: theme.colors.foreground,
     fontSize: theme.fontSize.sm,
@@ -223,4 +266,14 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.statusDanger,
     fontWeight: theme.fontWeight.normal,
   },
+  paceOver: {
+    color: theme.colors.statusWarning,
+    fontWeight: theme.fontWeight.normal,
+  },
 }));
+
+const LABEL_STYLES = {
+  inline: styles.label,
+  wrap: styles.labelWhole,
+  stack: styles.labelLine,
+} as const;

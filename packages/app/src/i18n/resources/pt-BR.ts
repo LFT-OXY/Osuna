@@ -3030,6 +3030,8 @@ export const ptBR: TranslationResources = {
         noKey: "Este endpoint não tem chave, então o saldo não pode ser lido",
         rowUnavailable: "Saldo indisponível",
         rowAmount: "Saldo {{amount}}",
+        rowWindowUsed: "{{window}} {{percent}} usado",
+        rowWindowLeft: "{{window}} {{percent}} restante",
         readFailed: "Não foi possível ler o saldo",
         withStatus: "{{text}} (HTTP {{status}})",
         failure: {
@@ -3047,6 +3049,12 @@ export const ptBR: TranslationResources = {
           toppedUp: "Recarregado",
         },
         hint: {
+          glmKeyRefused:
+            "Esta chave expirou, foi excluída ou foi colada errado: copie uma válida no console e cole nas configurações deste endpoint.",
+          opencodeGoNoSubscription:
+            "Esta chave não tem OpenCode Go: o Go pertence ao membro que assinou, naquele workspace. Use uma chave criada por esse membro lá (opencode.ai, API Keys do workspace).",
+          opencodeKeyRefused:
+            "O OpenCode não aceita esta chave: ela foi excluída ou colada errado.",
           opencodeNoBalance:
             "O OpenCode não informa o saldo a uma chave de API: os créditos pré-pagos do Zen só aparecem no console do OpenCode, em Overview → Credits (para os proprietários e administradores do workspace).",
           siliconflowRetired:
@@ -3061,10 +3069,22 @@ export const ptBR: TranslationResources = {
             "O relay pede seu ID de usuário: preencha ID de usuário nas configurações deste endpoint (mostrado nas configurações pessoais do site).",
         },
         window: {
-          fiveHours: "5 horas",
-          oneDay: "1 dia",
-          sevenDays: "7 dias",
+          hoursOne: "{{count}} hora",
+          hoursMany: "{{count}} horas",
+          daysOne: "{{count}} dia",
+          daysMany: "{{count}} dias",
+          minutesOne: "{{count}} minuto",
+          minutesMany: "{{count}} minutos",
+          month: "Mês",
+          allowance: "Uso do plano",
+          mcpMonth: "MCP · Mês",
+          bucket: "{{bucket}} · {{window}}",
+          bucketVideo: "Vídeo",
+          bucketImage: "Imagem",
+          unitVideos: "vídeos",
         },
+        pace: "Ritmo {{pace}}",
+        asideTitle: "Não bloqueia os modelos",
         autoRefresh: {
           label: "Atualizar saldo e uso do plano automaticamente",
           hint: "A cada minuto enquanto a lista de endpoints ou a página de um endpoint estiver aberta. Desligado: só ao abrir uma delas ou ao tocar em Atualizar na página de um endpoint.",

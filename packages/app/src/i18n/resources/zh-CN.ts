@@ -2999,6 +2999,8 @@ export const zhCN: TranslationResources = {
         noKey: "这家没填 key，查不了余额",
         rowUnavailable: "余额查不到",
         rowAmount: "余额 {{amount}}",
+        rowWindowUsed: "{{window}}已用 {{percent}}",
+        rowWindowLeft: "{{window}}剩 {{percent}}",
         readFailed: "读余额失败",
         withStatus: "{{text}}（HTTP {{status}}）",
         failure: {
@@ -3016,6 +3018,11 @@ export const zhCN: TranslationResources = {
           toppedUp: "充值",
         },
         hint: {
+          glmKeyRefused:
+            "这把 key 已过期、被删除或粘错了：请到控制台复制一把有效的 key，粘到这家的设置里。",
+          opencodeGoNoSubscription:
+            "这把 key 没有 OpenCode Go：Go 只归订阅的那位成员、在订阅时的工作区里。请用那位成员在那个工作区建的 key（opencode.ai 工作区的 API Keys）。",
+          opencodeKeyRefused: "OpenCode 不认这把 key：它已被删除，或粘错了。",
           opencodeNoBalance:
             "这家不给 key 查余额，请去它的控制台看：Zen 的按量 credits 只在 OpenCode 控制台的 Overview → Credits 显示（工作区所有者与管理员可见）。",
           siliconflowRetired:
@@ -3029,10 +3036,22 @@ export const zhCN: TranslationResources = {
             "中转站要你的用户 ID：请在这家的设置里填上「用户 ID」（在站点的个人设置里能看到）。",
         },
         window: {
-          fiveHours: "5 小时",
-          oneDay: "1 天",
-          sevenDays: "7 天",
+          hoursOne: "{{count}} 小时",
+          hoursMany: "{{count}} 小时",
+          daysOne: "{{count}} 天",
+          daysMany: "{{count}} 天",
+          minutesOne: "{{count}} 分钟",
+          minutesMany: "{{count}} 分钟",
+          month: "月",
+          allowance: "套餐用量",
+          mcpMonth: "MCP · 月",
+          bucket: "{{bucket}} · {{window}}",
+          bucketVideo: "视频",
+          bucketImage: "图片",
+          unitVideos: "个视频",
         },
+        pace: "配速 {{pace}}",
+        asideTitle: "用完不影响模型使用",
         autoRefresh: {
           label: "自动刷新余额与套餐用量",
           hint: "接口列表页或接口详情页开着时每分钟读一次。关掉后只在打开这些页面、或在详情页点刷新时读。",

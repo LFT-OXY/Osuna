@@ -344,6 +344,7 @@ import {
   readEndpointBalance,
   type BalanceVendorId,
 } from "./balance.js";
+import { withPaceAt } from "./balance-plan.js";
 import type { DataFileSystem } from "./last-good.js";
 import {
   defaultImportSourcePaths,
@@ -3469,7 +3470,7 @@ export class ApiEndpointService {
     // 照 magpie quota_asked.go：开关关着时只有用户要求的读取发请求，别的回留着的读数，不论多旧。
     const held = state.balanceAutoRefresh === false && !input.asked && !input.force;
     const deadline = AbortSignal.timeout(BALANCE_PAGE_TIMEOUT_MS);
-    return Promise.all(
+    const readings = await Promise.all(
       endpoints.map(async (endpoint) => {
         const kept = this.keptBalances.get(endpoint.id);
         const isFresh = kept !== undefined && this.now().getTime() - kept.at < BALANCE_KEPT_MS;
@@ -3489,6 +3490,8 @@ export class ApiEndpointService {
           userAgent: this.userAgent,
           now: this.now,
           vendorUrls: this.balanceUrls,
+          withPlan: true,
+          hasLastReading: this.lastBalances.has(settings, endpoint.id),
           signal: input.signal,
           deadline,
         });
@@ -3500,6 +3503,9 @@ export class ApiEndpointService {
         return reading;
       }),
     );
+    // 留着的、上次的读数也按现在的时刻写配速。
+    const now = this.now().getTime();
+    return readings.map((reading) => withPaceAt({ reading, now }));
   }
 
   /**

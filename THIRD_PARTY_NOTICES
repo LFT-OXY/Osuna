@@ -1129,6 +1129,22 @@ in internal/gui/assets/app.js:
   packages/app/src/api-endpoints/internal/balance-settings-form.ts
   packages/app/src/api-endpoints/balance-settings-fields.tsx
 
+A plan key's windows (GLM Coding Plan, Kimi Code, MiniMax and OpenCode Go known
+by their base URLs' hosts and paths, the bare key for GLM and a Bearer for the
+rest, only Accept and Accept-Language beside it, each reply's windows and their
+names, GLM's MCP month and MiniMax's other buckets set aside, a refused GLM key
+sent to its console, OpenCode Go's session headers and its 401 and 403) follows
+planQuotaSourceOf, readZhipuPlan, readKimiCode, kimiCodeBase, readMiniMaxPlan,
+miniMaxCount, readOpenCodeGo, planBody and zhipuRefused in magpie's
+internal/provider/planquota.go, zhipuEnvelope in zhipu_envelope.go and
+OpenCodeSession and openCodeNewID in opencode_client.go; a window's pace follows
+Pace in internal/provider/window_pace.go and Bounds in window_holds.go, and how
+it is written follows quotaPace and paceNumber in internal/gui/assets/app.js:
+
+  packages/server/src/server/api-endpoints/balance-plan.ts
+  packages/server/src/server/api-endpoints/window-pace.ts
+  packages/app/src/api-endpoints/internal/balance-windows.ts
+
 Import from other apps (the five sources and where each keeps its file, how a
 CC Switch, Claude Code, Codex, Alma or OpenCode entry becomes an endpoint, a
 template's when the URLs are its own, entries of one account merged, Osuna's own

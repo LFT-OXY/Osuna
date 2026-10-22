@@ -1697,12 +1697,12 @@ if (held) return this.lastBalances.standIn(settings, notAskedReading(endpoint.id
 
 ### 3. Contracts
 - File: `{ readings: { [endpointId]: { fingerprint, readAt, items, windows? } } }`. `fingerprint` = sha256 of `{ baseUrls, apiKey, balance?, balanceToken? }` (`balance` and the token only when set, so readings kept before tickets 05 and 06 still match), first 32 hex; never the key or a token.
-- `keep` stores only `status: "ok"` readings with at least one item; an empty `ok` (Ollama without purchased credits) and every failure leave the previous entry alone (magpie returns early on no windows and no balance).
+- `keep` stores only `status: "ok"` readings with at least one item or window (ticket 08); an empty `ok` (Ollama without purchased credits) and every failure leave the previous entry alone (magpie returns early on no windows and no balance).
 - `standIn` replaces a reading whose `failure.reason === "temporary"` (429, 408, 5xx, timeout, deadline, network error, and `not_asked`) with `{ status: "ok", items, readAt: <last readAt>, failure: null, stale: <this time's failure> }`. Other readings pass through unchanged.
 - Invalidation is lazy: a fingerprint mismatch at `standIn` drops the entry and returns the failure; `delete` calls `forget`. Renaming or saving unchanged settings keeps it.
 - In `readBalances`: fresh read → `keep` → `standIn`, except when `unsendableHeader(extras) !== null` (a settings problem; magpie's `passing` doesn't match it either). The result, stale or not, goes into `keptBalances` for the minute.
 - App: `stale` with `hint: "not_asked"` → caption "Not refreshed · last read {time}" (muted); any other `stale` → "Couldn't read just now · last read {time}" (`statusWarning`, testID `api-endpoint-balance-stale`). The row needs nothing: the reading is `ok`.
-- Later tickets: the token (ticket 06) is in `fingerprintOf`, the user ID rides in `balance`; ticket 06's `windows` are stored with the entry; plan windows (ticket 08) add magpie's `elapsed` and expired-window note.
+- Later tickets: the token (ticket 06) is in `fingerprintOf`, the user ID rides in `balance`; ticket 06's `windows` are stored with the entry; plan windows (ticket 08) are stored the same way and get their pace recomputed when served ("a plan key's windows and their pace").
 
 ### 4. Validation & Error Matrix
 - File missing → no last readings. Unreadable or schema-invalid → empty, one warn line. Write failure → warn only; the reading is still returned and memory updated.
@@ -1870,4 +1870,49 @@ readEndpointBalance({ ..., balanceToken: this.store.getBalanceToken(id) });
 #### Correct
 ```ts
 readEndpointBalance({ endpoint: { id, baseUrls, balance: { url } }, apiKey, balanceToken: null, ... });
+```
+
+## Scenario: a plan key's windows and their pace (endpoint-balance ticket 08, magpie `provider/planquota.go`, `window_pace.go`, `window_holds.go` `Bounds`)
+
+### 1. Scope / Trigger
+- New outbound requests (vendor plan queries) merged into the existing balance reading, new optional window fields on the wire, and a pace the daemon owns.
+
+### 2. Signatures
+- Server `balance-plan.ts`: `PLAN_VENDOR_URLS` (spread into `BALANCE_VENDOR_URLS`, so the test daemon's dead-port default and `balanceUrls` injection cover them; Kimi Code's entries are the site, the path comes from the endpoint), `planSourceOf({ baseUrls, vendorUrls }) → PlanSource | null`, `planRequestHeaders`, `shownWindows`, `withPace({ window, span, now })`, `withPaceAt({ reading, now })`, `zhipuKeyRefusal(body)`.
+- Server `window-pace.ts`: `windowStart({ resetsAt, span }) → ms | null` (span is ms or `"month"`), `paceBetween({ usedPct, start, end, now }) → number | null`, `windowPace`.
+- `ReadBalanceInput.withPlan?: boolean` (only `readBalances` sets it; Check balance and Detect URL never read plans), `hasLastReading?: boolean`; `LastBalanceReadings.has(settings, endpointId)`.
+
+### 3. Contracts
+- Window (`ApiEndpointBalanceWindowSchema`, all optional): `startsAt` (reset minus span; a month's on the same day a month before, Go `AddDate`), `pacePct` (used% − elapsed share; positive runs out before reset), `aside: true` (GLM `TIME_LIMIT` "MCP · Month", MiniMax non-`general` buckets). `id` convention: `Nmin` / `Nh` / `Nd` / `month` / `allowance` / `mcp_month`, a bucket as `video:24h`, a repeat as `#2`; the app translates by id and falls back to `label`.
+- `readBalances` returns every reading through `withPaceAt(now)`, so kept (1-minute or switch-off) and last readings show today's pace, none once `now >= resetsAt`.
+- Plan requests: `authorization` (`Bearer` except GLM's bare key), `accept: application/json`, `accept-language: en-US,en`, `user-agent: Osuna/<version>`; never the endpoint's headers. OpenCode Go adds a fresh `x-opencode-session` = `x-opencode-session-id` (`ses_` + 12 hex + 14 base62).
+- Merge: balance and plan run together; both ok → balance items + `[...balance.windows, ...plan.windows]`; only one ok → that one; neither → the plan's failure. A plan with no windows contributes nothing.
+- `PlanSource.sure` (GLM on `/api/coding/`, Kimi Code, OpenCode Go): failures show. Not sure (MiniMax, GLM elsewhere): a failure shows nothing, except a temporary one when `hasLastReading` (then `standIn` gives the last reading).
+- `LastBalanceReadings.keep` stores `ok` readings with items **or** windows.
+
+### 4. Validation & Error Matrix
+- GLM 401, or any status with `{ success: false, code: 1000–1005 }` → `token_rejected`, `hint: "glm_key_refused"`, `seeAt` = bigmodel / z.ai keys page, detail = vendor's words.
+- OpenCode Go 403 → `token_rejected` + `opencode_go_no_subscription`; 401 → `opencode_key_refused`.
+- Other ≥300 → `failureOfStatus`; non-JSON → `wrong_url`; reader `no_value` (GLM `success:false`, MiniMax `base_resp` code ≠ 0, no windows in Kimi/OpenCode) → `no_value` with detail.
+
+### 5. Good/Base/Bad Cases
+- Good: GLM coding key → 5h, 7d, MCP month aside, `items: []`, each with `startsAt` and `pacePct`.
+- Base: OpenCode Go weekly at 0% → `resetsAt: null`, no `startsAt`/`pacePct`.
+- Bad: pay-as-you-go MiniMax key → `unsupported`, not a failure card.
+
+### 6. Tests Required
+- `window-pace.test.ts`: +10 at half time, negative, month start, >100 clamp, null cases.
+- `daemon-e2e/api-endpoint-balance.e2e.test.ts` › "API endpoint plan windows": each vendor's URL, headers and windows; GLM refusals; non-sure GLM / MiniMax unsupported; OpenCode Go both paths with session headers, 401/403; last reading keeps windows; pace recomputed an hour later and gone after reset; MiniMax busy before first read unsupported, after it stale; Check balance asks no plan.
+- App `balance-windows.test.ts` (`tightestWindow`, `paceOf`), `balance-copy.test.ts` (ids → English and zh labels); browser `Balance` › GLM windows + used/remaining toggle + row, GLM refusal.
+
+### 7. Wrong vs Correct
+#### Wrong
+```ts
+// 上次读数带着读取那一刻的配速：几小时后、甚至窗口重置后还写「配速 −48%」
+return this.lastBalances.standIn(settings, fresh);
+```
+#### Correct
+```ts
+const readings = await Promise.all(/* … */);
+return readings.map((reading) => withPaceAt({ reading, now: this.now().getTime() }));
 ```

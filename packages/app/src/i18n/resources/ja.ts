@@ -3020,6 +3020,8 @@ export const ja: TranslationResources = {
         noKey: "このエンドポイントにはキーがないため、残高を取得できません",
         rowUnavailable: "残高を取得できません",
         rowAmount: "残高 {{amount}}",
+        rowWindowUsed: "{{window}} {{percent}} 使用",
+        rowWindowLeft: "{{window}} 残り {{percent}}",
         readFailed: "残高を読み込めませんでした",
         withStatus: "{{text}}（HTTP {{status}}）",
         failure: {
@@ -3037,6 +3039,11 @@ export const ja: TranslationResources = {
           toppedUp: "チャージ",
         },
         hint: {
+          glmKeyRefused:
+            "このキーは期限切れ、削除済み、または貼り間違いです。コンソールから有効なキーをコピーし、このエンドポイントの設定に貼り付けてください。",
+          opencodeGoNoSubscription:
+            "このキーには OpenCode Go がありません。Go は購読したメンバーの、購読したワークスペースに属します。そのメンバーがそのワークスペースで作ったキーを使ってください（opencode.ai のワークスペースの API Keys）。",
+          opencodeKeyRefused: "OpenCode がこのキーを受け付けません。削除されたか、貼り間違いです。",
           opencodeNoBalance:
             "OpenCode は API キーに残高を教えません。Zen の従量課金クレジットは OpenCode コンソールの Overview → Credits にのみ表示されます（ワークスペースのオーナーと管理者のみ）。",
           siliconflowRetired:
@@ -3050,10 +3057,22 @@ export const ja: TranslationResources = {
             "中継がユーザー ID を求めています：このエンドポイントの設定で「ユーザー ID」を入力してください（サイトの個人設定に表示）。",
         },
         window: {
-          fiveHours: "5 時間",
-          oneDay: "1 日",
-          sevenDays: "7 日",
+          hoursOne: "{{count}} 時間",
+          hoursMany: "{{count}} 時間",
+          daysOne: "{{count}} 日",
+          daysMany: "{{count}} 日",
+          minutesOne: "{{count}} 分",
+          minutesMany: "{{count}} 分",
+          month: "月",
+          allowance: "プラン使用量",
+          mcpMonth: "MCP · 月",
+          bucket: "{{bucket}} · {{window}}",
+          bucketVideo: "動画",
+          bucketImage: "画像",
+          unitVideos: "本の動画",
         },
+        pace: "ペース {{pace}}",
+        asideTitle: "使い切ってもモデルは止まりません",
         autoRefresh: {
           label: "残高とプラン使用量を自動更新",
           hint: "エンドポイント一覧または各エンドポイントのページを開いている間、1 分ごとに読み取ります。オフ：これらのページを開いたとき、またはエンドポイントのページで「更新」を押したときだけ。",

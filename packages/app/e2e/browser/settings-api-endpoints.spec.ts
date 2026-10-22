@@ -6893,6 +6893,88 @@ test.describe("Balance", () => {
     await expect(windows).toContainText("$200.00 / $800.00 · 25%");
   });
 
+  // 工单 08：GLM Coding Plan 的套餐窗口。重置时间从写回复这一刻算起，配速跟着真实时钟走。
+  const GLM_QUOTA = "https://open.bigmodel.cn/api/monitor/usage/quota/limit";
+
+  async function glmAnswers(status: number, body: unknown): Promise<void> {
+    await writeFile(
+      fakeSites,
+      JSON.stringify({ [GLM_QUOTA]: { status, body: JSON.stringify(body) } }),
+    );
+  }
+
+  function glmQuota() {
+    const inHours = (hours: number) => Date.now() + hours * 60 * 60 * 1000;
+    return {
+      code: 200,
+      success: true,
+      data: {
+        level: "pro",
+        limits: [
+          { type: "TOKENS_LIMIT", unit: 3, number: 5, percentage: 12, nextResetTime: inHours(2) },
+          { type: "TOKENS_LIMIT", unit: 6, number: 1, percentage: 40, nextResetTime: inHours(96) },
+          { type: "TIME_LIMIT", unit: 5, number: 1, percentage: 3, nextResetTime: inHours(240) },
+        ],
+      },
+    };
+  }
+
+  function seedGlm(): Promise<string> {
+    return seedApiEndpoint(client, {
+      name: "GLM Coding",
+      baseUrls: [{ format: "openai_chat", url: "https://open.bigmodel.cn/api/coding/paas/v4" }],
+      models: ["glm-4.6"],
+    });
+  }
+
+  test("a GLM Coding Plan key shows its windows with pace, the MCP month aside; used or left is one choice for the page and the row", async ({
+    page,
+  }) => {
+    await glmAnswers(200, glmQuota());
+    const id = await seedGlm();
+    await openApiEndpointsPage(page);
+    // 行上是剩得最少的窗口（7 天用了 40%），不是放一旁的 MCP 月度。
+    await expect(row(page, id).getByTestId("api-endpoint-row-balance")).toHaveText(
+      "7 days 40% used",
+    );
+
+    await openEndpointDetail(page, id);
+    const section = balanceSection(page);
+    const fiveHours = section.getByTestId("api-endpoint-balance-window-5h");
+    // 5 小时窗口过了 3 小时（60%），只用了 12%：配速 −48%。
+    await expect(fiveHours).toContainText("5 hours");
+    await expect(fiveHours).toContainText("12%");
+    await expect(fiveHours).toContainText("Pace −48%");
+    await expect(section.getByTestId("api-endpoint-balance-window-7d")).toContainText("40%");
+    const aside = section.getByTestId("api-endpoint-balance-windows-aside");
+    await expect(aside).toContainText("Doesn't stop the models");
+    await expect(aside).toContainText("MCP · Month");
+    await expect(section.getByTestId("api-endpoint-balance-item")).toHaveCount(0);
+
+    await section.getByTestId("api-endpoint-balance-display-remaining").click();
+    await expect(fiveHours).toContainText("88% left");
+    // 看剩余时配速的符号反过来。
+    await expect(fiveHours).toContainText("Pace +48%");
+    await openApiEndpointsPage(page);
+    await expect(row(page, id).getByTestId("api-endpoint-row-balance")).toHaveText(
+      "7 days 60% left",
+    );
+  });
+
+  test("a GLM key it refuses says to paste a current one, with its console", async ({ page }) => {
+    await glmAnswers(401, { error: { code: "1000", message: "Authentication failed" } });
+    const id = await seedGlm();
+    await openEndpointDetail(page, id);
+    const failure = balanceSection(page).getByTestId("api-endpoint-balance-failure");
+    await expect(failure.getByTestId("api-endpoint-balance-failure-reason")).toContainText(
+      "(HTTP 401)",
+    );
+    await expect(failure.getByTestId("api-endpoint-balance-failure-hint")).toContainText(
+      "This key has expired, was deleted, or is mistyped",
+    );
+    await expect(failure.getByTestId("api-endpoint-balance-failure-console")).toBeVisible();
+  });
+
   test("DeepSeek lists each currency and splits the granted from the topped up; OpenCode Zen says to read its console", async ({
     page,
   }) => {

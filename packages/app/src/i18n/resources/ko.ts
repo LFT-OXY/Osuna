@@ -3003,6 +3003,8 @@ export const ko: TranslationResources = {
         noKey: "이 엔드포인트에는 키가 없어 잔액을 조회할 수 없습니다",
         rowUnavailable: "잔액을 가져올 수 없음",
         rowAmount: "잔액 {{amount}}",
+        rowWindowUsed: "{{window}} {{percent}} 사용",
+        rowWindowLeft: "{{window}} {{percent}} 남음",
         readFailed: "잔액을 읽지 못했습니다",
         withStatus: "{{text}} (HTTP {{status}})",
         failure: {
@@ -3020,6 +3022,11 @@ export const ko: TranslationResources = {
           toppedUp: "충전",
         },
         hint: {
+          glmKeyRefused:
+            "이 키는 만료되었거나 삭제되었거나 잘못 붙여넣었습니다. 콘솔에서 유효한 키를 복사해 이 엔드포인트 설정에 붙여넣으세요.",
+          opencodeGoNoSubscription:
+            "이 키에는 OpenCode Go가 없습니다. Go는 구독한 멤버의, 구독한 워크스페이스에 속합니다. 그 멤버가 그 워크스페이스에서 만든 키를 사용하세요(opencode.ai 워크스페이스의 API Keys).",
+          opencodeKeyRefused: "OpenCode가 이 키를 받지 않습니다. 삭제되었거나 잘못 붙여넣었습니다.",
           opencodeNoBalance:
             "OpenCode는 API 키에 잔액을 알려 주지 않습니다. Zen의 종량제 크레딧은 OpenCode 콘솔의 Overview → Credits에서만 볼 수 있습니다(워크스페이스 소유자와 관리자만).",
           siliconflowRetired:
@@ -3034,10 +3041,22 @@ export const ko: TranslationResources = {
             "중계가 사용자 ID를 요구합니다: 이 엔드포인트 설정에서 「사용자 ID」를 입력하세요(사이트 개인 설정에 표시).",
         },
         window: {
-          fiveHours: "5시간",
-          oneDay: "1일",
-          sevenDays: "7일",
+          hoursOne: "{{count}}시간",
+          hoursMany: "{{count}}시간",
+          daysOne: "{{count}}일",
+          daysMany: "{{count}}일",
+          minutesOne: "{{count}}분",
+          minutesMany: "{{count}}분",
+          month: "월",
+          allowance: "플랜 사용량",
+          mcpMonth: "MCP · 월",
+          bucket: "{{bucket}} · {{window}}",
+          bucketVideo: "동영상",
+          bucketImage: "이미지",
+          unitVideos: "개 동영상",
         },
+        pace: "페이스 {{pace}}",
+        asideTitle: "다 써도 모델은 멈추지 않음",
         autoRefresh: {
           label: "잔액과 요금제 사용량 자동 새로고침",
           hint: "엔드포인트 목록이나 엔드포인트 페이지가 열려 있는 동안 1분마다 읽습니다. 끄면: 이 페이지를 열 때나 엔드포인트 페이지에서 새로고침을 누를 때만 읽습니다.",

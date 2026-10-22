@@ -2977,6 +2977,8 @@ export const ar: TranslationResources = {
         noKey: "لا يوجد مفتاح لنقطة النهاية هذه، لذا لا يمكن قراءة رصيدها",
         rowUnavailable: "الرصيد غير متاح",
         rowAmount: "الرصيد {{amount}}",
+        rowWindowUsed: "{{window}}: مستخدم {{percent}}",
+        rowWindowLeft: "{{window}}: متبقٍ {{percent}}",
         readFailed: "تعذّرت قراءة الرصيد",
         withStatus: "{{text}} (HTTP {{status}})",
         failure: {
@@ -2994,6 +2996,11 @@ export const ar: TranslationResources = {
           toppedUp: "مشحون",
         },
         hint: {
+          glmKeyRefused:
+            "انتهت صلاحية هذا المفتاح أو حُذف أو لُصق خطأً: انسخ مفتاحًا صالحًا من وحدة التحكم والصقه في إعدادات نقطة النهاية هذه.",
+          opencodeGoNoSubscription:
+            "لا يملك هذا المفتاح OpenCode Go: يعود Go إلى العضو الذي اشترك، في مساحة العمل تلك. استخدم مفتاحًا أنشأه ذلك العضو هناك (opencode.ai، قسم API Keys في مساحة العمل).",
+          opencodeKeyRefused: "لا يقبل OpenCode هذا المفتاح: حُذف أو لُصق خطأً.",
           opencodeNoBalance:
             "لا يخبر OpenCode مفتاح API برصيده: أرصدة Zen للدفع حسب الاستخدام تظهر فقط في لوحة تحكم OpenCode، ضمن Overview → Credits (لمالكي مساحة العمل ومشرفيها).",
           siliconflowRetired:
@@ -3007,10 +3014,22 @@ export const ar: TranslationResources = {
             "يطلب المرحّل معرّف المستخدم: املأ «معرّف المستخدم» في إعدادات نقطة النهاية هذه (يظهر في الإعدادات الشخصية للموقع).",
         },
         window: {
-          fiveHours: "5 ساعات",
-          oneDay: "يوم واحد",
-          sevenDays: "7 أيام",
+          hoursOne: "{{count}} ساعة",
+          hoursMany: "{{count}} ساعة",
+          daysOne: "{{count}} يوم",
+          daysMany: "{{count}} يوم",
+          minutesOne: "{{count}} دقيقة",
+          minutesMany: "{{count}} دقيقة",
+          month: "شهر",
+          allowance: "استخدام الخطة",
+          mcpMonth: "MCP · شهر",
+          bucket: "{{bucket}} · {{window}}",
+          bucketVideo: "فيديو",
+          bucketImage: "صور",
+          unitVideos: "فيديو",
         },
+        pace: "الوتيرة {{pace}}",
+        asideTitle: "لا يوقف النماذج",
         autoRefresh: {
           label: "تحديث الرصيد واستخدام الخطة تلقائيًا",
           hint: "كل دقيقة ما دامت قائمة نقاط الاتصال أو صفحة نقطة اتصال مفتوحة. عند الإيقاف: فقط عند فتح إحداهما أو الضغط على تحديث في صفحة نقطة الاتصال.",

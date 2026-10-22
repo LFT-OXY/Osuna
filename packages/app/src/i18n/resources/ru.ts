@@ -3027,6 +3027,8 @@ export const ru: TranslationResources = {
         noKey: "У этой точки доступа нет ключа, поэтому баланс узнать нельзя",
         rowUnavailable: "Баланс недоступен",
         rowAmount: "Баланс {{amount}}",
+        rowWindowUsed: "{{window}}: использовано {{percent}}",
+        rowWindowLeft: "{{window}}: осталось {{percent}}",
         readFailed: "Не удалось прочитать баланс",
         withStatus: "{{text}} (HTTP {{status}})",
         failure: {
@@ -3044,6 +3046,11 @@ export const ru: TranslationResources = {
           toppedUp: "Пополнено",
         },
         hint: {
+          glmKeyRefused:
+            "Срок действия ключа истёк, он удалён или вставлен с ошибкой: скопируйте действующий ключ в консоли и вставьте его в настройки этого эндпоинта.",
+          opencodeGoNoSubscription:
+            "У этого ключа нет OpenCode Go: Go принадлежит подписавшемуся участнику в том рабочем пространстве. Используйте ключ, созданный этим участником там (opencode.ai, API Keys рабочего пространства).",
+          opencodeKeyRefused: "OpenCode не принимает этот ключ: он удалён или вставлен с ошибкой.",
           opencodeNoBalance:
             "OpenCode не сообщает баланс по API-ключу: кредиты Zen с оплатой по факту видны только в консоли OpenCode, в Overview → Credits (владельцам и администраторам рабочего пространства).",
           siliconflowRetired:
@@ -3058,10 +3065,22 @@ export const ru: TranslationResources = {
             "Релей требует ваш ID пользователя: заполните «ID пользователя» в настройках этого эндпоинта (указан в личных настройках сайта).",
         },
         window: {
-          fiveHours: "5 часов",
-          oneDay: "1 день",
-          sevenDays: "7 дней",
+          hoursOne: "{{count}} ч",
+          hoursMany: "{{count}} ч",
+          daysOne: "{{count}} дн.",
+          daysMany: "{{count}} дн.",
+          minutesOne: "{{count}} мин",
+          minutesMany: "{{count}} мин",
+          month: "Месяц",
+          allowance: "Использование тарифа",
+          mcpMonth: "MCP · Месяц",
+          bucket: "{{bucket}} · {{window}}",
+          bucketVideo: "Видео",
+          bucketImage: "Изображения",
+          unitVideos: "видео",
         },
+        pace: "Темп {{pace}}",
+        asideTitle: "Не останавливает модели",
         autoRefresh: {
           label: "Автообновление баланса и использования тарифа",
           hint: "Раз в минуту, пока открыт список точек или страница точки. Выключено: только при открытии этих страниц или по кнопке «Обновить» на странице точки.",

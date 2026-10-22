@@ -2267,4 +2267,46 @@ describe("API endpoint balance (apiEndpointBalance)", () => {
     const { windows: _windows, ...older } = withWindows;
     expect(ApiEndpointBalanceReadingSchema.parse(older)).toEqual(older);
   });
+  it("parses plan windows with their pace and an aside window, and the GLM refusal with where to get a key", () => {
+    const plan = {
+      endpointId: "ep_glm",
+      status: "ok",
+      items: [],
+      windows: [
+        {
+          id: "5h",
+          label: "5 hours",
+          usedPct: 12,
+          remainingPct: 88,
+          resetsAt: "2026-10-22T10:00:00.000Z",
+          pacePct: -48,
+        },
+        {
+          id: "mcp_month",
+          label: "MCP · Month",
+          usedPct: 3,
+          remainingPct: 97,
+          resetsAt: "2026-11-01T00:00:00.000Z",
+          aside: true,
+        },
+      ],
+      readAt: "2026-10-22T08:00:00.000Z",
+      failure: null,
+    };
+    expect(ApiEndpointBalanceReadingSchema.parse(plan)).toEqual(plan);
+    const refused = {
+      endpointId: "ep_glm",
+      status: "failed",
+      items: [],
+      readAt: "2026-10-22T08:00:00.000Z",
+      failure: {
+        reason: "token_rejected",
+        detail: "Token expired",
+        status: 200,
+        hint: "glm_key_refused",
+        seeAt: "https://open.bigmodel.cn/usercenter/proj-mgmt/apikeys",
+      },
+    };
+    expect(ApiEndpointBalanceReadingSchema.parse(refused)).toEqual(refused);
+  });
 });

@@ -34,7 +34,9 @@ import { Shortcut } from "@/components/ui/shortcut";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Switch } from "@/components/ui/switch";
 import { Text as UiText } from "@/components/ui/text";
+import { useAppSettings } from "@/hooks/use-settings";
 import type { ProviderStatusDisplay } from "@/provider-detail/status";
+import { formatPct } from "@/usage/format";
 import { ProviderStatusLine } from "@/screens/settings/provider-status-line";
 import { settingsStyles } from "@/styles/settings";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
@@ -50,7 +52,9 @@ import {
   type EndpointRowStatus,
   type HostEndpointsLoadState,
 } from "./internal/host-list";
+import { windowLabel } from "./balance-copy";
 import { EndpointIcon } from "./endpoint-icon";
+import { tightestWindow } from "./internal/balance-windows";
 import { SortableEndpointRows } from "./sortable-endpoint-rows";
 import type { VendorNotice } from "./internal/vendor-status";
 import { VendorNoticeLine } from "./vendor-notice";
@@ -847,8 +851,11 @@ function EndpointFacts({
     });
   }
   const balance = management.balances.get(endpoint.id);
-  // 读到了却没有单独余额的（如 Ollama Cloud 没买过 credits）行上不出这一段。
-  const hasNothingToShow = balance?.status === "ok" && balance.items.length === 0;
+  // 读到了却没有单独余额、也没有窗口的（如 Ollama Cloud 没买过 credits）行上不出这一段。
+  const hasNothingToShow =
+    balance?.status === "ok" &&
+    balance.items.length === 0 &&
+    tightestWindow(balance.windows ?? []) === null;
   if (balance && balance.status !== "unsupported" && !hasNothingToShow) {
     facts.push({ key: "balance", node: <BalanceFact reading={balance} /> });
   }
@@ -865,9 +872,32 @@ function EndpointFacts({
   );
 }
 
-/** 行上的一小段余额：有读数写金额，查不到只写「余额查不到」，原因留给详情页。 */
+/**
+ * 行上的一小段余额：有套餐窗口时写剩得最少的那个（同时有余额也是它，最紧的限制先看到），否则写金额；
+ * 查不到只写「余额查不到」，原因留给详情页。
+ */
 function BalanceFact({ reading }: { reading: ApiEndpointBalanceReading }) {
   const { t } = useTranslation();
+  const { settings } = useAppSettings();
+  const tightest = reading.status === "ok" ? tightestWindow(reading.windows ?? []) : null;
+  if (tightest !== null) {
+    const displayAs = settings.usage.displayAs;
+    const usedPct = tightest.usedPct ?? 0;
+    const shownPct = displayAs === "remaining" ? 100 - usedPct : usedPct;
+    return (
+      <Text style={styles.fact} numberOfLines={1} testID="api-endpoint-row-balance">
+        {t(
+          displayAs === "remaining"
+            ? "settings.apiEndpoints.balance.rowWindowLeft"
+            : "settings.apiEndpoints.balance.rowWindowUsed",
+          {
+            window: windowLabel({ t, window: tightest }),
+            percent: formatPct(shownPct),
+          },
+        )}
+      </Text>
+    );
+  }
   const first = reading.status === "ok" ? reading.items[0] : undefined;
   if (!first) {
     return (

@@ -44,6 +44,17 @@
   - 从不用账户令牌（令牌配这两个 key 级地址只会被拒）；没有 key 或找不到站点时 daemon 拒收（`invalid_input`），界面上按钮此时本就不可点。
   - 英文界面名叫「Detect URL」，不叫「Auto-detect」：同一个窗口顶上已有识别请求格式的「Auto-detect」。
 
+- 2026-10-22 工单 08 实现时定下：
+  - 填了余额查询地址也照读套餐窗口（magpie 的 `planQuotaSourceOf` 不看 Balance URL）；两份同时问，都读到时余额项在前、窗口接在余额自己的窗口后。一份读到、一份失败时只显示读到的那份，失败的那份原因不显示——magpie 是两张卡各显示各的；工单 08 的四家与余额没有同主机的，只有自己填了余额查询地址的 GLM / MiniMax 接口会碰到，留给用户决定（见工单 08 的交付说明）。
+  - 「认不准是套餐」（MiniMax、GLM 不在 `/api/coding/` 下）读不出时不显示（`unsupported`）；暂时查不到且有上次读数时回上次读数，同 magpie `keepReading` 只在读到过时出卡。
+  - 配速：daemon 写 `pacePct` 与 `startsAt`，每次回读数按当时的时刻重算（magpie 前端每次显示时算 `quotaPace`）。OpenCode Go 的 monthly 与 GLM 的「MCP · Month」按一个自然月算窗口长度，所以也有配速；magpie 的 `windowSpan` 认不出只叫「Month」的名字，这两个窗口没有配速——这是多做。
+  - OpenCode Go 的请求照 magpie 另带 `x-opencode-session` 与 `x-opencode-session-id`（OpenCode 网关 2026-09 起不路由没说会话的请求），工单写的「只带四个头」之外的这一对写进了 `docs/usage.md`。
+  - 重置时间沿用套餐用量窗口条的「3d 后重置」，没有改成 magpie 的「重置于 {when}」：两处窗口读起来一致；术语表收作 **Resets**。
+  - 列表行「剩得最少的窗口」在界面里挑（`tightestWindow`），所以由界面单元测试与浏览器测试验，不是 daemon 端到端测试。
+  - 窗口名按 id 翻译；MiniMax 只翻 video、image 两个桶名，别的桶照 daemon 给的英文名（「Speech · 5 hours」）。计数文案照前端规范用 `…One`/`…Many` 两个键。
+  - 详情分区的窗口块顶上有「已用 / 剩余」切换（magpie 是点数字切换），写的就是套餐用量那个设置，各处同一个选择。
+  - magpie 对个人 GLM 套餐另读的重置次数与套餐期限（`zhipuPersonalResets`、`zhipuTerm`）不在 prd 与任何工单里，没有做，交用户决定。
+
 ## magpie 出处（照做时对照）
 
 ### 按地址认的厂商余额（`provider/balance.go:41-84, 255-470`）

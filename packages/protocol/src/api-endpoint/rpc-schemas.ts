@@ -1406,7 +1406,9 @@ export type ApiEndpointBalanceFailureReason = (typeof API_ENDPOINT_BALANCE_FAILU
  * 失败附带的具体提示：opencode_no_balance（OpenCode 不给 key 查 Zen 的余额）、siliconflow_retired（硅基流动的
  * 余额接口已下线）、aihubmix_no_limit（AiHubMix 的 key 没设上限，要填账户令牌）、not_asked（「自动刷新余额与套餐用量」
  * 关着，这次读取不是用户要求的，也还没有读数）、token_on_key_url（账户令牌配了只认 key 的查询，该改用的地址在 useUrl，
- * 没发请求）、new_api_user_missing（new-api 说缺 New-Api-User，要填用户 ID）。
+ * 没发请求）、new_api_user_missing（new-api 说缺 New-Api-User，要填用户 ID）、glm_key_refused（智谱或 Z.ai 不认这把
+ * key：过期、删了或粘错，去 seeAt 换一把）、opencode_go_no_subscription（这把 key 没有 OpenCode Go：Go 归订阅的成员，
+ * 要用那位成员在那个工作区建的 key）、opencode_key_refused（OpenCode 不认这把 key：删了或粘错）。
  */
 export const API_ENDPOINT_BALANCE_HINTS = [
   "opencode_no_balance",
@@ -1415,6 +1417,9 @@ export const API_ENDPOINT_BALANCE_HINTS = [
   "not_asked",
   "token_on_key_url",
   "new_api_user_missing",
+  "glm_key_refused",
+  "opencode_go_no_subscription",
+  "opencode_key_refused",
 ] as const;
 export type ApiEndpointBalanceHint = (typeof API_ENDPOINT_BALANCE_HINTS)[number];
 export const API_ENDPOINT_BALANCE_PARTS = ["granted", "topped_up"] as const;
@@ -1451,8 +1456,10 @@ export const ApiEndpointBalanceFailureSchema = z.object({
 export type ApiEndpointBalanceFailure = z.infer<typeof ApiEndpointBalanceFailureSchema>;
 
 /**
- * 一个限额窗口（如 sub2api key 的 5 小时 / 1 天 / 7 天），字段名同套餐用量的窗口（ProviderUsageWindowSchema），
- * 另带用量与上限的数（used、limit，单位 unit，如 USD）。id 是窗口的代号（5h、1d、7d），界面按它翻译，认不得的写 label。
+ * 一个限额窗口（如 sub2api key 的 5 小时 / 1 天 / 7 天、套餐 key 的 5 小时 / 周 / 月），字段名同套餐用量的窗口
+ * （ProviderUsageWindowSchema），另带用量与上限的数（used、limit，单位 unit，如 USD）。
+ * id 是窗口的代号，界面按它翻译，认不得的写 label：Nmin、Nh、Nd（N 分钟 / 小时 / 天）、month（月）、allowance（长度不明）、
+ * mcp_month（GLM 的 MCP 月度）；别的桶在前面加桶名与冒号，如 video:5h。
  */
 export const ApiEndpointBalanceWindowSchema = z.object({
   id: z.string(),
@@ -1463,6 +1470,12 @@ export const ApiEndpointBalanceWindowSchema = z.object({
   used: z.number().nullable().optional(),
   limit: z.number().nullable().optional(),
   unit: z.string().nullable().optional(),
+  // 窗口从什么时候开始（照 magpie startsAt）：重置时间往前一个窗口长度，月窗口往前一个自然月；不知道时没有。
+  startsAt: z.string().nullable().optional(),
+  // 配速（照 magpie Pace）：已用的百分比比照匀速该用的多（正）或少（负）几个点，按回复的时刻算；不知道窗口起点或已过重置时没有。
+  pacePct: z.number().nullable().optional(),
+  // 用完也不挡模型的窗口（GLM 的 MCP 月度、MiniMax 视频等别的桶）：放一旁显示，列表行不取它。
+  aside: z.boolean().optional(),
 });
 export type ApiEndpointBalanceWindow = z.infer<typeof ApiEndpointBalanceWindowSchema>;
 

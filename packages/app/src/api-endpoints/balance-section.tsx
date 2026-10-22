@@ -10,15 +10,19 @@ import type {
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { Button } from "@/components/ui/button";
+import { SegmentedControl, type SegmentedControlOption } from "@/components/ui/segmented-control";
 import { Text as UiText } from "@/components/ui/text";
 import { settingsStyles } from "@/styles/settings";
 import { useAppSettings } from "@/hooks/use-settings";
+import { useIsCompactFormFactor } from "@/constants/layout";
 import { formatAmount } from "@/usage/format";
-import type { UsageDisplayAs } from "@/usage/preferences";
-import { UsageWindowBar } from "@/usage/window-bar";
+import { setUsageDisplayAs, type UsageDisplayAs } from "@/usage/preferences";
+import type { UsageWindowPace } from "@/usage/types";
+import { UsageWindowBar, type UsageWindowBarLayout } from "@/usage/window-bar";
 import { openExternalUrl } from "@/utils/open-external-url";
 import { relativeAgo } from "./reopen-hints-copy";
-import { failureTitle, hintOf, itemLabel, windowLabel } from "./balance-copy";
+import { failureTitle, hintOf, itemLabel, windowLabel, windowUnitLabel } from "./balance-copy";
+import { paceOf } from "./internal/balance-windows";
 import type { EndpointBalances } from "./use-endpoint-balances";
 
 /**
@@ -177,7 +181,8 @@ function BalanceBody({
       />
     );
   }
-  if (reading.items.length === 0) {
+  const windows = reading.windows ?? [];
+  if (reading.items.length === 0 && windows.length === 0) {
     // 读到了，但这家现在没有单独的余额（如 Ollama Cloud 没买过 credits）。
     return (
       <Notice
@@ -203,67 +208,169 @@ function BalanceBody({
           </Text>
         </View>
       ))}
-      {reading.windows && reading.windows.length > 0 ? (
-        <BalanceWindows windows={reading.windows} />
+      {windows.length > 0 ? (
+        <BalanceWindows windows={windows} afterItems={reading.items.length > 0} />
       ) : null}
     </>
   );
 }
 
-/** 限额窗口（如 sub2api key 的 5 小时 / 1 天 / 7 天）：套餐用量的窗口条，已用 / 剩余照套餐用量的选择，百分比前写用量。 */
-function BalanceWindows({ windows }: { windows: ApiEndpointBalanceWindow[] }) {
+/**
+ * 限额与套餐窗口：套餐用量的窗口条，已用 / 剩余照套餐用量的选择（顶上可切换，各处同一个选择），百分比前写用量，
+ * 重置时间后写配速。用完也不挡模型的窗口（GLM 的 MCP 月度、MiniMax 别的桶）另起一组放在后面。
+ */
+function BalanceWindows({
+  windows,
+  afterItems,
+}: {
+  windows: ApiEndpointBalanceWindow[];
+  afterItems: boolean;
+}) {
   const { t, i18n } = useTranslation();
-  const { settings } = useAppSettings();
+  const { settings, updateSettings } = useAppSettings();
+  const compact = useIsCompactFormFactor();
   const displayAs = settings.usage.displayAs;
+  const setDisplayAs = useCallback(
+    (next: UsageDisplayAs) => {
+      void updateSettings((current) => ({ usage: setUsageDisplayAs(current.usage, next) }));
+    },
+    [updateSettings],
+  );
+  const displayOptions = useMemo<SegmentedControlOption<UsageDisplayAs>[]>(
+    () => [
+      {
+        value: "used",
+        label: t("usage.planUsage.displayUsed"),
+        testID: "api-endpoint-balance-display-used",
+      },
+      {
+        value: "remaining",
+        label: t("usage.planUsage.displayRemaining"),
+        testID: "api-endpoint-balance-display-remaining",
+      },
+    ],
+    [t],
+  );
   const shown = useMemo(
     () =>
-      windows.map((window) => ({
-        window: { ...window, label: windowLabel({ t, window }) },
-        count: windowCount({ window, displayAs, locale: i18n.language }),
-      })),
+      windows.map((window) => {
+        const pace = paceOf({ pacePct: window.pacePct, displayAs });
+        const paceText = pace
+          ? { ...pace, text: t("settings.apiEndpoints.balance.pace", { pace: pace.text }) }
+          : undefined;
+        return {
+          window: { ...window, label: windowLabel({ t, window }) },
+          count: windowCount({ window, displayAs, locale: i18n.language, t }),
+          pace: paceText,
+        };
+      }),
     [displayAs, i18n.language, t, windows],
   );
+  // 窄屏整组都是名字一行、数字一行，行高一致；宽屏一行，名字太长时才换行。
+  const layout: UsageWindowBarLayout = compact ? "stack" : "wrap";
+  const main = shown.filter(({ window }) => !window.aside);
+  const aside = shown.filter(({ window }) => window.aside);
   return (
-    <View style={[styles.windows, settingsStyles.rowBorder]} testID="api-endpoint-balance-windows">
-      {shown.map(({ window, count }) => (
-        <UsageWindowBar
+    <View
+      style={[styles.windows, afterItems && settingsStyles.rowBorder]}
+      testID="api-endpoint-balance-windows"
+    >
+      <View style={styles.windowsHeader}>
+        <SegmentedControl
+          options={displayOptions}
+          value={displayAs}
+          onValueChange={setDisplayAs}
+          size="sm"
+          testID="api-endpoint-balance-display-as"
+        />
+      </View>
+      {main.map(({ window, count, pace }) => (
+        <BalanceWindowBar
           key={window.id}
           window={window}
           count={count}
+          pace={pace}
+          layout={layout}
           displayAs={displayAs}
-          pinnable={false}
-          pinned={false}
-          onTogglePin={noop}
-          pinLabel=""
-          pinTestID=""
         />
       ))}
+      {aside.length > 0 ? (
+        <View style={styles.asideGroup} testID="api-endpoint-balance-windows-aside">
+          <UiText variant="caption" color="foregroundMuted">
+            {t("settings.apiEndpoints.balance.asideTitle")}
+          </UiText>
+          {aside.map(({ window, count, pace }) => (
+            <BalanceWindowBar
+              key={window.id}
+              window={window}
+              count={count}
+              pace={pace}
+              layout={layout}
+              displayAs={displayAs}
+            />
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function BalanceWindowBar({
+  window,
+  count,
+  pace,
+  layout,
+  displayAs,
+}: {
+  window: ApiEndpointBalanceWindow;
+  count: string | undefined;
+  pace: UsageWindowPace | undefined;
+  layout: UsageWindowBarLayout;
+  displayAs: UsageDisplayAs;
+}) {
+  return (
+    <View testID={`api-endpoint-balance-window-${window.id}`}>
+      <UsageWindowBar
+        window={window}
+        count={count}
+        pace={pace}
+        layout={layout}
+        displayAs={displayAs}
+        pinnable={false}
+        pinned={false}
+        onTogglePin={noop}
+        pinLabel=""
+        pinTestID=""
+      />
     </View>
   );
 }
 
 function noop() {}
 
-/** 「$15.00 / $20.00」：已用（或剩余）与上限，照 magpie quotaCount；没有上限时不写。 */
+/**
+ * 「$15.00 / $20.00」「1 / 5 个视频」：已用（或剩余）与上限，照 magpie quotaCount——美元每个数写成货币，
+ * 别的单位只写在最后；没有上限时不写。
+ */
 function windowCount(input: {
   window: ApiEndpointBalanceWindow;
   displayAs: UsageDisplayAs;
   locale: string;
+  t: TFunction;
 }): string | undefined {
-  const { window, displayAs, locale } = input;
+  const { window, displayAs, locale, t } = input;
   const limit = window.limit ?? null;
   if (limit === null || limit <= 0) return undefined;
   const used = Math.max(0, window.used ?? 0);
   const shown = displayAs === "remaining" ? Math.max(0, limit - used) : used;
-  const format = (value: number) => amountIn({ value, unit: window.unit ?? null, locale });
-  return `${format(shown)} / ${format(limit)}`;
-}
-
-/** 美元按界面语言写成货币，别的单位写在数后面。 */
-function amountIn(input: { value: number; unit: string | null; locale: string }): string {
-  if (input.unit === "USD") return formatAmount(input.value, "usd", input.locale);
-  const amount = formatAmount(input.value, "credits", input.locale);
-  return input.unit ? `${amount} ${input.unit}` : amount;
+  const unit = window.unit ?? null;
+  if (unit === "USD") {
+    const format = (value: number) => formatAmount(value, "usd", locale);
+    return `${format(shown)} / ${format(limit)}`;
+  }
+  const format = (value: number) => formatAmount(value, "credits", locale);
+  const count = `${format(shown)} / ${format(limit)}`;
+  return unit ? `${count} ${windowUnitLabel({ t, unit })}` : count;
 }
 
 function Notice({ text, testID }: { text: string; testID: string }) {
@@ -367,6 +474,17 @@ const styles = StyleSheet.create((theme) => ({
   windows: {
     paddingVertical: theme.spacing[2],
     paddingHorizontal: theme.spacing[4],
+  },
+  windowsHeader: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    paddingVertical: theme.spacing[1],
+  },
+  asideGroup: {
+    marginTop: theme.spacing[2],
+    paddingTop: theme.spacing[2],
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.borderCardRow,
   },
   failure: {
     flexDirection: "column",

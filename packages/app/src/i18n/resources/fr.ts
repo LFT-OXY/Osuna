@@ -3056,6 +3056,8 @@ export const fr: TranslationResources = {
         noKey: "Ce point de terminaison n’a pas de clé, son solde ne peut donc pas être lu",
         rowUnavailable: "Solde indisponible",
         rowAmount: "Solde {{amount}}",
+        rowWindowUsed: "{{window}} {{percent}} utilisé",
+        rowWindowLeft: "{{window}} {{percent}} restant",
         readFailed: "Impossible de lire le solde",
         withStatus: "{{text}} (HTTP {{status}})",
         failure: {
@@ -3073,6 +3075,11 @@ export const fr: TranslationResources = {
           toppedUp: "Rechargé",
         },
         hint: {
+          glmKeyRefused:
+            "Cette clé a expiré, a été supprimée ou est mal saisie : copiez une clé valide depuis la console et collez-la dans les réglages de ce point d'accès.",
+          opencodeGoNoSubscription:
+            "Cette clé n'a pas OpenCode Go : Go appartient au membre qui s'est abonné, dans cet espace de travail. Utilisez une clé créée par ce membre à cet endroit (opencode.ai, API Keys de l'espace de travail).",
+          opencodeKeyRefused: "OpenCode refuse cette clé : elle a été supprimée ou est mal saisie.",
           opencodeNoBalance:
             "OpenCode ne donne pas le solde à une clé d'API : les crédits à l'usage de Zen ne s'affichent que dans la console OpenCode, sous Overview → Credits (pour les propriétaires et administrateurs de l'espace de travail).",
           siliconflowRetired:
@@ -3087,10 +3094,22 @@ export const fr: TranslationResources = {
             "Le relais demande votre ID utilisateur : remplissez ID utilisateur dans les paramètres de ce point de terminaison (affiché dans les paramètres personnels du site).",
         },
         window: {
-          fiveHours: "5 heures",
-          oneDay: "1 jour",
-          sevenDays: "7 jours",
+          hoursOne: "{{count}} heure",
+          hoursMany: "{{count}} heures",
+          daysOne: "{{count}} jour",
+          daysMany: "{{count}} jours",
+          minutesOne: "{{count}} minute",
+          minutesMany: "{{count}} minutes",
+          month: "Mois",
+          allowance: "Utilisation du forfait",
+          mcpMonth: "MCP · Mois",
+          bucket: "{{bucket}} · {{window}}",
+          bucketVideo: "Vidéo",
+          bucketImage: "Image",
+          unitVideos: "vidéos",
         },
+        pace: "Rythme {{pace}}",
+        asideTitle: "N'arrête pas les modèles",
         autoRefresh: {
           label: "Actualiser automatiquement le solde et l'usage du forfait",
           hint: "Toutes les minutes tant que la liste des points d'accès ou la page d'un point d'accès est ouverte. Désactivé : seulement à l'ouverture de l'une d'elles, ou en appuyant sur Actualiser sur la page d'un point d'accès.",

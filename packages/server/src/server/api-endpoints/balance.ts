@@ -28,6 +28,15 @@ import {
   type RequestExtras,
 } from "./request-extras.js";
 import { numberOf, readBalanceField } from "./balance-field.js";
+import {
+  PLAN_VENDOR_URLS,
+  planRequestHeaders,
+  planSourceOf,
+  shownWindows,
+  withPace,
+  zhipuKeyRefusal,
+  type PlanSource,
+} from "./balance-plan.js";
 import { upstreamFetch, type UpstreamResponse } from "./insecure-tls.js";
 import type { StoredApiEndpoint } from "./store.js";
 import {
@@ -50,7 +59,7 @@ import { hostOf } from "./vendor-status.js";
  * 回复里的 key、令牌与请求头的值打码后截到 200 字给界面看。
  */
 
-/** 各厂商的余额查询（照 magpie balanceSourceOf）；测试 daemon 把它们换成本机地址。 */
+/** 各厂商的余额查询（照 magpie balanceSourceOf）与套餐窗口查询；测试 daemon 把它们换成本机地址。 */
 export const BALANCE_VENDOR_URLS = {
   deepseek: "https://api.deepseek.com/user/balance",
   moonshot_cn: "https://api.moonshot.cn/v1/users/me/balance",
@@ -65,6 +74,7 @@ export const BALANCE_VENDOR_URLS = {
   aihubmix: "https://aihubmix.com/dashboard/billing/remain",
   // 填了账户令牌时问整个账户的余额。
   aihubmix_account: "https://aihubmix.com/api/user/self",
+  ...PLAN_VENDOR_URLS,
 } as const;
 
 export type BalanceVendorId = keyof typeof BALANCE_VENDOR_URLS;
@@ -191,6 +201,10 @@ export interface ReadBalanceInput {
   now: () => Date;
   // 只给测试：把厂商表里的真实地址换成本机假服务。
   vendorUrls?: Partial<Record<BalanceVendorId, string>>;
+  // 一并读套餐 key 的窗口：页面上的读余额读，编辑窗口的「查询余额」「自动识别」只查余额（照 magpie 编辑器的 Check balance）。
+  withPlan?: boolean;
+  // 这家有对得上的上次读数：认不准是套餐的 key 暂时没读成时，照 magpie 只在读到过时才显示（回上次读数）。
+  hasLastReading?: boolean;
   // 连接断了：抛错，不回读数。
   signal: AbortSignal;
   // 整页的期限到了：和单次超时一样算暂时查不到。
@@ -208,10 +222,135 @@ export function notAskedReading(endpointId: string): ApiEndpointBalanceReading {
   };
 }
 
-/** 读一家的余额：认不出或没有 key 时什么都不发（magpie 同样不查没 key 的）。 */
+/**
+ * 读一家的余额与套餐窗口（withPlan 时）：两份同时问，读到的合成一份读数。认不出或没有 key 时什么都不发
+ * （magpie 同样不查没 key 的）。
+ */
 export async function readEndpointBalance(
   input: ReadBalanceInput,
 ): Promise<ApiEndpointBalanceReading> {
+  const plan =
+    input.withPlan && input.apiKey
+      ? planSourceOf({ baseUrls: input.endpoint.baseUrls, vendorUrls: input.vendorUrls })
+      : null;
+  if (plan === null || !input.apiKey) return readBalanceOnly(input);
+  const [balance, planned] = await Promise.all([
+    readBalanceOnly(input),
+    readPlanWindows({ input, source: plan, apiKey: input.apiKey }),
+  ]);
+  return mergedReading({ balance, planned });
+}
+
+/**
+ * 余额与套餐窗口合成一份：有一份读到就是读到（余额各项在前、窗口接在余额自己的窗口后）；都没读到时说套餐的原因，
+ * 套餐没有可说的（不是套餐 key）时照余额的说。
+ */
+function mergedReading(input: {
+  balance: ApiEndpointBalanceReading;
+  planned: ApiEndpointBalanceReading | null;
+}): ApiEndpointBalanceReading {
+  const { balance, planned } = input;
+  if (planned === null) return balance;
+  if (planned.status === "ok" && balance.status === "ok") {
+    return { ...balance, windows: [...(balance.windows ?? []), ...(planned.windows ?? [])] };
+  }
+  if (balance.status === "ok") return balance;
+  return planned;
+}
+
+/**
+ * 问套餐 key 的窗口（照 magpie planBody 与 PlanQuotas）。null 是没有可显示的：这把 key 没有套餐（回了空窗口），或认不准是
+ * 套餐（按量付费也走这个地址）时没读成——读到过且这次只是暂时查不到除外，那样回上次读数。
+ */
+async function readPlanWindows(input: {
+  input: ReadBalanceInput;
+  source: PlanSource;
+  apiKey: string;
+}): Promise<ApiEndpointBalanceReading | null> {
+  const { source, apiKey } = input;
+  const { endpoint, signal, deadline } = input.input;
+  const now = input.input.now();
+  const readAt = now.toISOString();
+  const secrets = [apiKey];
+  const failed = (failure: ApiEndpointBalanceFailure): ApiEndpointBalanceReading | null => {
+    const keepsLast = failure.reason === "temporary" && input.input.hasLastReading === true;
+    if (!source.sure && !keepsLast) return null;
+    return { endpointId: endpoint.id, status: "failed", items: [], readAt, failure };
+  };
+  let status: number;
+  let text: string;
+  try {
+    const response = await upstreamFetch({
+      url: source.url,
+      init: {
+        headers: planRequestHeaders({
+          source,
+          apiKey,
+          userAgent: input.input.userAgent,
+          now: now.getTime(),
+        }),
+        signal: AbortSignal.any([signal, AbortSignal.timeout(BALANCE_READ_TIMEOUT_MS), deadline]),
+      },
+      uncheckedHosts: input.input.extras.uncheckedHosts,
+    });
+    status = response.status;
+    text = await readCapped(response);
+  } catch (error) {
+    if (signal.aborted) throw error;
+    return failed({
+      reason: "temporary",
+      detail: clip(redactKey(describeNetworkError(error), secrets)),
+      status: null,
+    });
+  }
+  const body = parseJson(text);
+  const glmRefused = (detail: string | null): ApiEndpointBalanceFailure => ({
+    reason: "token_rejected",
+    detail,
+    status,
+    hint: "glm_key_refused",
+    seeAt: source.keysAt,
+  });
+  if (status >= 300) {
+    const detail = quoted(text, secrets);
+    if (source.opencode && (status === 401 || status === 403)) {
+      // OpenCode 的 Go 归订阅的成员、在订阅的工作区里，按 key 的成员与工作区查：别人建的 key、别的工作区的没有 Go。
+      return failed({
+        reason: "token_rejected",
+        detail,
+        status,
+        hint: status === 403 ? "opencode_go_no_subscription" : "opencode_key_refused",
+      });
+    }
+    const isZhipuRefusal =
+      source.keysAt !== null && (status === 401 || zhipuKeyRefusal(body) !== null);
+    if (isZhipuRefusal) {
+      return failed(glmRefused(detail));
+    }
+    return failed({ reason: failureOfStatus(status), detail, status });
+  }
+  if (body === undefined) return failed({ reason: "wrong_url", detail: null, status });
+  const read = source.read(body);
+  if (read.kind === "key_refused") {
+    return failed(glmRefused(read.detail === "" ? null : clip(redactKey(read.detail, secrets))));
+  }
+  if (read.kind === "no_value") {
+    return failed({ reason: "no_value", detail: clip(redactKey(read.detail, secrets)), status });
+  }
+  // 没有窗口的 key 没有套餐，不显示（照 magpie）。
+  if (read.windows.length === 0) return null;
+  return {
+    endpointId: endpoint.id,
+    status: "ok",
+    items: [],
+    windows: shownWindows({ windows: read.windows, now: now.getTime() }),
+    readAt,
+    failure: null,
+  };
+}
+
+/** 只读余额：认不出或没有 key 时什么都不发。 */
+async function readBalanceOnly(input: ReadBalanceInput): Promise<ApiEndpointBalanceReading> {
   const endpointId = input.endpoint.id;
   const readAt = input.now().toISOString();
   const failed = (failure: ApiEndpointBalanceFailure): ApiEndpointBalanceReading => ({
@@ -303,7 +442,7 @@ export async function readEndpointBalance(
       status: null,
     });
   }
-  const replied = readReply({ source, status, text, secrets });
+  const replied = readReply({ source, status, text, secrets, now: input.now().getTime() });
   if ("items" in replied) {
     return {
       endpointId,
@@ -363,6 +502,7 @@ function readReply(input: {
   status: number;
   text: string;
   secrets: readonly string[];
+  now: number;
 }): BalanceReplyItems | ApiEndpointBalanceFailure {
   const { source, status, text, secrets } = input;
   const notOffered = (note: BalanceNotOffered): ApiEndpointBalanceFailure => ({
@@ -391,7 +531,7 @@ function readReply(input: {
     return { reason: failureOfStatus(status), detail: quoted(text, secrets), status };
   }
   if (body === undefined) return { reason: "wrong_url", detail: null, status };
-  const windows = source.readsKeyLimits ? sub2ApiKeyLimits(body) : [];
+  const windows = source.readsKeyLimits ? sub2ApiKeyLimits(body, input.now) : [];
   const read = source.read(body);
   if (read.kind === "not_offered") return notOffered(read);
   if (read.kind === "rejected") {
@@ -549,17 +689,18 @@ function keyQueryInsteadOf(url: string): string | null {
   }
 }
 
+const HOUR_MS = 3_600_000;
 const SUB2API_WINDOWS = [
-  { id: "5h", label: "5 hours" },
-  { id: "1d", label: "1 day" },
-  { id: "7d", label: "7 days" },
+  { id: "5h", label: "5 hours", span: 5 * HOUR_MS },
+  { id: "1d", label: "1 day", span: 24 * HOUR_MS },
+  { id: "7d", label: "7 days", span: 7 * 24 * HOUR_MS },
 ] as const;
 
 /**
  * sub2api key 的限额窗口（照 magpie readSub2APIKeyLimits）：rate_limits 里每个窗口的已用、上限（美元）与重置时间，
- * 依 5 小时、1 天、7 天排；上限不是正数的不算。没有 reset_at 的窗口还没开始，或用完后还没再用。
+ * 依 5 小时、1 天、7 天排；上限不是正数的不算。没有 reset_at 的窗口还没开始，或用完后还没再用。带上读数时的配速。
  */
-function sub2ApiKeyLimits(body: unknown): ApiEndpointBalanceWindow[] {
+function sub2ApiKeyLimits(body: unknown, now: number): ApiEndpointBalanceWindow[] {
   if (!isRecord(body) || !Array.isArray(body.rate_limits)) return [];
   const limits = body.rate_limits.filter(isRecord);
   const windows: ApiEndpointBalanceWindow[] = [];
@@ -570,7 +711,7 @@ function sub2ApiKeyLimits(body: unknown): ApiEndpointBalanceWindow[] {
       if (window !== known.id || limit === null || limit <= 0) continue;
       const used = Math.max(0, numberOf(entry.used) ?? 0);
       const usedPct = Math.min(100, Math.max(0, (used / limit) * 100));
-      windows.push({
+      const shown = {
         id: known.id,
         label: known.label,
         usedPct,
@@ -579,7 +720,8 @@ function sub2ApiKeyLimits(body: unknown): ApiEndpointBalanceWindow[] {
         used,
         limit,
         unit: "USD",
-      });
+      };
+      windows.push(withPace({ window: shown, span: known.span, now }));
       break;
     }
   }

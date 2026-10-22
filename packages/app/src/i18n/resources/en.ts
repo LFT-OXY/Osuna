@@ -3050,6 +3050,8 @@ export const en = {
         noKey: "This endpoint has no key, so its balance can't be read",
         rowUnavailable: "Balance unavailable",
         rowAmount: "Balance {{amount}}",
+        rowWindowUsed: "{{window}} {{percent}} used",
+        rowWindowLeft: "{{window}} {{percent}} left",
         readFailed: "Couldn't read the balance",
         withStatus: "{{text}} (HTTP {{status}})",
         failure: {
@@ -3067,6 +3069,11 @@ export const en = {
           toppedUp: "Topped up",
         },
         hint: {
+          glmKeyRefused:
+            "This key has expired, was deleted, or is mistyped: copy a current one from the console and paste it into this endpoint's settings.",
+          opencodeGoNoSubscription:
+            "This key has no OpenCode Go: Go belongs to the member who subscribed, in that workspace. Use a key that member made there (opencode.ai, the workspace's API Keys).",
+          opencodeKeyRefused: "OpenCode doesn't take this key: it was deleted, or is mistyped.",
           opencodeNoBalance:
             "OpenCode doesn't tell an API key its balance: Zen's pay-as-you-go credits are shown only in the OpenCode console, under Overview → Credits (to the workspace's owners and admins).",
           siliconflowRetired:
@@ -3080,10 +3087,22 @@ export const en = {
             "The relay wants your user ID: fill in User ID in this endpoint's settings (shown in the site's personal settings).",
         },
         window: {
-          fiveHours: "5 hours",
-          oneDay: "1 day",
-          sevenDays: "7 days",
+          hoursOne: "{{count}} hour",
+          hoursMany: "{{count}} hours",
+          daysOne: "{{count}} day",
+          daysMany: "{{count}} days",
+          minutesOne: "{{count}} minute",
+          minutesMany: "{{count}} minutes",
+          month: "Month",
+          allowance: "Plan usage",
+          mcpMonth: "MCP · Month",
+          bucket: "{{bucket}} · {{window}}",
+          bucketVideo: "Video",
+          bucketImage: "Image",
+          unitVideos: "videos",
         },
+        pace: "Pace {{pace}}",
+        asideTitle: "Doesn't stop the models",
         autoRefresh: {
           label: "Auto-refresh balance and plan usage",
           hint: "Every minute while the endpoint list or an endpoint's page is open. Off: only when you open one of them, or press Refresh on an endpoint's page.",

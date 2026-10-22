@@ -392,6 +392,14 @@ describe("API endpoint balance of the other known vendors", () => {
       ollama: "https://ollama.com/api/balance",
       aihubmix: "https://aihubmix.com/dashboard/billing/remain",
       aihubmix_account: "https://aihubmix.com/api/user/self",
+      // 套餐窗口（工单 08）。
+      glm_cn: "https://open.bigmodel.cn/api/monitor/usage/quota/limit",
+      glm_z: "https://api.z.ai/api/monitor/usage/quota/limit",
+      kimi_code_com: "https://api.kimi.com",
+      kimi_code_ai: "https://api.kimi.ai",
+      minimax_cn: "https://api.minimaxi.com/v1/token_plan/remains",
+      minimax_io: "https://api.minimax.io/v1/token_plan/remains",
+      opencode_go: "https://opencode.ai/zen/go/v1/usage",
     });
   });
 
@@ -619,10 +627,8 @@ describe("API endpoint balance of the other known vendors", () => {
         },
       });
     }
-    // Go 的套餐窗口另算；用户自己挂在 inference/custom 下的、没 key 的都不是 Zen 的余额。
+    // Go 的是套餐窗口（见「API endpoint plan windows」）；用户自己挂在 inference/custom 下的、没 key 的都不是 Zen 的余额。
     for (const [baseUrl, apiKey] of [
-      ["https://opencode.ai/zen/go", KEY],
-      ["https://opencode.ai/inference/go/v1", KEY],
       ["https://opencode.ai/inference/custom/acme/v1", KEY],
       ["https://opencode.ai/zen", null],
     ] as const) {
@@ -1614,6 +1620,9 @@ describe("API endpoint balance at an address the user gave", () => {
         used: 15,
         limit: 20,
         unit: "USD",
+        // 5 小时窗口过了 3 小时（60%），用了 75%。
+        startsAt: "2026-10-22T05:00:00.000Z",
+        pacePct: expect.closeTo(15, 6),
       },
       {
         id: "1d",
@@ -1634,6 +1643,8 @@ describe("API endpoint balance at an address the user gave", () => {
         used: 200,
         limit: 800,
         unit: "USD",
+        startsAt: "2026-10-20T00:00:00.000Z",
+        pacePct: expect.closeTo(25 - (56 / 168) * 100, 3),
       },
     ]);
   });
@@ -1745,5 +1756,501 @@ describe("API endpoint balance at an address the user gave", () => {
     const reading = await read(id);
     expect(reading.status).toBe("failed");
     expect(reading.stale).toBeUndefined();
+  });
+});
+
+/*
+ * 工单 08：套餐 key 的窗口（照 magpie planquota.go）。一个本机假服务扮演 GLM、Kimi Code、MiniMax、OpenCode Go：
+ * 厂商表里每家的地址换成「假服务 + 厂商 id + 真实路径」；Kimi Code 的地址跟着接口的路径走，换的是站点。
+ */
+describe("API endpoint plan windows", () => {
+  let daemon: TestPaseoDaemon;
+  let client: DaemonClient;
+  let origin: string;
+  let clock = NOW;
+  const requests: { url: string; headers: IncomingHttpHeaders }[] = [];
+  const replies = new Map<string, Reply>();
+
+  function pathOf(vendor: BalanceVendorId): string {
+    return `/${vendor}${new URL(BALANCE_VENDOR_URLS[vendor]).pathname}`.replace(/\/$/, "");
+  }
+
+  beforeEach(async () => {
+    requests.length = 0;
+    replies.clear();
+    clock = NOW;
+    origin = await startVendorSite((request, response) => {
+      const url = request.url ?? "";
+      requests.push({ url, headers: request.headers });
+      const reply = replies.get(url);
+      if (reply) reply(response);
+      else sendJson(response, 404, { error: { message: `no fake reply for ${url}` } });
+    });
+    const vendors = Object.keys(BALANCE_VENDOR_URLS) as BalanceVendorId[];
+    const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-plan-"));
+    tempRoots.push(root);
+    daemon = await createTestPaseoDaemon({
+      daemonVersion: VERSION,
+      apiEndpoints: {
+        env: { CLAUDE_CONFIG_DIR: path.join(root, "claude"), CODEX_HOME: path.join(root, "codex") },
+        homeDir: root,
+        now: () => new Date(clock),
+        balanceUrls: Object.fromEntries(
+          vendors.map((vendor) => [vendor, `${origin}${pathOf(vendor)}`]),
+        ),
+      },
+    });
+    client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.17.0" });
+    await client.connect();
+    await client.fetchAgents({ subscribe: {} });
+  });
+
+  afterEach(async () => {
+    await client?.close();
+    await daemon?.close();
+    await Promise.all(servers.splice(0).map(closeServer));
+    await Promise.all(
+      tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
+    );
+  });
+
+  async function saveAt(baseUrl: string, headers?: Record<string, string>): Promise<string> {
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: `Plan ${baseUrl}`,
+      baseUrl,
+      apiKey: KEY,
+      ...(headers === undefined ? {} : { headers }),
+      models: [{ id: "some-model" }],
+      defaultModelId: "some-model",
+    });
+    expect(saved.error).toBeNull();
+    if (!saved.endpoint) throw new Error("Expected a saved endpoint");
+    return saved.endpoint.id;
+  }
+
+  async function read(endpointId: string, options: { force?: boolean } = {}) {
+    const answer = await client.apiEndpointReadBalance({ endpointIds: [endpointId], ...options });
+    expect(answer.error).toBeNull();
+    return answer.readings[0]!;
+  }
+
+  async function readAt(baseUrl: string, headers?: Record<string, string>) {
+    return read(await saveAt(baseUrl, headers));
+  }
+
+  const GLM_QUOTA = {
+    code: 200,
+    success: true,
+    data: {
+      level: "pro",
+      limits: [
+        {
+          type: "TOKENS_LIMIT",
+          unit: 3,
+          number: 5,
+          percentage: 12,
+          nextResetTime: Date.parse("2026-10-22T10:00:00.000Z"),
+        },
+        {
+          type: "TOKENS_LIMIT",
+          unit: 6,
+          number: 1,
+          percentage: 40,
+          nextResetTime: Date.parse("2026-10-27T00:00:00.000Z"),
+        },
+        {
+          type: "TIME_LIMIT",
+          unit: 5,
+          number: 1,
+          percentage: 3,
+          nextResetTime: Date.parse("2026-11-01T00:00:00.000Z"),
+        },
+      ],
+    },
+  };
+
+  test("a GLM Coding Plan key shows its 5-hour and 7-day windows, the MCP month aside, asked with the bare key and no headers of the endpoint's", async () => {
+    replies.set(pathOf("glm_cn"), (response) => sendJson(response, 200, GLM_QUOTA));
+    const reading = await readAt("https://open.bigmodel.cn/api/coding/paas/v4", {
+      "X-Custom": "endpoint-only",
+    });
+    expect(reading.status).toBe("ok");
+    expect(reading.items).toEqual([]);
+    expect(reading.readAt).toBe(new Date(NOW).toISOString());
+    expect(reading.windows).toEqual([
+      {
+        id: "5h",
+        label: "5 hours",
+        usedPct: 12,
+        remainingPct: 88,
+        resetsAt: "2026-10-22T10:00:00.000Z",
+        // 5 小时窗口过了 3 小时（60%），用了 12%。
+        startsAt: "2026-10-22T05:00:00.000Z",
+        pacePct: expect.closeTo(-48, 6),
+      },
+      {
+        id: "7d",
+        label: "7 days",
+        usedPct: 40,
+        remainingPct: 60,
+        resetsAt: "2026-10-27T00:00:00.000Z",
+        // 7 天过了 56 小时（33.33%）。
+        startsAt: "2026-10-20T00:00:00.000Z",
+        pacePct: expect.closeTo(6.6667, 3),
+      },
+      {
+        id: "mcp_month",
+        label: "MCP · Month",
+        usedPct: 3,
+        remainingPct: 97,
+        resetsAt: "2026-11-01T00:00:00.000Z",
+        // 月窗口从 10-01 起：744 小时过了 512 小时。
+        startsAt: "2026-10-01T00:00:00.000Z",
+        pacePct: expect.closeTo(3 - (512 / 744) * 100, 3),
+        aside: true,
+      },
+    ]);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.url).toBe(pathOf("glm_cn"));
+    const headers = requests[0]!.headers;
+    expect(headers.authorization).toBe(KEY);
+    expect(headers.accept).toBe("application/json");
+    expect(headers["accept-language"]).toBe("en-US,en");
+    expect(headers["user-agent"]).toBe(`Osuna/${VERSION}`);
+    expect(headers["x-custom"]).toBeUndefined();
+  });
+
+  test("Z.ai's GLM Coding Plan is asked at api.z.ai", async () => {
+    replies.set(pathOf("glm_z"), (response) => sendJson(response, 200, GLM_QUOTA));
+    const reading = await readAt("https://api.z.ai/api/coding/paas/v4");
+    expect(reading.windows?.map((window) => window.id)).toEqual(["5h", "7d", "mcp_month"]);
+    expect(requests[0]?.url).toBe(pathOf("glm_z"));
+  });
+
+  test("a GLM key refused (401, or a 1000–1005 code) says to paste a current one, and where", async () => {
+    replies.set(pathOf("glm_cn"), (response) =>
+      sendJson(response, 401, { error: { code: "1000", message: `bad key ${KEY}` } }),
+    );
+    const refused = await readAt("https://open.bigmodel.cn/api/coding/paas/v4");
+    expect(refused.status).toBe("failed");
+    expect(refused.failure).toEqual({
+      reason: "token_rejected",
+      detail: expect.stringContaining("bad key"),
+      status: 401,
+      hint: "glm_key_refused",
+      seeAt: "https://open.bigmodel.cn/usercenter/proj-mgmt/apikeys",
+    });
+    expect(refused.failure?.detail).not.toContain(KEY);
+
+    replies.set(pathOf("glm_z"), (response) =>
+      sendJson(response, 200, { code: 1001, msg: "Token expired", success: false }),
+    );
+    const expired = await readAt("https://api.z.ai/api/coding/paas/v4");
+    expect(expired.failure).toEqual({
+      reason: "token_rejected",
+      detail: "Token expired",
+      status: 200,
+      hint: "glm_key_refused",
+      seeAt: "https://z.ai/manage-apikey/apikey-list",
+    });
+  });
+
+  test("a pay-as-you-go GLM key, not on the coding path, shows nothing when the plan cannot be read", async () => {
+    replies.set(pathOf("glm_cn"), (response) =>
+      sendJson(response, 200, { code: 500, msg: "no plan", success: false }),
+    );
+    const reading = await readAt("https://open.bigmodel.cn/api/anthropic");
+    expect(reading.status).toBe("unsupported");
+    expect(requests).toHaveLength(1);
+  });
+
+  test("Kimi Code shows each limit window and the week, asked at the endpoint's own coding path with a Bearer", async () => {
+    const usages = "/kimi_code_com/coding/v1/usages";
+    replies.set(usages, (response) =>
+      sendJson(response, 200, {
+        usage: { limit: "100", used: "12", resetTime: "2026-10-27T00:00:00Z" },
+        limits: [
+          {
+            window: { duration: 300, timeUnit: "TIME_UNIT_MINUTE" },
+            detail: { limit: "100", remaining: "88", resetTime: "2026-10-22T10:00:00.44Z" },
+          },
+        ],
+      }),
+    );
+    const reading = await readAt("https://api.kimi.com/coding");
+    expect(reading.status).toBe("ok");
+    expect(reading.windows).toEqual([
+      {
+        id: "5h",
+        label: "5 hours",
+        usedPct: 12,
+        remainingPct: 88,
+        resetsAt: "2026-10-22T10:00:00.440Z",
+        // 重置时间带 0.44 秒：起点也晚 0.44 秒。
+        startsAt: "2026-10-22T05:00:00.440Z",
+        pacePct: expect.closeTo(-48, 2),
+      },
+      {
+        id: "7d",
+        label: "7 days",
+        usedPct: 12,
+        remainingPct: 88,
+        resetsAt: "2026-10-27T00:00:00.000Z",
+        startsAt: "2026-10-20T00:00:00.000Z",
+        pacePct: expect.closeTo(12 - (56 / 168) * 100, 3),
+      },
+    ]);
+    expect(requests[0]?.url).toBe(usages);
+    expect(requests[0]?.headers.authorization).toBe(`Bearer ${KEY}`);
+    expect(requests[0]?.headers["accept-language"]).toBe("en-US,en");
+  });
+
+  test("MiniMax shows each bucket's interval and week; another bucket is aside, a used-up window full, an unlimited one left out", async () => {
+    const at = (iso: string) => Date.parse(iso);
+    replies.set(pathOf("minimax_cn"), (response) =>
+      sendJson(response, 200, {
+        model_remains: [
+          {
+            model_name: "general",
+            start_time: at("2026-10-22T05:00:00Z"),
+            end_time: at("2026-10-22T10:00:00Z"),
+            current_interval_remaining_percent: 70,
+            current_interval_status: 1,
+            current_interval_total_count: 0,
+            weekly_start_time: at("2026-10-20T00:00:00Z"),
+            weekly_end_time: at("2026-10-27T00:00:00Z"),
+            current_weekly_remaining_percent: 90,
+            current_weekly_status: 1,
+            current_weekly_total_count: 0,
+          },
+          {
+            model_name: "video",
+            start_time: at("2026-10-22T00:00:00Z"),
+            end_time: at("2026-10-23T00:00:00Z"),
+            current_interval_remaining_percent: 80,
+            current_interval_status: 1,
+            current_interval_total_count: 5,
+            current_interval_usage_count: 1,
+            weekly_start_time: at("2026-10-20T00:00:00Z"),
+            weekly_end_time: at("2026-10-27T00:00:00Z"),
+            current_weekly_remaining_percent: 0,
+            current_weekly_status: 2,
+            current_weekly_total_count: 35,
+            current_weekly_usage_count: 35,
+          },
+          {
+            model_name: "speech",
+            current_interval_status: 3,
+            current_interval_total_count: 0,
+            current_weekly_status: 3,
+            current_weekly_total_count: 0,
+          },
+        ],
+        base_resp: { status_code: 0, status_msg: "success" },
+      }),
+    );
+    const reading = await readAt("https://api.minimaxi.com/anthropic");
+    expect(reading.status).toBe("ok");
+    expect(reading.windows).toEqual([
+      {
+        id: "5h",
+        label: "5 hours",
+        usedPct: 30,
+        remainingPct: 70,
+        resetsAt: "2026-10-22T10:00:00.000Z",
+        startsAt: "2026-10-22T05:00:00.000Z",
+        pacePct: expect.closeTo(-30, 6),
+      },
+      {
+        id: "7d",
+        label: "7 days",
+        usedPct: 10,
+        remainingPct: 90,
+        resetsAt: "2026-10-27T00:00:00.000Z",
+        startsAt: "2026-10-20T00:00:00.000Z",
+        pacePct: expect.closeTo(10 - (56 / 168) * 100, 3),
+      },
+      {
+        id: "video:24h",
+        label: "Video · 24 hours",
+        usedPct: 20,
+        remainingPct: 80,
+        resetsAt: "2026-10-23T00:00:00.000Z",
+        used: 1,
+        limit: 5,
+        unit: "videos",
+        startsAt: "2026-10-22T00:00:00.000Z",
+        pacePct: expect.closeTo(20 - (8 / 24) * 100, 3),
+        aside: true,
+      },
+      {
+        id: "video:7d",
+        label: "Video · 7 days",
+        usedPct: 100,
+        remainingPct: 0,
+        resetsAt: "2026-10-27T00:00:00.000Z",
+        used: 35,
+        limit: 35,
+        unit: "videos",
+        startsAt: "2026-10-20T00:00:00.000Z",
+        pacePct: expect.closeTo(100 - (56 / 168) * 100, 3),
+        aside: true,
+      },
+    ]);
+    expect(requests[0]?.url).toBe(pathOf("minimax_cn"));
+    expect(requests[0]?.headers.authorization).toBe(`Bearer ${KEY}`);
+  });
+
+  test("a MiniMax pay-as-you-go key, refused in base_resp, shows nothing", async () => {
+    replies.set(pathOf("minimax_io"), (response) =>
+      sendJson(response, 200, {
+        base_resp: { status_code: 1004, status_msg: "not a token plan key" },
+      }),
+    );
+    const reading = await readAt("https://api.minimax.io/anthropic");
+    expect(reading.status).toBe("unsupported");
+    expect(requests[0]?.url).toBe(pathOf("minimax_io"));
+  });
+
+  const OPENCODE_GO_USAGE = {
+    usage: {
+      rolling: { status: "ok", percent: 37, resetsAt: "2026-10-22T10:00:00.000Z" },
+      // 0% 给的重置时间是「现在加窗口长度」，什么都不会发生，丢掉。
+      weekly: { status: "ok", percent: 0, resetsAt: "2026-10-29T08:00:00.000Z" },
+      monthly: { status: "rate-limited", percent: 100, resetsAt: "2026-11-01T00:00:00.000Z" },
+    },
+  };
+
+  test.each(["https://opencode.ai/zen/go/v1", "https://opencode.ai/inference/go/v1"])(
+    "OpenCode Go at %s shows its 5-hour, week and month windows, asked with a session of its own",
+    async (baseUrl) => {
+      replies.set(pathOf("opencode_go"), (response) => sendJson(response, 200, OPENCODE_GO_USAGE));
+      const reading = await readAt(baseUrl);
+      expect(reading.status).toBe("ok");
+      expect(reading.windows).toEqual([
+        {
+          id: "5h",
+          label: "5 hours",
+          usedPct: 37,
+          remainingPct: 63,
+          resetsAt: "2026-10-22T10:00:00.000Z",
+          startsAt: "2026-10-22T05:00:00.000Z",
+          pacePct: expect.closeTo(-23, 6),
+        },
+        { id: "7d", label: "7 days", usedPct: 0, remainingPct: 100, resetsAt: null },
+        {
+          id: "month",
+          label: "Month",
+          usedPct: 100,
+          remainingPct: 0,
+          resetsAt: "2026-11-01T00:00:00.000Z",
+          startsAt: "2026-10-01T00:00:00.000Z",
+          pacePct: expect.closeTo(100 - (512 / 744) * 100, 3),
+        },
+      ]);
+      expect(requests[0]?.url).toBe(pathOf("opencode_go"));
+      expect(requests[0]?.headers.authorization).toBe(`Bearer ${KEY}`);
+      expect(requests[0]?.headers["x-opencode-session"]).toMatch(
+        /^ses_[0-9a-f]{12}[0-9A-Za-z]{14}$/,
+      );
+      expect(requests[0]?.headers["x-opencode-session-id"]).toBe(
+        requests[0]?.headers["x-opencode-session"],
+      );
+    },
+  );
+
+  test("OpenCode Go refusing the key says why: 403 is another member's key, 401 a key it doesn't take", async () => {
+    replies.set(pathOf("opencode_go"), (response) =>
+      sendJson(response, 403, { error: { message: "no subscription" } }),
+    );
+    const other = await readAt("https://opencode.ai/zen/go/v1");
+    expect(other.failure).toMatchObject({
+      reason: "token_rejected",
+      status: 403,
+      hint: "opencode_go_no_subscription",
+    });
+    replies.set(pathOf("opencode_go"), (response) =>
+      sendJson(response, 401, { error: { message: "invalid key" } }),
+    );
+    const refused = await read(await saveAt("https://opencode.ai/zen/go/v1"), { force: true });
+    expect(refused.failure).toMatchObject({
+      reason: "token_rejected",
+      status: 401,
+      detail: "invalid key",
+      hint: "opencode_key_refused",
+    });
+  });
+
+  test("a busy vendor gives the plan's last reading, its windows kept on disk", async () => {
+    replies.set(pathOf("glm_cn"), (response) => sendJson(response, 200, GLM_QUOTA));
+    const id = await saveAt("https://open.bigmodel.cn/api/coding/paas/v4");
+    await read(id);
+    const kept = await readFile(
+      path.join(daemon.paseoHome, "api-endpoints", "balance-readings.json"),
+      "utf8",
+    );
+    expect(kept).toContain("mcp_month");
+    expect(kept).not.toContain(KEY);
+    replies.set(pathOf("glm_cn"), (response) => sendJson(response, 503, { error: "busy" }));
+    const reading = await read(id, { force: true });
+    expect(reading.status).toBe("ok");
+    expect(reading.stale?.reason).toBe("temporary");
+    expect(reading.windows?.map((window) => window.id)).toEqual(["5h", "7d", "mcp_month"]);
+  });
+
+  test("a last reading's pace is reckoned when it is shown, and left out once the window has reset", async () => {
+    replies.set(pathOf("glm_cn"), (response) => sendJson(response, 200, GLM_QUOTA));
+    const id = await saveAt("https://open.bigmodel.cn/api/coding/paas/v4");
+    await read(id);
+    replies.set(pathOf("glm_cn"), (response) => sendJson(response, 503, { error: "busy" }));
+    // 一小时后：5 小时窗口过了 4 小时（80%），读数里还是用了 12%。
+    clock = NOW + 60 * 60 * 1000;
+    const later = await read(id, { force: true });
+    expect(later.stale?.reason).toBe("temporary");
+    expect(later.windows?.[0]?.pacePct).toBeCloseTo(-68, 6);
+    // 过了 10:00 的重置：这个窗口不再有配速。
+    clock = NOW + 3 * 60 * 60 * 1000;
+    const reset = await read(id, { force: true });
+    expect(reset.windows?.[0]?.id).toBe("5h");
+    expect(reset.windows?.[0]?.pacePct).toBeUndefined();
+  });
+
+  test("a MiniMax key busy before it was ever read shows nothing; once read, the last reading", async () => {
+    replies.set(pathOf("minimax_cn"), (response) => sendJson(response, 503, { error: "busy" }));
+    const id = await saveAt("https://api.minimaxi.com/anthropic");
+    expect((await read(id)).status).toBe("unsupported");
+    replies.set(pathOf("minimax_cn"), (response) =>
+      sendJson(response, 200, {
+        model_remains: [
+          {
+            model_name: "general",
+            start_time: Date.parse("2026-10-22T05:00:00Z"),
+            end_time: Date.parse("2026-10-22T10:00:00Z"),
+            current_interval_remaining_percent: 70,
+            current_interval_status: 1,
+          },
+        ],
+        base_resp: { status_code: 0, status_msg: "success" },
+      }),
+    );
+    expect((await read(id, { force: true })).windows?.map((window) => window.id)).toEqual(["5h"]);
+    replies.set(pathOf("minimax_cn"), (response) => sendJson(response, 503, { error: "busy" }));
+    const busy = await read(id, { force: true });
+    expect(busy.status).toBe("ok");
+    expect(busy.stale?.reason).toBe("temporary");
+    expect(busy.windows?.map((window) => window.id)).toEqual(["5h"]);
+  });
+
+  test("checking the balance from the form asks no plan", async () => {
+    const checked = await client.apiEndpointCheckBalance({
+      apiKey: KEY,
+      baseUrls: [
+        { format: "anthropic_messages", url: "https://open.bigmodel.cn/api/coding/paas/v4" },
+      ],
+      balance: {},
+    });
+    expect(checked.reading?.status).toBe("unsupported");
+    expect(requests).toHaveLength(0);
   });
 });
