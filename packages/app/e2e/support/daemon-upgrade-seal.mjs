@@ -44,7 +44,19 @@ const PACKAGE_MANAGERS = new Set(["npm", "pnpm", "yarn", "bun"]);
 const INSTALL_VERBS = new Set(["install", "i", "add", "update", "upgrade", "reinstall"]);
 
 // 读余额的厂商的 API 主机（packages/server/src/server/api-endpoints/balance.ts 的 BALANCE_VENDORS）。
-const SEALED_VENDOR_ORIGINS = ["https://api.deepseek.com/"];
+const SEALED_VENDOR_ORIGINS = [
+  "https://api.deepseek.com/",
+  "https://api.moonshot.cn/",
+  "https://api.moonshot.ai/",
+  "https://openrouter.ai/",
+  "https://api.siliconflow.cn/",
+  "https://api.siliconflow.com/",
+  "https://api.stepfun.com/",
+  "https://api.stepfun.ai/",
+  "https://api.commandcode.ai/",
+  "https://ollama.com/",
+  "https://aihubmix.com/",
+];
 
 const realFetch = globalThis.fetch;
 if (typeof realFetch === "function") {

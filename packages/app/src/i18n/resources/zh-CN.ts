@@ -2972,6 +2972,21 @@ export const zhCN: TranslationResources = {
           noValue: "取不到值：回复里没有余额",
           temporary: "暂时查不到：稍后再试",
         },
+        noItems: "这家现在没有单独的余额可显示",
+        openConsole: "打开控制台 ↗",
+        openConsoleLabel: "在浏览器里打开 {{url}}",
+        part: {
+          granted: "赠送",
+          toppedUp: "充值",
+        },
+        hint: {
+          opencodeNoBalance:
+            "这家不给 key 查余额，请去它的控制台看：Zen 的按量 credits 只在 OpenCode 控制台的 Overview → Credits 显示（工作区所有者与管理员可见）。",
+          siliconflowRetired:
+            "硅基流动的余额查询接口已下线，暂时没有替代接口，请去控制台看余额与代金券（国内站在「余额充值 → 代金券」）。",
+          aihubmixNoLimit:
+            "这把 key 没设上限，AiHubMix 只告诉 key 它自己还剩多少。要看账户余额，请在这家的设置里填账户令牌（AiHubMix → 设置 → 生成系统访问令牌），或在 AiHubMix 控制台给 key 设上限。",
+        },
       },
       models: {
         title: "模型",

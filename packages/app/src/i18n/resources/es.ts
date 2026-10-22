@@ -3017,6 +3017,21 @@ export const es: TranslationResources = {
           noValue: "Sin valor: la respuesta no contiene saldo",
           temporary: "No disponible temporalmente: inténtalo más tarde",
         },
+        noItems: "Este proveedor no tiene ahora un saldo aparte que mostrar",
+        openConsole: "Abrir consola ↗",
+        openConsoleLabel: "Abrir {{url}} en el navegador",
+        part: {
+          granted: "Regalado",
+          toppedUp: "Recargado",
+        },
+        hint: {
+          opencodeNoBalance:
+            "OpenCode no da el saldo a una clave de API: los créditos de pago por uso de Zen solo se muestran en la consola de OpenCode, en Overview → Credits (para los propietarios y administradores del espacio de trabajo).",
+          siliconflowRetired:
+            "SiliconFlow retiró su consulta de saldo y aún no tiene otra API. Consulta el saldo y los cupones en su consola (en el sitio de China: 余额充值 → 代金券).",
+          aihubmixNoLimit:
+            "Esta clave no tiene límite y AiHubMix solo le dice a una clave lo que le queda. Para ver el saldo de la cuenta, añade el token de acceso de la cuenta en los ajustes de este endpoint (AiHubMix → Ajustes → Generar token de acceso del sistema), o ponle un límite a la clave en la consola de AiHubMix.",
+        },
       },
       models: {
         title: "Modelos",

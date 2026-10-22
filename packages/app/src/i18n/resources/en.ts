@@ -3022,6 +3022,21 @@ export const en = {
           noValue: "No value: the reply has no balance in it",
           temporary: "Temporarily unavailable: try again later",
         },
+        noItems: "This vendor has no separate balance to show right now",
+        openConsole: "Open console ↗",
+        openConsoleLabel: "Open {{url}} in the browser",
+        part: {
+          granted: "Granted",
+          toppedUp: "Topped up",
+        },
+        hint: {
+          opencodeNoBalance:
+            "OpenCode doesn't tell an API key its balance: Zen's pay-as-you-go credits are shown only in the OpenCode console, under Overview → Credits (to the workspace's owners and admins).",
+          siliconflowRetired:
+            "SiliconFlow retired its balance query and has no API in its place yet. See the balance and vouchers on its console (on the China site: 余额充值 → 代金券).",
+          aihubmixNoLimit:
+            "This key has no limit, and AiHubMix only tells a key what is left on it. To see the account's balance, add the account's access token in this endpoint's settings (AiHubMix → Settings → Generate System Access Token), or give the key a limit in the AiHubMix console.",
+        },
       },
       models: {
         title: "Models",

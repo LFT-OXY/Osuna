@@ -2991,6 +2991,21 @@ export const ja: TranslationResources = {
           noValue: "値を取得できません：応答に残高がありません",
           temporary: "一時的に取得できません：後でもう一度お試しください",
         },
+        noItems: "このサービスには今表示できる個別の残高がありません",
+        openConsole: "コンソールを開く ↗",
+        openConsoleLabel: "{{url}} をブラウザで開く",
+        part: {
+          granted: "付与",
+          toppedUp: "チャージ",
+        },
+        hint: {
+          opencodeNoBalance:
+            "OpenCode は API キーに残高を教えません。Zen の従量課金クレジットは OpenCode コンソールの Overview → Credits にのみ表示されます（ワークスペースのオーナーと管理者のみ）。",
+          siliconflowRetired:
+            "SiliconFlow は残高照会 API を廃止し、代わりの API はまだありません。残高とクーポンはコンソールで確認してください（中国版サイトでは「余额充值 → 代金券」）。",
+          aihubmixNoLimit:
+            "このキーには上限がなく、AiHubMix はキー自身の残りしか教えません。アカウントの残高を見るには、このエンドポイントの設定にアカウントのアクセストークン（AiHubMix → 設定 → システムアクセストークンを生成）を入力するか、AiHubMix コンソールでキーに上限を設定してください。",
+        },
       },
       models: {
         title: "モデル",

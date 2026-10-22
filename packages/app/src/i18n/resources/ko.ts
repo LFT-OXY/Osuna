@@ -2975,6 +2975,21 @@ export const ko: TranslationResources = {
           noValue: "값 없음: 응답에 잔액이 없습니다",
           temporary: "일시적으로 가져올 수 없음: 잠시 후 다시 시도하세요",
         },
+        noItems: "지금 이 업체에는 따로 표시할 잔액이 없습니다",
+        openConsole: "콘솔 열기 ↗",
+        openConsoleLabel: "브라우저에서 {{url}} 열기",
+        part: {
+          granted: "증정",
+          toppedUp: "충전",
+        },
+        hint: {
+          opencodeNoBalance:
+            "OpenCode는 API 키에 잔액을 알려 주지 않습니다. Zen의 종량제 크레딧은 OpenCode 콘솔의 Overview → Credits에서만 볼 수 있습니다(워크스페이스 소유자와 관리자만).",
+          siliconflowRetired:
+            "SiliconFlow가 잔액 조회 API를 종료했고 대체 API는 아직 없습니다. 잔액과 쿠폰은 콘솔에서 확인하세요 (중국 사이트: 余额充值 → 代金券).",
+          aihubmixNoLimit:
+            "이 키에는 한도가 없고, AiHubMix는 키에 남은 금액만 알려 줍니다. 계정 잔액을 보려면 이 엔드포인트 설정에 계정 액세스 토큰(AiHubMix → 설정 → 시스템 액세스 토큰 생성)을 입력하거나, AiHubMix 콘솔에서 키에 한도를 설정하세요.",
+        },
       },
       models: {
         title: "모델",

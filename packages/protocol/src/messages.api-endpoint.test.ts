@@ -6,7 +6,10 @@ import {
   SessionInboundMessageSchema,
   SessionOutboundMessageSchema,
 } from "./messages";
-import { API_ENDPOINT_ICON_MAX_BASE64_LENGTH } from "./api-endpoint/rpc-schemas";
+import {
+  API_ENDPOINT_ICON_MAX_BASE64_LENGTH,
+  ApiEndpointBalanceReadingSchema,
+} from "./api-endpoint/rpc-schemas";
 
 // 第三方接口 RPC。老客户端不认识 features.apiEndpoints 与这组消息，解析必须照常通过。
 const ENDPOINT = {
@@ -1988,5 +1991,39 @@ describe("API endpoint balance (apiEndpointBalance)", () => {
       features: { apiEndpointManagement: true },
     });
     expect(older.features?.apiEndpointBalance).toBeUndefined();
+  });
+
+  it("parses a balance's parts and a failure's hint and console, and a reading from a daemon without them", () => {
+    const withParts = {
+      endpointId: "ep_1",
+      status: "ok",
+      items: [
+        { label: null, text: "¥110.00 · $5.00", value: 110, unit: "CNY" },
+        { label: "Granted", text: "¥10.00", value: 10, unit: "CNY", part: "granted" },
+        { label: "Topped up", text: "¥100.00", value: 100, unit: "CNY", part: "some_new_part" },
+      ],
+      readAt: "2026-10-22T08:00:00.000Z",
+      failure: null,
+    };
+    expect(ApiEndpointBalanceReadingSchema.parse(withParts)).toEqual(withParts);
+    const notOffered = {
+      endpointId: "ep_2",
+      status: "failed",
+      items: [],
+      readAt: "2026-10-22T08:00:00.000Z",
+      failure: {
+        reason: "not_offered",
+        detail: null,
+        status: null,
+        hint: "opencode_no_balance",
+        seeAt: "https://opencode.ai/console",
+      },
+    };
+    expect(ApiEndpointBalanceReadingSchema.parse(notOffered)).toEqual(notOffered);
+    const older = {
+      ...notOffered,
+      failure: { reason: "temporary", detail: null, status: 503 },
+    };
+    expect(ApiEndpointBalanceReadingSchema.parse(older)).toEqual(older);
   });
 });

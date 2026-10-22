@@ -847,7 +847,9 @@ function EndpointFacts({
     });
   }
   const balance = management.balances.get(endpoint.id);
-  if (balance && balance.status !== "unsupported") {
+  // 读到了却没有单独余额的（如 Ollama Cloud 没买过 credits）行上不出这一段。
+  const hasNothingToShow = balance?.status === "ok" && balance.items.length === 0;
+  if (balance && balance.status !== "unsupported" && !hasNothingToShow) {
     facts.push({ key: "balance", node: <BalanceFact reading={balance} /> });
   }
   return (

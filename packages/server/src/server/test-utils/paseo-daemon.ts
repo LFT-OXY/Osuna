@@ -16,6 +16,7 @@ import type { PushNotificationSender } from "../push/index.js";
 import type { AgentProfile } from "@getpaseo/protocol/messages";
 import { AGENT_PROVIDER_DEFINITIONS } from "@getpaseo/protocol/provider-manifest";
 import { FakeHostProcesses } from "./fake-host-processes.js";
+import { BALANCE_VENDOR_URLS } from "../api-endpoints/balance.js";
 
 interface TestPaseoDaemonOptions {
   daemonVersion?: string;
@@ -273,7 +274,12 @@ async function prepareTestDaemonConfig(
       },
       // 厂商余额接口一律指到本机一个没人听的端口：绝不带着 key 去问真的厂商。关心它的用例指到本机假服务。
       balanceUrls: {
-        deepseek: "http://127.0.0.1:9/deepseek/user/balance",
+        ...Object.fromEntries(
+          Object.keys(BALANCE_VENDOR_URLS).map((vendor) => [
+            vendor,
+            `http://127.0.0.1:9/${vendor}/balance`,
+          ]),
+        ),
         ...options.apiEndpoints?.balanceUrls,
       },
       // 从别的软件导入：CC Switch、Alma、OpenCode 一律读临时目录（多半不存在），绝不读开发者真实的配置；

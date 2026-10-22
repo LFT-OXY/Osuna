@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useCallback, useMemo } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
@@ -6,14 +6,20 @@ import { StyleSheet } from "react-native-unistyles";
 import { RotateCw } from "lucide-react-native";
 import {
   API_ENDPOINT_BALANCE_FAILURES,
+  API_ENDPOINT_BALANCE_HINTS,
+  API_ENDPOINT_BALANCE_PARTS,
   type ApiEndpointBalanceFailure,
   type ApiEndpointBalanceFailureReason,
+  type ApiEndpointBalanceHint,
+  type ApiEndpointBalanceItem,
+  type ApiEndpointBalancePart,
   type ApiEndpointBalanceReading,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { Button } from "@/components/ui/button";
 import { Text as UiText } from "@/components/ui/text";
 import { settingsStyles } from "@/styles/settings";
+import { openExternalUrl } from "@/utils/open-external-url";
 import { relativeAgo } from "./reopen-hints-copy";
 import type { EndpointBalances } from "./use-endpoint-balances";
 
@@ -23,6 +29,17 @@ const FAILURE_KEYS: Record<ApiEndpointBalanceFailureReason, string> = {
   not_offered: "settings.apiEndpoints.balance.failure.notOffered",
   no_value: "settings.apiEndpoints.balance.failure.noValue",
   temporary: "settings.apiEndpoints.balance.failure.temporary",
+};
+
+const HINT_KEYS: Record<ApiEndpointBalanceHint, string> = {
+  opencode_no_balance: "settings.apiEndpoints.balance.hint.opencodeNoBalance",
+  siliconflow_retired: "settings.apiEndpoints.balance.hint.siliconflowRetired",
+  aihubmix_no_limit: "settings.apiEndpoints.balance.hint.aihubmixNoLimit",
+};
+
+const PART_KEYS: Record<ApiEndpointBalancePart, string> = {
+  granted: "settings.apiEndpoints.balance.part.granted",
+  topped_up: "settings.apiEndpoints.balance.part.toppedUp",
 };
 
 /**
@@ -118,7 +135,9 @@ function BalanceBody({
     return (
       <FailureRows
         title={t("settings.apiEndpoints.balance.readFailed")}
+        hint={null}
         detail={balances.message}
+        seeAt={null}
         testID="api-endpoint-balance-failure"
       />
     );
@@ -129,12 +148,23 @@ function BalanceBody({
       : t("settings.apiEndpoints.balance.noKey");
     return <Notice text={text} testID="api-endpoint-balance-unsupported" />;
   }
-  if (reading.status !== "ok" || reading.items.length === 0) {
+  if (reading.status !== "ok") {
     return (
       <FailureRows
         title={failureTitle({ t, failure: reading.failure })}
+        hint={hintOf({ t, failure: reading.failure })}
         detail={reading.failure?.detail ?? null}
+        seeAt={reading.failure?.seeAt ?? null}
         testID="api-endpoint-balance-failure"
+      />
+    );
+  }
+  if (reading.items.length === 0) {
+    // 读到了，但这家现在没有单独的余额（如 Ollama Cloud 没买过 credits）。
+    return (
+      <Notice
+        text={t("settings.apiEndpoints.balance.noItems")}
+        testID="api-endpoint-balance-no-items"
       />
     );
   }
@@ -146,8 +176,9 @@ function BalanceBody({
           style={[settingsStyles.row, index > 0 && settingsStyles.rowBorder]}
           testID="api-endpoint-balance-item"
         >
-          <Text style={settingsStyles.rowTitle}>
-            {item.label ?? t("settings.apiEndpoints.balance.balance")}
+          {/* 赠送 / 充值是上面总额的组成，标题放轻。 */}
+          <Text style={[settingsStyles.rowTitle, item.part ? styles.partTitle : null]}>
+            {itemLabel({ t, item })}
           </Text>
           <Text style={[settingsStyles.rowValue, styles.amount]} selectable>
             {item.text}
@@ -168,21 +199,34 @@ function Notice({ text, testID }: { text: string; testID: string }) {
   );
 }
 
-/** 原因一行，对方的原话可能很长，另起一行。 */
+/** 原因一行，具体提示、对方的原话（可能很长）各另起一行，有控制台时末尾给链接。 */
 function FailureRows({
   title,
+  hint,
   detail,
+  seeAt,
   testID,
 }: {
   title: string;
+  hint: string | null;
   detail: string | null;
+  seeAt: string | null;
   testID: string;
 }) {
+  const { t } = useTranslation();
+  const handleOpen = useCallback(() => {
+    if (seeAt) void openExternalUrl(seeAt);
+  }, [seeAt]);
   return (
     <View style={[settingsStyles.row, styles.failure]} testID={testID}>
       <UiText variant="caption" color="statusWarning" testID={`${testID}-reason`}>
         {title}
       </UiText>
+      {hint ? (
+        <UiText variant="caption" color="foregroundMuted" testID={`${testID}-hint`}>
+          {hint}
+        </UiText>
+      ) : null}
       {detail ? (
         <UiText
           variant="caption"
@@ -194,8 +238,32 @@ function FailureRows({
           {detail}
         </UiText>
       ) : null}
+      {seeAt ? (
+        <Button
+          variant="outline"
+          size="xs"
+          onPress={handleOpen}
+          accessibilityRole="link"
+          accessibilityLabel={t("settings.apiEndpoints.balance.openConsoleLabel", { url: seeAt })}
+          testID={`${testID}-console`}
+        >
+          {t("settings.apiEndpoints.balance.openConsole")}
+        </Button>
+      ) : null}
     </View>
   );
+}
+
+/** 赠送 / 充值按界面语言写；daemon 以后多出的部分写它给的 label，余额本身写「余额」。 */
+function itemLabel(input: { t: TFunction; item: ApiEndpointBalanceItem }): string {
+  const part = API_ENDPOINT_BALANCE_PARTS.find((candidate) => candidate === input.item.part);
+  if (part) return input.t(PART_KEYS[part]);
+  return input.item.label ?? input.t("settings.apiEndpoints.balance.balance");
+}
+
+function hintOf(input: { t: TFunction; failure: ApiEndpointBalanceFailure | null }): string | null {
+  const hint = API_ENDPOINT_BALANCE_HINTS.find((candidate) => candidate === input.failure?.hint);
+  return hint ? input.t(HINT_KEYS[hint]) : null;
 }
 
 function failureTitle(input: { t: TFunction; failure: ApiEndpointBalanceFailure | null }): string {
@@ -219,6 +287,9 @@ const styles = StyleSheet.create((theme) => ({
   amount: {
     color: theme.colors.foreground,
     fontWeight: theme.fontWeight.medium,
+  },
+  partTitle: {
+    color: theme.colors.foregroundMuted,
   },
   failure: {
     flexDirection: "column",

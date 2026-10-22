@@ -6602,4 +6602,50 @@ test.describe("Balance", () => {
       balanceSection(page).getByTestId("api-endpoint-balance-failure-reason"),
     ).toHaveText("Temporarily unavailable: try again later");
   });
+  test("DeepSeek lists each currency and splits the granted from the topped up; OpenCode Zen says to read its console", async ({
+    page,
+  }) => {
+    await deepseekAnswers(200, {
+      is_available: true,
+      balance_infos: [
+        {
+          currency: "USD",
+          total_balance: "5.00",
+          granted_balance: "0.00",
+          topped_up_balance: "5.00",
+        },
+        {
+          currency: "CNY",
+          total_balance: "110.00",
+          granted_balance: "10.00",
+          topped_up_balance: "100.00",
+        },
+      ],
+    });
+    const deepseek = await seedDeepSeek("DeepSeek");
+    const zen = await seedApiEndpoint(client, {
+      name: "OpenCode Zen",
+      baseUrls: [{ format: "openai_chat", url: "https://opencode.ai/zen/v1" }],
+      models: ["kimi-k2"],
+    });
+
+    await openEndpointDetail(page, deepseek);
+    const items = balanceSection(page).getByTestId("api-endpoint-balance-item");
+    await expect(items).toHaveCount(3);
+    await expect(items.nth(0)).toHaveText(/Balance.*¥110\.00 · \$5\.00/);
+    await expect(items.nth(1)).toHaveText(/Granted.*¥10\.00/);
+    await expect(items.nth(2)).toHaveText(/Topped up.*¥100\.00/);
+
+    await openEndpointDetail(page, zen);
+    const failure = balanceSection(page).getByTestId("api-endpoint-balance-failure");
+    await expect(failure.getByTestId("api-endpoint-balance-failure-reason")).toHaveText(
+      "This vendor doesn't offer a balance query",
+    );
+    await expect(failure.getByTestId("api-endpoint-balance-failure-hint")).toContainText(
+      "Overview → Credits",
+    );
+    await expect(failure.getByTestId("api-endpoint-balance-failure-console")).toHaveText(
+      "Open console ↗",
+    );
+  });
 });

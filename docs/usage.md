@@ -206,9 +206,20 @@ by the host of the endpoint's base URLs (Chat Completions first, then Responses,
 then Anthropic), never by its template. An endpoint on a host the daemon doesn't
 know, or with no key, sends nothing.
 
-| Vendor   | Host               | Request                                     |
-| -------- | ------------------ | ------------------------------------------- |
-| DeepSeek | `api.deepseek.com` | `GET https://api.deepseek.com/user/balance` |
+| Vendor       | Host                                         | Request                                                   |
+| ------------ | -------------------------------------------- | --------------------------------------------------------- |
+| DeepSeek     | `api.deepseek.com`                           | `GET https://api.deepseek.com/user/balance`               |
+| Kimi         | `api.moonshot.cn` / `api.moonshot.ai`        | `GET https://api.moonshot.cn/v1/users/me/balance` (`.ai`) |
+| OpenRouter   | `openrouter.ai`                              | `GET https://openrouter.ai/api/v1/credits`                |
+| SiliconFlow  | `api.siliconflow.cn` / `api.siliconflow.com` | `GET https://api.siliconflow.cn/v1/user/info` (`.com`)    |
+| StepFun      | `api.stepfun.com` / `api.stepfun.ai`         | `GET https://api.stepfun.com/v1/accounts` (`.ai`)         |
+| Command Code | `api.commandcode.ai`                         | `GET https://api.commandcode.ai/alpha/billing/credits`    |
+| Ollama Cloud | `ollama.com`                                 | `GET https://ollama.com/api/balance`                      |
+| AiHubMix     | `aihubmix.com`                               | `GET https://aihubmix.com/dashboard/billing/remain`       |
+
+An endpoint on OpenCode Zen (`opencode.ai/zen` or `opencode.ai/inference`, not
+Go's `/go` or a `/custom` provider) sends nothing either: OpenCode tells no key
+its balance, so its section says to read it on the OpenCode console.
 
 It carries the key as `Authorization: Bearer`, `Accept: application/json`,
 `User-Agent: Osuna/<version>` and the endpoint's own **Headers**, which can

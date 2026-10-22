@@ -1325,6 +1325,18 @@ export const API_ENDPOINT_BALANCE_FAILURES = [
   "temporary",
 ] as const;
 export type ApiEndpointBalanceFailureReason = (typeof API_ENDPOINT_BALANCE_FAILURES)[number];
+/**
+ * 失败附带的具体提示：opencode_no_balance（OpenCode 不给 key 查 Zen 的余额）、siliconflow_retired（硅基流动的
+ * 余额接口已下线）、aihubmix_no_limit（AiHubMix 的 key 没设上限，要填账户令牌）。
+ */
+export const API_ENDPOINT_BALANCE_HINTS = [
+  "opencode_no_balance",
+  "siliconflow_retired",
+  "aihubmix_no_limit",
+] as const;
+export type ApiEndpointBalanceHint = (typeof API_ENDPOINT_BALANCE_HINTS)[number];
+export const API_ENDPOINT_BALANCE_PARTS = ["granted", "topped_up"] as const;
+export type ApiEndpointBalancePart = (typeof API_ENDPOINT_BALANCE_PARTS)[number];
 
 export const ApiEndpointBalanceItemSchema = z.object({
   // 这一项叫什么；null 是余额本身（界面写「余额」）。
@@ -1336,6 +1348,8 @@ export const ApiEndpointBalanceItemSchema = z.object({
   unit: z.string().nullable(),
   // 0–1 的比例，带进度条的项才有。
   ratio: z.number().nullable().optional(),
+  // 余额由哪部分组成（照 magpie BalancePart）：granted 赠送、topped_up 充值；界面按它翻译，认不得的写 label。
+  part: z.string().nullable().optional(),
 });
 export type ApiEndpointBalanceItem = z.infer<typeof ApiEndpointBalanceItemSchema>;
 
@@ -1345,6 +1359,10 @@ export const ApiEndpointBalanceFailureSchema = z.object({
   detail: z.string().nullable(),
   // 对方回的 HTTP 状态；没回（网络错误、超时）为 null。
   status: z.number().nullable(),
+  // magpie 的具体提示，界面按它翻译成一句（API_ENDPOINT_BALANCE_HINTS）；认不得的不显示。
+  hint: z.string().nullable().optional(),
+  // 余额该去哪看（厂商的控制台）。
+  seeAt: z.string().nullable().optional(),
 });
 export type ApiEndpointBalanceFailure = z.infer<typeof ApiEndpointBalanceFailureSchema>;
 

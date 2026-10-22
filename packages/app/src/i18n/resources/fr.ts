@@ -3027,6 +3027,21 @@ export const fr: TranslationResources = {
           noValue: "Aucune valeur : la réponse ne contient pas de solde",
           temporary: "Indisponible pour le moment : réessayez plus tard",
         },
+        noItems: "Ce fournisseur n'a pas de solde distinct à afficher pour le moment",
+        openConsole: "Ouvrir la console ↗",
+        openConsoleLabel: "Ouvrir {{url}} dans le navigateur",
+        part: {
+          granted: "Offert",
+          toppedUp: "Rechargé",
+        },
+        hint: {
+          opencodeNoBalance:
+            "OpenCode ne donne pas le solde à une clé d'API : les crédits à l'usage de Zen ne s'affichent que dans la console OpenCode, sous Overview → Credits (pour les propriétaires et administrateurs de l'espace de travail).",
+          siliconflowRetired:
+            "SiliconFlow a retiré sa requête de solde et n'a pas encore d'API pour la remplacer. Consultez le solde et les bons sur sa console (sur le site chinois : 余额充值 → 代金券).",
+          aihubmixNoLimit:
+            "Cette clé n'a pas de limite, et AiHubMix ne dit à une clé que ce qui lui reste. Pour voir le solde du compte, ajoutez le jeton d'accès du compte dans les réglages de ce point d'accès (AiHubMix → Paramètres → Générer un jeton d'accès système), ou donnez une limite à la clé dans la console AiHubMix.",
+        },
       },
       models: {
         title: "Modèles",
