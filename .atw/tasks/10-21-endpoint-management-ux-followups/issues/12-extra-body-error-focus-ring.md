@@ -4,10 +4,10 @@
 
 **Blocked by:** None — can start immediately
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
-- [ ] UI: 编辑窗口 / 附加请求体有保留字段且在输入 / 桌面 1280 与窄窗口 390 — 只看到一种状态的边框，错误一眼可辨。
-- [ ] 英文浅色、英文深色、中文浅色三版截图，用无头浏览器在临时目录里拍。
-- [ ] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
+- [x] UI: 编辑窗口 / 附加请求体有保留字段且在输入 / 桌面 1280 与窄窗口 390 — 只看到一种状态的边框，错误一眼可辨。
+- [x] 英文浅色、英文深色、中文浅色三版截图，用无头浏览器在临时目录里拍。
+- [x] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
 
 参考：工单 08 视觉评审第 4 条，`screenshots/08-edit-dialog-headers-*.png`。
