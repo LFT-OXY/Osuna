@@ -713,6 +713,10 @@ type ApiEndpointReadBalancePayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.read_balance.response" }
 >["payload"];
+type ApiEndpointCheckBalancePayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.check_balance.response" }
+>["payload"];
 type ApiEndpointSetBalanceAutoRefreshPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.set_balance_auto_refresh.response" }
@@ -6692,6 +6696,23 @@ export class DaemonClient {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId,
       message: { type: "provider.api_endpoint.read_balance.request", ...options },
+    });
+  }
+
+  /**
+   * 编辑窗口的「查询余额」：用表单里还没保存的余额设置、key、地址与请求头当场查一次，不进缓存与上次读数。
+   * 可以用 apiEndpointCancel 按 requestId 取消。只有声明了 apiEndpointBalance 的 daemon 认。
+   */
+  async apiEndpointCheckBalance(
+    options: Omit<
+      Extract<SessionInboundMessage, { type: "provider.api_endpoint.check_balance.request" }>,
+      "type" | "requestId"
+    >,
+    requestId?: string,
+  ): Promise<ApiEndpointCheckBalancePayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.check_balance.request", ...options },
     });
   }
 

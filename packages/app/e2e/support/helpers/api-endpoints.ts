@@ -75,6 +75,7 @@ function send(response: ServerResponse, status: number, body: unknown) {
  * - /broke：Anthropic 对话回 402 欠费（中转站让它冷却 30 分钟）。
  * - /reject：Anthropic 对话回 401（中转站把它标成需要检查）。
  * - /free：像不要 key 的本机服务，谁来都答，其余同 /good。
+ * - /balance/usage：余额查询地址，回 {"data":{"left":7.5}}（key 不对时照样 401）。
  * - /azure：像 Azure OpenAI 的资源，key 只认 api-key 头；/azure/openai/deployments 列出 AZURE_DEPLOYMENTS。
  * - 测试模型用：/good 上对话请求问 bad-* 回 404（模型不存在），问 slow-* 什么都不回；cc-only-* 只答 User-Agent 是
  *   Claude Code 的，codex-only-* 只答 originator 是 Codex 的（照只放行某 CLI 的分组），别的回 403。
@@ -136,6 +137,11 @@ export async function startFakeRelay(): Promise<FakeRelay> {
       }
       if (url === "/broke/v1/messages") {
         send(response, 402, { error: { message: "insufficient balance" } });
+        return;
+      }
+      if (url === "/balance/usage") {
+        // 余额查询地址（工单 05）：key 级余额，取值写法 $data.left。
+        send(response, 200, { data: { left: 7.5 } });
         return;
       }
       if (url === "/reject/v1/messages") {

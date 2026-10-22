@@ -884,3 +884,378 @@ describe("when the API endpoint balance is read", () => {
     expect(deepseek.requests).toHaveLength(0);
   });
 });
+
+/*
+ * 自定义余额（工单 05）：填了余额查询地址就按它查，取值写法照 magpie；「查询余额」用表单里还没保存的值当场查。
+ * 本机假中转服务按路径回话，记下每次收到的方法、地址、请求头与正文。
+ */
+describe("API endpoint balance at an address the user gave", () => {
+  const RELAY_KEY = "sk-relay key+/=";
+  let daemon: TestPaseoDaemon;
+  let client: DaemonClient;
+  let deepseek: FakeDeepSeek;
+  let relay: {
+    origin: string;
+    requests: {
+      method: string;
+      url: string;
+      headers: IncomingHttpHeaders;
+      body: string;
+    }[];
+    replies: Record<string, Reply>;
+  };
+  let clock = NOW;
+
+  async function startRelay() {
+    const fake: typeof relay = { origin: "", requests: [], replies: {} };
+    const server = createServer((request, response) => {
+      let body = "";
+      request.on("data", (chunk) => {
+        body += String(chunk);
+      });
+      request.on("end", () => {
+        const url = request.url ?? "";
+        fake.requests.push({ method: request.method ?? "", url, headers: request.headers, body });
+        const reply = fake.replies[url.split("?")[0] ?? ""];
+        if (reply) reply(response);
+        else sendJson(response, 404, { error: "not here" });
+      });
+    });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    fake.origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    return fake;
+  }
+
+  beforeEach(async () => {
+    clock = NOW;
+    const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-balance-custom-"));
+    tempRoots.push(root);
+    deepseek = await startDeepSeek();
+    relay = await startRelay();
+    daemon = await createTestPaseoDaemon({
+      daemonVersion: VERSION,
+      apiEndpoints: {
+        env: { CLAUDE_CONFIG_DIR: path.join(root, "claude"), CODEX_HOME: path.join(root, "codex") },
+        homeDir: root,
+        now: () => new Date(clock),
+        balanceUrls: { deepseek: deepseek.balanceUrl },
+      },
+    });
+    client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.17.0" });
+    await client.connect();
+    await client.fetchAgents({ subscribe: {} });
+  });
+
+  afterEach(async () => {
+    await client?.close();
+    await daemon?.close();
+    await Promise.all(servers.splice(0).map(closeServer));
+    await Promise.all(tempRoots.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  });
+
+  async function saveRelay(input: {
+    balance?: { url?: string; method?: string; field?: string };
+    headers?: Record<string, string>;
+    baseUrl?: string;
+    endpointId?: string;
+  }) {
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      ...(input.endpointId === undefined ? {} : { endpointId: input.endpointId }),
+      name: "Relay",
+      baseUrls: [
+        // 聊天地址指到本机没人听的端口：保存后拉模型清单不打到假中转服务上。
+        { format: "anthropic_messages", url: input.baseUrl ?? "http://127.0.0.1:1/anthropic" },
+      ],
+      apiKey: RELAY_KEY,
+      models: [{ id: "claude-sonnet" }],
+      ...(input.balance === undefined ? {} : { balance: input.balance }),
+      ...(input.headers === undefined ? {} : { headers: input.headers }),
+    });
+    return saved;
+  }
+
+  async function savedRelayId(input: Parameters<typeof saveRelay>[0]): Promise<string> {
+    const saved = await saveRelay(input);
+    expect(saved.error).toBeNull();
+    if (!saved.endpoint) throw new Error("Expected a saved endpoint");
+    return saved.endpoint.id;
+  }
+
+  async function read(endpointId: string, options: { force?: boolean } = {}) {
+    const answer = await client.apiEndpointReadBalance({ endpointIds: [endpointId], ...options });
+    expect(answer.error).toBeNull();
+    return answer.readings[0]!;
+  }
+
+  async function listed(endpointId: string) {
+    const list = await client.apiEndpointList("claude");
+    expect(list.error).toBeNull();
+    return list.endpoints.find((endpoint) => endpoint.id === endpointId);
+  }
+
+  test("a GET to the address the user gave, with the key in its placeholders and the endpoint's headers", async () => {
+    relay.replies["/query"] = (response) => sendJson(response, 200, { data: { left: "7.5" } });
+    const id = await savedRelayId({
+      balance: { url: `${relay.origin}/query?apikey={key}`, field: "$data.left" },
+      headers: { "X-Key": "{apiKey}", "X-Plain": "kept" },
+    });
+    expect(await read(id)).toEqual({
+      endpointId: id,
+      status: "ok",
+      items: [{ label: null, text: "$7.50", value: 7.5, unit: "USD", ratio: null }],
+      readAt: new Date(NOW).toISOString(),
+      failure: null,
+    });
+    expect(relay.requests).toHaveLength(1);
+    const [sent] = relay.requests;
+    expect(sent?.method).toBe("GET");
+    expect(sent?.url).toBe("/query?apikey=sk-relay+key%2B%2F%3D");
+    expect(sent?.headers.authorization).toBe(`Bearer ${RELAY_KEY}`);
+    expect(sent?.headers.accept).toBe("application/json");
+    expect(sent?.headers["user-agent"]).toBe(`Osuna/${VERSION}`);
+    expect(sent?.headers["x-key"]).toBe(RELAY_KEY);
+    expect(sent?.headers["x-plain"]).toBe("kept");
+  });
+
+  test("a POST, as the user chose it, goes with no body", async () => {
+    relay.replies["/api/check-balance"] = (response) =>
+      sendJson(response, 200, { usd_balance: "0.94306040" });
+    const id = await savedRelayId({
+      balance: { url: `${relay.origin}/api/check-balance`, method: "post", field: "$usd_balance" },
+    });
+    expect((await listed(id))?.balance).toEqual({
+      url: `${relay.origin}/api/check-balance`,
+      method: "POST",
+      field: "$usd_balance",
+    });
+    expect((await read(id)).items[0]?.text).toBe("$0.94");
+    expect(relay.requests.map(({ method, body }) => `${method} ${body}`)).toEqual(["POST "]);
+  });
+
+  test("several amounts with labels, a percent with its ratio, and a dash for one the reply hasn't", async () => {
+    relay.replies["/usage"] = (response) =>
+      sendJson(response, 200, { left: 12, used: 45, cap: 50 });
+    const id = await savedRelayId({
+      balance: {
+        url: `${relay.origin}/usage`,
+        field: "Left: $left; Used: used / cap %; Today: today",
+      },
+    });
+    expect((await read(id)).items).toEqual([
+      { label: "Left", text: "$12.00", value: 12, unit: "USD", ratio: null },
+      { label: "Used", text: "90%", value: 90, unit: "%", ratio: 0.9 },
+      { label: "Today", text: "—", value: null, unit: null, ratio: null },
+    ]);
+  });
+
+  test.each([
+    [
+      "/api/usage/token",
+      { code: true, data: { total_available: 1500000, total_used: 500000 } },
+      "$3.00",
+    ],
+    ["/v1/usage", { mode: "unrestricted", remaining: 7.25, unit: "USD" }, "$7.25"],
+    [
+      "/v1/dashboard/billing/credit_grants",
+      { object: "credit_summary", total_granted: 20, total_used: 7.5, total_available: 12.5 },
+      "$12.50",
+    ],
+  ])("a known query read with its field left empty: %s", async (queryPath, reply, want) => {
+    relay.replies[queryPath] = (response) => sendJson(response, 200, reply);
+    const id = await savedRelayId({ balance: { url: `${relay.origin}${queryPath}` } });
+    expect((await read(id)).items[0]?.text).toBe(want);
+  });
+
+  test("an address with no default and no field says where to write one, as no value", async () => {
+    relay.replies["/other"] = (response) => sendJson(response, 200, { balance: 3 });
+    const id = await savedRelayId({ balance: { url: `${relay.origin}/other` } });
+    expect((await read(id)).failure).toEqual({
+      reason: "no_value",
+      detail: "no balance path: where in the reply the amount is, e.g. data.balance",
+      status: 200,
+    });
+  });
+
+  test("a field the reply hasn't is no value, saying what was missing", async () => {
+    relay.replies["/query"] = (response) => sendJson(response, 200, { data: {} });
+    const id = await savedRelayId({
+      balance: { url: `${relay.origin}/query`, field: "data.left" },
+    });
+    expect((await read(id)).failure).toEqual({
+      reason: "no_value",
+      detail: 'nothing at "data.left" in the reply',
+      status: 200,
+    });
+  });
+
+  test("an endpoint on a known vendor's host asks the address the user gave instead", async () => {
+    relay.replies["/query"] = (response) => sendJson(response, 200, { balance: 3 });
+    const id = await savedRelayId({
+      baseUrl: "https://api.deepseek.com/anthropic",
+      balance: { url: `${relay.origin}/query`, field: "balance" },
+    });
+    expect((await read(id)).items[0]?.text).toBe("3.00");
+    expect(deepseek.requests).toHaveLength(0);
+    expect(relay.requests).toHaveLength(1);
+  });
+
+  test("a reply is read up to 1 MB: one cut there is not JSON, so the address is wrong", async () => {
+    relay.replies["/query"] = (response) =>
+      sendJson(response, 200, { balance: 3, pad: "x".repeat(1 << 20) });
+    const id = await savedRelayId({ balance: { url: `${relay.origin}/query`, field: "balance" } });
+    expect((await read(id)).failure).toEqual({ reason: "wrong_url", detail: null, status: 200 });
+  });
+
+  test("a check with a method that is neither GET nor POST is refused", async () => {
+    const answer = await client.apiEndpointCheckBalance({
+      apiKey: RELAY_KEY,
+      balance: { url: `${relay.origin}/query`, method: "PUT" },
+    });
+    expect(answer.reading).toBeNull();
+    expect(answer.error?.code).toBe("invalid_balance_settings");
+    expect(relay.requests).toHaveLength(0);
+  });
+
+  test("an address that cannot be reached does not show the key put in it", async () => {
+    const id = await savedRelayId({
+      balance: { url: "http://127.0.0.1:1/q?key={key}", field: "balance" },
+    });
+    const reading = await read(id);
+    expect(reading.failure?.reason).toBe("temporary");
+    expect(JSON.stringify(reading)).not.toContain("sk-relay");
+  });
+
+  test("an old client's save keeps the balance settings, an empty address clears them, and a copy takes them", async () => {
+    const balance = { url: `${relay.origin}/query`, field: "balance" };
+    const id = await savedRelayId({ balance });
+    await savedRelayId({ endpointId: id });
+    expect((await listed(id))?.balance).toEqual(balance);
+    const copied = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Relay copy",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/anthropic` }],
+      models: [{ id: "claude-sonnet" }],
+      copyOf: id,
+    });
+    expect(copied.endpoint?.balance).toEqual(balance);
+    await savedRelayId({ endpointId: id, balance: { url: " ", field: "balance" } });
+    expect((await listed(id))?.balance).toBeUndefined();
+  });
+
+  test("a method that is neither GET nor POST is refused on save", async () => {
+    const saved = await saveRelay({ balance: { url: `${relay.origin}/query`, method: "PUT" } });
+    expect(saved.endpoint).toBeNull();
+    expect(saved.error).toMatchObject({
+      code: "invalid_balance_settings",
+      params: { field: "method" },
+    });
+  });
+
+  test("changing the balance settings drops the endpoint's last reading", async () => {
+    relay.replies["/query"] = (response) => sendJson(response, 200, { balance: 3 });
+    relay.replies["/other"] = (response) => sendJson(response, 503, { error: "busy" });
+    const id = await savedRelayId({ balance: { url: `${relay.origin}/query`, field: "balance" } });
+    await read(id);
+    await savedRelayId({
+      endpointId: id,
+      balance: { url: `${relay.origin}/other`, field: "balance" },
+    });
+    const reading = await read(id);
+    expect(reading.status).toBe("failed");
+    expect(reading.stale).toBeUndefined();
+  });
+
+  describe("checking the balance with the form's values", () => {
+    test("a new endpoint is asked with the typed key, headers and settings, nothing saved", async () => {
+      relay.replies["/query"] = (response) => sendJson(response, 200, { data: { left: 2 } });
+      const answer = await client.apiEndpointCheckBalance({
+        apiKey: RELAY_KEY,
+        baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/anthropic` }],
+        balance: { url: `${relay.origin}/query?k={token}`, method: "POST", field: "¥data.left" },
+        headers: { "X-Key": "${API_KEY}" },
+      });
+      expect(answer.error).toBeNull();
+      expect(answer.reading).toEqual({
+        endpointId: "",
+        status: "ok",
+        items: [{ label: null, text: "¥2.00", value: 2, unit: "CNY", ratio: null }],
+        readAt: new Date(NOW).toISOString(),
+        failure: null,
+      });
+      const [sent] = relay.requests;
+      expect(sent?.method).toBe("POST");
+      expect(sent?.url).toBe("/query?k=sk-relay+key%2B%2F%3D");
+      expect(sent?.headers["x-key"]).toBe(RELAY_KEY);
+      expect(sent?.headers["user-agent"]).toBe(`Osuna/${VERSION}`);
+      expect((await client.apiEndpointList("claude")).endpoints).toHaveLength(0);
+    });
+
+    test("an endpoint being edited is asked with its saved key and the unsaved settings", async () => {
+      relay.replies["/query"] = (response) => sendJson(response, 200, { balance: 1 });
+      relay.replies["/other"] = (response) => sendJson(response, 200, { left: 9 });
+      const id = await savedRelayId({
+        balance: { url: `${relay.origin}/query`, field: "balance" },
+      });
+      const answer = await client.apiEndpointCheckBalance({
+        endpointId: id,
+        balance: { url: `${relay.origin}/other`, field: "$left" },
+      });
+      expect(answer.reading?.items[0]?.text).toBe("$9.00");
+      expect(relay.requests).toHaveLength(1);
+      expect(relay.requests[0]?.url).toBe("/other");
+      expect(relay.requests[0]?.headers.authorization).toBe(`Bearer ${RELAY_KEY}`);
+      expect((await listed(id))?.balance?.url).toBe(`${relay.origin}/query`);
+    });
+
+    test("with no address, the form's base address finds a known vendor", async () => {
+      const answer = await client.apiEndpointCheckBalance({
+        apiKey: KEY,
+        baseUrls: [{ format: "anthropic_messages", url: "https://api.deepseek.com/anthropic" }],
+        balance: {},
+      });
+      expect(answer.reading?.items[0]?.text).toBe("¥110.00");
+      expect(deepseek.requests).toHaveLength(1);
+    });
+
+    test("a failed check says why, as a reading does", async () => {
+      relay.replies["/query"] = (response) =>
+        sendJson(response, 401, { error: { message: `bad key ${RELAY_KEY}` } });
+      const answer = await client.apiEndpointCheckBalance({
+        apiKey: RELAY_KEY,
+        balance: { url: `${relay.origin}/query`, field: "balance" },
+      });
+      expect(answer.error).toBeNull();
+      expect(answer.reading?.failure?.reason).toBe("token_rejected");
+      expect(answer.reading?.failure?.status).toBe(401);
+      expect(JSON.stringify(answer)).not.toContain(RELAY_KEY);
+    });
+
+    test("a check is neither kept for the minute nor taken as the last reading", async () => {
+      relay.replies["/query"] = (response) => sendJson(response, 200, { balance: 4 });
+      const id = await savedRelayId({
+        balance: { url: `${relay.origin}/query`, field: "balance" },
+      });
+      await client.apiEndpointCheckBalance({
+        endpointId: id,
+        balance: { url: `${relay.origin}/query`, field: "balance" },
+      });
+      expect(relay.requests).toHaveLength(1);
+      relay.replies["/query"] = (response) => sendJson(response, 503, { error: "busy" });
+      const reading = await read(id);
+      expect(relay.requests).toHaveLength(2);
+      expect(reading.status).toBe("failed");
+      expect(reading.stale).toBeUndefined();
+    });
+
+    test("an endpoint that is not there is refused", async () => {
+      const answer = await client.apiEndpointCheckBalance({
+        endpointId: "ep_missing",
+        balance: { url: `${relay.origin}/query` },
+      });
+      expect(answer.reading).toBeNull();
+      expect(answer.error?.code).toBe("not_found");
+    });
+  });
+});

@@ -35,6 +35,7 @@ import {
   type ApiEndpointModelFacts,
   type ApiEndpointModelSettings,
   type ApiEndpointCooldownSettings,
+  type ApiEndpointBalanceSettings,
   type ApiEndpointRef,
   type ApiEndpointRequestFormat,
   type ApiEndpointSwitchOffFile,
@@ -336,6 +337,7 @@ import { VendorStatusPages, vendorOfBaseUrls, type VendorId } from "./vendor-sta
 import {
   BALANCE_KEPT_MS,
   BALANCE_PAGE_TIMEOUT_MS,
+  BALANCE_READ_TIMEOUT_MS,
   notAskedReading,
   readEndpointBalance,
   type BalanceVendorId,
@@ -401,6 +403,7 @@ import {
 } from "./insecure-tls.js";
 import { storedRequestExtras, unsendableHeader, type RequestExtras } from "./request-extras.js";
 import { LastBalanceReadings } from "./balance-last.js";
+import { balanceMethodOf } from "@getpaseo/protocol/api-endpoint/balance-settings";
 import { endpointKnowsModel, settleModelSettings } from "./model-settings.js";
 import {
   cleanAutoPickRules,
@@ -431,6 +434,8 @@ export type ApiEndpointErrorCode =
   | "insecure_tls_template"
   // 冷却设置的分钟数不是 0 到八天的整数（params.field、max）。
   | "invalid_cooldown_settings"
+  // 余额设置的方法不是 GET、POST（params.field 为 method）。
+  | "invalid_balance_settings"
   // 导入时那一条已经不在它的软件里了（重新扫描）；替换给的不是名称撞上的那条（params.name）。
   | "import_gone"
   | "import_cannot_replace"
@@ -535,6 +540,17 @@ export interface ApiEndpointSaveInput extends ApiEndpointRequestExtrasInput {
   modelSettings?: ApiEndpointModelSettings;
   // 冷却设置，整份替换、空对象清掉；undefined 保留原来的（复制时是原来那家的）。
   cooldownSettings?: ApiEndpointCooldownSettings;
+  // 余额设置，整份替换、没有地址即清掉；undefined 保留原来的（复制时是原来那家的）。
+  balance?: ApiEndpointBalanceSettings;
+}
+
+/** 「查询余额」带的表单值：key 与地址省略即用 endpointId 那家存的。 */
+export interface ApiEndpointCheckBalanceInput extends ApiEndpointRequestExtrasInput {
+  endpointId?: string;
+  apiKey?: string;
+  baseUrls?: { format: string; url: string }[];
+  templateId?: string;
+  balance: ApiEndpointBalanceSettings;
 }
 
 export interface ApiEndpointAgentSettingsInput {
@@ -1520,6 +1536,7 @@ export class ApiEndpointService {
         catalog: input.catalog,
         requestExtras: savedRequestExtras({ request: input, base, templateId }),
         cooldownSettings: savedCooldownSettings({ requested: input.cooldownSettings, base }),
+        balance: savedBalanceSettings({ requested: input.balance, base }),
         // 新客户端建的接口默认开着；老客户端建的要等 set_active 才开，和以前「保存不启用」一样。
         enabledWhenNew: !isLegacyForm,
         timestamp: this.now().toISOString(),
@@ -3459,6 +3476,45 @@ export class ApiEndpointService {
   }
 
   /**
+   * 编辑窗口的「查询余额」：用表单里还没保存的值当场查一次（照 magpie 编辑器的 Check balance）。只读，
+   * 不进 1 分钟缓存，也不记作上次读数；key、地址与请求头等表单没给的用 endpointId 那家存的。只有取消才抛错。
+   */
+  async checkBalance(
+    input: ApiEndpointCheckBalanceInput,
+    signal: AbortSignal,
+  ): Promise<ApiEndpointBalanceReading> {
+    const apiKey = this.resolveRequestKey(input);
+    const saved = input.endpointId ? findEndpoint(this.readState(), input.endpointId) : null;
+    const formUrls = input.baseUrls?.flatMap(({ format, url }) => {
+      const known = API_ENDPOINT_REQUEST_FORMATS.find((candidate) => candidate === format);
+      return known === undefined ? [] : [{ format: known, url }];
+    });
+    const baseUrls = formUrls ?? saved?.baseUrls ?? [];
+    const extras = this.requestExtras({
+      ...input,
+      baseUrl: baseUrls[0]?.url ?? "",
+      ...(input.baseUrls === undefined ? {} : { baseUrls }),
+    });
+    // 表单的值照保存时的样子读（方法不是 GET、POST 的同样拒收），只是不存。
+    const { balance } = savedBalanceSettings({ requested: input.balance, base: null });
+    try {
+      return await readEndpointBalance({
+        endpoint: { id: input.endpointId ?? "", baseUrls, balance },
+        apiKey,
+        extras,
+        userAgent: this.userAgent,
+        now: this.now,
+        vendorUrls: this.balanceUrls,
+        signal,
+        deadline: AbortSignal.timeout(BALANCE_READ_TIMEOUT_MS),
+      });
+    } catch (error) {
+      if (!signal.aborted) throw error;
+      throw new ApiEndpointRequestError({ code: "cancelled", message: "Request cancelled" });
+    }
+  }
+
+  /**
    * 本机别的软件里的接口配置，对照已有的接口（从别的软件导入，ADR 0013）。只读；key 只给打码的。
    * includeOpenCode 为 false 时不碰 OpenCode 的 auth.json。
    */
@@ -4925,6 +4981,7 @@ export class ApiEndpointService {
       ...(endpoint.cooldownSettings !== undefined
         ? { cooldownSettings: endpoint.cooldownSettings }
         : {}),
+      ...(endpoint.balance !== undefined ? { balance: endpoint.balance } : {}),
     };
   }
 
@@ -5400,6 +5457,8 @@ function buildEndpoint(input: {
   requestExtras: StoredRequestExtras;
   // 冷却设置：savedCooldownSettings 已按请求与 base 定好，没设就没有这项。
   cooldownSettings: StoredCooldownSettings;
+  // 余额设置：savedBalanceSettings 已按请求与 base 定好，没设就没有这项。
+  balance: StoredBalanceSettings;
   enabledWhenNew: boolean;
   timestamp: string;
 }): StoredApiEndpoint {
@@ -5418,6 +5477,7 @@ function buildEndpoint(input: {
     keyHeader: _keyHeader,
     insecureTls: _insecureTls,
     cooldownSettings: _cooldownSettings,
+    balance: _balance,
     ...kept
   } = base ?? {};
   const name = existing ? fields.name : freeEndpointName(state, fields.name);
@@ -5438,6 +5498,7 @@ function buildEndpoint(input: {
     ...catalogFieldOf({ requested: input.catalog, timestamp: input.timestamp }),
     ...input.requestExtras,
     ...input.cooldownSettings,
+    ...input.balance,
     createdAt: existing?.createdAt ?? input.timestamp,
     updatedAt: input.timestamp,
   };
@@ -5482,6 +5543,39 @@ function savedRequestExtras(input: {
 }
 
 type StoredCooldownSettings = Pick<StoredApiEndpoint, "cooldownSettings">;
+
+type StoredBalanceSettings = Pick<StoredApiEndpoint, "balance">;
+
+/**
+ * 存下的余额设置：请求给了就整份换上（地址、取值写法去掉首尾空白，空的不存；GET 是缺省不存），没给留 base 的。
+ * 没有余额查询地址即清掉整项。方法不是 GET、POST 的拒收（照 magpie 命令行的 balance.method=GET|POST）。
+ */
+function savedBalanceSettings(input: {
+  requested: ApiEndpointBalanceSettings | undefined;
+  base: StoredApiEndpoint | null;
+}): StoredBalanceSettings {
+  const { requested } = input;
+  const kept = input.base?.balance;
+  if (requested === undefined) return kept !== undefined ? { balance: kept } : {};
+  const method = balanceMethodOf(requested.method);
+  if (method === null) {
+    throw new ApiEndpointRequestError({
+      code: "invalid_balance_settings",
+      message: `The balance request method is GET or POST, not ${JSON.stringify(requested.method)}`,
+      params: { field: "method" },
+    });
+  }
+  const url = requested.url?.trim() ?? "";
+  if (url === "") return {};
+  const field = requested.field?.trim() ?? "";
+  return {
+    balance: {
+      url,
+      ...(method === "POST" ? { method } : {}),
+      ...(field === "" ? {} : { field }),
+    },
+  };
+}
 
 /**
  * 存下的冷却设置：请求给了就整份换上（0 是用中转站自己的，不存；「原因不明不冷却」开着时冷却上限不存，照 magpie 的

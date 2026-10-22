@@ -2072,4 +2072,68 @@ describe("API endpoint balance (apiEndpointBalance)", () => {
     };
     expect(ApiEndpointBalanceReadingSchema.parse(older)).toEqual(older);
   });
+
+  it("parses an endpoint and a save carrying balance settings, a save that clears them, and older ones without", () => {
+    const balance = {
+      url: "https://relay.example/query?key={key}",
+      method: "POST",
+      field: "$data.left",
+    };
+    const save = {
+      type: "provider.api_endpoint.save.request" as const,
+      requestId: "req-b1",
+      provider: "claude",
+      endpointId: "ep_1",
+      name: "Relay",
+      baseUrls: [{ format: "anthropic_messages", url: "https://relay.example" }],
+      models: [],
+      balance,
+    };
+    expect(SessionInboundMessageSchema.parse(save)).toEqual(save);
+    const cleared = { ...save, balance: {} };
+    expect(SessionInboundMessageSchema.parse(cleared)).toEqual(cleared);
+    const { balance: _balance, ...older } = save;
+    expect(SessionInboundMessageSchema.parse(older)).toEqual(older);
+    for (const endpoint of [{ ...ENDPOINT, balance: { url: balance.url } }, ENDPOINT]) {
+      const response = {
+        type: "provider.api_endpoint.save.response" as const,
+        payload: { requestId: "req-b1", endpoint, error: null },
+      };
+      expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+    }
+  });
+
+  it("parses check_balance with the form's values, its reading and its rejection", () => {
+    const request = {
+      type: "provider.api_endpoint.check_balance.request" as const,
+      requestId: "req-cb",
+      endpointId: "ep_1",
+      apiKey: "sk-typed",
+      baseUrls: [{ format: "openai_chat", url: "https://relay.example/v1" }],
+      balance: { url: "https://relay.example/api/usage/token", method: "GET" },
+      headers: { "X-Key": "{key}" },
+      insecureTls: true,
+    };
+    expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+    const bare = {
+      type: "provider.api_endpoint.check_balance.request" as const,
+      requestId: "req-cb2",
+      balance: {},
+    };
+    expect(SessionInboundMessageSchema.parse(bare)).toEqual(bare);
+    const reading = {
+      endpointId: "ep_1",
+      status: "ok",
+      items: [{ label: "Used", text: "90%", value: 90, unit: "%", ratio: 0.9 }],
+      readAt: "2026-10-22T08:00:00.000Z",
+      failure: null,
+    };
+    for (const payload of [
+      { requestId: "req-cb", reading, error: null },
+      { requestId: "req-cb", reading: null, error: { code: "not_found", message: "gone" } },
+    ]) {
+      const response = { type: "provider.api_endpoint.check_balance.response" as const, payload };
+      expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+    }
+  });
 });

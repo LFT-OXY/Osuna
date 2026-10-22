@@ -2754,6 +2754,16 @@ export const zhCN: TranslationResources = {
         apiKeyOptionalLabel: "API key（选填）",
         apiKeyLocalPlaceholder: "本机服务可以不填",
         keyRejected: "上游拒绝了这把 key（401 / 403）",
+        balance: {
+          url: "余额查询地址",
+          urlInfo:
+            "厂商告诉这把 key 还剩多少的地址，用 GET 或不带正文的 POST 查。和聊天请求一样带上 key（Bearer）与这家的请求头；地址或请求头里的 {key} 会换成 key。填了就按这个地址查，不再按 Osuna 认得的厂商查。只在接口页面开着时查，每分钟最多一次。",
+          field: "取值写法",
+          fieldInfo:
+            "余额在回复里的位置，如 data.balance。可以用 + - * / 和括号计算，如 data.total / 500000。前面加「$」「¥」带上符号；后面加「%」显示成百分比并带进度条。几项用「;」分开，每项可加标签，如 5h: a.used / a.cap %; $credits.left。列表的每一项写 a.*.used，只要符合条件的写 a[status=active].used，放进 sum()、max()、min() 或 count()。不填时，new-api、sub2api 与 credit grants 的地址按占位里的写法取。",
+          check: "查询余额",
+          nothingToAsk: "没填余额查询地址，也没认出这家的余额查法",
+        },
         extras: {
           advanced: "高级",
           advancedShow: "展开高级",
@@ -2963,6 +2973,7 @@ export const zhCN: TranslationResources = {
         staleNotAsked: "没有刷新，显示{{time}}的读数",
         staleMomentAgo: "刚才",
         unsupported: "没认出这家的余额查法",
+        fillUrl: "填写余额查询地址",
         noKey: "这家没填 key，查不了余额",
         rowUnavailable: "余额查不到",
         rowAmount: "余额 {{amount}}",

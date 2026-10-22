@@ -379,6 +379,7 @@ function ConnectionSheet({
     | "fetchSiteIcon"
     | "fetchModels"
     | "testConnection"
+    | "checkBalance"
   >;
   setSheet: Dispatch<SetStateAction<ConnectionSheetState>>;
   onSaved: (result: Extract<ConnectionSaveResult, { status: "saved" }>) => void;
@@ -388,6 +389,8 @@ function ConnectionSheet({
   // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机新建时要求 key，也读不回 key，没有模板，
   // 也不认请求头、附加请求体与 key 放哪个头。
   const hasManagement = useHostFeature(serverId, "apiEndpointManagement");
+  // COMPAT(apiEndpointBalance): added in v0.17.0, remove gate after 2027-04-22. 老主机不认 balance 与 check_balance。
+  const hasBalance = useHostFeature(serverId, "apiEndpointBalance");
   const templates = useEndpointTemplates({ serverId, enabled: hasManagement });
   const handlePick = useCallback(
     (templateId: string | null) =>
@@ -436,6 +439,7 @@ function ConnectionSheet({
       canCheckBeforeSave={hasManagement}
       followsListWhenNew={hasManagement}
       canSetRequestExtras={hasManagement}
+      canSetBalance={hasManagement && hasBalance}
       templates={templates.status === "ready" ? templates.templates : []}
       onBack={sheet.backToPicker ? handleBack : null}
       onSave={endpoints.save}
@@ -445,6 +449,7 @@ function ConnectionSheet({
       onFetchSiteIcon={endpoints.fetchSiteIcon}
       onFetchModels={endpoints.fetchModels}
       onTestConnection={endpoints.testConnection}
+      onCheckBalance={endpoints.checkBalance}
       onSaved={onSaved}
       onClose={closeForm}
     />
@@ -719,6 +724,15 @@ function ApiEndpointDetailContent({
       setSheet({ kind: "form", seed: duplicateSeed(endpoint, t), backToPicker: false });
     }
   }, [endpoint, t]);
+  // 余额分区的「填写余额查询地址」：打开编辑窗口，定位到「高级」里的余额栏。
+  const handleFillBalanceUrl = useCallback(() => {
+    if (!endpoint) return;
+    setSheet({
+      kind: "form",
+      seed: { mode: "edit", endpoint, focus: "balance" },
+      backToPicker: false,
+    });
+  }, [endpoint]);
   // 「再加一家」：用这家的模板开新表单；模板清单里没有它（「自定义」加的、主机已不认识的模板）就没有这一项。
   const templateId = endpoint?.templateId ?? null;
   const hasKnownTemplate =
@@ -764,6 +778,7 @@ function ApiEndpointDetailContent({
         onEdit={handleEdit}
         onDuplicate={canDuplicate ? handleDuplicate : null}
         onAddAnother={hasKnownTemplate ? handleAddAnother : null}
+        onFillBalanceUrl={canDuplicate ? handleFillBalanceUrl : null}
       />
       <ConnectionSheet
         serverId={serverId}
@@ -786,6 +801,7 @@ function ApiEndpointDetailSections({
   onEdit,
   onDuplicate,
   onAddAnother,
+  onFillBalanceUrl,
 }: {
   serverId: string;
   endpoint: ApiEndpoint;
@@ -797,6 +813,8 @@ function ApiEndpointDetailSections({
   onDuplicate: (() => void) | null;
   // 从主机认得的模板加的才有「再加一家」。
   onAddAnother: (() => void) | null;
+  // 编辑窗口有「高级」时才有（主机声明了 apiEndpointManagement）；余额分区本身只在声明了 apiEndpointBalance 时出现。
+  onFillBalanceUrl: (() => void) | null;
 }) {
   const { t } = useTranslation();
   const now = useClock();
@@ -934,6 +952,7 @@ function ApiEndpointDetailSections({
           hasApiKey={endpoint.hasApiKey}
           balances={balances}
           now={now}
+          onFillBalanceUrl={onFillBalanceUrl}
         />
       )}
       {hasCliWiring && canSearchWeb ? (

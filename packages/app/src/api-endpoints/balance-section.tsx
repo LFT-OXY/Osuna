@@ -4,60 +4,34 @@ import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { RotateCw } from "lucide-react-native";
-import {
-  API_ENDPOINT_BALANCE_FAILURES,
-  API_ENDPOINT_BALANCE_HINTS,
-  API_ENDPOINT_BALANCE_PARTS,
-  type ApiEndpointBalanceFailure,
-  type ApiEndpointBalanceFailureReason,
-  type ApiEndpointBalanceHint,
-  type ApiEndpointBalanceItem,
-  type ApiEndpointBalancePart,
-  type ApiEndpointBalanceReading,
-} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type { ApiEndpointBalanceReading } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { Button } from "@/components/ui/button";
 import { Text as UiText } from "@/components/ui/text";
 import { settingsStyles } from "@/styles/settings";
 import { openExternalUrl } from "@/utils/open-external-url";
 import { relativeAgo } from "./reopen-hints-copy";
+import { failureTitle, hintOf, itemLabel } from "./balance-copy";
 import type { EndpointBalances } from "./use-endpoint-balances";
-
-const FAILURE_KEYS: Record<ApiEndpointBalanceFailureReason, string> = {
-  wrong_url: "settings.apiEndpoints.balance.failure.wrongUrl",
-  token_rejected: "settings.apiEndpoints.balance.failure.tokenRejected",
-  not_offered: "settings.apiEndpoints.balance.failure.notOffered",
-  no_value: "settings.apiEndpoints.balance.failure.noValue",
-  temporary: "settings.apiEndpoints.balance.failure.temporary",
-};
-
-const HINT_KEYS: Record<ApiEndpointBalanceHint, string> = {
-  opencode_no_balance: "settings.apiEndpoints.balance.hint.opencodeNoBalance",
-  siliconflow_retired: "settings.apiEndpoints.balance.hint.siliconflowRetired",
-  aihubmix_no_limit: "settings.apiEndpoints.balance.hint.aihubmixNoLimit",
-  not_asked: "settings.apiEndpoints.balance.hint.notAsked",
-};
-
-const PART_KEYS: Record<ApiEndpointBalancePart, string> = {
-  granted: "settings.apiEndpoints.balance.part.granted",
-  topped_up: "settings.apiEndpoints.balance.part.toppedUp",
-};
 
 /**
  * 接口详情页的「余额与套餐用量」区：每项余额一行，标题下写读数时间，右侧「刷新」。
- * 查不到时就地写原因，对方的原话（已打码）接在下面；认不出查法时写明。
+ * 查不到时就地写原因，对方的原话（已打码）接在下面；认不出查法时写明，并给「填写余额查询地址」。
  */
 export function ApiEndpointBalanceSection({
   endpointId,
   hasApiKey,
   balances,
   now,
+  onFillBalanceUrl,
 }: {
   endpointId: string;
   // 没填 key 的接口不查余额（照 magpie），分区说它没 key，不说认不出。
   hasApiKey: boolean;
   balances: Exclude<EndpointBalances, { status: "off" }>;
   now: Date;
+  // 打开编辑窗口并定位到余额栏；老主机的编辑窗口没有这几栏时为 null。
+  onFillBalanceUrl: (() => void) | null;
 }) {
   const { t, i18n } = useTranslation();
   const reading = balances.status === "ready" ? balances.readings.get(endpointId) : undefined;
@@ -111,7 +85,12 @@ export function ApiEndpointBalanceSection({
       testID="api-endpoint-balance-section"
     >
       <View style={settingsStyles.card}>
-        <BalanceBody balances={balances} reading={reading} hasApiKey={hasApiKey} />
+        <BalanceBody
+          balances={balances}
+          reading={reading}
+          hasApiKey={hasApiKey}
+          onFillBalanceUrl={onFillBalanceUrl}
+        />
       </View>
     </SettingsSection>
   );
@@ -121,10 +100,12 @@ function BalanceBody({
   balances,
   reading,
   hasApiKey,
+  onFillBalanceUrl,
 }: {
   balances: Exclude<EndpointBalances, { status: "off" }>;
   reading: ApiEndpointBalanceReading | undefined;
   hasApiKey: boolean;
+  onFillBalanceUrl: (() => void) | null;
 }) {
   const { t } = useTranslation();
   if (balances.status === "loading") {
@@ -147,10 +128,36 @@ function BalanceBody({
     );
   }
   if (!reading || reading.status === "unsupported") {
-    const text = hasApiKey
-      ? t("settings.apiEndpoints.balance.unsupported")
-      : t("settings.apiEndpoints.balance.noKey");
-    return <Notice text={text} testID="api-endpoint-balance-unsupported" />;
+    if (!hasApiKey) {
+      return (
+        <Notice
+          text={t("settings.apiEndpoints.balance.noKey")}
+          testID="api-endpoint-balance-unsupported"
+        />
+      );
+    }
+    return (
+      <View style={settingsStyles.row}>
+        <UiText
+          variant="caption"
+          color="foregroundMuted"
+          style={styles.noticeText}
+          testID="api-endpoint-balance-unsupported"
+        >
+          {t("settings.apiEndpoints.balance.unsupported")}
+        </UiText>
+        {onFillBalanceUrl ? (
+          <Button
+            variant="outline"
+            size="xs"
+            onPress={onFillBalanceUrl}
+            testID="api-endpoint-balance-fill-url"
+          >
+            {t("settings.apiEndpoints.balance.fillUrl")}
+          </Button>
+        ) : null}
+      </View>
+    );
   }
   if (reading.status !== "ok") {
     return (
@@ -258,29 +265,6 @@ function FailureRows({
   );
 }
 
-/** 赠送 / 充值按界面语言写；daemon 以后多出的部分写它给的 label，余额本身写「余额」。 */
-function itemLabel(input: { t: TFunction; item: ApiEndpointBalanceItem }): string {
-  const part = API_ENDPOINT_BALANCE_PARTS.find((candidate) => candidate === input.item.part);
-  if (part) return input.t(PART_KEYS[part]);
-  return input.item.label ?? input.t("settings.apiEndpoints.balance.balance");
-}
-
-function hintOf(input: { t: TFunction; failure: ApiEndpointBalanceFailure | null }): string | null {
-  const hint = API_ENDPOINT_BALANCE_HINTS.find((candidate) => candidate === input.failure?.hint);
-  return hint ? input.t(HINT_KEYS[hint]) : null;
-}
-
-function failureTitle(input: { t: TFunction; failure: ApiEndpointBalanceFailure | null }): string {
-  const reason = input.failure?.reason;
-  const known = API_ENDPOINT_BALANCE_FAILURES.find((candidate) => candidate === reason);
-  const text = input.t(
-    known ? FAILURE_KEYS[known] : "settings.apiEndpoints.balance.rowUnavailable",
-  );
-  const status = input.failure?.status ?? null;
-  if (status === null) return text;
-  return input.t("settings.apiEndpoints.balance.withStatus", { text, status });
-}
-
 type StaleKind = "temporary" | "notAsked";
 
 /** 读数是不是上次的：这次暂时查不到，还是开关关着这次没去读。 */
@@ -310,6 +294,9 @@ const styles = StyleSheet.create((theme) => ({
   },
   partTitle: {
     color: theme.colors.foregroundMuted,
+  },
+  noticeText: {
+    flex: 1,
   },
   failure: {
     flexDirection: "column",

@@ -2788,6 +2788,17 @@ export const es: TranslationResources = {
         apiKeyOptionalLabel: "Clave de API (opcional)",
         apiKeyLocalPlaceholder: "Opcional en servidores locales",
         keyRejected: "El servidor rechazó esta clave (401 / 403)",
+        balance: {
+          url: "URL de saldo",
+          urlInfo:
+            "Dirección donde el proveedor dice cuánto queda en la clave; se consulta con GET, o POST sin cuerpo. Lleva la clave como Bearer, igual que una petición de chat, con las cabeceras de este endpoint; {key} en la dirección o en una cabecera se cambia por la clave. Si la rellenas, se consulta esta dirección en lugar de la que Osuna conoce para el proveedor. Solo se consulta con las páginas del endpoint abiertas, como mucho una vez por minuto.",
+          field: "Campo de saldo",
+          fieldInfo:
+            "Dónde está el importe en la respuesta, p. ej. data.balance. Puede ser una suma con + - * / y paréntesis, p. ej. data.total / 500000. “$” o “¥” delante añade el signo; “%” detrás lo muestra como porcentaje con barra. Varios, cada uno con etiqueta, se separan con “;”, p. ej. 5h: a.used / a.cap %; $credits.left. Los elementos de una lista son a.*.used, o a[status=active].used para los que cumplen, dentro de sum(), max(), min() o count(). Si lo dejas vacío, las direcciones de new-api, sub2api y credit grants se leen como muestra el ejemplo.",
+          check: "Consultar saldo",
+          nothingToAsk:
+            "No hay URL de saldo que consultar y no se conoce el saldo de este proveedor",
+        },
         extras: {
           advanced: "Avanzado",
           advancedShow: "Mostrar avanzado",
@@ -3008,6 +3019,7 @@ export const es: TranslationResources = {
         staleNotAsked: "Sin actualizar · leído {{time}}",
         staleMomentAgo: "hace un momento",
         unsupported: "No se conoce cómo leer el saldo de este proveedor",
+        fillUrl: "Rellenar URL de saldo",
         noKey: "Este endpoint no tiene clave, así que no se puede leer su saldo",
         rowUnavailable: "Saldo no disponible",
         rowAmount: "Saldo {{amount}}",

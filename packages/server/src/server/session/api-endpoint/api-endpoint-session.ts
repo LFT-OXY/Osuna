@@ -6,6 +6,7 @@ import type {
   ApiEndpointRequestExtras,
   ApiEndpointVendorStatusResponse,
   ApiEndpointReadBalanceResponse,
+  ApiEndpointCheckBalanceResponse,
   ApiEndpointImportScanResponse,
   ApiEndpointImportDiscoveryResponse,
   ApiEndpointImportResponse,
@@ -49,6 +50,7 @@ export type ApiEndpointRequest = Extract<
       | "provider.api_endpoint.vendor_status.request"
       | "provider.api_endpoint.read_balance.request"
       | "provider.api_endpoint.set_balance_auto_refresh.request"
+      | "provider.api_endpoint.check_balance.request"
       | "provider.api_endpoint.import_scan.request"
       | "provider.api_endpoint.import.request"
       | "provider.api_endpoint.import_discovery.request"
@@ -87,6 +89,7 @@ const API_ENDPOINT_REQUEST_TYPES: Record<ApiEndpointRequest["type"], true> = {
   "provider.api_endpoint.vendor_status.request": true,
   "provider.api_endpoint.read_balance.request": true,
   "provider.api_endpoint.set_balance_auto_refresh.request": true,
+  "provider.api_endpoint.check_balance.request": true,
   "provider.api_endpoint.import_scan.request": true,
   "provider.api_endpoint.import.request": true,
   "provider.api_endpoint.import_discovery.request": true,
@@ -174,6 +177,8 @@ export class ApiEndpointSession {
         return this.handleReadBalance(request, connectionSignal);
       case "provider.api_endpoint.set_balance_auto_refresh.request":
         return this.handleSetBalanceAutoRefresh(request);
+      case "provider.api_endpoint.check_balance.request":
+        return this.handleCheckBalance(request, connectionSignal);
       default:
         return this.handleAddingAids(request, connectionSignal);
     }
@@ -324,6 +329,7 @@ export class ApiEndpointSession {
         ...(request.cooldownSettings !== undefined
           ? { cooldownSettings: request.cooldownSettings }
           : {}),
+        ...(request.balance !== undefined ? { balance: request.balance } : {}),
         ...requestExtrasOf(request),
       });
       this.host.emit({
@@ -783,6 +789,37 @@ export class ApiEndpointSession {
     }
     this.host.emit({
       type: "provider.api_endpoint.read_balance.response",
+      payload: { requestId: request.requestId, ...payload },
+    });
+  }
+
+  /** 「查询余额」：可以用 cancel 取消；查不到余额写在读数里，找不到接口或被取消时 reading 为 null。 */
+  private async handleCheckBalance(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.check_balance.request" }>,
+    connectionSignal: AbortSignal,
+  ): Promise<void> {
+    const { signal, release } = this.trackUpstreamRequest(request.requestId, connectionSignal);
+    let payload: Omit<ApiEndpointCheckBalanceResponse["payload"], "requestId">;
+    try {
+      const reading = await this.service.checkBalance(
+        {
+          ...(request.endpointId !== undefined ? { endpointId: request.endpointId } : {}),
+          ...(request.apiKey !== undefined ? { apiKey: request.apiKey } : {}),
+          ...(request.baseUrls !== undefined ? { baseUrls: request.baseUrls } : {}),
+          ...(request.templateId !== undefined ? { templateId: request.templateId } : {}),
+          balance: request.balance,
+          ...requestExtrasOf(request),
+        },
+        signal,
+      );
+      payload = { reading, error: null };
+    } catch (caught) {
+      payload = { reading: null, error: this.toWireError(caught, request) };
+    } finally {
+      release();
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.check_balance.response",
       payload: { requestId: request.requestId, ...payload },
     });
   }

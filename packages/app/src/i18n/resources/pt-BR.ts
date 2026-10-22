@@ -2772,6 +2772,17 @@ export const ptBR: TranslationResources = {
         apiKeyOptionalLabel: "Chave de API (opcional)",
         apiKeyLocalPlaceholder: "Opcional para servidores locais",
         keyRejected: "O servidor recusou esta chave (401 / 403)",
+        balance: {
+          url: "URL do saldo",
+          urlInfo:
+            "Endereço onde o fornecedor informa quanto resta na chave, consultado com GET, ou POST sem corpo. Leva a chave como Bearer, como uma requisição de chat, com os cabeçalhos deste endpoint; {key} no endereço ou num cabeçalho vira a chave. Preenchido, este endereço é consultado em vez do que o Osuna conhece para o fornecedor. Só é consultado com as páginas do endpoint abertas, no máximo uma vez por minuto.",
+          field: "Campo do saldo",
+          fieldInfo:
+            "Onde o valor está na resposta, ex.: data.balance. Pode ser uma conta com + - * / e parênteses, ex.: data.total / 500000. “$” ou “¥” na frente adiciona o símbolo; “%” depois mostra uma porcentagem com barra. Vários, cada um com rótulo, separam-se por “;”, ex.: 5h: a.used / a.cap %; $credits.left. Os itens de uma lista são a.*.used, ou a[status=active].used para os que atendem, dentro de sum(), max(), min() ou count(). Vazio, os endereços de new-api, sub2api e credit grants são lidos como mostra o exemplo.",
+          check: "Consultar saldo",
+          nothingToAsk:
+            "Não há URL do saldo para consultar e o saldo deste fornecedor não é conhecido",
+        },
         extras: {
           advanced: "Avançado",
           advancedShow: "Mostrar avançado",
@@ -2992,6 +3003,7 @@ export const ptBR: TranslationResources = {
         staleNotAsked: "Não atualizado · lido {{time}}",
         staleMomentAgo: "há um instante",
         unsupported: "Não se sabe como ler o saldo deste fornecedor",
+        fillUrl: "Preencher URL do saldo",
         noKey: "Este endpoint não tem chave, então o saldo não pode ser lido",
         rowUnavailable: "Saldo indisponível",
         rowAmount: "Saldo {{amount}}",

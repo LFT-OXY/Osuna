@@ -1,7 +1,12 @@
 // 按地址认出的厂商余额、失败的说法照 magpie（https://github.com/yetone/magpie，internal/provider/balance.go 的
 // balanceSourceOf、balanceRead、balanceRefusal、money、currencySign、number 与各厂商的 read*，7597c132；
 // DeepSeek 的赠送 / 充值拆分与 OpenCode Zen 的说明照最新版 ea6be159 的 readDeepSeekSplit、errOpenCodeNoBalance、openCodeZen）。
+// 填了余额查询地址时的自定义余额照 magpie 的 balanceRead、balanceMethodOf、balanceKeyNames、withBalanceKey（7597c132）。
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+import {
+  balanceMethodOf,
+  defaultBalanceField,
+} from "@getpaseo/protocol/api-endpoint/balance-settings";
 import type {
   ApiEndpointBalanceFailure,
   ApiEndpointBalanceFailureReason,
@@ -16,7 +21,8 @@ import {
   withUserHeaders,
   type RequestExtras,
 } from "./request-extras.js";
-import { upstreamFetch } from "./insecure-tls.js";
+import { numberOf, readBalanceField } from "./balance-field.js";
+import { upstreamFetch, type UpstreamResponse } from "./insecure-tls.js";
 import type { StoredApiEndpoint } from "./store.js";
 import {
   describeNetworkError,
@@ -29,7 +35,9 @@ import { hostOf } from "./vendor-status.js";
 
 /*
  * 接口的余额：厂商自己的余额接口说这把 key 还剩多少。只显示，从不进中转站选路。
- * 厂商按接口各格式地址的主机名精确认（顺序同 magpie：Chat、Responses、Anthropic），不看模板。
+ * 填了余额查询地址就按它查（GET 或不带正文的 POST），按取值写法取值，不再按地址认（照 magpie balanceSourceOf）；
+ * 地址与请求头里的 {key} 一类占位换成 key（地址里先转义）。
+ * 没填时厂商按接口各格式地址的主机名精确认（顺序同 magpie：Chat、Responses、Anthropic），不看模板。
  * 请求带 key 的 Bearer 头、Accept、Osuna 的 User-Agent，再写上这家自己的请求头（用户的可以盖过 User-Agent，ADR 0008）。
  * 回复里的 key 与请求头的值打码后截到 200 字给界面看。
  */
@@ -115,7 +123,8 @@ export const BALANCE_READ_TIMEOUT_MS = 15_000;
 export const BALANCE_PAGE_TIMEOUT_MS = 30_000;
 // 每家的读数留这么久，照 magpie keyBalanceCache。
 export const BALANCE_KEPT_MS = 60_000;
-const MAX_BODY_CHARS = 1 << 20;
+// 回复最多读这么多字节（照 magpie io.LimitReader）。
+const MAX_BODY_BYTES = 1 << 20;
 const MAX_DETAIL_CHARS = 200;
 
 /** 这家接口的地址对上的余额厂商；中转站与认不出的为 null。 */
@@ -131,7 +140,7 @@ export function balanceVendorOf(baseUrls: StoredApiEndpoint["baseUrls"]): Balanc
 }
 
 export interface ReadBalanceInput {
-  endpoint: Pick<StoredApiEndpoint, "id" | "baseUrls">;
+  endpoint: Pick<StoredApiEndpoint, "id" | "baseUrls" | "balance">;
   apiKey: string | null;
   extras: RequestExtras;
   userAgent: string;
@@ -160,8 +169,6 @@ export async function readEndpointBalance(
   input: ReadBalanceInput,
 ): Promise<ApiEndpointBalanceReading> {
   const endpointId = input.endpoint.id;
-  const vendorId = balanceVendorOf(input.endpoint.baseUrls);
-  const vendor = BALANCE_VENDORS.find((candidate) => candidate.id === vendorId);
   const readAt = input.now().toISOString();
   const failed = (failure: ApiEndpointBalanceFailure): ApiEndpointBalanceReading => ({
     endpointId,
@@ -170,9 +177,8 @@ export async function readEndpointBalance(
     readAt,
     failure,
   });
-  const notOffered = (note: BalanceNotOffered, status: number | null) =>
-    failed({ reason: "not_offered", detail: null, status, hint: note.hint, seeAt: note.seeAt });
-  if (!vendor && input.apiKey && openCodeZen(input.endpoint.baseUrls)) {
+  const source = sourceOf(input);
+  if (source === null && input.apiKey && openCodeZen(input.endpoint.baseUrls)) {
     // OpenCode 不给 key 查 Zen 的余额：照 magpie 说明去哪看，不发请求，也就没有读数时间。
     return {
       endpointId,
@@ -188,11 +194,21 @@ export async function readEndpointBalance(
       },
     };
   }
-  if (!vendor || !input.apiKey) {
+  if (source === null || !input.apiKey) {
     return { endpointId, status: "unsupported", items: [], readAt: null, failure: null };
   }
-  const secrets = secretsOf({ apiKey: input.apiKey, extras: input.extras });
-  const problem = unsendableHeader(input.extras);
+  const apiKey = input.apiKey;
+  const extras = withKeyInHeaders(input.extras, apiKey);
+  const secrets = [...secretsOf({ apiKey, extras }), queryEscape(apiKey)];
+  if (source.method === null) {
+    // 手改坏的方法照 magpie 不发，也不当 GET 发。
+    return failed({
+      reason: "wrong_url",
+      detail: `the balance method ${JSON.stringify(input.endpoint.balance?.method ?? "")} is neither GET nor POST`,
+      status: null,
+    });
+  }
+  const problem = unsendableHeader(extras);
   if (problem !== null) {
     // 这家自己的请求头发不出去：照 magpie 当作没查成（它原样报错，界面归为暂时查不到），原因写明是哪个头。
     return failed({
@@ -203,18 +219,19 @@ export async function readEndpointBalance(
   }
   const headers = withUserHeaders(
     {
-      authorization: `Bearer ${input.apiKey}`,
+      authorization: `Bearer ${apiKey}`,
       accept: "application/json",
       "user-agent": input.userAgent,
     },
-    input.extras,
+    extras,
   );
   let status: number;
   let text: string;
   try {
     const response = await upstreamFetch({
-      url: input.vendorUrls?.[vendor.id] ?? BALANCE_VENDOR_URLS[vendor.id],
+      url: withKeyInUrl(source.url, apiKey),
       init: {
+        ...(source.method === "POST" ? { method: "POST" as const } : {}),
         headers,
         signal: AbortSignal.any([
           input.signal,
@@ -225,7 +242,7 @@ export async function readEndpointBalance(
       uncheckedHosts: input.extras.uncheckedHosts,
     });
     status = response.status;
-    text = (await response.text()).slice(0, MAX_BODY_CHARS);
+    text = await readCapped(response);
   } catch (error) {
     if (input.signal.aborted) throw error;
     return failed({
@@ -234,24 +251,120 @@ export async function readEndpointBalance(
       status: null,
     });
   }
+  const replied = readReply({ source, status, text, secrets });
+  if ("items" in replied) {
+    return { endpointId, status: "ok", items: replied.items, readAt, failure: null };
+  }
+  return failed(replied);
+}
+
+/** 对方的回复读成余额各项，或失败的原因（照 magpie balanceRead 的先后：拒绝、状态、不是 JSON、取值）。 */
+function readReply(input: {
+  source: BalanceSource;
+  status: number;
+  text: string;
+  secrets: readonly string[];
+}): { items: ApiEndpointBalanceItem[] } | ApiEndpointBalanceFailure {
+  const { source, status, text, secrets } = input;
+  const notOffered = (note: BalanceNotOffered): ApiEndpointBalanceFailure => ({
+    reason: "not_offered",
+    detail: null,
+    status,
+    hint: note.hint,
+    seeAt: note.seeAt,
+  });
   const body = parseJson(text);
   const refusal = refusalOf(body);
   if (refusal !== null) {
     // new-api 一类的 {"success":false,"message":…}：不论状态码都是拒绝。
-    return failed({ reason: "token_rejected", detail: clip(redactKey(refusal, secrets)), status });
+    return { reason: "token_rejected", detail: clip(redactKey(refusal, secrets)), status };
   }
   if (status >= 300) {
-    const known = vendor.failed?.(status, body) ?? null;
-    if (known !== null) return notOffered(known, status);
-    return failed({ reason: failureOfStatus(status), detail: quoted(text, secrets), status });
+    const known = source.failed?.(status, body) ?? null;
+    if (known !== null) return notOffered(known);
+    return { reason: failureOfStatus(status), detail: quoted(text, secrets), status };
   }
-  if (body === undefined) return failed({ reason: "wrong_url", detail: null, status });
-  const read = vendor.read(body);
-  if (read.kind === "not_offered") return notOffered(read, status);
+  if (body === undefined) return { reason: "wrong_url", detail: null, status };
+  const read = source.read(body);
+  if (read.kind === "not_offered") return notOffered(read);
   if (read.kind === "no_value") {
-    return failed({ reason: "no_value", detail: read.detail && clip(read.detail), status });
+    return {
+      reason: "no_value",
+      detail: read.detail && clip(redactKey(read.detail, secrets)),
+      status,
+    };
   }
-  return { endpointId, status: "ok", items: read.items, readAt, failure: null };
+  return { items: read.items };
+}
+
+/** 去哪问、怎么问、怎么读回复；认不出且没填余额查询地址时为 null。 */
+interface BalanceSource {
+  url: string;
+  // 方法读不懂（手改坏的）为 null：不发。
+  method: "GET" | "POST" | null;
+  read: (body: unknown) => BalanceRead;
+  failed?: BalanceVendor["failed"];
+}
+
+function sourceOf(input: ReadBalanceInput): BalanceSource | null {
+  const custom = input.endpoint.balance;
+  const customUrl = custom?.url.trim() ?? "";
+  if (custom !== undefined && customUrl !== "") {
+    // 用户填的地址：取值写法空着时按地址给默认写法（magpie #881），都没有时照 magpie 说要写哪里。
+    const field = custom.field?.trim() || defaultBalanceField(customUrl) || "";
+    return {
+      url: customUrl,
+      method: balanceMethodOf(custom.method),
+      read: (body) => readBalanceField(body, field),
+    };
+  }
+  const vendorId = balanceVendorOf(input.endpoint.baseUrls);
+  const vendor = BALANCE_VENDORS.find((candidate) => candidate.id === vendorId);
+  if (!vendor) return null;
+  // 认得的厂商照它的回答方式问：方法只跟用户自己的地址走。
+  return {
+    url: input.vendorUrls?.[vendor.id] ?? BALANCE_VENDOR_URLS[vendor.id],
+    method: "GET",
+    read: vendor.read,
+    ...(vendor.failed ? { failed: vendor.failed } : {}),
+  };
+}
+
+/** 地址或请求头的值里怎么写 key（照 magpie balanceKeyNames）：{key} {apiKey} {api_key} {API_KEY} {token} {{key}} ${API_KEY}，大小写不论。 */
+const KEY_NAMES = /\$?\{\{?\s*(?:key|api[_-]?key|token)\s*\}?\}/gi;
+
+function withKeyInUrl(url: string, apiKey: string): string {
+  const escaped = queryEscape(apiKey);
+  return url.replace(KEY_NAMES, () => escaped);
+}
+
+/** 这家的请求头里写的 key 占位换成 key（照 magpie withBalanceKey，只在查余额时）。 */
+function withKeyInHeaders(extras: RequestExtras, apiKey: string): RequestExtras {
+  const headers: Record<string, string> = {};
+  for (const [name, value] of Object.entries(extras.headers)) {
+    headers[name] = value.replace(KEY_NAMES, () => apiKey);
+  }
+  return { ...extras, headers };
+}
+
+/** 照 Go 的 url.QueryEscape：空格写成 +，字母数字与 - _ . ~ 之外的都转义。 */
+function queryEscape(value: string): string {
+  return encodeURIComponent(value)
+    .replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)
+    .replace(/%20/g, "+");
+}
+
+/** 读回复的前 1 MB，读够就不再收。 */
+async function readCapped(response: UpstreamResponse): Promise<string> {
+  const parts: Uint8Array[] = [];
+  let size = 0;
+  for await (const chunk of response.chunks()) {
+    const left = MAX_BODY_BYTES - size;
+    parts.push(chunk.byteLength > left ? chunk.subarray(0, left) : chunk);
+    size += Math.min(chunk.byteLength, left);
+    if (size >= MAX_BODY_BYTES) break;
+  }
+  return Buffer.concat(parts).toString("utf8");
 }
 
 function failureOfStatus(status: number): ApiEndpointBalanceFailureReason {
@@ -286,14 +399,6 @@ function currencySign(code: string): string {
   if (upper === "USD") return "$";
   if (upper === "") return "";
   return `${upper} `;
-}
-
-/** JSON 数或写成数的字符串。 */
-function numberOf(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value !== "string" || value.trim() === "") return null;
-  const parsed = Number(value.trim());
-  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function moneyItem(code: string, value: number): ApiEndpointBalanceItem {

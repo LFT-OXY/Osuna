@@ -201,10 +201,15 @@ are reached without checking their certificate.
 The dialog's requests use what is in the form, so they can reach an address and
 key you haven't saved yet.
 
-The balance read goes to the vendor's own balance query, which the daemon picks
-by the host of the endpoint's base URLs (Chat Completions first, then Responses,
-then Anthropic), never by its template. An endpoint on a host the daemon doesn't
-know, or with no key, sends nothing.
+The balance read goes to the endpoint's **Balance URL** when you set one in the
+edit dialog's Advanced, on any endpoint, templated or custom. It is asked with
+`GET`, or with `POST` and no body when you pick POST, and `{key}`, `{apiKey}`,
+`{api_key}`, `{token}`, `{{key}}` or `${API_KEY}` in the address (escaped) or in
+a header value is replaced with the key. Without one, it goes to the vendor's
+own balance query, which the daemon picks by the host of the endpoint's base
+URLs (Chat Completions first, then Responses, then Anthropic), never by its
+template. An endpoint on a host the daemon doesn't know with no Balance URL, or
+one with no key, sends nothing.
 
 | Vendor       | Host                                         | Request                                                   |
 | ------------ | -------------------------------------------- | --------------------------------------------------------- |
@@ -220,6 +225,11 @@ know, or with no key, sends nothing.
 An endpoint on OpenCode Zen (`opencode.ai/zen` or `opencode.ai/inference`, not
 Go's `/go` or a `/custom` provider) sends nothing either: OpenCode tells no key
 its balance, so its section says to read it on the OpenCode console.
+
+"Check balance" in the edit dialog sends the same read once, when you press it,
+with what is in the form: its Balance URL, method, field, key, base URLs and
+headers, saved or not. Its answer is not kept for the minute nor as the last
+reading.
 
 It carries the key as `Authorization: Bearer`, `Accept: application/json`,
 `User-Agent: Osuna/<version>` and the endpoint's own **Headers**, which can

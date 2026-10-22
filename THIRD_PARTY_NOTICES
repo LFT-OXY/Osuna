@@ -1094,6 +1094,24 @@ internal/provider/balance.go:
 
   packages/server/src/server/api-endpoints/balance.ts
 
+A balance read at the address the user gave (GET, or POST with no body; the key
+put in for {key} and its other names, escaped in the address; the field left
+empty read by new-api's, sub2api's and credit grants' defaults) and the balance
+field (paths, sums, a sign or percent, lists by * and [k=v], sum() max() min()
+count(), several amounts by ";" with "—" for one missing), with the editor's
+Balance URL, method, field and Check balance, follow balanceRead,
+balanceMethodOf, balanceKeyNames, withBalanceKey, balancePathOf,
+readBalanceParts, readBalanceOne and balanceExpr in magpie's
+internal/provider/balance.go, its tests in balance_test.go and
+balance_parts_test.go, and balanceFieldOf and the Advanced section's balance
+fields in internal/gui/assets/app.js:
+
+  packages/protocol/src/api-endpoint/balance-settings.ts
+  packages/server/src/server/api-endpoints/balance-field.ts
+  packages/server/src/server/api-endpoints/balance-field.test.ts
+  packages/app/src/api-endpoints/internal/balance-settings-form.ts
+  packages/app/src/api-endpoints/balance-settings-fields.tsx
+
 Import from other apps (the five sources and where each keeps its file, how a
 CC Switch, Claude Code, Codex, Alma or OpenCode entry becomes an endpoint, a
 template's when the URLs are its own, entries of one account merged, Osuna's own

@@ -2748,6 +2748,16 @@ export const ko: TranslationResources = {
         apiKeyOptionalLabel: "API 키 (선택 사항)",
         apiKeyLocalPlaceholder: "로컬 서버는 선택 사항",
         keyRejected: "업스트림이 이 키를 거부했습니다 (401 / 403)",
+        balance: {
+          url: "잔액 조회 URL",
+          urlInfo:
+            "공급자가 키에 남은 금액을 알려 주는 주소로, GET 또는 본문 없는 POST로 조회합니다. 채팅 요청처럼 키(Bearer)와 이 엔드포인트의 헤더를 붙이며, 주소나 헤더의 {key}는 키로 바뀝니다. 설정하면 Osuna가 아는 공급자 주소 대신 이 주소로 조회합니다. 엔드포인트 페이지가 열려 있을 때만, 1분에 최대 한 번 조회합니다.",
+          field: "값 추출식",
+          fieldInfo:
+            "응답에서 잔액이 있는 위치입니다(예: data.balance). + - * /와 괄호로 계산할 수 있습니다(예: data.total / 500000). 앞에 “$”나 “¥”를 붙이면 기호가 붙고, 뒤에 “%”를 붙이면 막대와 함께 백분율로 표시합니다. 여러 개는 “;”로 나누고 각각 라벨을 붙일 수 있습니다(예: 5h: a.used / a.cap %; $credits.left). 목록의 각 항목은 a.*.used, 조건에 맞는 항목은 a[status=active].used로 쓰고 sum(), max(), min(), count()에 넣습니다. 비워 두면 new-api, sub2api, credit grants 주소는 자리 표시자의 식으로 읽습니다.",
+          check: "잔액 조회",
+          nothingToAsk: "잔액 조회 URL이 없고 이 공급자의 조회 방법도 알 수 없습니다",
+        },
         extras: {
           advanced: "고급",
           advancedShow: "고급 펼치기",
@@ -2966,6 +2976,7 @@ export const ko: TranslationResources = {
         staleNotAsked: "새로 고치지 않음 · {{time}}에 읽은 값",
         staleMomentAgo: "조금 전",
         unsupported: "이 공급업체의 잔액 조회 방법을 알 수 없습니다",
+        fillUrl: "잔액 조회 URL 입력",
         noKey: "이 엔드포인트에는 키가 없어 잔액을 조회할 수 없습니다",
         rowUnavailable: "잔액을 가져올 수 없음",
         rowAmount: "잔액 {{amount}}",

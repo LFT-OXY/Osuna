@@ -1692,17 +1692,17 @@ if (held) return this.lastBalances.standIn(settings, notAskedReading(endpoint.id
 ### 2. Signatures
 - `LastBalanceReadings` (`api-endpoints/balance-last.ts`), built by the service on `api-endpoints/balance-readings.json`:
   - `keep(settings: BalanceSettings, reading)`; `standIn(settings, reading) → reading`; `forget(endpointId)`.
-  - `BalanceSettings = { endpoint: Pick<StoredApiEndpoint, "baseUrls">, apiKey }`.
+  - `BalanceSettings = { endpoint: Pick<StoredApiEndpoint, "baseUrls" | "balance">, apiKey }`.
 - Wire: `ApiEndpointBalanceReadingSchema.stale?: ApiEndpointBalanceFailure`.
 
 ### 3. Contracts
-- File: `{ readings: { [endpointId]: { fingerprint, readAt, items } } }`. `fingerprint` = sha256 of `{ baseUrls, apiKey }`, first 32 hex; never the key or a token.
+- File: `{ readings: { [endpointId]: { fingerprint, readAt, items } } }`. `fingerprint` = sha256 of `{ baseUrls, apiKey, balance? }` (`balance` only when set, so readings kept before ticket 05 still match), first 32 hex; never the key or a token.
 - `keep` stores only `status: "ok"` readings with at least one item; an empty `ok` (Ollama without purchased credits) and every failure leave the previous entry alone (magpie returns early on no windows and no balance).
 - `standIn` replaces a reading whose `failure.reason === "temporary"` (429, 408, 5xx, timeout, deadline, network error, and `not_asked`) with `{ status: "ok", items, readAt: <last readAt>, failure: null, stale: <this time's failure> }`. Other readings pass through unchanged.
 - Invalidation is lazy: a fingerprint mismatch at `standIn` drops the entry and returns the failure; `delete` calls `forget`. Renaming or saving unchanged settings keeps it.
 - In `readBalances`: fresh read → `keep` → `standIn`, except when `unsendableHeader(extras) !== null` (a settings problem; magpie's `passing` doesn't match it either). The result, stale or not, goes into `keptBalances` for the minute.
 - App: `stale` with `hint: "not_asked"` → caption "Not refreshed · last read {time}" (muted); any other `stale` → "Couldn't read just now · last read {time}" (`statusWarning`, testID `api-endpoint-balance-stale`). The row needs nothing: the reading is `ok`.
-- Later tickets: balance settings (custom balance URL, method, field, token, user ID) go into `fingerprintOf`; plan windows (ticket 08) go into the stored entry, with magpie's `elapsed` and expired-window note.
+- Later tickets: the token and user ID (ticket 06) go into `fingerprintOf` beside `balance` (ticket 05); plan windows (ticket 08) go into the stored entry, with magpie's `elapsed` and expired-window note.
 
 ### 4. Validation & Error Matrix
 - File missing → no last readings. Unreadable or schema-invalid → empty, one warn line. Write failure → warn only; the reading is still returned and memory updated.
@@ -1729,3 +1729,55 @@ lastBalances[endpoint.id] = { readAt, items };
 this.lastBalances.keep({ endpoint, apiKey }, fresh); // stores fingerprintOf({ baseUrls, apiKey })
 const reading = unsendableHeader(extras) === null ? this.lastBalances.standIn(settings, fresh) : fresh;
 ```
+
+## Scenario: a balance URL the user gave, and Check balance (endpoint-balance ticket 05, magpie `provider/balance.go` `balanceRead` / `readBalanceParts` / `balanceExpr`)
+
+### 1. Scope / Trigger
+- New optional endpoint field on the wire and on disk, a new save field, a new RPC, and a pure port of magpie's balance-field parser.
+
+### 2. Signatures
+- Protocol `ApiEndpointBalanceSettingsSchema = { url?, method?, field? }` (strings); `ApiEndpoint.balance?`, `ApiEndpointSaveRequest.balance?`.
+- `provider.api_endpoint.check_balance.request { endpointId?, apiKey?, baseUrls?, templateId?, balance, ...ApiEndpointRequestExtras }` → `.response { requestId, reading: ApiEndpointBalanceReading | null, error }` (`daemon.manage`, cancellable through `cancel`, gated by `apiEndpointBalance`).
+- Shared `protocol/api-endpoint/balance-settings.ts`: `balanceMethodOf(raw) → "GET" | "POST" | null`, `defaultBalanceField(url) → string | null`.
+- Server `balance-field.ts`: `readBalanceField(reply, field) → { kind: "items", items } | { kind: "no_value", detail }`, `numberOf`. Service `checkBalance(ApiEndpointCheckBalanceInput, signal)`.
+
+### 3. Contracts
+- Stored `balance: { url, method?: "POST", field? }`; GET and an empty field are not stored; no URL → no `balance`. Save: omitted keeps (old clients, copies take the source's), an object replaces whole, one without a URL clears.
+- A `balance.url` wins over the host table: `sourceOf` returns the custom source first, so an endpoint on `api.deepseek.com` with a Balance URL never asks DeepSeek. No key → `unsupported`, nothing sent.
+- Request: `GET`, or `POST` with no body; `Authorization: Bearer <key>`, `Accept`, `User-Agent: Osuna/<v>`, then the endpoint's headers with `{key}` names replaced (`KEY_NAMES`, magpie `balanceKeyNames`); in the URL the key is Go-`QueryEscape`d (space `+`). The escaped key joins the redaction secrets.
+- Reply read up to 1 MiB of bytes (`readCapped` over `response.chunks()`), not characters after a full `text()`.
+- Field empty → `defaultBalanceField(url)`; no default → `no_value` "no balance path: …".
+- Items: `{ label: string | null, text, value, unit, ratio }`; `$ ¥ € £` → `USD CNY EUR GBP`; a `%` item has `unit: "%"`, `value` = percent, `ratio` = 0–1. A missing amount among several is `text: "—"`, `value: null` — its reason is not on the wire (PRD 21's item shape has no error field; magpie keeps it for a hover).
+- Check balance: same `readEndpointBalance` with the form's values over the saved endpoint's; never touches `keptBalances` or `LastBalanceReadings`.
+- Port deviations kept on purpose: a custom reply that is not JSON is `wrong_url` (PRD 16), where magpie says "the reply is not JSON".
+
+### 4. Validation & Error Matrix
+- Save or check with `method` not GET/POST (any case, trimmed) → `invalid_balance_settings`, `params.field: "method"`, nothing sent.
+- Hand-edited stored method that reads as neither → `failed wrong_url`, detail magpie's sentence, nothing sent.
+- Field errors → `no_value` with magpie's English sentence as `detail` (key masked).
+- `check_balance` with an unknown `endpointId` → `reading: null`, `error.code: "not_found"`; aborted → `cancelled`.
+
+### 5. Good/Base/Bad Cases
+- Good: `{ url: ".../query?apikey={key}", field: "$data.left" }`, reply `{"data":{"left":"7.5"}}` → `$7.50`, URL carries the escaped key.
+- Base: `/v1/dashboard/billing/credit_grants` with no field → `$total_available` → `$12.50`.
+- Bad: field `data.list.*.left` → `no_value` "…several values where one is wanted…".
+
+### 6. Tests Required
+- `api-endpoints/balance-field.test.ts`: every magpie `TestReadBalancePath` / `TestBalancePathLists` / `TestBalanceParts` case, each error sentence, numbers in filters (`1e21`, `1e-7`), a `"0x10"` string staying a string, `defaultBalanceField`.
+- `daemon-e2e/api-endpoint-balance.e2e.test.ts` "at an address the user gave": GET with placeholders and headers, POST no body, labels/percent/dash, three defaults, no default, missing path, known host overridden, unreachable URL masks the key, 1 MB cut → `wrong_url`, old-client save keeps / empty URL clears / copy takes, PUT refused, settings change drops the last reading; check: unsaved new endpoint, edit with saved key, no URL finds the vendor, failure reading, not kept, unknown endpoint, PUT refused.
+- Protocol: save/endpoint with and without `balance`; `check_balance` request, reading and rejection.
+- App `connection-form-model.test.ts` and browser `Balance` › "Check balance asks…", "…fill in its balance URL…".
+
+### 7. Wrong vs Correct
+#### Wrong
+```ts
+// JS Number() takes "0x10" and "0b11"; a filter on 1e21 compares "1e+21"
+const n = Number(value.trim());
+got = String(value);
+```
+#### Correct
+```ts
+if (!DECIMAL.test(value.trim())) return null; // what Go's ParseFloat reads
+got = plainNumber(value); // FormatFloat(n, 'f', -1, 64): shortest digits, no exponent
+```
+

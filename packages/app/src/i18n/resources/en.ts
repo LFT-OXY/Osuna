@@ -2797,6 +2797,16 @@ export const en = {
         apiKeyOptionalLabel: "API key (optional)",
         apiKeyLocalPlaceholder: "Optional for local servers",
         keyRejected: "The upstream rejected this key (401 / 403)",
+        balance: {
+          url: "Balance URL",
+          urlInfo:
+            "Where the vendor tells what is left on the key, asked with GET, or POST with no body. It gets the key as a Bearer token, like a chat request, with this endpoint's headers; {key} in the address or a header becomes the key. Once set, this address is asked instead of the one Osuna knows for the vendor. Asked only while the endpoint pages are open, at most once a minute.",
+          field: "Balance field",
+          fieldInfo:
+            "Where the amount is in the reply, e.g. data.balance. It can be a sum with + - * / and brackets, e.g. data.total / 500000. “$” or “¥” in front adds the sign; “%” after it shows a percent with a bar. Several, each with a label, go apart by “;”, e.g. 5h: a.used / a.cap %; $credits.left. A list's items are a.*.used, or a[status=active].used for those that match, in sum(), max(), min() or count(). Left empty, new-api, sub2api and credit grants addresses are read as the placeholder shows.",
+          check: "Check balance",
+          nothingToAsk: "No balance URL to ask, and this vendor's balance isn't known",
+        },
         extras: {
           advanced: "Advanced",
           advancedShow: "Show advanced",
@@ -3013,6 +3023,7 @@ export const en = {
         staleNotAsked: "Not refreshed · last read {{time}}",
         staleMomentAgo: "a moment ago",
         unsupported: "No known way to read this vendor's balance",
+        fillUrl: "Fill in balance URL",
         noKey: "This endpoint has no key, so its balance can't be read",
         rowUnavailable: "Balance unavailable",
         rowAmount: "Balance {{amount}}",

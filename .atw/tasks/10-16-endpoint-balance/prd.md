@@ -160,14 +160,14 @@
 
 ### 数据与存储
 
-17. **接口的新字段**（可选，缺省等于没有，不做迁移）：余额设置，含余额查询地址、方法、取值写法、new-api 用户 ID、智谱团队组织 ID 与项目 ID。存在接口自己的存储里。
+17. **接口的新字段**（可选，缺省等于没有，不做迁移）：余额设置，含余额查询地址、方法、取值写法、new-api 用户 ID、智谱团队组织 ID 与项目 ID。存在接口自己的存储里。工单 05 起线上与存储都是 `balance: { url, method?, field? }`：方法只存 POST（GET 是缺省），空的取值写法不存，没有地址即没有这一项；保存时整份替换，省略即保留，没有地址即清掉；方法不是 GET、POST 的拒收（`invalid_balance_settings`，同 magpie 命令行）。
 18. **新的机密**：账户令牌、火山 AccessKey ID 与 Secret Access Key、腾讯 SecretId 与 SecretKey 存在 key 文件里，和 key 一样只有 daemon 读。客户端只看到有没有和打码；保存请求里可写入、可清空。复制接口时与 key 一样按「沿用哪家」拷贝。
 19. **主机级新字段**：「自动刷新余额与套餐用量」开关，缺省开。
 
 ### 协议
 
-20. 新 RPC 都在 `provider.api_endpoint.` 下，带点命名加 `.request` / `.response`（`docs/rpc-namespacing.md`）：读余额 `provider.api_endpoint.read_balance`（`endpointIds`，不存在的 id 不回；回 `readings` 与 `error`；工单 01 已做，可选「强制重读」，返回每家的结果、读数时间、是否旧读数）、查询余额（未保存的表单值）、自动识别余额地址（未保存的表单值）、读写自动刷新开关（或并入现有的主机级接口设置读写）。
-21. 余额项的形状：标签（`label`，null 即余额本身，界面写「余额」）、显示文字（`text`，如 `¥12.34`、`25%`）、数值（`value`）、币种或单位（`unit`）、可选的比例（`ratio`，带进度条时）。一家的读数：`endpointId`、`status`（`ok` / `unsupported` / `failed`，线上是字符串）、`items`、`readAt`（unsupported 为 null；OpenCode Zen 不发请求，也为 null）、`failure`（`reason` 五类之一、`detail`、`status`，可选的 `hint` 与 `seeAt`）；窗口沿用套餐用量现有的窗口形状。工单 02 加的可选字段：余额项的 `part`（`granted` 赠送 / `topped_up` 充值，界面按它翻译，认不得的写 `label`）；失败的 `hint`（magpie 具体提示的代码：`opencode_no_balance`、`siliconflow_retired`、`aihubmix_no_limit`，界面翻成一句，认不得的不显示）与 `seeAt`（厂商控制台网址，界面给「打开控制台」按钮）。DeepSeek 多币种合成一项（「 · 」拼接，`value`/`unit` 取排第一的币种），赠送 / 充值各一项排在其后。读到了却没有单独余额（Ollama Cloud 没买过 credits）是 `ok` 且 `items` 为空：列表行不显示，详情分区写「这家现在没有单独的余额可显示」。接口与保存请求里的新字段全部可选。
+20. 新 RPC 都在 `provider.api_endpoint.` 下，带点命名加 `.request` / `.response`（`docs/rpc-namespacing.md`）：读余额 `provider.api_endpoint.read_balance`（`endpointIds`，不存在的 id 不回；回 `readings` 与 `error`；工单 01 已做，可选「强制重读」，返回每家的结果、读数时间、是否旧读数）、查询余额 `provider.api_endpoint.check_balance`（未保存的表单值：`endpointId`、`apiKey`、`baseUrls`、`templateId`、`balance` 与请求头等附加项；回一份读数或 `error`，不进 1 分钟缓存与上次读数，可取消）、自动识别余额地址（未保存的表单值）、读写自动刷新开关（或并入现有的主机级接口设置读写）。
+21. 余额项的形状：标签（`label`，null 即余额本身，界面写「余额」）、显示文字（`text`，如 `¥12.34`、`25%`）、数值（`value`）、币种或单位（`unit`）、可选的比例（`ratio`，带进度条时）。一家的读数：`endpointId`、`status`（`ok` / `unsupported` / `failed`，线上是字符串）、`items`、`readAt`（unsupported 为 null；OpenCode Zen 不发请求，也为 null）、`failure`（`reason` 五类之一、`detail`、`status`，可选的 `hint` 与 `seeAt`）；窗口沿用套餐用量现有的窗口形状。工单 02 加的可选字段：余额项的 `part`（`granted` 赠送 / `topped_up` 充值，界面按它翻译，认不得的写 `label`）；失败的 `hint`（magpie 具体提示的代码：`opencode_no_balance`、`siliconflow_retired`、`aihubmix_no_limit`，界面翻成一句，认不得的不显示）与 `seeAt`（厂商控制台网址，界面给「打开控制台」按钮）。DeepSeek 多币种合成一项（「 · 」拼接，`value`/`unit` 取排第一的币种），赠送 / 充值各一项排在其后。取值写法的项：`$ ¥ € £` 对应 `unit` USD、CNY、EUR、GBP；带 `%` 的 `unit` 为 `%`、`value` 是百分数、`ratio` 是 0–1；几项里取不到的一项 `text` 为「—」、`value` 为 null，不带原因（magpie 把原因放在悬停里，这里的项形状没有这一栏）。读到了却没有单独余额（Ollama Cloud 没买过 credits）是 `ok` 且 `items` 为空：列表行不显示，详情分区写「这家现在没有单独的余额可显示」。接口与保存请求里的新字段全部可选。
 22. 新能力位 `server_info.features.apiEndpointBalance`。客户端在它为真时才显示本任务的接口页新界面；没有时照旧。
 23. 旧客户端保存接口时不带新字段：daemon 按「没给就保留原值」处理。
 

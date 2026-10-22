@@ -2761,6 +2761,16 @@ export const ja: TranslationResources = {
         apiKeyOptionalLabel: "API キー（任意）",
         apiKeyLocalPlaceholder: "ローカルサーバーでは任意",
         keyRejected: "上流がこのキーを拒否しました（401 / 403）",
+        balance: {
+          url: "残高照会 URL",
+          urlInfo:
+            "ベンダーがキーの残りを返すアドレス。GET、または本文なしの POST で照会します。チャットのリクエストと同じくキー（Bearer）とこのエンドポイントのヘッダーを付け、アドレスやヘッダーの {key} はキーに置き換わります。設定すると、Osuna が知っているベンダーの照会先ではなくこのアドレスに照会します。エンドポイントのページを開いている間だけ、1 分に 1 回まで照会します。",
+          field: "取得式",
+          fieldInfo:
+            "返答の中で残高がある場所。例：data.balance。+ - * / と括弧で計算できます（例：data.total / 500000）。前に「$」「¥」で記号を付け、後ろに「%」でパーセントとバーを表示します。複数は「;」で区切り、それぞれにラベルを付けられます（例：5h: a.used / a.cap %; $credits.left）。リストの各項目は a.*.used、条件に合うものは a[status=active].used と書き、sum()、max()、min()、count() に入れます。空欄なら new-api、sub2api、credit grants のアドレスはプレースホルダーの式で読みます。",
+          check: "残高を照会",
+          nothingToAsk: "残高照会 URL がなく、このベンダーの照会方法もわかりません",
+        },
         extras: {
           advanced: "詳細",
           advancedShow: "詳細を表示",
@@ -2982,6 +2992,7 @@ export const ja: TranslationResources = {
         staleNotAsked: "未更新 · {{time}}の値",
         staleMomentAgo: "少し前",
         unsupported: "このベンダーの残高の取得方法がわかりません",
+        fillUrl: "残高照会 URL を入力",
         noKey: "このエンドポイントにはキーがないため、残高を取得できません",
         rowUnavailable: "残高を取得できません",
         rowAmount: "残高 {{amount}}",

@@ -1,0 +1,219 @@
+// 余额查询地址、方法、取值写法与「查询余额」的编排照 magpie（https://github.com/yetone/magpie，
+// internal/gui/assets/app.js 编辑窗口的 Balance URL、Balance request method、Balance field、Check balance，7597c132）。
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+import React, { useMemo } from "react";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
+import { View } from "react-native";
+import { StyleSheet } from "react-native-unistyles";
+import type { ApiEndpointBalanceMethod } from "@getpaseo/protocol/api-endpoint/balance-settings";
+import type { ApiEndpointBalanceReading } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import { Button } from "@/components/ui/button";
+import { FormTextInput } from "@/components/ui/form-field";
+import { SegmentedControl, type SegmentedControlOption } from "@/components/ui/segmented-control";
+import { Text } from "@/components/ui/text";
+import { AdvancedFieldLabel } from "./advanced-field-label";
+import { failureTitle, hintOf, itemLabel } from "./balance-copy";
+import type { ConnectionFormModel, ConnectionFormState } from "./internal/connection-form-model";
+
+const KEY = "settings.apiEndpoints.form.balance";
+
+/**
+ * 「高级」里的余额设置：方法（GET / POST）与余额查询地址同一行，取值写法的占位是按地址给的默认写法；
+ * 「查询余额」用表单里还没保存的值当场查，结果写在按钮旁，留到再查或关掉窗口。说明都在信息提示里。
+ */
+export function BalanceSettingsFields({
+  state,
+  model,
+  size,
+}: {
+  state: ConnectionFormState;
+  model: ConnectionFormModel;
+  size: "sm" | "md";
+}) {
+  const { t } = useTranslation();
+  const urlLabel = t(`${KEY}.url`);
+  const fieldLabel = t(`${KEY}.field`);
+  const methods = useMemo<SegmentedControlOption<ApiEndpointBalanceMethod>[]>(
+    () => [
+      { value: "GET", label: "GET", testID: "api-endpoint-connection-balance-get" },
+      { value: "POST", label: "POST", testID: "api-endpoint-connection-balance-post" },
+    ],
+    [],
+  );
+  const check = state.balanceCheck;
+  const isChecking = check.status === "checking";
+  return (
+    <>
+      <View style={styles.field} testID="api-endpoint-connection-balance-url">
+        <AdvancedFieldLabel
+          label={urlLabel}
+          info={t(`${KEY}.urlInfo`)}
+          testID="api-endpoint-connection-balance-url-info"
+        />
+        <View style={styles.urlRow}>
+          <SegmentedControl
+            options={methods}
+            value={state.balanceMethod}
+            onValueChange={model.setBalanceMethod}
+            size="sm"
+            style={styles.segmentTrack}
+            testID="api-endpoint-connection-balance-method"
+          />
+          <View style={styles.flex}>
+            <FormTextInput
+              initialValue={state.balanceUrlText}
+              onChangeText={model.setBalanceUrl}
+              placeholder="https://…/api/usage/token"
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoFocus={state.focusesBalance}
+              keyboardType="url"
+              size={size}
+              accessibilityLabel={urlLabel}
+              testID="api-endpoint-connection-balance-url-input"
+            />
+          </View>
+        </View>
+      </View>
+      <View style={styles.field} testID="api-endpoint-connection-balance-field">
+        <AdvancedFieldLabel
+          label={fieldLabel}
+          info={t(`${KEY}.fieldInfo`)}
+          testID="api-endpoint-connection-balance-field-info"
+        />
+        <FormTextInput
+          initialValue={state.balanceFieldText}
+          onChangeText={model.setBalanceField}
+          placeholder={state.balanceFieldPlaceholder}
+          autoCapitalize="none"
+          autoCorrect={false}
+          size={size}
+          accessibilityLabel={fieldLabel}
+          testID="api-endpoint-connection-balance-field-input"
+        />
+        <View style={styles.checkRow}>
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={model.checkBalance}
+            loading={isChecking}
+            disabled={isChecking}
+            testID="api-endpoint-connection-check-balance"
+          >
+            {t(`${KEY}.check`)}
+          </Button>
+          <CheckResult check={check} />
+        </View>
+      </View>
+    </>
+  );
+}
+
+function CheckResult({ check }: { check: ConnectionFormState["balanceCheck"] }) {
+  const { t } = useTranslation();
+  if (check.status === "idle" || check.status === "checking") return null;
+  if (check.status === "failed") {
+    return (
+      <Text
+        variant="caption"
+        color="statusDanger"
+        selectable
+        style={styles.result}
+        accessibilityLiveRegion="polite"
+        testID="api-endpoint-connection-balance-result"
+      >
+        {check.message}
+      </Text>
+    );
+  }
+  const { reading } = check;
+  if (reading.status === "ok") {
+    return (
+      <Text
+        weight="medium"
+        selectable
+        style={styles.result}
+        accessibilityLiveRegion="polite"
+        testID="api-endpoint-connection-balance-result"
+      >
+        {readingLine({ t, reading })}
+      </Text>
+    );
+  }
+  if (reading.status !== "failed") {
+    return (
+      <Text
+        variant="caption"
+        color="foregroundMuted"
+        style={styles.result}
+        accessibilityLiveRegion="polite"
+        testID="api-endpoint-connection-balance-result"
+      >
+        {t(`${KEY}.nothingToAsk`)}
+      </Text>
+    );
+  }
+  const hint = hintOf({ t, failure: reading.failure });
+  const detail = reading.failure?.detail ?? null;
+  return (
+    <View
+      style={styles.result}
+      accessibilityLiveRegion="polite"
+      testID="api-endpoint-connection-balance-result"
+    >
+      <Text variant="caption" color="statusWarning">
+        {failureTitle({ t, failure: reading.failure })}
+      </Text>
+      {hint ? (
+        <Text variant="caption" color="foregroundMuted">
+          {hint}
+        </Text>
+      ) : null}
+      {detail ? (
+        <Text variant="caption" color="foregroundMuted" selectable numberOfLines={3}>
+          {detail}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+/** 读到的各项写成一行：「余额 $7.50」「Used 90% · Left $12.00」（照 magpie 编辑器的就地结果）。 */
+function readingLine(input: { t: TFunction; reading: ApiEndpointBalanceReading }): string {
+  const { t, reading } = input;
+  if (reading.items.length === 0) return t("settings.apiEndpoints.balance.noItems");
+  return reading.items.map((item) => `${itemLabel({ t, item })} ${item.text}`).join(" · ");
+}
+
+const styles = StyleSheet.create((theme) => ({
+  field: {
+    gap: theme.spacing[2],
+  },
+  urlRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+  },
+  flex: {
+    flex: 1,
+    minWidth: 0,
+  },
+  // 同冷却设置的分段：描一圈输入框的边，浅色对话框里也看得出这一组。
+  segmentTrack: {
+    borderWidth: 1,
+    borderColor: theme.colors.borderInput,
+  },
+  checkRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    flexWrap: "wrap",
+    gap: theme.spacing[3],
+  },
+  result: {
+    flex: 1,
+    minWidth: 160,
+    gap: theme.spacing[1],
+    paddingTop: theme.spacing[1],
+  },
+}));

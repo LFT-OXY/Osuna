@@ -2791,6 +2791,17 @@ export const fr: TranslationResources = {
         apiKeyOptionalLabel: "Clé d'API (facultative)",
         apiKeyLocalPlaceholder: "Facultative pour les serveurs locaux",
         keyRejected: "Le serveur a refusé cette clé (401 / 403)",
+        balance: {
+          url: "URL du solde",
+          urlInfo:
+            "Adresse où le fournisseur indique ce qui reste sur la clé, interrogée en GET, ou en POST sans corps. Elle reçoit la clé en Bearer, comme une requête de chat, avec les en-têtes de ce point de terminaison ; {key} dans l’adresse ou un en-tête devient la clé. Une fois renseignée, c’est cette adresse qui est interrogée, et non celle qu’Osuna connaît pour le fournisseur. Interrogée seulement quand les pages du point de terminaison sont ouvertes, au plus une fois par minute.",
+          field: "Champ du solde",
+          fieldInfo:
+            "Où se trouve le montant dans la réponse, p. ex. data.balance. Ce peut être un calcul avec + - * / et des parenthèses, p. ex. data.total / 500000. « $ » ou « ¥ » devant ajoute le symbole ; « % » après l’affiche en pourcentage avec une barre. Plusieurs, chacun avec une étiquette, se séparent par « ; », p. ex. 5h: a.used / a.cap %; $credits.left. Les éléments d’une liste s’écrivent a.*.used, ou a[status=active].used pour ceux qui correspondent, dans sum(), max(), min() ou count(). Laissé vide, les adresses new-api, sub2api et credit grants sont lues comme l’indique l’exemple.",
+          check: "Vérifier le solde",
+          nothingToAsk:
+            "Aucune URL du solde à interroger, et le solde de ce fournisseur n’est pas connu",
+        },
         extras: {
           advanced: "Avancé",
           advancedShow: "Afficher les options avancées",
@@ -3018,6 +3029,7 @@ export const fr: TranslationResources = {
         staleNotAsked: "Non actualisé · relevé {{time}}",
         staleMomentAgo: "il y a un instant",
         unsupported: "Aucun moyen connu de lire le solde de ce fournisseur",
+        fillUrl: "Renseigner l’URL du solde",
         noKey: "Ce point de terminaison n’a pas de clé, son solde ne peut donc pas être lu",
         rowUnavailable: "Solde indisponible",
         rowAmount: "Solde {{amount}}",

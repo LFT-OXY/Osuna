@@ -33,6 +33,8 @@ import type {
   ConnectionSaveResult,
   ConnectionTestRequest,
   ConnectionTestResult,
+  ConnectionBalanceCheckRequest,
+  ConnectionBalanceCheckResult,
 } from "./internal/connection-form-model";
 import { CONNECTION_ICON_ERROR_CODES } from "./internal/connection-form-model";
 import {
@@ -149,6 +151,11 @@ export interface UseHostEndpointsResult {
     request: ConnectionTestRequest,
     signal: AbortSignal,
   ) => Promise<ConnectionTestResult>;
+  // 编辑窗口的「查询余额」；只在声明了 apiEndpointBalance 的主机上用。
+  checkBalance: (
+    request: ConnectionBalanceCheckRequest,
+    signal: AbortSignal,
+  ) => Promise<ConnectionBalanceCheckResult>;
 }
 
 /** 调用方已经确认主机声明了 apiEndpointGateway 能力。 */
@@ -517,6 +524,30 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     [client, t],
   );
 
+  const checkBalance = useCallback(
+    async (
+      request: ConnectionBalanceCheckRequest,
+      signal: AbortSignal,
+    ): Promise<ConnectionBalanceCheckResult> => {
+      if (!client) return { status: "failed", message: t("workspace.terminal.hostDisconnected") };
+      const requestId = createUpstreamRequestId();
+      const unlink = linkAbortToCancel(signal, () => client.apiEndpointCancel(requestId));
+      try {
+        const response = await client.apiEndpointCheckBalance(request, requestId);
+        if (signal.aborted || response.error?.code === "cancelled") return { status: "cancelled" };
+        if (response.error) return { status: "failed", message: response.error.message };
+        if (!response.reading) throw new Error("The host returned neither a reading nor an error");
+        return { status: "done", reading: response.reading };
+      } catch (error) {
+        if (signal.aborted) return { status: "cancelled" };
+        return { status: "failed", message: toErrorMessage(error) };
+      } finally {
+        unlink();
+      }
+    },
+    [client, t],
+  );
+
   const revealKey = useCallback(
     async (endpointId: string): Promise<ConnectionRevealKeyResult> => {
       if (!client) return { status: "failed", message: t("workspace.terminal.hostDisconnected") };
@@ -599,6 +630,7 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     fetchSiteIcon,
     fetchModels,
     testConnection,
+    checkBalance,
   };
 }
 

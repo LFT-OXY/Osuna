@@ -76,6 +76,8 @@ export interface ApiEndpointConnectionSheetProps {
   followsListWhenNew: boolean;
   // 同上：「高级」里能设请求头、附加请求体、key 放哪个头。
   canSetRequestExtras: boolean;
+  // 主机声明了 apiEndpointBalance：「高级」里能设余额查询地址、方法、取值写法，能「查询余额」。
+  canSetBalance: boolean;
   // 主机给的模板清单（老主机为空）：新建时按 seed 的模板填好，编辑从模板加的接口时能切区域或套餐。
   templates: readonly ApiEndpointTemplate[];
   // 从模板列表进来时回到列表；其余为 null。
@@ -87,6 +89,7 @@ export interface ApiEndpointConnectionSheetProps {
   onFetchSiteIcon: ConnectionFormDeps["fetchSiteIcon"];
   onFetchModels: ConnectionFormDeps["fetchModels"];
   onTestConnection: ConnectionFormDeps["testConnection"];
+  onCheckBalance: ConnectionFormDeps["checkBalance"];
   // 保存成功：新建时调用方进入详情页，编辑时只关掉弹窗。
   onSaved: (result: Extract<ConnectionSaveResult, { status: "saved" }>) => void;
   onClose: () => void;
@@ -113,6 +116,7 @@ export function ApiEndpointConnectionSheet({
   canCheckBeforeSave,
   followsListWhenNew,
   canSetRequestExtras,
+  canSetBalance,
   templates,
   onBack,
   onSave,
@@ -122,6 +126,7 @@ export function ApiEndpointConnectionSheet({
   onFetchSiteIcon,
   onFetchModels,
   onTestConnection,
+  onCheckBalance,
   onSaved,
   onClose,
 }: ApiEndpointConnectionSheetProps) {
@@ -138,6 +143,7 @@ export function ApiEndpointConnectionSheet({
       fetchSiteIcon: onFetchSiteIcon,
       fetchModels: onFetchModels,
       testConnection: onTestConnection,
+      checkBalance: onCheckBalance,
     },
     {
       isKeyOptional,
@@ -147,6 +153,7 @@ export function ApiEndpointConnectionSheet({
       canCheckBeforeSave,
       followsListWhenNew,
       canSetRequestExtras,
+      canSetBalance,
       templates,
     },
   );

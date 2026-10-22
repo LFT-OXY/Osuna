@@ -13,6 +13,8 @@ import {
   type ApiEndpointTemplate,
   type ApiEndpointTemplateRegion,
   type ApiEndpointTestConnectionRequest,
+  type ApiEndpointCheckBalanceRequest,
+  type ApiEndpointBalanceReading,
   type ApiEndpointTestConnectionResult,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import equal from "fast-deep-equal";
@@ -47,6 +49,14 @@ import {
   type QuotaRestMode,
 } from "./cooldown-settings-form";
 import type { CooldownSettingsProblem } from "@getpaseo/protocol/api-endpoint/cooldown-settings";
+import {
+  balanceFieldPlaceholder,
+  balanceFieldsOf,
+  balanceSettingsOf,
+  hasBalanceSettings,
+  type BalanceCheck,
+  type BalanceFields,
+} from "./balance-settings-form";
 
 /*
  * 第三方接口「添加 / 编辑连接」弹窗的表单模型：纯 TypeScript，无 React（docs/forms.md）。
@@ -77,7 +87,8 @@ import type { CooldownSettingsProblem } from "@getpaseo/protocol/api-endpoint/co
 export type ConnectionFormSeed =
   // templateId 为 null 是「自定义」；「再加一家」用那家的模板。认不出的模板按「自定义」开。
   | { mode: "create"; templateId: string | null }
-  | { mode: "edit"; endpoint: ApiEndpoint }
+  // focus：从详情页「填写余额查询地址」打开，展开「高级」并把光标放在余额查询地址上。
+  | { mode: "edit"; endpoint: ApiEndpoint; focus?: "balance" }
   // name 是调用方按界面语言起好的「原名 副本」；重名由 daemon 避让。
   | { mode: "duplicate"; source: ApiEndpoint; name: string };
 
@@ -161,6 +172,18 @@ export type ConnectionTestRequest = Omit<
 // failed：请求本身没成立（断线、主机拒收）；上游的结论（含失败）在 done 的 result 里。
 export type ConnectionTestResult =
   | { status: "done"; result: ApiEndpointTestConnectionResult }
+  | { status: "failed"; message: string }
+  | { status: "cancelled" };
+
+// 「查询余额」：表单里还没保存的余额设置、key、地址与请求头。
+export type ConnectionBalanceCheckRequest = Omit<
+  ApiEndpointCheckBalanceRequest,
+  "type" | "requestId"
+>;
+
+// failed：请求本身没成立（断线、主机拒收）；查不到余额写在 done 的读数里。
+export type ConnectionBalanceCheckResult =
+  | { status: "done"; reading: ApiEndpointBalanceReading }
   | { status: "failed"; message: string }
   | { status: "cancelled" };
 
@@ -272,6 +295,8 @@ export interface ConnectionFormOptions {
   followsListWhenNew: boolean;
   // 同上：「高级」里能设请求头、附加请求体、key 放哪个头。
   canSetRequestExtras: boolean;
+  // 主机声明了 apiEndpointBalance：「高级」里有余额查询地址、方法、取值写法与「查询余额」。
+  canSetBalance: boolean;
   // 主机给的模板清单；老主机没有，为空。
   templates: readonly ApiEndpointTemplate[];
 }
@@ -415,6 +440,15 @@ export interface ConnectionFormState {
   showsRestCap: boolean;
   // 哪一项不对（分钟数不是 0 到八天的整数、时刻读不懂）；挡住保存。
   cooldownProblem: CooldownSettingsProblem | null;
+  // 「高级」里的余额设置（只在 canSetBalance 时有）：余额查询地址、方法、取值写法；占位是按地址给的默认写法。
+  canSetBalance: boolean;
+  balanceUrlText: string;
+  balanceMethod: BalanceFields["balanceMethod"];
+  balanceFieldText: string;
+  balanceFieldPlaceholder: string;
+  balanceCheck: BalanceCheck;
+  // 从「填写余额查询地址」打开：光标放在余额查询地址上。
+  focusesBalance: boolean;
 }
 
 export interface ConnectionFormDeps {
@@ -434,6 +468,10 @@ export interface ConnectionFormDeps {
     request: ConnectionTestRequest,
     signal: AbortSignal,
   ) => Promise<ConnectionTestResult>;
+  checkBalance: (
+    request: ConnectionBalanceCheckRequest,
+    signal: AbortSignal,
+  ) => Promise<ConnectionBalanceCheckResult>;
 }
 
 export interface ConnectionFormModel {
@@ -497,6 +535,11 @@ export interface ConnectionFormModel {
   setQuotaResetAt(value: string): void;
   setRestCap(value: string): void;
   setNoFailRest(value: boolean): void;
+  setBalanceUrl(value: string): void;
+  setBalanceMethod(value: BalanceFields["balanceMethod"]): void;
+  setBalanceField(value: string): void;
+  // 「查询余额」：用表单里还没保存的值当场查一次；再按一次重来。
+  checkBalance(): void;
   detect(): void;
   // 「逐个模型」：表单里的模型（前 30 个）在每种格式上各问一次。
   detectEachModel(): void;
@@ -576,6 +619,10 @@ interface Values {
   quotaResetAtText: string;
   restCapText: string;
   noFailRest: boolean;
+  balanceUrlText: string;
+  balanceMethod: BalanceFields["balanceMethod"];
+  balanceFieldText: string;
+  balanceCheck: BalanceCheck;
 }
 
 // 粘贴的 curl 给「自定义」填的地址与它的格式。
@@ -602,6 +649,7 @@ export function createConnectionFormModel(
     canCheckBeforeSave,
     followsListWhenNew,
     canSetRequestExtras,
+    canSetBalance,
     templates,
   } = options;
   // 添加窗口（新建或复制）：能在保存前拉模型，「模型」框一直显示。
@@ -616,6 +664,7 @@ export function createConnectionFormModel(
   let pendingDetect: AbortController | null = null;
   let pendingFetch: AbortController | null = null;
   let pendingTest: AbortController | null = null;
+  let pendingBalanceCheck: AbortController | null = null;
   const seededTemplate = templateOf(seed, templates);
   const seededRegion = seededTemplate ? initialRegionOf(seed, seededTemplate) : null;
   const seededUrls = initialUrlsOf({
@@ -627,10 +676,14 @@ export function createConnectionFormModel(
   const serviceAddressWas = originOf(seededUrls);
   const seededIcon = keyOwner?.icon ?? null;
   const seededCooldown = cooldownFieldsOf(keyOwner?.cooldownSettings);
+  const seededBalance = balanceFieldsOf(keyOwner?.balance);
+  const focusesBalance = canSetBalance && seed.mode === "edit" && seed.focus === "balance";
+  const hasSeededBalance = canSetBalance && hasBalanceSettings(seededBalance);
   const seededExtras = seededRequestExtras({
     keyOwner,
     isCustom: seededTemplate === null,
     hasCooldownSettings: hasCooldownSettings(seededCooldown),
+    opensAdvanced: focusesBalance || hasSeededBalance,
   });
   let values: Values = {
     template: seededTemplate,
@@ -670,10 +723,13 @@ export function createConnectionFormModel(
     insecureTls: keyOwner?.insecureTls === true,
     isConfirmingInsecureTls: false,
     ...seededCooldown,
+    ...seededBalance,
+    balanceCheck: { status: "idle" },
   };
   let state = derive(values);
   const extrasAtOpen = extrasNow();
   const cooldownAtOpen = cooldownFieldsRead(seededCooldown);
+  const balanceAtOpen = balanceSettingsOf(seededBalance);
   const hasSeededExtras = !equal(extrasAtOpen, EMPTY_EXTRAS);
   // 当前这次换图标；再换一次或关掉表单后，旧请求晚到的结果不再生效。
   let pendingIcon: object | null = null;
@@ -753,6 +809,13 @@ export function createConnectionFormModel(
       submitError: next.submitError,
       ...extras,
       ...cooldown,
+      canSetBalance,
+      balanceUrlText: next.balanceUrlText,
+      balanceMethod: next.balanceMethod,
+      balanceFieldText: next.balanceFieldText,
+      balanceFieldPlaceholder: balanceFieldPlaceholder(next.balanceUrlText),
+      balanceCheck: next.balanceCheck,
+      focusesBalance,
     };
   }
 
@@ -1194,6 +1257,34 @@ export function createConnectionFormModel(
     return { cooldownSettings: now.value };
   }
 
+  /** 余额设置只在改过时整份带上；没改的省略，daemon 留着那家原来的（复制时由 daemon 拷）。老主机不带。 */
+  function savedBalanceRequest(): Pick<ConnectionSaveRequest, "balance"> {
+    if (!canSetBalance) return {};
+    const now = balanceSettingsOf(values);
+    return equal(now, balanceAtOpen) ? {} : { balance: now };
+  }
+
+  /** 「查询余额」：表单里的 key、各格式地址、模板、请求头与余额设置，都还没保存。 */
+  async function runBalanceCheck(controller: AbortController): Promise<void> {
+    const outcome = await deps.checkBalance(
+      {
+        ...keyOwnerRequest(),
+        baseUrls: checkedUrlsOf(values),
+        ...(values.template ? { templateId: values.template.id } : {}),
+        balance: balanceSettingsOf(values),
+        ...typedExtrasRequest(),
+        ...insecureTlsRequest(),
+      },
+      controller.signal,
+    );
+    if (pendingBalanceCheck !== controller) return;
+    pendingBalanceCheck = null;
+    if (outcome.status === "cancelled") update({ balanceCheck: { status: "idle" } });
+    else if (outcome.status === "done") {
+      update({ balanceCheck: { status: "done", reading: outcome.reading } });
+    } else update({ balanceCheck: { status: "failed", message: outcome.message } });
+  }
+
   /** 改一行请求头。 */
   function updateHeaderRow(id: number, change: (row: HeaderRow) => HeaderRow): void {
     const headerRows = values.headerRows.map((row) => {
@@ -1349,6 +1440,7 @@ export function createConnectionFormModel(
       ...savedExtrasRequest(),
       ...insecureTlsRequest(),
       ...savedCooldownRequest(),
+      ...savedBalanceRequest(),
     };
   }
 
@@ -1709,6 +1801,23 @@ export function createConnectionFormModel(
     setNoFailRest(value) {
       update({ noFailRest: value });
     },
+    setBalanceUrl(value) {
+      update({ balanceUrlText: value });
+    },
+    setBalanceMethod(value) {
+      update({ balanceMethod: value });
+    },
+    setBalanceField(value) {
+      update({ balanceFieldText: value });
+    },
+    checkBalance() {
+      if (!canSetBalance) return;
+      pendingBalanceCheck?.abort();
+      const controller = new AbortController();
+      pendingBalanceCheck = controller;
+      update({ balanceCheck: { status: "checking" } });
+      void runBalanceCheck(controller);
+    },
     cancelDetect() {
       if (!pendingDetect) return;
       abortPendingDetect();
@@ -1728,6 +1837,8 @@ export function createConnectionFormModel(
       abortPendingDetect();
       abortPendingFetch();
       abortPendingTest();
+      pendingBalanceCheck?.abort();
+      pendingBalanceCheck = null;
       pendingIcon = null;
       closed = true;
       listeners.clear();
@@ -1743,13 +1854,19 @@ function seededRequestExtras(input: {
   keyOwner: ApiEndpoint | null;
   isCustom: boolean;
   hasCooldownSettings: boolean;
+  // 填了余额查询地址，或从「填写余额查询地址」打开。
+  opensAdvanced: boolean;
 }): Pick<Values, "isAdvancedOpen" | "headerRows" | "nextHeaderId" | "extraBodyText" | "keyHeader"> {
   const { keyOwner } = input;
   const saved = headerRowsOf(keyOwner?.headers);
   const extraBodyText = extraBodyTextOf(keyOwner?.extraBody);
   const keyHeader = keyHeaderOf(keyOwner?.keyHeader);
   const isSet =
-    saved.length > 0 || extraBodyText !== "" || keyHeader !== "both" || input.hasCooldownSettings;
+    saved.length > 0 ||
+    extraBodyText !== "" ||
+    keyHeader !== "both" ||
+    input.hasCooldownSettings ||
+    input.opensAdvanced;
   const startsEmpty = input.isCustom && saved.length === 0;
   const headerRows = startsEmpty ? [{ id: 0, name: "", value: "", isJson: false }] : saved;
   return {

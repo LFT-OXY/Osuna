@@ -18,6 +18,8 @@ import {
   type ConnectionSaveRequest,
   type ConnectionSaveResult,
   type ConnectionIconResult,
+  type ConnectionBalanceCheckRequest,
+  type ConnectionBalanceCheckResult,
 } from "./connection-form-model";
 import { curlOf, type CurlCommand } from "./curl-command";
 import type { ConnectionCurlInputs } from "./connection-form-model";
@@ -49,6 +51,8 @@ function fakeDeps() {
   const fetchAnswers: Deferred<ConnectionFetchResult>[] = [];
   const tests: { request: ConnectionTestRequest; signal: AbortSignal }[] = [];
   const testAnswers: Deferred<ConnectionTestResult>[] = [];
+  const balanceChecks: { request: ConnectionBalanceCheckRequest; signal: AbortSignal }[] = [];
+  const balanceAnswers: Deferred<ConnectionBalanceCheckResult>[] = [];
   const deps: ConnectionFormDeps = {
     save: async (request) => {
       saves.push(request);
@@ -82,6 +86,12 @@ function fakeDeps() {
       testAnswers.push(answer);
       return answer.promise;
     },
+    checkBalance: (request, signal) => {
+      balanceChecks.push({ request, signal });
+      const answer = deferred<ConnectionBalanceCheckResult>();
+      balanceAnswers.push(answer);
+      return answer.promise;
+    },
   };
   return {
     deps,
@@ -95,6 +105,10 @@ function fakeDeps() {
     },
     answerTest(index: number, result: ConnectionTestResult) {
       testAnswers[index]?.resolve(result);
+    },
+    balanceChecks,
+    answerBalanceCheck(index: number, result: ConnectionBalanceCheckResult) {
+      balanceAnswers[index]?.resolve(result);
     },
     reveals,
     storedIcons,
@@ -161,6 +175,7 @@ const KEY_REQUIRED = {
   canCheckBeforeSave: false,
   followsListWhenNew: false,
   canSetRequestExtras: false,
+  canSetBalance: false,
   templates: [],
 };
 const KEY_OPTIONAL = {
@@ -171,8 +186,11 @@ const KEY_OPTIONAL = {
   canCheckBeforeSave: true,
   followsListWhenNew: true,
   canSetRequestExtras: true,
+  canSetBalance: false,
   templates: [],
 };
+// 主机还声明了 apiEndpointBalance：「高级」里有余额设置与「查询余额」。
+const WITH_BALANCE = { ...KEY_OPTIONAL, canSetBalance: true };
 
 describe("connection form: create", () => {
   it("cannot save or detect until a name, a key and an address are there", () => {
@@ -2812,5 +2830,148 @@ describe("connection form: quota rest until a time of day", () => {
     });
     model.setQuotaResetAt("16:00Z");
     expect(model.getState()).toMatchObject({ cooldownProblem: null, canSubmit: true });
+  });
+});
+
+describe("connection form: balance settings and checking the balance", () => {
+  const READING = {
+    endpointId: "ep_1",
+    status: "ok",
+    items: [{ label: null, text: "$7.50", value: 7.5, unit: "USD", ratio: null }],
+    readAt: "2026-10-22T08:00:00.000Z",
+    failure: null,
+  };
+
+  it("opens with nothing set folded, the field's placeholder following the address, and leaves them out of a save", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "edit", endpoint: SAVED_ENDPOINT },
+      fake.deps,
+      WITH_BALANCE,
+    );
+    expect(model.getState()).toMatchObject({
+      canSetBalance: true,
+      isAdvancedOpen: false,
+      balanceUrlText: "",
+      balanceMethod: "GET",
+      balanceFieldText: "",
+      balanceFieldPlaceholder: "data.balance",
+      balanceCheck: { status: "idle" },
+    });
+    model.setBalanceUrl("https://relay.example/api/usage/token");
+    expect(model.getState().balanceFieldPlaceholder).toBe("$data.total_available / 500000");
+    model.setBalanceUrl("");
+    await model.submit();
+    expect(fake.saves[0]).not.toHaveProperty("balance");
+  });
+
+  it("opens an endpoint with an address set unfolded, and saves what was typed whole; an emptied address clears", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      {
+        mode: "edit",
+        endpoint: {
+          ...SAVED_ENDPOINT,
+          balance: { url: "https://relay.example/q", method: "POST", field: "$left" },
+        },
+      },
+      fake.deps,
+      WITH_BALANCE,
+    );
+    expect(model.getState()).toMatchObject({
+      isAdvancedOpen: true,
+      balanceUrlText: "https://relay.example/q",
+      balanceMethod: "POST",
+      balanceFieldText: "$left",
+    });
+    model.setBalanceMethod("GET");
+    model.setBalanceField(" data.left ");
+    await model.submit();
+    expect(fake.saves[0]?.balance).toEqual({ url: "https://relay.example/q", field: "data.left" });
+    model.setBalanceUrl(" ");
+    await model.submit();
+    expect(fake.saves[1]?.balance).toEqual({});
+  });
+
+  it("opened to fill in the balance address, the advanced part is unfolded at those fields", () => {
+    const { deps } = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "edit", endpoint: SAVED_ENDPOINT, focus: "balance" },
+      deps,
+      WITH_BALANCE,
+    );
+    expect(model.getState()).toMatchObject({ isAdvancedOpen: true, focusesBalance: true });
+  });
+
+  it("checks the balance with the form's unsaved values, and shows the reading in place", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "edit", endpoint: SAVED_ENDPOINT },
+      fake.deps,
+      WITH_BALANCE,
+    );
+    model.setApiKey("sk-typed");
+    model.setBalanceUrl(" https://relay.example/q?key={key} ");
+    model.setBalanceMethod("POST");
+    model.setBalanceField("$data.left");
+    model.checkBalance();
+    expect(model.getState().balanceCheck).toEqual({ status: "checking" });
+    expect(fake.balanceChecks[0]?.request).toEqual({
+      endpointId: "ep_1",
+      apiKey: "sk-typed",
+      baseUrls: [
+        { format: "anthropic_messages", url: "https://relay.example" },
+        { format: "openai_chat", url: "https://relay.example/v1" },
+      ],
+      balance: { url: "https://relay.example/q?key={key}", method: "POST", field: "$data.left" },
+    });
+    fake.answerBalanceCheck(0, { status: "done", reading: READING });
+    await flush();
+    expect(model.getState().balanceCheck).toEqual({ status: "done", reading: READING });
+    expect(fake.saves).toHaveLength(0);
+  });
+
+  it("a check that could not be made says why and stays until checked again; closing cancels one in flight", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: null },
+      fake.deps,
+      WITH_BALANCE,
+    );
+    model.setBalanceUrl("https://relay.example/q");
+    model.checkBalance();
+    fake.answerBalanceCheck(0, { status: "failed", message: "Host disconnected" });
+    await flush();
+    model.setBalanceField("data.left");
+    expect(model.getState().balanceCheck).toEqual({
+      status: "failed",
+      message: "Host disconnected",
+    });
+    model.checkBalance();
+    expect(model.getState().balanceCheck).toEqual({ status: "checking" });
+    model.close();
+    expect(fake.balanceChecks[1]?.signal.aborted).toBe(true);
+  });
+
+  it("a copy carries the original's settings without sending them, and an older host gets none", async () => {
+    const fake = fakeDeps();
+    const source = { ...SAVED_ENDPOINT, balance: { url: "https://relay.example/q" } };
+    const copy = createConnectionFormModel(
+      { mode: "duplicate", source, name: "Relay 2" },
+      fake.deps,
+      WITH_BALANCE,
+    );
+    expect(copy.getState().balanceUrlText).toBe("https://relay.example/q");
+    await copy.submit();
+    expect(fake.saves[0]).not.toHaveProperty("balance");
+    const older = createConnectionFormModel(
+      { mode: "edit", endpoint: SAVED_ENDPOINT },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    expect(older.getState().canSetBalance).toBe(false);
+    older.setBalanceUrl("https://relay.example/q");
+    await older.submit();
+    expect(fake.saves[1]).not.toHaveProperty("balance");
   });
 });

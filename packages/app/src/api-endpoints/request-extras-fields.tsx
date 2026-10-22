@@ -14,6 +14,7 @@ import { isBrokenJson, type HeaderRow } from "./internal/request-extras-form";
 import { extraBodyProblemText, headerProblemText } from "./request-extras-copy";
 import { CooldownSettingsFields } from "./cooldown-settings-fields";
 import { AdvancedFieldLabel } from "./advanced-field-label";
+import { BalanceSettingsFields } from "./balance-settings-fields";
 
 const ThemedChevronRight = withUnistyles(ChevronRight);
 const ThemedChevronDown = withUnistyles(ChevronDown);
@@ -26,7 +27,7 @@ const EXTRA_BODY_STYLE = { height: 128, paddingVertical: 8 };
 const EXTRA_BODY_PLACEHOLDER = '{\n  "prompt_cache_key": "${sessionId}"\n}';
 
 /**
- * 添加 / 编辑窗口的「高级」（照 magpie 编辑窗口的 Advanced）：请求头、附加请求体、key 放在哪个头，以及冷却设置。
+ * 添加 / 编辑窗口的「高级」（照 magpie 编辑窗口的 Advanced）：请求头、附加请求体、key 放在哪个头、余额设置，以及冷却设置。
  * 默认收起，设了任一项时一打开就展开。说明都在信息提示里，不在字段下面写段落。
  */
 export function RequestExtrasFields({
@@ -69,6 +70,9 @@ export function RequestExtrasFields({
           <HeadersField state={state} model={model} size={size} isCompact={isCompact} />
           <ExtraBodyField state={state} model={model} size={size} />
           {state.showsKeyHeader ? <KeyHeaderField state={state} model={model} /> : null}
+          {state.canSetBalance ? (
+            <BalanceSettingsFields state={state} model={model} size={size} />
+          ) : null}
           <CooldownSettingsFields state={state} model={model} size={size} />
         </View>
       ) : null}

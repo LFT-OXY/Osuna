@@ -208,6 +208,18 @@ export const ApiEndpointCooldownSettingsSchema = z.object({
 export type ApiEndpointCooldownSettings = z.infer<typeof ApiEndpointCooldownSettingsSchema>;
 
 /**
+ * 余额设置（照 magpie 的 Balance URL、Balance request method、Balance field）：填了余额查询地址就按它查余额，不再按接口地址认厂商。
+ * url：余额查询地址，地址与请求头里的 {key} 一类占位换成这家的 key；method：GET（缺省）或 POST（不带正文），见 balance-settings.ts；
+ * field：取值写法，空着时按地址给默认写法（defaultBalanceField）。都只在设了时有，老 daemon 不发、忽略。
+ */
+export const ApiEndpointBalanceSettingsSchema = z.object({
+  url: z.string().optional(),
+  method: z.string().optional(),
+  field: z.string().optional(),
+});
+export type ApiEndpointBalanceSettings = z.infer<typeof ApiEndpointBalanceSettingsSchema>;
+
+/**
  * 这家能用的一种 CLI 测法（ADR 0013）：`method` 是 test_models 的测法（claude_code、codex）。只列这家提供的：
  * 按 Claude Code 测只给有 Anthropic 地址的中转服务（模板分组是 relay，或「自定义」加的），按 Codex 测给有 Responses 或 Chat 地址的。
  * `unavailable` 为 null 即现在就能测；否则是现在测不了的原因（cli_sample_missing：还没有 Claude Code 请求经过中转站）。
@@ -265,6 +277,8 @@ export const ApiEndpointSchema = z.object({
   ...ApiEndpointRequestExtrasSchema.shape,
   // 冷却设置（cooldown 是正在冷却的状态，这是用户设的时长）；设了才发，老 daemon 不发。
   cooldownSettings: ApiEndpointCooldownSettingsSchema.optional(),
+  // 余额设置；设了余额查询地址才发，老 daemon 不发。
+  balance: ApiEndpointBalanceSettingsSchema.optional(),
 });
 export type ApiEndpoint = z.infer<typeof ApiEndpointSchema>;
 
@@ -443,6 +457,9 @@ export type ApiEndpointListResponse = z.infer<typeof ApiEndpointListResponseSche
  * cooldownSettings：冷却设置，整份替换（空对象清掉），省略即保留（复制时是原来那家的）。分钟数不是 0 到八天
  * （API_ENDPOINT_COOLDOWN_MAX_MINUTES）的整数、时刻读不懂的拒收（invalid_cooldown_settings，params.field 为 quotaRestMinutes /
  * restCapMinutes / quotaResetAt，params.max）。老 daemon 忽略它。
+ *
+ * balance：余额设置，整份替换（没有余额查询地址即清掉），省略即保留（复制时是原来那家的），老客户端保存不会清掉它。
+ * 方法不是 GET、POST 的拒收（invalid_balance_settings，params.field 为 method）。老 daemon 忽略它。
  */
 export const ApiEndpointSaveRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.save.request"),
@@ -467,6 +484,7 @@ export const ApiEndpointSaveRequestSchema = z.object({
   autoPick: z.array(z.string()).optional(),
   modelSettings: ApiEndpointModelSettingsSchema.optional(),
   cooldownSettings: ApiEndpointCooldownSettingsSchema.optional(),
+  balance: ApiEndpointBalanceSettingsSchema.optional(),
   ...ApiEndpointRequestExtrasSchema.shape,
 });
 export type ApiEndpointSaveRequest = z.infer<typeof ApiEndpointSaveRequestSchema>;
@@ -1432,6 +1450,36 @@ export const ApiEndpointReadBalanceResponseSchema = z.object({
   }),
 });
 export type ApiEndpointReadBalanceResponse = z.infer<typeof ApiEndpointReadBalanceResponseSchema>;
+
+/**
+ * 查询余额（编辑窗口的「查询余额」，照 magpie 编辑器的 Check balance）：用表单里还没保存的值当场查一次，只读，
+ * 不进 1 分钟缓存，也不记作上次读数。key 的规则同 test_connection（apiKey 省略即用 endpointId 那家存的）；
+ * baseUrls、templateId 与请求头等附加项是表单里的，不校验证书的主机按它们算（省略即用那家存的）。
+ * balance 没有余额查询地址时按表单的地址认厂商，同读余额。可以用 cancel 按 requestId 取消。
+ * 只有声明了 apiEndpointBalance 的 daemon 认它。
+ */
+export const ApiEndpointCheckBalanceRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.check_balance.request"),
+  requestId: z.string(),
+  endpointId: z.string().optional(),
+  apiKey: z.string().optional(),
+  baseUrls: z.array(ApiEndpointBaseUrlSchema).optional(),
+  templateId: z.string().optional(),
+  balance: ApiEndpointBalanceSettingsSchema,
+  ...ApiEndpointRequestExtrasSchema.shape,
+});
+export type ApiEndpointCheckBalanceRequest = z.infer<typeof ApiEndpointCheckBalanceRequestSchema>;
+
+/** 请求本身被拒（找不到接口、被取消）时 reading 为 null，原因在 error；查不到余额写在 reading 里。 */
+export const ApiEndpointCheckBalanceResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.check_balance.response"),
+  payload: z.object({
+    requestId: z.string(),
+    reading: ApiEndpointBalanceReadingSchema.nullable(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointCheckBalanceResponse = z.infer<typeof ApiEndpointCheckBalanceResponseSchema>;
 
 /**
  * 从别的软件导入（Import）：daemon 只读地读本机别的软件的配置（ADR 0013）。每条发现照 Osuna 会加的那家给出，

@@ -6711,6 +6711,57 @@ test.describe("Balance", () => {
       balanceSection(page).getByTestId("api-endpoint-balance-failure-reason"),
     ).toHaveText("Temporarily unavailable: try again later");
   });
+  test("Check balance asks the form's unsaved address and field and shows the balance in place; a refused key says why", async ({
+    page,
+  }) => {
+    const id = await seedRelay();
+    await openEndpointDetail(page, id);
+    await page.getByTestId("api-endpoint-edit-connection").filter({ visible: true }).click();
+    await page.getByTestId("api-endpoint-connection-advanced-toggle").click();
+    await page
+      .getByTestId("api-endpoint-connection-balance-url-input")
+      .fill(`${relay.origin}/balance/usage`);
+    await expect(page.getByTestId("api-endpoint-connection-balance-field-input")).toHaveAttribute(
+      "placeholder",
+      "data.balance",
+    );
+    await page.getByTestId("api-endpoint-connection-balance-field-input").fill("$data.left");
+    const check = page.getByTestId("api-endpoint-connection-check-balance");
+    const result = page.getByTestId("api-endpoint-connection-balance-result");
+
+    await check.click();
+    await expect(result).toHaveText("Balance $7.50");
+
+    await page.getByTestId("api-endpoint-connection-api-key").fill("sk-wrong");
+    await check.click();
+    await expect(result).toContainText("Token rejected: the vendor refused the key (HTTP 401)");
+    await expect(result).toContainText("Invalid API key");
+
+    // 只看不存：取消后这家没有余额设置。
+    await page.getByRole("button", { name: "Cancel" }).click();
+    const listed = await client.apiEndpointList("claude");
+    expect(listed.endpoints.find((endpoint) => endpoint.id === id)?.balance).toBeUndefined();
+  });
+
+  test("an endpoint with no known balance query offers to fill in its balance URL, opening the editor at it", async ({
+    page,
+  }) => {
+    const id = await seedRelay();
+    await openEndpointDetail(page, id);
+    await balanceSection(page).getByTestId("api-endpoint-balance-fill-url").click();
+    const urlInput = page.getByTestId("api-endpoint-connection-balance-url-input");
+    await expect(urlInput).toBeFocused();
+    await urlInput.fill(`${relay.origin}/balance/usage`);
+    await page.getByTestId("api-endpoint-connection-balance-field-input").fill("$data.left");
+    await page.getByTestId("api-endpoint-connection-save").click();
+    await expect(page.getByTestId("api-endpoint-connection-form")).toHaveCount(0);
+
+    await balanceSection(page).getByTestId("api-endpoint-balance-refresh").click();
+    await expect(balanceSection(page).getByTestId("api-endpoint-balance-item")).toHaveText(
+      /Balance.*\$7\.50/,
+    );
+  });
+
   test("DeepSeek lists each currency and splits the granted from the topped up; OpenCode Zen says to read its console", async ({
     page,
   }) => {
