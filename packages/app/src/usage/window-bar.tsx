@@ -138,7 +138,7 @@ function WindowRowContent({
       <View style={styles.contentRow}>
         <View style={styles.windowContent}>
           <View style={layout === "inline" ? styles.labelRow : styles.labelRowWrapping}>
-            <Text style={LABEL_STYLES[layout]} numberOfLines={1}>
+            <Text style={labelStyleOf(layout)} numberOfLines={1}>
               {label}
             </Text>
             <Text style={layout === "inline" ? styles.value : styles.valueWrapping}>
@@ -272,8 +272,13 @@ const styles = StyleSheet.create((theme) => ({
   },
 }));
 
-const LABEL_STYLES = {
-  inline: styles.label,
-  wrap: styles.labelWhole,
-  stack: styles.labelLine,
+// 在渲染时取样式：模块加载时读 styles 会在主题载入前把样式定死（unistyles-module-scope.test.ts）。
+function labelStyleOf(layout: keyof typeof LABEL_STYLE_KEYS) {
+  return styles[LABEL_STYLE_KEYS[layout]];
+}
+
+const LABEL_STYLE_KEYS = {
+  inline: "label",
+  wrap: "labelWhole",
+  stack: "labelLine",
 } as const;
