@@ -3,7 +3,7 @@
   "name": "endpoint-balance",
   "title": "余额与套餐额度显示",
   "description": "照 magpie 在接口页显示每家余额与套餐 key 的额度窗口（块 5），只显示，不按额度换家",
-  "status": "accept",
+  "status": "implement",
   "dev_type": null,
   "scope": null,
   "package": "server",
