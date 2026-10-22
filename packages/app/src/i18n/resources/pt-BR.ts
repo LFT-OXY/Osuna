@@ -2805,6 +2805,20 @@ export const ptBR: TranslationResources = {
             "O ID do projeto da equipe, no mesmo console. Os dois IDs são necessários.",
           teamProjectIdPlaceholder: "Opcional · só plano de equipe GLM",
           teamBothNeeded: "Plano de equipe: informe o ID da organização e o ID do projeto",
+          volcAccessKeyId: "AccessKey ID",
+          volcSecretAccessKey: "Secret Access Key",
+          tencentSecretId: "SecretId",
+          tencentSecretKey: "SecretKey",
+          accessKeyVendor: {
+            volcengine: "Volcengine Ark",
+            tencent: "Tencent Cloud Token Plan Enterprise",
+          },
+          accessKeyInfo:
+            "{{vendor}} só informa as janelas de uso de um plano à chave de acesso de nuvem da conta (criada no gerenciamento de acesso do console), nunca à chave do próprio plano. Com os dois campos, as janelas são lidas da plataforma aberta do fornecedor. Fica só neste host e não é usada para mais nada.",
+          secretAccessKeyInfo:
+            "O segredo que acompanha o ID. Só é enviada uma assinatura feita com ele, nunca o segredo.",
+          accessKeySecretNeeded: "Informe também a {{secret}}",
+          accessKeyRemove: "Remover",
           fixNewApiKeyQuery:
             "…/api/usage/token aceita a chave de API, não este token. Para o saldo da conta, o new-api usa /api/user/self; o sub2api usa /api/v1/user/profile.",
           fixSub2apiKeyQuery:
@@ -3038,6 +3052,16 @@ export const ptBR: TranslationResources = {
         fillUrl: "Preencher URL do saldo",
         noKey: "Este endpoint não tem chave, então o saldo não pode ser lido",
         rowUnavailable: "Saldo indisponível",
+        rowNeedsAccessKey: "Precisa de AccessKey",
+        needsAccessKeyVolcengine:
+          "Precisa de AccessKey: o Volcengine Ark só informa as janelas deste plano ao AccessKey ID e à Secret Access Key da conta. Preencha-os em Avançado, nas configurações deste endpoint.",
+        needsAccessKeyTencent:
+          "Precisa de AccessKey: a Tencent Cloud só informa o uso de um Token Plan Enterprise ao SecretId e à SecretKey da conta. Preencha-os em Avançado, nas configurações deste endpoint.",
+        fillAccessKey: "Preencher AccessKey",
+        planTier: "Nível: {{tier}}",
+        planStopped: "Plano parado: {{status}}",
+        teamPlanStopped: "Plano da equipe {{team}} parado: {{status}}",
+        unreadTeams: "Sem cota lida para: {{teams}}",
         rowAmount: "Saldo {{amount}}",
         rowWindowUsed: "{{window}} {{percent}} usado",
         rowWindowLeft: "{{window}} {{percent}} restante",
@@ -3058,6 +3082,8 @@ export const ptBR: TranslationResources = {
           toppedUp: "Recarregado",
         },
         hint: {
+          accessKeyRefused:
+            "Verifique o AccessKey (AK/SK) e suas permissões: a plataforma aberta recusou a chave de acesso, ou ela não pode ler o uso deste plano.",
           glmKeyRefused:
             "Esta chave expirou, foi excluída ou foi colada errado: copie uma válida no console e cole nas configurações deste endpoint.",
           opencodeGoNoSubscription:
@@ -3092,6 +3118,8 @@ export const ptBR: TranslationResources = {
           bucket: "{{bucket}} · {{window}}",
           bucketVideo: "Vídeo",
           bucketImage: "Imagem",
+          unitCredits: "créditos",
+          unitTokens: "tokens",
           unitVideos: "vídeos",
         },
         pace: "Ritmo {{pace}}",

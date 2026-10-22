@@ -116,15 +116,20 @@ const API_ENDPOINT_REQUEST_TYPES: Record<ApiEndpointRequest["type"], true> = {
   "provider.api_endpoint.cancel.request": true,
 };
 
-type SavedBalance = Pick<ApiEndpointSaveInput, "balance" | "balanceToken">;
+type SavedBalance = Pick<
+  ApiEndpointSaveInput,
+  "balance" | "balanceToken" | "accessKeyId" | "secretAccessKey"
+>;
 
-/** 保存请求里的余额设置与账户令牌：给了才带。 */
+/** 保存请求里的余额设置、账户令牌与云账号密钥：给了才带。 */
 function savedBalanceOf(
   request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.save.request" }>,
 ): SavedBalance {
   return {
     ...(request.balance !== undefined ? { balance: request.balance } : {}),
     ...(request.balanceToken !== undefined ? { balanceToken: request.balanceToken } : {}),
+    ...(request.accessKeyId !== undefined ? { accessKeyId: request.accessKeyId } : {}),
+    ...(request.secretAccessKey !== undefined ? { secretAccessKey: request.secretAccessKey } : {}),
   };
 }
 
@@ -692,8 +697,7 @@ export class ApiEndpointSession {
           message: `Unknown secret: ${request.secret}`,
         });
       }
-      // 现在只有账户令牌一种。
-      value = this.service.revealBalanceToken(request.endpointId);
+      value = this.service.revealSecret(request.endpointId, secret);
     } catch (caught) {
       error = this.toWireError(caught, request);
     }

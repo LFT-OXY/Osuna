@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { RotateCw } from "lucide-react-native";
+import type { ApiEndpointAccessKeyVendor } from "@getpaseo/protocol/api-endpoint/balance-settings";
 import type {
   ApiEndpointBalanceReading,
   ApiEndpointBalanceResets,
@@ -35,7 +36,8 @@ import type { EndpointBalances } from "./use-endpoint-balances";
 
 /**
  * 接口详情页的「余额与套餐用量」区：每项余额一行，标题下写读数时间，右侧「刷新」。
- * 查不到时就地写原因，对方的原话（已打码）接在下面；认不出查法时写明，并给「填写余额查询地址」。
+ * 查不到时就地写原因，对方的原话（已打码）接在下面；认不出查法时写明，并给「填写余额查询地址」；火山、腾讯的套餐
+ * 还没填云账号密钥时写「需要 AccessKey」，并给「填写 AccessKey」。
  */
 export function ApiEndpointBalanceSection({
   endpointId,
@@ -43,6 +45,8 @@ export function ApiEndpointBalanceSection({
   balances,
   now,
   onFillBalanceUrl,
+  accessKeyVendor,
+  onFillAccessKey,
 }: {
   endpointId: string;
   // 没填 key 的接口不查余额（照 magpie），分区说它没 key，不说认不出。
@@ -51,6 +55,10 @@ export function ApiEndpointBalanceSection({
   now: Date;
   // 打开编辑窗口并定位到余额栏；老主机的编辑窗口没有这几栏时为 null。
   onFillBalanceUrl: (() => void) | null;
+  // 地址是火山方舟或腾讯云 Token Plan 企业版时是哪家（说要填哪两栏）；别的为 null。
+  accessKeyVendor: ApiEndpointAccessKeyVendor | null;
+  // 打开编辑窗口并定位到 AccessKey 两栏；同 onFillBalanceUrl。
+  onFillAccessKey: (() => void) | null;
 }) {
   const { t, i18n } = useTranslation();
   const reading = balances.status === "ready" ? balances.readings.get(endpointId) : undefined;
@@ -109,6 +117,8 @@ export function ApiEndpointBalanceSection({
           reading={reading}
           hasApiKey={hasApiKey}
           onFillBalanceUrl={onFillBalanceUrl}
+          accessKeyVendor={accessKeyVendor}
+          onFillAccessKey={onFillAccessKey}
         />
       </View>
     </SettingsSection>
@@ -120,11 +130,15 @@ function BalanceBody({
   reading,
   hasApiKey,
   onFillBalanceUrl,
+  accessKeyVendor,
+  onFillAccessKey,
 }: {
   balances: Exclude<EndpointBalances, { status: "off" }>;
   reading: ApiEndpointBalanceReading | undefined;
   hasApiKey: boolean;
   onFillBalanceUrl: (() => void) | null;
+  accessKeyVendor: ApiEndpointAccessKeyVendor | null;
+  onFillAccessKey: (() => void) | null;
 }) {
   const { t } = useTranslation();
   if (balances.status === "loading") {
@@ -178,6 +192,34 @@ function BalanceBody({
       </View>
     );
   }
+  if (reading.status === "needs_access_key") {
+    return (
+      <View style={settingsStyles.row}>
+        <UiText
+          variant="caption"
+          color="foregroundMuted"
+          style={styles.noticeText}
+          testID="api-endpoint-balance-needs-access-key"
+        >
+          {t(
+            accessKeyVendor === "tencent"
+              ? "settings.apiEndpoints.balance.needsAccessKeyTencent"
+              : "settings.apiEndpoints.balance.needsAccessKeyVolcengine",
+          )}
+        </UiText>
+        {onFillAccessKey ? (
+          <Button
+            variant="outline"
+            size="xs"
+            onPress={onFillAccessKey}
+            testID="api-endpoint-balance-fill-access-key"
+          >
+            {t("settings.apiEndpoints.balance.fillAccessKey")}
+          </Button>
+        ) : null}
+      </View>
+    );
+  }
   if (reading.status !== "ok") {
     return (
       <FailureRows
@@ -201,6 +243,7 @@ function BalanceBody({
   }
   return (
     <>
+      <PlanNotes reading={reading} />
       {reading.items.map((item, index) => (
         <View
           key={`${item.label ?? ""}:${item.unit ?? ""}:${item.text}`}
@@ -422,6 +465,51 @@ function windowCount(input: {
   return unit ? `${count} ${windowUnitLabel({ t, unit })}` : count;
 }
 
+/**
+ * 套餐自己说的（照 magpie 写在套餐名旁）：火山 Agent Plan 的档位、腾讯停用的套餐与原因（提醒色），几个团队时读不到额度的团队。
+ */
+function PlanNotes({ reading }: { reading: ApiEndpointBalanceReading }) {
+  const { t } = useTranslation();
+  const stopped = reading.stoppedPlans ?? [];
+  const unread = reading.unreadTeams ?? [];
+  if (reading.planTier === undefined && stopped.length === 0 && unread.length === 0) return null;
+  return (
+    <View style={styles.planNotes} testID="api-endpoint-balance-plan-notes">
+      {reading.planTier === undefined ? null : (
+        <UiText variant="caption" color="foregroundMuted" testID="api-endpoint-balance-plan-tier">
+          {t("settings.apiEndpoints.balance.planTier", { tier: reading.planTier })}
+        </UiText>
+      )}
+      {stopped.map((plan) => {
+        const status = plan.reason ? `${plan.status}, ${plan.reason}` : plan.status;
+        return (
+          <UiText
+            key={plan.team ?? ""}
+            variant="caption"
+            color="statusWarning"
+            testID="api-endpoint-balance-plan-stopped"
+          >
+            {plan.team === null
+              ? t("settings.apiEndpoints.balance.planStopped", { status })
+              : t("settings.apiEndpoints.balance.teamPlanStopped", { team: plan.team, status })}
+          </UiText>
+        );
+      })}
+      {unread.length === 0 ? null : (
+        <UiText
+          variant="caption"
+          color="foregroundMuted"
+          testID="api-endpoint-balance-unread-teams"
+        >
+          {t("settings.apiEndpoints.balance.unreadTeams", {
+            teams: unread.join(t("settings.apiEndpoints.listSeparator")),
+          })}
+        </UiText>
+      )}
+    </View>
+  );
+}
+
 function Notice({ text, testID }: { text: string; testID: string }) {
   return (
     <View style={settingsStyles.row}>
@@ -542,6 +630,11 @@ const styles = StyleSheet.create((theme) => ({
     paddingTop: theme.spacing[2],
     borderTopWidth: 1,
     borderTopColor: theme.colors.borderCardRow,
+  },
+  planNotes: {
+    gap: theme.spacing[1],
+    paddingTop: theme.spacing[3],
+    paddingHorizontal: theme.spacing[4],
   },
   failure: {
     flexDirection: "column",

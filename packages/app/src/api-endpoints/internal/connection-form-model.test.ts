@@ -60,7 +60,13 @@ function fakeDeps() {
   const balanceDetectAnswers: Deferred<ConnectionBalanceDetectResult>[] = [];
   const tokenReveals: string[] = [];
   let tokenRevealAnswer = deferred<ConnectionRevealSecretResult>();
+  const accessKeyReveals: { endpointId: string; part: string }[] = [];
+  let accessKeyRevealAnswer = deferred<ConnectionRevealSecretResult>();
   const deps: ConnectionFormDeps = {
+    revealAccessKey: (endpointId, part) => {
+      accessKeyReveals.push({ endpointId, part });
+      return accessKeyRevealAnswer.promise;
+    },
     revealBalanceToken: (endpointId) => {
       tokenReveals.push(endpointId);
       return tokenRevealAnswer.promise;
@@ -133,6 +139,11 @@ function fakeDeps() {
     },
     reveals,
     tokenReveals,
+    accessKeyReveals,
+    answerAccessKeyReveal(result: ConnectionRevealSecretResult) {
+      accessKeyRevealAnswer.resolve(result);
+      accessKeyRevealAnswer = deferred<ConnectionRevealSecretResult>();
+    },
     answerTokenReveal(result: ConnectionRevealSecretResult) {
       tokenRevealAnswer.resolve(result);
       tokenRevealAnswer = deferred<ConnectionRevealSecretResult>();
@@ -3335,5 +3346,126 @@ describe("connection form: the account's balance token and user ID", () => {
       balanceTokenMask: "abcd…wxyz",
     });
     expect(model.getState().balanceFix).toBeNull();
+  });
+});
+
+describe("connection form: the cloud access key of a Volcengine or Tencent plan", () => {
+  const ARK: ApiEndpoint = {
+    ...SAVED_ENDPOINT,
+    baseUrl: "https://ark.cn-beijing.volces.com/api/coding/v3",
+    baseUrls: [{ format: "openai_chat", url: "https://ark.cn-beijing.volces.com/api/coding/v3" }],
+  };
+  const ARK_WITH_KEY: ApiEndpoint = {
+    ...ARK,
+    accessKeyIdMask: "AKLT…0001",
+    secretAccessKeyMask: "volc…leak",
+  };
+
+  function editing(
+    endpoint: ApiEndpoint,
+    focus?: "access_key",
+  ): { fake: ReturnType<typeof fakeDeps>; model: ReturnType<typeof createConnectionFormModel> } {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "edit", endpoint, ...(focus ? { focus } : {}) },
+      fake.deps,
+      WITH_BALANCE,
+    );
+    return { fake, model };
+  }
+
+  it("gives the two fields only at a Volcengine Ark or Tencent Token Plan Enterprise address, named for the vendor", () => {
+    expect(editing(SAVED_ENDPOINT).model.getState().accessKeyVendor).toBeNull();
+    expect(editing(ARK).model.getState().accessKeyVendor).toBe("volcengine");
+    const tencent = editing({
+      ...SAVED_ENDPOINT,
+      baseUrls: [{ format: "openai_chat", url: "https://tokenhub.tencentmaas.com/plan/v3" }],
+    });
+    expect(tencent.model.getState().accessKeyVendor).toBe("tencent");
+    const oldHost = createConnectionFormModel(
+      { mode: "edit", endpoint: ARK },
+      fakeDeps().deps,
+      KEY_OPTIONAL,
+    );
+    expect(oldHost.getState().accessKeyVendor).toBeNull();
+  });
+
+  it("opens Advanced with the saved keys masked, and leaves them out of a save not touching them", async () => {
+    const { fake, model } = editing(ARK_WITH_KEY);
+    expect(model.getState()).toMatchObject({
+      isAdvancedOpen: true,
+      hasSavedAccessKey: true,
+      accessKeyId: { mask: "AKLT…0001", boxValue: "" },
+      secretAccessKey: { mask: "volc…leak", boxValue: "" },
+    });
+    await model.submit();
+    expect(fake.saves[0]).not.toHaveProperty("accessKeyId");
+    expect(fake.saves[0]).not.toHaveProperty("secretAccessKey");
+  });
+
+  it("from Fill in AccessKey, opens Advanced with the cursor on the ID", () => {
+    expect(editing(ARK, "access_key").model.getState()).toMatchObject({
+      isAdvancedOpen: true,
+      focusesAccessKey: true,
+    });
+  });
+
+  it("holds the save while the ID has no Secret, as magpie does, then saves both trimmed", async () => {
+    const { fake, model } = editing(ARK);
+    model.setAccessKey("secret", "only-secret");
+    expect(model.getState().hasLoneAccessKey).toBe(false);
+    model.setAccessKey("secret", "");
+    model.setAccessKey("id", " AKLTnew ");
+    expect(model.getState()).toMatchObject({ hasLoneAccessKey: true, canSubmit: false });
+    model.setAccessKey("secret", " new-secret ");
+    expect(model.getState()).toMatchObject({ hasLoneAccessKey: false, canSubmit: true });
+    await model.submit();
+    expect(fake.saves[0]).toMatchObject({ accessKeyId: "AKLTnew", secretAccessKey: "new-secret" });
+  });
+
+  it("replaces only the Secret when only it is typed, and removes both together", async () => {
+    const { fake, model } = editing(ARK_WITH_KEY);
+    model.setAccessKey("secret", "another-secret");
+    expect(model.getState().hasLoneAccessKey).toBe(false);
+    await model.submit();
+    expect(fake.saves[0]).toMatchObject({ secretAccessKey: "another-secret" });
+    expect(fake.saves[0]).not.toHaveProperty("accessKeyId");
+    model.removeAccessKey();
+    expect(model.getState()).toMatchObject({
+      hasSavedAccessKey: false,
+      accessKeyId: { mask: null, boxValue: "" },
+      secretAccessKey: { mask: null, boxValue: "" },
+      hasLoneAccessKey: false,
+    });
+    await model.submit();
+    expect(fake.saves[1]).toMatchObject({ accessKeyId: "", secretAccessKey: "" });
+  });
+
+  it("shows a saved key on asking, and hides it again without keeping it in the box", async () => {
+    const { fake, model } = editing(ARK_WITH_KEY);
+    model.toggleAccessKeyVisible("secret");
+    expect(model.getState().secretAccessKey.isRevealing).toBe(true);
+    expect(fake.accessKeyReveals).toEqual([{ endpointId: "ep_1", part: "secret" }]);
+    fake.answerAccessKeyReveal({ status: "revealed", value: "volc-secret-leak" });
+    await flush();
+    expect(model.getState().secretAccessKey).toMatchObject({
+      isVisible: true,
+      boxValue: "volc-secret-leak",
+    });
+    await model.submit();
+    expect(fake.saves[0]).not.toHaveProperty("secretAccessKey");
+    model.toggleAccessKeyVisible("secret");
+    expect(model.getState().secretAccessKey).toMatchObject({ isVisible: false, boxValue: "" });
+  });
+
+  it("says why a saved key could not be shown", async () => {
+    const { fake, model } = editing(ARK_WITH_KEY);
+    model.toggleAccessKeyVisible("id");
+    fake.answerAccessKeyReveal({ status: "failed", message: "Host disconnected" });
+    await flush();
+    expect(model.getState().accessKeyId).toMatchObject({
+      isRevealing: false,
+      revealError: "Host disconnected",
+    });
   });
 });

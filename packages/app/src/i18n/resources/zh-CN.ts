@@ -2785,6 +2785,19 @@ export const zhCN: TranslationResources = {
           teamProjectIdInfo: "团队的项目 ID，在同一个控制台里看。两个 ID 都填了才读团队的窗口。",
           teamProjectIdPlaceholder: "可选 · 只有 GLM 团队套餐要",
           teamBothNeeded: "团队套餐：请同时填写组织 ID 和项目 ID",
+          volcAccessKeyId: "AccessKey ID",
+          volcSecretAccessKey: "Secret Access Key",
+          tencentSecretId: "SecretId",
+          tencentSecretKey: "SecretKey",
+          accessKeyVendor: {
+            volcengine: "火山方舟",
+            tencent: "腾讯云 Token Plan 企业版",
+          },
+          accessKeyInfo:
+            "{{vendor}}只把套餐的用量窗口告诉账号的云账号密钥（在云控制台的访问控制里创建），套餐自己的 key 问不到。两栏都填后，从这家的开放平台读窗口。只存在这台主机上，不作他用。",
+          secretAccessKeyInfo: "和 ID 配对的密钥。只发出用它算出的签名，密钥本身不发出去。",
+          accessKeySecretNeeded: "请一并填写 {{secret}}",
+          accessKeyRemove: "移除",
           fixNewApiKeyQuery:
             "…/api/usage/token 只认 API key，不认这个令牌。要看账户余额，new-api 用 /api/user/self，sub2api 用 /api/v1/user/profile。",
           fixSub2apiKeyQuery:
@@ -3006,6 +3019,16 @@ export const zhCN: TranslationResources = {
         fillUrl: "填写余额查询地址",
         noKey: "这家没填 key，查不了余额",
         rowUnavailable: "余额查不到",
+        rowNeedsAccessKey: "需要 AccessKey",
+        needsAccessKeyVolcengine:
+          "需要 AccessKey：火山方舟只把这个套餐的窗口告诉账号的 AccessKey ID 与 Secret Access Key，请在这家接口设置的「高级」里填写。",
+        needsAccessKeyTencent:
+          "需要 AccessKey：腾讯云只把 Token Plan 企业版的用量告诉账号的 SecretId 与 SecretKey，请在这家接口设置的「高级」里填写。",
+        fillAccessKey: "填写 AccessKey",
+        planTier: "档位：{{tier}}",
+        planStopped: "套餐已停用：{{status}}",
+        teamPlanStopped: "团队 {{team}} 的套餐已停用：{{status}}",
+        unreadTeams: "读不到这些团队的额度：{{teams}}",
         rowAmount: "余额 {{amount}}",
         rowWindowUsed: "{{window}}已用 {{percent}}",
         rowWindowLeft: "{{window}}剩 {{percent}}",
@@ -3026,6 +3049,8 @@ export const zhCN: TranslationResources = {
           toppedUp: "充值",
         },
         hint: {
+          accessKeyRefused:
+            "检查 AK/SK 与权限：开放平台不认这组云账号密钥，或它没有读这个套餐用量的权限。",
           glmKeyRefused:
             "这把 key 已过期、被删除或粘错了：请到控制台复制一把有效的 key，粘到这家的设置里。",
           opencodeGoNoSubscription:
@@ -3058,6 +3083,8 @@ export const zhCN: TranslationResources = {
           bucket: "{{bucket}} · {{window}}",
           bucketVideo: "视频",
           bucketImage: "图片",
+          unitCredits: "积分",
+          unitTokens: "token",
           unitVideos: "个视频",
         },
         pace: "配速 {{pace}}",

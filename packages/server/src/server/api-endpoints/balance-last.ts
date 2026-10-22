@@ -7,17 +7,19 @@ import {
   ApiEndpointBalanceItemSchema,
   ApiEndpointBalanceResetsSchema,
   ApiEndpointBalanceWindowSchema,
+  ApiEndpointStoppedPlanSchema,
   type ApiEndpointBalanceReading,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { writePrivateFileAtomicSync } from "../private-files.js";
 import { readOptionalFile } from "./config-file.js";
-import type { StoredApiEndpoint } from "./store.js";
+import type { StoredAccessKey, StoredApiEndpoint } from "./store.js";
+import { planNotesOf } from "./balance.js";
 import { parseJson } from "./upstream-http.js";
 
 /*
  * 每家接口最近一次成功的余额读数，存在 api-endpoints/balance-readings.json，重启后还在：
  * 对方忙或断网（暂时查不到）时界面看上次读数，不看一句错误。只有余额各项、限额与套餐窗口、重置次数和读数时间，不含 key 与令牌；
- * 每条带这家查余额用的地址、余额设置、key 与账户令牌的指纹（摘要，还原不出 key），对不上即作废（magpie 按 key 的摘要记，换了 key 自然对不上）。
+ * 每条带这家查余额用的地址、余额设置、key、账户令牌与云账号密钥的指纹（摘要，还原不出 key），对不上即作废（magpie 按 key 的摘要记，换了 key 自然对不上）。
  * 它是缓存，读不懂当作空的。
  */
 
@@ -30,16 +32,21 @@ const LastReadingSchema = z.object({
   // 智谱团队套餐的窗口与重置次数。
   team: z.boolean().optional(),
   resets: ApiEndpointBalanceResetsSchema.optional(),
+  // 套餐的档位、停用的套餐与读不到的团队（火山、腾讯）。
+  planTier: z.string().optional(),
+  stoppedPlans: z.array(ApiEndpointStoppedPlanSchema).optional(),
+  unreadTeams: z.array(z.string()).optional(),
 });
 type LastReading = z.infer<typeof LastReadingSchema>;
 
 const LastReadingsFileSchema = z.object({ readings: z.record(z.string(), LastReadingSchema) });
 
-/** 查余额用到的设置：地址、余额设置、key 与账户令牌。以后加的余额设置也要进指纹。 */
+/** 查余额用到的设置：地址、余额设置、key、账户令牌与云账号密钥。以后加的余额设置也要进指纹。 */
 export interface BalanceSettings {
   endpoint: Pick<StoredApiEndpoint, "baseUrls" | "balance">;
   apiKey: string | null;
   balanceToken: string | null;
+  accessKey: StoredAccessKey;
 }
 
 export class LastBalanceReadings {
@@ -65,6 +72,7 @@ export class LastBalanceReadings {
         ...(reading.windows === undefined ? {} : { windows: reading.windows }),
         ...(reading.team ? { team: true } : {}),
         ...(reading.resets === undefined ? {} : { resets: reading.resets }),
+        ...planNotesOf(reading),
       },
     });
   }
@@ -92,6 +100,7 @@ export class LastBalanceReadings {
       ...(last.windows === undefined ? {} : { windows: last.windows }),
       ...(last.team ? { team: true } : {}),
       ...(last.resets === undefined ? {} : { resets: last.resets }),
+      ...planNotesOf(last),
       readAt: last.readAt,
       failure: null,
       stale: failure,
@@ -146,6 +155,9 @@ function fingerprintOf(input: BalanceSettings): string {
     // 没设的不进摘要：升级前记下的读数指纹照旧对得上。
     ...(input.endpoint.balance === undefined ? {} : { balance: input.endpoint.balance }),
     ...(input.balanceToken === null ? {} : { balanceToken: input.balanceToken }),
+    ...(input.accessKey.id === null && input.accessKey.secret === null
+      ? {}
+      : { accessKey: input.accessKey }),
   });
   return createHash("sha256").update(settings).digest("hex").slice(0, 32);
 }

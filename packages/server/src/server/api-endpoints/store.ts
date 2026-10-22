@@ -36,7 +36,8 @@ import { ModelFactsSchema } from "./model-facts.js";
 /*
  * $PASEO_HOME/api-endpoints/ 下的私有文件，全部 0600：
  * - endpoints.json：主机共用的接口与每个 Agent 的总开关、默认模型，不含 key；
- * - keys.json：API key 与账户令牌（balanceTokens，查账户余额用），只有 daemon 读，RPC 只给打码（reveal_key、reveal_secret 除外）；
+ * - keys.json：API key、账户令牌（balanceTokens，查账户余额用）与云账号密钥（accessKeys，读火山、腾讯的套餐窗口用），
+ *   只有 daemon 读，RPC 只给打码（reveal_key、reveal_secret 除外）；
  * - takeover-claude.json：接管记录，含用户原先写在 settings.json 里的值（可能是别的 token）；
  * - takeover-codex.json：config.toml 的接管记录；
  * - codex-models.json：Codex 的 model_catalog_json，Codex 总开关开着时才有；
@@ -231,10 +232,22 @@ export class ApiEndpointsFileUnparsableError extends Error {
   }
 }
 
+const StoredAccessKeySchema = z.object({
+  id: z.string().optional(),
+  secret: z.string().optional(),
+});
+/** 一家接口存的云账号密钥；没存的那样为 null。 */
+export interface StoredAccessKey {
+  id: string | null;
+  secret: string | null;
+}
+
 const KeysFileSchema = z.object({
   keys: z.record(z.string(), z.string()),
   // 账户令牌，按接口 id；没有的接口不留条目。升级前的文件没有这一项。
   balanceTokens: z.record(z.string(), z.string()).optional(),
+  // 云账号密钥（火山的 AccessKey ID 与 Secret Access Key、腾讯的 SecretId 与 SecretKey），按接口 id；两样都没有的不留条目。
+  accessKeys: z.record(z.string(), StoredAccessKeySchema).optional(),
 });
 type KeysFile = z.infer<typeof KeysFileSchema>;
 
@@ -455,7 +468,8 @@ export class ApiEndpointStore {
     const file = this.readKeysFile();
     const { [id]: _removed, ...keys } = file.keys;
     const { [id]: _token, ...balanceTokens } = file.balanceTokens ?? {};
-    this.writeKeysFile({ keys, balanceTokens });
+    const { [id]: _accessKey, ...accessKeys } = file.accessKeys ?? {};
+    this.writeKeysFile({ keys, balanceTokens, accessKeys });
   }
 
   getApiKey(id: string): string | null {
@@ -473,6 +487,25 @@ export class ApiEndpointStore {
     this.writeKeysFile({
       ...file,
       balanceTokens: token === null ? rest : { ...rest, [id]: token },
+    });
+  }
+
+  getAccessKey(id: string): StoredAccessKey {
+    const stored = this.readKeysFile().accessKeys?.[id];
+    return { id: stored?.id ?? null, secret: stored?.secret ?? null };
+  }
+
+  /** 两样都为 null 即删掉这家的条目。 */
+  setAccessKey(id: string, accessKey: StoredAccessKey): void {
+    const file = this.readKeysFile();
+    const { [id]: _previous, ...rest } = file.accessKeys ?? {};
+    const entry = {
+      ...(accessKey.id === null ? {} : { id: accessKey.id }),
+      ...(accessKey.secret === null ? {} : { secret: accessKey.secret }),
+    };
+    this.writeKeysFile({
+      ...file,
+      accessKeys: Object.keys(entry).length === 0 ? rest : { ...rest, [id]: entry },
     });
   }
 
@@ -645,9 +678,16 @@ export class ApiEndpointStore {
   }
 
   private writeKeysFile(file: KeysFile): void {
-    const { balanceTokens, ...rest } = file;
+    const { balanceTokens, accessKeys, ...rest } = file;
     const hasTokens = balanceTokens !== undefined && Object.keys(balanceTokens).length > 0;
-    this.keysFile.write(KeysFileSchema.parse(hasTokens ? { ...rest, balanceTokens } : rest));
+    const hasAccessKeys = accessKeys !== undefined && Object.keys(accessKeys).length > 0;
+    this.keysFile.write(
+      KeysFileSchema.parse({
+        ...rest,
+        ...(hasTokens ? { balanceTokens } : {}),
+        ...(hasAccessKeys ? { accessKeys } : {}),
+      }),
+    );
   }
 
   private readJson(name: string): unknown {

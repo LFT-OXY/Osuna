@@ -4,7 +4,9 @@
 // 填了余额查询地址时的自定义余额照 magpie 的 balanceRead、balanceMethodOf、balanceKeyNames、withBalanceKey（7597c132）。
 // 账户令牌照 magpie 的 keyQueryOf、keyNotToken、balanceAuthorization、errKeyQueryWithToken、newAPIUserHint、
 // readAiHubMixAccount，sub2api 的限额窗口照 sub2api_usage.go 的 readSub2APIKeyLimits 与 Balance；套餐窗口照
-// planquota.go 的 planKeyWindows、zhipuKeyTeamAt 与 commandcode_plan.go 的 cmdKeyWindows、cmdKeyPlanID（7597c132）。
+// planquota.go 的 planKeyWindows、zhipuKeyTeamAt 与 commandcode_plan.go 的 cmdKeyWindows、cmdKeyPlanID，
+// 云账号密钥读的套餐照 volcengine_usage.go 的 volcPlanQuota、volcOpenAPICall，tencent_usage.go 的 tencentPlanCards、
+// tencentAPICall 与 access_key_card.go（7597c132）。
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import {
   balanceMethodOf,
@@ -21,6 +23,7 @@ import type {
   ApiEndpointBalanceReading,
   ApiEndpointBalanceResets,
   ApiEndpointBalanceWindow,
+  ApiEndpointStoppedPlan,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import {
   secretsOf,
@@ -47,8 +50,21 @@ import {
   type PlanSource,
   type PlanWindow,
 } from "./balance-plan.js";
+import {
+  accessKeyPlanOf,
+  openApiErrorOf,
+  readTencentPlanList,
+  readVolcPlan,
+  tencentRequest,
+  tencentTeamOf,
+  volcRequest,
+  withTencentDetail,
+  type AccessKeyPlan,
+  type OpenApiError,
+  type OpenApiRequest,
+} from "./balance-access-key.js";
 import { upstreamFetch, type UpstreamResponse } from "./insecure-tls.js";
-import type { StoredApiEndpoint } from "./store.js";
+import type { StoredAccessKey, StoredApiEndpoint } from "./store.js";
 import {
   describeNetworkError,
   isRecord,
@@ -205,6 +221,8 @@ export interface ReadBalanceInput {
   apiKey: string | null;
   // 账户令牌；没有为 null。
   balanceToken: string | null;
+  // 云账号密钥（火山、腾讯的套餐窗口用）；不读套餐时可不给。
+  accessKey?: StoredAccessKey;
   extras: RequestExtras;
   userAgent: string;
   now: () => Date;
@@ -240,6 +258,15 @@ export function notAskedReading(endpointId: string): ApiEndpointBalanceReading {
 export async function readEndpointBalance(
   input: ReadBalanceInput,
 ): Promise<ApiEndpointBalanceReading> {
+  const keyed = input.withPlan ? accessKeyPlanOf(input.endpoint.baseUrls) : null;
+  if (keyed !== null) {
+    // 火山、腾讯的套餐窗口用云账号密钥问开放平台，和这家的 key 无关（照 magpie 不看 key）。
+    const [balance, planned] = await Promise.all([
+      readBalanceOnly(input),
+      readAccessKeyPlan({ input, plan: keyed }),
+    ]);
+    return mergedReading({ balance, planned });
+  }
   const plan =
     input.withPlan && input.apiKey
       ? planSourceOf({ baseUrls: input.endpoint.baseUrls, vendorUrls: input.vendorUrls })
@@ -268,10 +295,22 @@ function mergedReading(input: {
       windows: [...(balance.windows ?? []), ...(planned.windows ?? [])],
       ...(planned.team ? { team: true } : {}),
       ...(planned.resets === undefined ? {} : { resets: planned.resets }),
+      ...planNotesOf(planned),
     };
   }
   if (balance.status === "ok") return balance;
   return planned;
+}
+
+/** 套餐的档位、停用的套餐与读不到的团队：合成读数与上次读数都带着。 */
+export function planNotesOf(
+  reading: Pick<ApiEndpointBalanceReading, "planTier" | "stoppedPlans" | "unreadTeams">,
+): Pick<ApiEndpointBalanceReading, "planTier" | "stoppedPlans" | "unreadTeams"> {
+  return {
+    ...(reading.planTier === undefined ? {} : { planTier: reading.planTier }),
+    ...(reading.stoppedPlans === undefined ? {} : { stoppedPlans: reading.stoppedPlans }),
+    ...(reading.unreadTeams === undefined ? {} : { unreadTeams: reading.unreadTeams }),
+  };
 }
 
 /** 问一次套餐窗口的结果：读出的窗口（空的是没有套餐），或没读成的原因（还没按「认不准是套餐」筛过）。 */
@@ -418,6 +457,207 @@ async function askPlan(input: {
     };
   }
   return { kind: "windows", windows: read.windows, status };
+}
+
+/** 开放平台的一份回复，或没读成的原因。 */
+type OpenApiAnswer = { body: unknown; text: string } | { failure: ApiEndpointBalanceFailure };
+
+/**
+ * 发一次开放平台请求（照 magpie volcOpenAPICall、tencentAPICall）：回复里说的错误、401 与 403 归到失败的分类，认证类的
+ * 带上「检查 AK/SK 与权限」；忙、限流与内部错误是暂时查不到。密钥只发往开放平台，原话里的打码。
+ */
+async function askOpenApi(input: {
+  input: ReadBalanceInput;
+  vendor: AccessKeyPlan["vendor"];
+  request: OpenApiRequest;
+  secrets: readonly string[];
+}): Promise<OpenApiAnswer> {
+  const { signal, deadline } = input.input;
+  const { secrets } = input;
+  let status: number;
+  let text: string;
+  try {
+    const response = await upstreamFetch({
+      url: input.request.url,
+      init: {
+        method: "POST",
+        headers: input.request.headers,
+        body: input.request.body,
+        signal: AbortSignal.any([signal, AbortSignal.timeout(BALANCE_READ_TIMEOUT_MS), deadline]),
+      },
+      uncheckedHosts: [],
+    });
+    status = response.status;
+    text = await readCapped(response);
+  } catch (error) {
+    if (signal.aborted) throw error;
+    return {
+      failure: {
+        reason: "temporary",
+        detail: clip(redactKey(describeNetworkError(error), secrets)),
+        status: null,
+      },
+    };
+  }
+  const body = parseJson(text);
+  const isRefusal = status === 401 || status === 403;
+  const error = openApiErrorOf({ vendor: input.vendor, body });
+  if (error !== null) {
+    const detail = clip(redactKey(`${error.code} ${error.message}`.trim(), secrets));
+    if (error.refusesKey || isRefusal) {
+      return {
+        failure: { reason: "token_rejected", detail, status, hint: "access_key_refused" },
+      };
+    }
+    return { failure: { reason: openApiFailureReason({ error, status }), detail, status } };
+  }
+  if (isRefusal) {
+    return {
+      failure: {
+        reason: "token_rejected",
+        detail: quoted(text, secrets),
+        status,
+        hint: "access_key_refused",
+      },
+    };
+  }
+  if (status >= 300) {
+    return { failure: { reason: failureOfStatus(status), detail: quoted(text, secrets), status } };
+  }
+  if (body === undefined) return { failure: { reason: "wrong_url", detail: null, status } };
+  return { body, text };
+}
+
+/** 开放平台说了错、但不是密钥的事：忙与限流是暂时查不到，别的按状态分，200 里说的错是取不到值。 */
+function openApiFailureReason(input: {
+  error: OpenApiError;
+  status: number;
+}): ApiEndpointBalanceFailureReason {
+  if (input.error.isPassing) return "temporary";
+  return input.status >= 300 ? failureOfStatus(input.status) : "no_value";
+}
+
+const VOLC_PLAN_NAMES = { GetCodingPlanUsage: "Coding Plan", GetAFPUsage: "Agent Plan" } as const;
+
+/**
+ * 云账号密钥读的套餐窗口（照 magpie volcPlanQuotas、tencentPlanQuotas）：没填齐两样密钥时不发请求，读数是
+ * needs_access_key（照 magpie accessKeyCard）。腾讯先列出账户在这个区的团队套餐，再逐个问本周期；有几个团队时窗口前
+ * 写团队名。
+ */
+async function readAccessKeyPlan(input: {
+  input: ReadBalanceInput;
+  plan: AccessKeyPlan;
+}): Promise<ApiEndpointBalanceReading> {
+  const { plan } = input;
+  const endpointId = input.input.endpoint.id;
+  const accessKeyId = input.input.accessKey?.id ?? null;
+  const secretAccessKey = input.input.accessKey?.secret ?? null;
+  if (!accessKeyId || !secretAccessKey) {
+    return { endpointId, status: "needs_access_key", items: [], readAt: null, failure: null };
+  }
+  const now = input.input.now();
+  const readAt = now.toISOString();
+  const secrets = [accessKeyId, secretAccessKey];
+  const urls = { ...PLAN_VENDOR_URLS, ...input.input.vendorUrls };
+  const failed = (failure: ApiEndpointBalanceFailure): ApiEndpointBalanceReading => ({
+    endpointId,
+    status: "failed",
+    items: [],
+    readAt,
+    failure,
+  });
+  const shown = (windows: PlanWindow[]): ApiEndpointBalanceReading => ({
+    endpointId,
+    status: "ok",
+    items: [],
+    windows: shownWindows({ windows, now: now.getTime() }),
+    readAt,
+    failure: null,
+  });
+  const ask = (request: OpenApiRequest) =>
+    askOpenApi({ input: input.input, vendor: plan.vendor, request, secrets });
+  if (plan.vendor === "volcengine") {
+    const answer = await ask(
+      volcRequest({
+        openUrl: urls.volcengine_open,
+        accessKeyId,
+        secretAccessKey,
+        action: plan.action,
+        region: plan.region,
+        userAgent: input.input.userAgent,
+        now: now.getTime(),
+      }),
+    );
+    if ("failure" in answer) return failed(answer.failure);
+    const { windows, tier } = readVolcPlan({ action: plan.action, body: answer.body });
+    if (windows.length === 0) {
+      const head = quoted(answer.text, secrets);
+      return failed({
+        reason: "no_value",
+        detail: `this Volcengine account has no ${VOLC_PLAN_NAMES[plan.action]}, or Ark answered ${plan.action} in a form Osuna doesn't know${head ? `: ${head}` : ""}`,
+        status: 200,
+      });
+    }
+    return { ...shown(windows), ...(tier === null ? {} : { planTier: tier }) };
+  }
+  const tencentAsk = (action: string, params: Record<string, unknown>) =>
+    ask(
+      tencentRequest({
+        openUrl: urls.tencent_open,
+        secretId: accessKeyId,
+        secretKey: secretAccessKey,
+        action,
+        params,
+        region: plan.region,
+        userAgent: input.input.userAgent,
+        now: now.getTime(),
+      }),
+    );
+  const listed = await tencentAsk("DescribeTokenPlanList", { Offset: 0, Limit: 100 });
+  if ("failure" in listed) return failed(listed.failure);
+  const plans = readTencentPlanList(listed.body);
+  if (plans === null) {
+    const head = quoted(listed.text, secrets);
+    return failed({
+      reason: "no_value",
+      detail: `Tencent Cloud DescribeTokenPlanList: a reply Osuna can't read${head ? `: ${head}` : ""}`,
+      status: 200,
+    });
+  }
+  if (plans.length === 0) {
+    return failed({
+      reason: "no_value",
+      detail: `this Tencent Cloud account has no Token Plan Enterprise in ${plan.region} that its API key can see (a sub-user sees only the plans it made)`,
+      status: 200,
+    });
+  }
+  const isSeveral = plans.length > 1;
+  const teams = await Promise.all(
+    plans.map(async (team) => {
+      // 套餐自己的回复有本周期的起止与状态；问不出时用清单里的。
+      const detail = await tencentAsk("DescribeTokenPlan", { TeamId: team.teamId });
+      const told = "failure" in detail ? team : withTencentDetail(team, detail.body);
+      return tencentTeamOf({ plan: told, isSeveral, now: now.getTime() });
+    }),
+  );
+  const read = teams.flatMap((team) => (team.window === null ? [] : [team.window]));
+  const stoppedPlans = teams.flatMap((team) => (team.stopped === null ? [] : [team.stopped]));
+  if (read.length === 0) {
+    return failed({ reason: "no_value", detail: tencentNoQuota(stoppedPlans[0]), status: 200 });
+  }
+  const unreadTeams = teams.flatMap((team) => (team.window === null ? [team.name] : []));
+  return {
+    ...shown(read),
+    ...(stoppedPlans.length === 0 ? {} : { stoppedPlans }),
+    ...(unreadTeams.length === 0 ? {} : { unreadTeams }),
+  };
+}
+
+/** 腾讯一个团队都读不出额度时怎么说；停用了的带上状态与原因（magpie 写在卡片的套餐名旁）。 */
+function tencentNoQuota(stopped: ApiEndpointStoppedPlan | undefined): string {
+  const told = "Tencent Cloud told no quota for this Token Plan Enterprise";
+  if (stopped === undefined) return told;
+  return `${told} (${stopped.reason ? `${stopped.status}, ${stopped.reason}` : stopped.status})`;
 }
 
 const COMMAND_CODE_PLAN_KEEP_MS = 10 * 60 * 1000;

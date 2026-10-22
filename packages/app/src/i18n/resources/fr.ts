@@ -2824,6 +2824,20 @@ export const fr: TranslationResources = {
             "L'ID de projet de l'équipe, dans la même console. Les deux ID sont nécessaires.",
           teamProjectIdPlaceholder: "Facultatif · forfait d'équipe GLM seulement",
           teamBothNeeded: "Forfait d'équipe : indiquez l'ID d'organisation et l'ID de projet",
+          volcAccessKeyId: "AccessKey ID",
+          volcSecretAccessKey: "Secret Access Key",
+          tencentSecretId: "SecretId",
+          tencentSecretKey: "SecretKey",
+          accessKeyVendor: {
+            volcengine: "Volcengine Ark",
+            tencent: "Tencent Cloud Token Plan Enterprise",
+          },
+          accessKeyInfo:
+            "{{vendor}} ne donne les fenêtres d'utilisation d'un forfait qu'à la clé d'accès cloud du compte (créée dans la gestion des accès de la console), jamais à la clé du forfait lui-même. Avec les deux champs, les fenêtres sont lues sur la plateforme ouverte du fournisseur. Conservée sur cet hôte uniquement et utilisée pour rien d'autre.",
+          secretAccessKeyInfo:
+            "Le secret associé à l'ID. Seule une signature faite avec lui est envoyée, jamais le secret.",
+          accessKeySecretNeeded: "Indiquez aussi la {{secret}}",
+          accessKeyRemove: "Retirer",
           fixNewApiKeyQuery:
             "…/api/usage/token prend la clé d'API, pas ce jeton. Pour le solde du compte, new-api utilise /api/user/self ; sub2api utilise /api/v1/user/profile.",
           fixSub2apiKeyQuery:
@@ -3064,6 +3078,16 @@ export const fr: TranslationResources = {
         fillUrl: "Renseigner l’URL du solde",
         noKey: "Ce point de terminaison n’a pas de clé, son solde ne peut donc pas être lu",
         rowUnavailable: "Solde indisponible",
+        rowNeedsAccessKey: "AccessKey requise",
+        needsAccessKeyVolcengine:
+          "AccessKey requise : Volcengine Ark ne donne les fenêtres de ce forfait qu'à l'AccessKey ID et à la Secret Access Key du compte. Renseignez-les dans Avancé, dans les réglages de ce point d'accès.",
+        needsAccessKeyTencent:
+          "AccessKey requise : Tencent Cloud ne donne l'utilisation d'un Token Plan Enterprise qu'au SecretId et à la SecretKey du compte. Renseignez-les dans Avancé, dans les réglages de ce point d'accès.",
+        fillAccessKey: "Renseigner l'AccessKey",
+        planTier: "Niveau : {{tier}}",
+        planStopped: "Forfait arrêté : {{status}}",
+        teamPlanStopped: "Forfait de l'équipe {{team}} arrêté : {{status}}",
+        unreadTeams: "Aucun quota lu pour : {{teams}}",
         rowAmount: "Solde {{amount}}",
         rowWindowUsed: "{{window}} {{percent}} utilisé",
         rowWindowLeft: "{{window}} {{percent}} restant",
@@ -3084,6 +3108,8 @@ export const fr: TranslationResources = {
           toppedUp: "Rechargé",
         },
         hint: {
+          accessKeyRefused:
+            "Vérifiez l'AccessKey (AK/SK) et ses droits : la plateforme ouverte a refusé la clé d'accès, ou elle ne peut pas lire l'utilisation de ce forfait.",
           glmKeyRefused:
             "Cette clé a expiré, a été supprimée ou est mal saisie : copiez une clé valide depuis la console et collez-la dans les réglages de ce point d'accès.",
           opencodeGoNoSubscription:
@@ -3117,6 +3143,8 @@ export const fr: TranslationResources = {
           bucket: "{{bucket}} · {{window}}",
           bucketVideo: "Vidéo",
           bucketImage: "Image",
+          unitCredits: "crédits",
+          unitTokens: "tokens",
           unitVideos: "vidéos",
         },
         pace: "Rythme {{pace}}",

@@ -36,6 +36,7 @@ const HINT_KEYS: Record<ApiEndpointBalanceHint, string> = {
   glm_key_refused: "settings.apiEndpoints.balance.hint.glmKeyRefused",
   opencode_go_no_subscription: "settings.apiEndpoints.balance.hint.opencodeGoNoSubscription",
   opencode_key_refused: "settings.apiEndpoints.balance.hint.opencodeKeyRefused",
+  access_key_refused: "settings.apiEndpoints.balance.hint.accessKeyRefused",
 };
 
 const SPAN_KEYS: Record<string, { one: string; many: string }> = {
@@ -114,6 +115,8 @@ export function resetsLine(input: { t: TFunction; resets: ApiEndpointBalanceRese
 /** 窗口用量的单位：美元以外认得的翻译，别的照 daemon 给的写。 */
 export function windowUnitLabel(input: { t: TFunction; unit: string }): string {
   if (input.unit === "videos") return input.t("settings.apiEndpoints.balance.window.unitVideos");
+  if (input.unit === "credits") return input.t("settings.apiEndpoints.balance.window.unitCredits");
+  if (input.unit === "tokens") return input.t("settings.apiEndpoints.balance.window.unitTokens");
   return input.unit;
 }
 

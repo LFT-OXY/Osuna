@@ -66,6 +66,9 @@ const SEALED_VENDOR_ORIGINS = [
   "https://api.minimaxi.com/",
   "https://api.minimax.io/",
   "https://opencode.ai/",
+  // 火山方舟与腾讯云的开放平台（balance-plan.ts 的 volcengine_open、tencent_open）：带的是云账号密钥的签名。
+  "https://open.volcengineapi.com/",
+  "https://tokenhub.tencentcloudapi.com/",
 ];
 
 const realFetch = globalThis.fetch;

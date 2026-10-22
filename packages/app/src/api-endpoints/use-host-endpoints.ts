@@ -8,6 +8,7 @@ import type {
   ApiEndpointConnection,
   ApiEndpointError,
   ApiEndpointListResponse,
+  ApiEndpointSecret,
   ApiEndpointSetAgentSettingsRequest,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { DaemonConnectionError, DaemonRpcError } from "@getpaseo/client/internal/daemon-client";
@@ -28,6 +29,7 @@ import type {
   ConnectionFetchResult,
   ConnectionRevealKeyResult,
   ConnectionRevealSecretResult,
+  ConnectionAccessKeyPart,
   ConnectionIconError,
   ConnectionIconResult,
   ConnectionSaveRequest,
@@ -166,6 +168,11 @@ export interface UseHostEndpointsResult {
   ) => Promise<ConnectionBalanceDetectResult>;
   // 编辑窗口账户令牌的「显示」；只在声明了 apiEndpointBalance 的主机上用。
   revealBalanceToken: (endpointId: string) => Promise<ConnectionRevealSecretResult>;
+  // 编辑窗口云账号密钥的「显示」；同上。
+  revealAccessKey: (
+    endpointId: string,
+    part: ConnectionAccessKeyPart,
+  ) => Promise<ConnectionRevealSecretResult>;
 }
 
 /** 调用方已经确认主机声明了 apiEndpointGateway 能力。 */
@@ -595,14 +602,14 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     [client, t],
   );
 
-  const revealBalanceToken = useCallback(
-    async (endpointId: string): Promise<ConnectionRevealSecretResult> => {
+  const revealSecret = useCallback(
+    async (
+      endpointId: string,
+      secret: ApiEndpointSecret,
+    ): Promise<ConnectionRevealSecretResult> => {
       if (!client) return { status: "failed", message: t("workspace.terminal.hostDisconnected") };
       try {
-        const result = await client.apiEndpointRevealSecret({
-          endpointId,
-          secret: "balance_token",
-        });
+        const result = await client.apiEndpointRevealSecret({ endpointId, secret });
         if (result.error) return { status: "failed", message: result.error.message };
         return { status: "revealed", value: result.value };
       } catch (error) {
@@ -610,6 +617,15 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
       }
     },
     [client, t],
+  );
+  const revealBalanceToken = useCallback(
+    (endpointId: string) => revealSecret(endpointId, "balance_token"),
+    [revealSecret],
+  );
+  const revealAccessKey = useCallback(
+    (endpointId: string, part: ConnectionAccessKeyPart) =>
+      revealSecret(endpointId, part === "id" ? "access_key_id" : "secret_access_key"),
+    [revealSecret],
   );
 
   // 存图片与从网站取图标的回复一样：主机给的图标值，或失败原因。
@@ -683,6 +699,7 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     checkBalance,
     detectBalanceUrl,
     revealBalanceToken,
+    revealAccessKey,
   };
 }
 

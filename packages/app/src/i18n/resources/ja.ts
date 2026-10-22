@@ -2793,6 +2793,20 @@ export const ja: TranslationResources = {
           teamProjectIdInfo: "同じコンソールにあるチームのプロジェクト ID。両方の ID が必要です。",
           teamProjectIdPlaceholder: "任意 · GLM チームプランのみ",
           teamBothNeeded: "チームプラン：組織 ID とプロジェクト ID の両方を入力してください",
+          volcAccessKeyId: "AccessKey ID",
+          volcSecretAccessKey: "Secret Access Key",
+          tencentSecretId: "SecretId",
+          tencentSecretKey: "SecretKey",
+          accessKeyVendor: {
+            volcengine: "Volcengine Ark",
+            tencent: "Tencent Cloud Token Plan Enterprise",
+          },
+          accessKeyInfo:
+            "{{vendor}} はプランの使用量ウィンドウをアカウントのクラウドアクセスキー（クラウドコンソールのアクセス管理で作成）にだけ返し、プラン自身のキーでは取得できません。両方を入力すると、ベンダーのオープンプラットフォームからウィンドウを読み取ります。このホストにのみ保存され、ほかの用途には使いません。",
+          secretAccessKeyInfo:
+            "ID と対になるシークレットです。送るのはそれで作った署名だけで、シークレット自体は送りません。",
+          accessKeySecretNeeded: "{{secret}} も入力してください",
+          accessKeyRemove: "削除",
           fixNewApiKeyQuery:
             "…/api/usage/token が受け付けるのは API キーで、このトークンではありません。アカウントの残高は、new-api なら /api/user/self、sub2api なら /api/v1/user/profile です。",
           fixSub2apiKeyQuery:
@@ -3027,6 +3041,16 @@ export const ja: TranslationResources = {
         fillUrl: "残高照会 URL を入力",
         noKey: "このエンドポイントにはキーがないため、残高を取得できません",
         rowUnavailable: "残高を取得できません",
+        rowNeedsAccessKey: "AccessKey が必要",
+        needsAccessKeyVolcengine:
+          "AccessKey が必要：Volcengine Ark はこのプランのウィンドウをアカウントの AccessKey ID と Secret Access Key にだけ返します。このエンドポイントの設定の「詳細」で入力してください。",
+        needsAccessKeyTencent:
+          "AccessKey が必要：Tencent Cloud は Token Plan Enterprise の使用量をアカウントの SecretId と SecretKey にだけ返します。このエンドポイントの設定の「詳細」で入力してください。",
+        fillAccessKey: "AccessKey を入力",
+        planTier: "プラン：{{tier}}",
+        planStopped: "プランは停止中：{{status}}",
+        teamPlanStopped: "チーム {{team}} のプランは停止中：{{status}}",
+        unreadTeams: "使用量を読み取れなかったチーム：{{teams}}",
         rowAmount: "残高 {{amount}}",
         rowWindowUsed: "{{window}} {{percent}} 使用",
         rowWindowLeft: "{{window}} 残り {{percent}}",
@@ -3047,6 +3071,8 @@ export const ja: TranslationResources = {
           toppedUp: "チャージ",
         },
         hint: {
+          accessKeyRefused:
+            "AccessKey（AK/SK）と権限を確認してください：オープンプラットフォームがアクセスキーを拒否したか、このプランの使用量を読む権限がありません。",
           glmKeyRefused:
             "このキーは期限切れ、削除済み、または貼り間違いです。コンソールから有効なキーをコピーし、このエンドポイントの設定に貼り付けてください。",
           opencodeGoNoSubscription:
@@ -3079,6 +3105,8 @@ export const ja: TranslationResources = {
           bucket: "{{bucket}} · {{window}}",
           bucketVideo: "動画",
           bucketImage: "画像",
+          unitCredits: "クレジット",
+          unitTokens: "トークン",
           unitVideos: "本の動画",
         },
         pace: "ペース {{pace}}",

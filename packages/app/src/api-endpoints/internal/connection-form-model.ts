@@ -56,9 +56,11 @@ import {
   balanceFieldsOf,
   balanceFixOf,
   balanceSettingsOf,
+  accessKeyRequest,
   balanceTokenRequest,
   fieldAfterUsing,
   hasBalanceSettings,
+  hasLoneAccessKey,
   hasLoneTeamId,
   isZhipuAddress,
   type BalanceCheck,
@@ -66,6 +68,10 @@ import {
   type BalanceFields,
   type BalanceFix,
 } from "./balance-settings-form";
+import {
+  accessKeyVendorOf,
+  type ApiEndpointAccessKeyVendor,
+} from "@getpaseo/protocol/api-endpoint/balance-settings";
 
 /*
  * 第三方接口「添加 / 编辑连接」弹窗的表单模型：纯 TypeScript，无 React（docs/forms.md）。
@@ -96,8 +102,8 @@ import {
 export type ConnectionFormSeed =
   // templateId 为 null 是「自定义」；「再加一家」用那家的模板。认不出的模板按「自定义」开。
   | { mode: "create"; templateId: string | null }
-  // focus：从详情页「填写余额查询地址」打开，展开「高级」并把光标放在余额查询地址上。
-  | { mode: "edit"; endpoint: ApiEndpoint; focus?: "balance" }
+  // focus：从详情页「填写余额查询地址」或「填写 AccessKey」打开，展开「高级」并把光标放在余额查询地址或 AccessKey 上。
+  | { mode: "edit"; endpoint: ApiEndpoint; focus?: "balance" | "access_key" }
   // name 是调用方按界面语言起好的「原名 副本」；重名由 daemon 避让。
   | { mode: "duplicate"; source: ApiEndpoint; name: string };
 
@@ -149,10 +155,23 @@ export type ConnectionRevealKeyResult =
   | { status: "revealed"; apiKey: string | null }
   | { status: "failed"; message: string };
 
-// 读回账户令牌原文：没存令牌时 value 为 null。
+// 读回账户令牌或云账号密钥原文：没存时 value 为 null。
 export type ConnectionRevealSecretResult =
   | { status: "revealed"; value: string | null }
   | { status: "failed"; message: string };
+
+// 云账号密钥的哪一样：AccessKey ID（腾讯的 SecretId）或 Secret Access Key（腾讯的 SecretKey）。
+export type ConnectionAccessKeyPart = "id" | "secret";
+
+/** 一个打码框（云账号密钥的一样）：存了的打码（移除后为 null），框里显示的字，显示与读回中的状态。 */
+export interface SecretBoxState {
+  mask: string | null;
+  boxValue: string;
+  boxGeneration: number;
+  isVisible: boolean;
+  isRevealing: boolean;
+  revealError: string | null;
+}
 
 export type ConnectionDetectRequest = Omit<ApiEndpointDetectFormatsRequest, "type" | "requestId">;
 
@@ -502,6 +521,15 @@ export interface ConnectionFormState {
   balanceTokenRevealError: string | null;
   // 令牌与地址对不上、缺用户 ID 的提示。
   balanceFix: BalanceFix | null;
+  // 云账号密钥两栏：只在这家的地址是火山方舟或腾讯云 Token Plan 企业版时给（accessKeyVendorOf），按哪家写栏名。
+  accessKeyVendor: ApiEndpointAccessKeyVendor | null;
+  accessKeyId: SecretBoxState;
+  secretAccessKey: SecretBoxState;
+  hasSavedAccessKey: boolean;
+  // 存下来有 ID 却没有 Secret：提示补上，挡住保存（照 magpie）。
+  hasLoneAccessKey: boolean;
+  // 从「填写 AccessKey」打开：光标放在 AccessKey ID 上。
+  focusesAccessKey: boolean;
 }
 
 export interface ConnectionFormDeps {
@@ -530,6 +558,10 @@ export interface ConnectionFormDeps {
     signal: AbortSignal,
   ) => Promise<ConnectionBalanceDetectResult>;
   revealBalanceToken: (endpointId: string) => Promise<ConnectionRevealSecretResult>;
+  revealAccessKey: (
+    endpointId: string,
+    part: ConnectionAccessKeyPart,
+  ) => Promise<ConnectionRevealSecretResult>;
 }
 
 export interface ConnectionFormModel {
@@ -602,6 +634,10 @@ export interface ConnectionFormModel {
   setBalanceToken(value: string): void;
   toggleBalanceTokenVisible(): void;
   removeBalanceToken(): void;
+  setAccessKey(part: ConnectionAccessKeyPart, value: string): void;
+  toggleAccessKeyVisible(part: ConnectionAccessKeyPart): void;
+  // 两样一起移除。
+  removeAccessKey(): void;
   // 「改用 …」：把余额查询地址换成账户查询。
   useBalanceUrl(url: string): void;
   // 「查询余额」：用表单里还没保存的值当场查一次；再按一次重来。
@@ -705,7 +741,33 @@ interface Values {
   isRevealingBalanceToken: boolean;
   balanceTokenRevealError: string | null;
   balanceTokenRemoved: boolean;
+  accessKeyIdBox: SecretBoxValues;
+  secretAccessKeyBox: SecretBoxValues;
+  accessKeyRemoved: boolean;
 }
+
+// 打码框的值：text 是打的（读回来没改的不算），boxValue 是框里显示的。
+interface SecretBoxValues {
+  text: string;
+  boxValue: string;
+  boxGeneration: number;
+  isVisible: boolean;
+  isRevealed: boolean;
+  isRevealing: boolean;
+  revealError: string | null;
+}
+
+const EMPTY_SECRET_BOX: SecretBoxValues = {
+  text: "",
+  boxValue: "",
+  boxGeneration: 0,
+  isVisible: false,
+  isRevealed: false,
+  isRevealing: false,
+  revealError: null,
+};
+
+const ACCESS_KEY_BOXES = { id: "accessKeyIdBox", secret: "secretAccessKeyBox" } as const;
 
 // 粘贴的 curl 给「自定义」填的地址与它的格式。
 interface CurlBaseUrl {
@@ -761,14 +823,20 @@ export function createConnectionFormModel(
   const seededCooldown = cooldownFieldsOf(keyOwner?.cooldownSettings);
   const seededBalance = balanceFieldsOf(keyOwner?.balance);
   const savedTokenMask = keyOwner?.balanceTokenMask ?? null;
-  const focusesBalance = canSetBalance && seed.mode === "edit" && seed.focus === "balance";
+  const savedAccessKeyMasks = accessKeyMasksOf(keyOwner);
+  const focus = canSetBalance ? focusOf(seed) : null;
+  const focusesBalance = focus === "balance";
+  const focusesAccessKey = focus === "access_key";
   const hasSeededBalance =
-    canSetBalance && (hasBalanceSettings(seededBalance) || savedTokenMask !== null);
+    canSetBalance &&
+    (hasBalanceSettings(seededBalance) ||
+      savedTokenMask !== null ||
+      hasAccessKeyMask(savedAccessKeyMasks));
   const seededExtras = seededRequestExtras({
     keyOwner,
     isCustom: seededTemplate === null,
     hasCooldownSettings: hasCooldownSettings(seededCooldown),
-    opensAdvanced: focusesBalance || hasSeededBalance,
+    opensAdvanced: focus !== null || hasSeededBalance,
   });
   let values: Values = {
     template: seededTemplate,
@@ -821,6 +889,9 @@ export function createConnectionFormModel(
     isRevealingBalanceToken: false,
     balanceTokenRevealError: null,
     balanceTokenRemoved: false,
+    accessKeyIdBox: EMPTY_SECRET_BOX,
+    secretAccessKeyBox: EMPTY_SECRET_BOX,
+    accessKeyRemoved: false,
   };
   let state = derive(values);
   const extrasAtOpen = extrasNow();
@@ -916,7 +987,51 @@ export function createConnectionFormModel(
         canSetBalance && hasKey && hasValidUrls && next.balanceDetect.status !== "detecting",
       focusesBalance,
       ...deriveBalanceToken(next),
+      ...deriveAccessKey(next),
     };
+  }
+
+  /** 云账号密钥两栏的样子：哪家、两个打码框，存下来会不会只有一样。 */
+  function deriveAccessKey(next: Values) {
+    const box = (part: ConnectionAccessKeyPart): SecretBoxState => {
+      const boxValues = next[ACCESS_KEY_BOXES[part]];
+      return {
+        mask: next.accessKeyRemoved ? null : savedAccessKeyMasks[part],
+        boxValue: boxValues.boxValue,
+        boxGeneration: boxValues.boxGeneration,
+        isVisible: boxValues.isVisible,
+        isRevealing: boxValues.isRevealing,
+        revealError: boxValues.revealError,
+      };
+    };
+    const accessKeyId = box("id");
+    const secretAccessKey = box("secret");
+    return {
+      accessKeyVendor: accessKeyVendorOfForm(next),
+      accessKeyId,
+      secretAccessKey,
+      hasSavedAccessKey: accessKeyId.mask !== null || secretAccessKey.mask !== null,
+      hasLoneAccessKey: hasLoneShownAccessKey(next),
+      focusesAccessKey,
+    };
+  }
+
+  function accessKeyVendorOfForm(next: Values): ApiEndpointAccessKeyVendor | null {
+    if (!canSetBalance) return null;
+    return accessKeyVendorOf([
+      next.urls.openai_chat,
+      next.urls.anthropic_messages,
+      next.urls.openai_responses,
+    ]);
+  }
+
+  /** 给出了两栏，存下来却有 ID 没 Secret（打了的，或存着没移除的）。 */
+  function hasLoneShownAccessKey(next: Values): boolean {
+    if (accessKeyVendorOfForm(next) === null) return false;
+    const has = (part: ConnectionAccessKeyPart) =>
+      next[ACCESS_KEY_BOXES[part]].text.trim() !== "" ||
+      (!next.accessKeyRemoved && savedAccessKeyMasks[part] !== null);
+    return hasLoneAccessKey({ hasId: has("id"), hasSecret: has("secret") });
   }
 
   /** 账户令牌、用户 ID 与智谱团队 ID 这几栏的样子，和令牌、地址对不上的提示。 */
@@ -981,7 +1096,8 @@ export function createConnectionFormModel(
     const hasExtrasProblem =
       input.extras.extraBodyProblem !== null ||
       input.cooldown.cooldownProblem !== null ||
-      hasLoneShownTeamId(input.next);
+      hasLoneShownTeamId(input.next) ||
+      hasLoneShownAccessKey(input.next);
     const isFilled = input.next.name.trim() !== "" && input.hasKey && input.hasValidUrls;
     return !input.busy && isFilled && !input.serviceAddressInvalid && !hasExtrasProblem;
   }
@@ -1411,7 +1527,10 @@ export function createConnectionFormModel(
    * 余额设置只在改过时整份带上；没改的省略，daemon 留着那家原来的（复制时由 daemon 拷）。账户令牌打了或移除了才带。
    * 老主机不带。
    */
-  function savedBalanceRequest(): Pick<ConnectionSaveRequest, "balance" | "balanceToken"> {
+  function savedBalanceRequest(): Pick<
+    ConnectionSaveRequest,
+    "balance" | "balanceToken" | "accessKeyId" | "secretAccessKey"
+  > {
     if (!canSetBalance) return {};
     const now = balanceSettingsOf(values);
     return {
@@ -1419,6 +1538,11 @@ export function createConnectionFormModel(
       ...balanceTokenRequest({
         typed: values.balanceTokenText,
         removed: values.balanceTokenRemoved,
+      }),
+      ...accessKeyRequest({
+        typedId: values.accessKeyIdBox.text,
+        typedSecret: values.secretAccessKeyBox.text,
+        removed: values.accessKeyRemoved,
       }),
     };
   }
@@ -1723,6 +1847,36 @@ export function createConnectionFormModel(
       detecting: false,
       detectError: null,
     };
+  }
+
+  function updateAccessKeyBox(part: ConnectionAccessKeyPart, patch: Partial<SecretBoxValues>) {
+    const name = ACCESS_KEY_BOXES[part];
+    update({ [name]: { ...values[name], ...patch } });
+  }
+
+  async function runAccessKeyReveal(
+    endpointId: string,
+    part: ConnectionAccessKeyPart,
+  ): Promise<void> {
+    const outcome = await deps.revealAccessKey(endpointId, part);
+    const box = values[ACCESS_KEY_BOXES[part]];
+    if (!box.isRevealing) return;
+    if (outcome.status === "failed") {
+      updateAccessKeyBox(part, { isRevealing: false, revealError: outcome.message });
+      return;
+    }
+    // 等的时候已经打了新的，或其实没存：只把框里的显示出来。
+    if (box.text !== "" || outcome.value === null) {
+      updateAccessKeyBox(part, { isRevealing: false, isVisible: true });
+      return;
+    }
+    updateAccessKeyBox(part, {
+      isRevealing: false,
+      isVisible: true,
+      isRevealed: true,
+      boxValue: outcome.value,
+      boxGeneration: box.boxGeneration + 1,
+    });
   }
 
   async function runTokenReveal(endpointId: string): Promise<void> {
@@ -2094,6 +2248,55 @@ export function createConnectionFormModel(
         balanceTokenRevealError: null,
       });
     },
+    setAccessKey(part, value) {
+      updateAccessKeyBox(part, {
+        text: value,
+        boxValue: value,
+        isRevealing: false,
+        revealError: null,
+      });
+    },
+    toggleAccessKeyVisible(part) {
+      const box = values[ACCESS_KEY_BOXES[part]];
+      if (box.isRevealing) return;
+      if (box.isVisible) {
+        // 读回来又没改的原文不留在框里（同 key）。
+        const clearsBox = box.isRevealed && box.text === "";
+        updateAccessKeyBox(part, {
+          isVisible: false,
+          isRevealed: false,
+          ...(clearsBox ? { boxValue: "", boxGeneration: box.boxGeneration + 1 } : {}),
+        });
+        return;
+      }
+      const readsSaved =
+        seed.mode === "edit" &&
+        savedAccessKeyMasks[part] !== null &&
+        !values.accessKeyRemoved &&
+        box.text === "";
+      if (readsSaved) {
+        updateAccessKeyBox(part, { isRevealing: true, revealError: null });
+        void runAccessKeyReveal(seed.endpoint.id, part);
+        return;
+      }
+      updateAccessKeyBox(part, { isVisible: true, revealError: null });
+    },
+    removeAccessKey() {
+      const cleared = (box: SecretBoxValues): SecretBoxValues => ({
+        ...box,
+        text: "",
+        boxValue: "",
+        boxGeneration: box.boxGeneration + 1,
+        isRevealed: false,
+        isRevealing: false,
+        revealError: null,
+      });
+      update({
+        accessKeyRemoved: true,
+        accessKeyIdBox: cleared(values.accessKeyIdBox),
+        secretAccessKeyBox: cleared(values.secretAccessKeyBox),
+      });
+    },
     useBalanceUrl(url) {
       update({
         balanceUrlText: url,
@@ -2238,6 +2441,22 @@ function initialNameOf(seed: ConnectionFormSeed): string {
 function endpointHasModel(endpoint: ApiEndpoint, modelId: string): boolean {
   const lists = [endpoint.models, endpoint.catalog?.models ?? [], endpoint.manualModels ?? []];
   return lists.some((models) => models.some((model) => model.id === modelId));
+}
+
+/** 编辑窗口从详情页的哪个按钮打开：光标放在余额查询地址还是 AccessKey 上；别的为 null。 */
+function focusOf(seed: ConnectionFormSeed): "balance" | "access_key" | null {
+  return seed.mode === "edit" ? (seed.focus ?? null) : null;
+}
+
+/** 编辑的这家或复制的原来那家存的云账号密钥打码。 */
+function accessKeyMasksOf(
+  owner: ApiEndpoint | null,
+): Record<ConnectionAccessKeyPart, string | null> {
+  return { id: owner?.accessKeyIdMask ?? null, secret: owner?.secretAccessKeyMask ?? null };
+}
+
+function hasAccessKeyMask(masks: Record<ConnectionAccessKeyPart, string | null>): boolean {
+  return masks.id !== null || masks.secret !== null;
 }
 
 function keyOwnerOf(seed: ConnectionFormSeed): ApiEndpoint | null {

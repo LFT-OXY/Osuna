@@ -54,3 +54,38 @@ export function defaultBalanceField(balanceUrl: string): string | null {
   if (path.endsWith("/dashboard/billing/credit_grants")) return "$total_available";
   return null;
 }
+
+/**
+ * 要用云账号密钥读套餐窗口的地址是哪家的（照 magpie AccessKeyVendor）：volcengine 是火山方舟（ark.<region>.volces.com，
+ * 不论哪个套餐），tencent 是腾讯云 Token Plan 企业版（tokenhub.tencentmaas.com 或 tokenhub-intl.tencentmaas.com 的 /plan 下）；
+ * 别的为 null。编辑窗口只在这两家的地址给 AccessKey 两栏。
+ */
+export type ApiEndpointAccessKeyVendor = "volcengine" | "tencent";
+
+/** 腾讯云 Token Plan 企业版的两个主机与各自云 API 的区（广州、新加坡）。 */
+export const TENCENT_TOKEN_PLAN_REGIONS: Readonly<Record<string, "ap-guangzhou" | "ap-singapore">> =
+  {
+    "tokenhub.tencentmaas.com": "ap-guangzhou",
+    "tokenhub-intl.tencentmaas.com": "ap-singapore",
+  };
+
+export function accessKeyVendorOf(addresses: readonly string[]): ApiEndpointAccessKeyVendor | null {
+  const parsed = addresses.flatMap((address) => {
+    try {
+      return [new URL(address.trim())];
+    } catch {
+      return [];
+    }
+  });
+  const isArk = parsed.some((url) => {
+    const host = url.hostname.toLowerCase();
+    return host.startsWith("ark.") && host.endsWith(".volces.com");
+  });
+  if (isArk) return "volcengine";
+  const isTokenPlan = parsed.some(
+    (url) =>
+      Object.hasOwn(TENCENT_TOKEN_PLAN_REGIONS, url.hostname.toLowerCase()) &&
+      `${url.pathname.replace(/\/+$/, "")}/`.startsWith("/plan/"),
+  );
+  return isTokenPlan ? "tencent" : null;
+}

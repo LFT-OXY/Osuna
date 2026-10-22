@@ -2822,6 +2822,20 @@ export const es: TranslationResources = {
             "El ID de proyecto del equipo, de la misma consola. Hacen falta los dos ID.",
           teamProjectIdPlaceholder: "Opcional · solo plan de equipo GLM",
           teamBothNeeded: "Plan de equipo: indica el ID de organización y el ID de proyecto",
+          volcAccessKeyId: "AccessKey ID",
+          volcSecretAccessKey: "Secret Access Key",
+          tencentSecretId: "SecretId",
+          tencentSecretKey: "SecretKey",
+          accessKeyVendor: {
+            volcengine: "Volcengine Ark",
+            tencent: "Tencent Cloud Token Plan Enterprise",
+          },
+          accessKeyInfo:
+            "{{vendor}} solo da las ventanas de uso de un plan a la clave de acceso a la nube de la cuenta (creada en la gestión de accesos de la consola), nunca a la clave del propio plan. Con ambos campos, las ventanas se leen de la plataforma abierta del proveedor. Se guarda solo en este host y no se usa para nada más.",
+          secretAccessKeyInfo:
+            "El secreto que acompaña al ID. Solo se envía una firma hecha con él, nunca el secreto.",
+          accessKeySecretNeeded: "Indica también la {{secret}}",
+          accessKeyRemove: "Quitar",
           fixNewApiKeyQuery:
             "…/api/usage/token acepta la clave de API, no este token. Para el saldo de la cuenta, new-api usa /api/user/self; sub2api usa /api/v1/user/profile.",
           fixSub2apiKeyQuery:
@@ -3055,6 +3069,16 @@ export const es: TranslationResources = {
         fillUrl: "Rellenar URL de saldo",
         noKey: "Este endpoint no tiene clave, así que no se puede leer su saldo",
         rowUnavailable: "Saldo no disponible",
+        rowNeedsAccessKey: "Falta AccessKey",
+        needsAccessKeyVolcengine:
+          "Falta AccessKey: Volcengine Ark solo da las ventanas de este plan al AccessKey ID y la Secret Access Key de la cuenta. Rellénalos en Avanzado, en la configuración de este endpoint.",
+        needsAccessKeyTencent:
+          "Falta AccessKey: Tencent Cloud solo da el uso de un Token Plan Enterprise al SecretId y la SecretKey de la cuenta. Rellénalos en Avanzado, en la configuración de este endpoint.",
+        fillAccessKey: "Rellenar AccessKey",
+        planTier: "Nivel: {{tier}}",
+        planStopped: "Plan detenido: {{status}}",
+        teamPlanStopped: "Plan del equipo {{team}} detenido: {{status}}",
+        unreadTeams: "Sin cuota leída para: {{teams}}",
         rowAmount: "Saldo {{amount}}",
         rowWindowUsed: "{{window}} {{percent}} usado",
         rowWindowLeft: "{{window}} {{percent}} restante",
@@ -3075,6 +3099,8 @@ export const es: TranslationResources = {
           toppedUp: "Recargado",
         },
         hint: {
+          accessKeyRefused:
+            "Revisa el AccessKey (AK/SK) y sus permisos: la plataforma abierta rechazó la clave de acceso, o no puede leer el uso de este plan.",
           glmKeyRefused:
             "Esta clave caducó, se eliminó o está mal escrita: copia una vigente desde la consola y pégala en los ajustes de este endpoint.",
           opencodeGoNoSubscription:
@@ -3108,6 +3134,8 @@ export const es: TranslationResources = {
           bucket: "{{bucket}} · {{window}}",
           bucketVideo: "Vídeo",
           bucketImage: "Imagen",
+          unitCredits: "créditos",
+          unitTokens: "tokens",
           unitVideos: "vídeos",
         },
         pace: "Ritmo {{pace}}",

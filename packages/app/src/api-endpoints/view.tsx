@@ -53,6 +53,7 @@ import { ApiEndpointMappingSection } from "./mapping-section";
 import { ApiEndpointModelDefaultsSection } from "./model-defaults-section";
 import { ApiEndpointModelScopeSection } from "./model-scope-section";
 import { ApiEndpointModelSettingsSheet } from "./model-settings-sheet";
+import { accessKeyVendorOf } from "@getpaseo/protocol/api-endpoint/balance-settings";
 import { resolveModelFacts } from "@getpaseo/protocol/api-endpoint/model-settings";
 import { ApiEndpointModelsSection, type ModelTestsControl } from "./models-section";
 import { useEndpointDetail } from "./use-endpoint-detail";
@@ -382,6 +383,7 @@ function ConnectionSheet({
     | "checkBalance"
     | "detectBalanceUrl"
     | "revealBalanceToken"
+    | "revealAccessKey"
   >;
   setSheet: Dispatch<SetStateAction<ConnectionSheetState>>;
   onSaved: (result: Extract<ConnectionSaveResult, { status: "saved" }>) => void;
@@ -454,6 +456,7 @@ function ConnectionSheet({
       onCheckBalance={endpoints.checkBalance}
       onDetectBalanceUrl={endpoints.detectBalanceUrl}
       onRevealBalanceToken={endpoints.revealBalanceToken}
+      onRevealAccessKey={endpoints.revealAccessKey}
       onSaved={onSaved}
       onClose={closeForm}
     />
@@ -737,6 +740,15 @@ function ApiEndpointDetailContent({
       backToPicker: false,
     });
   }, [endpoint]);
+  // 余额分区的「填写 AccessKey」：打开编辑窗口，定位到「高级」里的 AccessKey 两栏。
+  const handleFillAccessKey = useCallback(() => {
+    if (!endpoint) return;
+    setSheet({
+      kind: "form",
+      seed: { mode: "edit", endpoint, focus: "access_key" },
+      backToPicker: false,
+    });
+  }, [endpoint]);
   // 「再加一家」：用这家的模板开新表单；模板清单里没有它（「自定义」加的、主机已不认识的模板）就没有这一项。
   const templateId = endpoint?.templateId ?? null;
   const hasKnownTemplate =
@@ -783,6 +795,7 @@ function ApiEndpointDetailContent({
         onDuplicate={canDuplicate ? handleDuplicate : null}
         onAddAnother={hasKnownTemplate ? handleAddAnother : null}
         onFillBalanceUrl={canDuplicate ? handleFillBalanceUrl : null}
+        onFillAccessKey={canDuplicate ? handleFillAccessKey : null}
       />
       <ConnectionSheet
         serverId={serverId}
@@ -806,6 +819,7 @@ function ApiEndpointDetailSections({
   onDuplicate,
   onAddAnother,
   onFillBalanceUrl,
+  onFillAccessKey,
 }: {
   serverId: string;
   endpoint: ApiEndpoint;
@@ -819,6 +833,7 @@ function ApiEndpointDetailSections({
   onAddAnother: (() => void) | null;
   // 编辑窗口有「高级」时才有（主机声明了 apiEndpointManagement）；余额分区本身只在声明了 apiEndpointBalance 时出现。
   onFillBalanceUrl: (() => void) | null;
+  onFillAccessKey: (() => void) | null;
 }) {
   const { t } = useTranslation();
   const now = useClock();
@@ -957,6 +972,10 @@ function ApiEndpointDetailSections({
           balances={balances}
           now={now}
           onFillBalanceUrl={onFillBalanceUrl}
+          accessKeyVendor={accessKeyVendorOf(
+            (endpoint.baseUrls ?? [{ url: endpoint.baseUrl }]).map((entry) => entry.url),
+          )}
+          onFillAccessKey={onFillAccessKey}
         />
       )}
       {hasCliWiring && canSearchWeb ? (

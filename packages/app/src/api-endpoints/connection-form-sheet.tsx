@@ -92,6 +92,7 @@ export interface ApiEndpointConnectionSheetProps {
   onCheckBalance: ConnectionFormDeps["checkBalance"];
   onDetectBalanceUrl: ConnectionFormDeps["detectBalanceUrl"];
   onRevealBalanceToken: ConnectionFormDeps["revealBalanceToken"];
+  onRevealAccessKey: ConnectionFormDeps["revealAccessKey"];
   // 保存成功：新建时调用方进入详情页，编辑时只关掉弹窗。
   onSaved: (result: Extract<ConnectionSaveResult, { status: "saved" }>) => void;
   onClose: () => void;
@@ -131,6 +132,7 @@ export function ApiEndpointConnectionSheet({
   onCheckBalance,
   onDetectBalanceUrl,
   onRevealBalanceToken,
+  onRevealAccessKey,
   onSaved,
   onClose,
 }: ApiEndpointConnectionSheetProps) {
@@ -150,6 +152,7 @@ export function ApiEndpointConnectionSheet({
       checkBalance: onCheckBalance,
       detectBalanceUrl: onDetectBalanceUrl,
       revealBalanceToken: onRevealBalanceToken,
+      revealAccessKey: onRevealAccessKey,
     },
     {
       isKeyOptional,

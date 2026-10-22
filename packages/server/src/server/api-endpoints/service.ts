@@ -52,6 +52,7 @@ import {
   type ApiEndpointImportCandidate,
   type ApiEndpointImportLinkPreview,
   type ApiEndpointNameRef,
+  type ApiEndpointSecret,
   API_ENDPOINT_IMPORT_ACTIONS,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import {
@@ -230,6 +231,7 @@ import {
   type ApiEndpointProvider,
   type ApiEndpointState,
   type GatewayTokens,
+  type StoredAccessKey,
   type StoredApiEndpoint,
 } from "./store.js";
 import { testUpstreamConnection } from "./upstream-connection.js";
@@ -552,6 +554,9 @@ export interface ApiEndpointSaveInput extends ApiEndpointRequestExtrasInput {
   balance?: ApiEndpointBalanceSettings;
   // 账户令牌：非空换上，空白清掉，undefined 保留原来的（复制时是原来那家的）。
   balanceToken?: string;
+  // 云账号密钥：各自非空换上，空白清掉，undefined 保留原来的（两个都 undefined 的复制时是原来那家的）。
+  accessKeyId?: string;
+  secretAccessKey?: string;
 }
 
 /** 「查询余额」与「自动识别」带的表单值：key 与地址省略即用 endpointId 那家存的。 */
@@ -1592,6 +1597,8 @@ export class ApiEndpointService {
       );
       const balanceToken = savedBalanceTokenOf({ input, copySource, store: this.store });
       if (balanceToken !== undefined) this.store.setBalanceToken(endpoint.id, balanceToken);
+      const accessKey = savedAccessKeyOf({ input, copySource, store: this.store, endpoint });
+      if (accessKey !== undefined) this.store.setAccessKey(endpoint.id, accessKey);
       // 编辑过这家接口就解除「需要检查」；改了连接（key 或地址）时冷却也是旧连接的，一并清掉。
       if (existing) {
         const connectionEdited =
@@ -1699,12 +1706,14 @@ export class ApiEndpointService {
     }
   }
 
-  /** 读回一家接口已保存的账户令牌原文（编辑窗口的「显示」）；没有为 null。 */
-  revealBalanceToken(endpointId: string): string | null {
+  /** 读回一家接口已保存的账户令牌或云账号密钥原文（编辑窗口的「显示」）；没有为 null。 */
+  revealSecret(endpointId: string, secret: ApiEndpointSecret): string | null {
     if (!findEndpoint(this.readState(), endpointId)) {
       throw new ApiEndpointRequestError({ code: "not_found", message: "API endpoint not found" });
     }
-    return this.store.getBalanceToken(endpointId);
+    if (secret === "balance_token") return this.store.getBalanceToken(endpointId);
+    const accessKey = this.store.getAccessKey(endpointId);
+    return secret === "access_key_id" ? accessKey.id : accessKey.secret;
   }
 
   /** 读回一家接口已保存的 key 原文（编辑窗口的「显示」）；没有 key 为 null。照 magpie 不确认、不限次数。 */
@@ -3480,7 +3489,8 @@ export class ApiEndpointService {
         if (usesKept) return kept.reading;
         const apiKey = this.store.getApiKey(endpoint.id);
         const balanceToken = this.store.getBalanceToken(endpoint.id);
-        const settings = { endpoint, apiKey, balanceToken };
+        const accessKey = this.store.getAccessKey(endpoint.id);
+        const settings = { endpoint, apiKey, balanceToken, accessKey };
         if (held) return this.lastBalances.standIn(settings, notAskedReading(endpoint.id));
         const at = this.now().getTime();
         const extras = storedRequestExtras(endpoint);
@@ -3488,6 +3498,7 @@ export class ApiEndpointService {
           endpoint,
           apiKey,
           balanceToken,
+          accessKey,
           extras,
           userAgent: this.userAgent,
           now: this.now,
@@ -5054,6 +5065,7 @@ export class ApiEndpointService {
       hasApiKey: apiKey !== null,
       ...(apiKey !== null ? { apiKeyMask: maskApiKey(apiKey) } : {}),
       ...this.balanceTokenMaskOf(endpoint.id),
+      ...this.accessKeyMasksOf(endpoint.id),
       defaultModelProviders: defaultModelProvidersOf(state, endpoint.id),
       cooldown: this.cooldownOf(endpoint.id),
       ...(endpoint.catalog
@@ -5113,6 +5125,18 @@ export class ApiEndpointService {
   private balanceTokenMaskOf(endpointId: string): { balanceTokenMask?: string } {
     const token = this.store.getBalanceToken(endpointId);
     return token === null ? {} : { balanceTokenMask: maskApiKey(token) };
+  }
+
+  /** 云账号密钥只发打码；没存的那样没有这项。 */
+  private accessKeyMasksOf(endpointId: string): {
+    accessKeyIdMask?: string;
+    secretAccessKeyMask?: string;
+  } {
+    const { id, secret } = this.store.getAccessKey(endpointId);
+    return {
+      ...(id === null ? {} : { accessKeyIdMask: maskApiKey(id) }),
+      ...(secret === null ? {} : { secretAccessKeyMask: maskApiKey(secret) }),
+    };
   }
 
   /** 整家接口的冷却；只冷却了某个模型的不算。 */
@@ -5724,6 +5748,28 @@ function savedBalanceTokenOf(input: {
   if (typed !== undefined) return typed.trim() || null;
   if (!input.copySource) return undefined;
   return input.store.getBalanceToken(input.copySource.id) ?? undefined;
+}
+
+/**
+ * 存下的云账号密钥：请求给了的那样换上（去掉首尾空白，空白清掉），没给的那样留原来的；两样都没给时复制取原来那家的，
+ * 编辑与新建不动（undefined）。
+ */
+function savedAccessKeyOf(input: {
+  input: ApiEndpointSaveInput;
+  copySource: StoredApiEndpoint | null;
+  store: ApiEndpointStore;
+  endpoint: StoredApiEndpoint;
+}): StoredAccessKey | undefined {
+  const { accessKeyId, secretAccessKey } = input.input;
+  if (accessKeyId === undefined && secretAccessKey === undefined) {
+    if (!input.copySource) return undefined;
+    return input.store.getAccessKey(input.copySource.id);
+  }
+  const kept = input.store.getAccessKey(input.endpoint.id);
+  return {
+    id: accessKeyId === undefined ? kept.id : accessKeyId.trim() || null,
+    secret: secretAccessKey === undefined ? kept.secret : secretAccessKey.trim() || null,
+  };
 }
 
 /**

@@ -899,6 +899,13 @@ function BalanceFact({ reading }: { reading: ApiEndpointBalanceReading }) {
     );
   }
   const first = reading.status === "ok" ? reading.items[0] : undefined;
+  if (reading.status === "needs_access_key") {
+    return (
+      <Text style={[styles.fact, styles.balanceFailed]} testID="api-endpoint-row-balance">
+        {t("settings.apiEndpoints.balance.rowNeedsAccessKey")}
+      </Text>
+    );
+  }
   if (!first) {
     return (
       <Text style={[styles.fact, styles.balanceFailed]} testID="api-endpoint-row-balance">

@@ -2803,6 +2803,20 @@ export const ru: TranslationResources = {
           teamProjectIdInfo: "ID проекта команды из той же консоли. Нужны оба ID.",
           teamProjectIdPlaceholder: "Необязательно · только командный тариф GLM",
           teamBothNeeded: "Командный тариф: укажите и ID организации, и ID проекта",
+          volcAccessKeyId: "AccessKey ID",
+          volcSecretAccessKey: "Secret Access Key",
+          tencentSecretId: "SecretId",
+          tencentSecretKey: "SecretKey",
+          accessKeyVendor: {
+            volcengine: "Volcengine Ark",
+            tencent: "Tencent Cloud Token Plan Enterprise",
+          },
+          accessKeyInfo:
+            "{{vendor}} сообщает окна использования тарифа только облачному ключу доступа аккаунта (создаётся в управлении доступом облачной консоли), но не ключу самого тарифа. Когда заполнены оба поля, окна читаются с открытой платформы поставщика. Хранится только на этом хосте и ни для чего другого не используется.",
+          secretAccessKeyInfo:
+            "Секрет, парный к ID. Отправляется только подпись, сделанная с ним, но не сам секрет.",
+          accessKeySecretNeeded: "Укажите и {{secret}}",
+          accessKeyRemove: "Удалить",
           fixNewApiKeyQuery:
             "…/api/usage/token принимает API-ключ, а не этот токен. Для баланса аккаунта new-api использует /api/user/self, sub2api — /api/v1/user/profile.",
           fixSub2apiKeyQuery:
@@ -3034,6 +3048,16 @@ export const ru: TranslationResources = {
         fillUrl: "Указать URL баланса",
         noKey: "У этой точки доступа нет ключа, поэтому баланс узнать нельзя",
         rowUnavailable: "Баланс недоступен",
+        rowNeedsAccessKey: "Нужен AccessKey",
+        needsAccessKeyVolcengine:
+          "Нужен AccessKey: Volcengine Ark сообщает окна этого тарифа только AccessKey ID и Secret Access Key аккаунта. Укажите их в разделе «Дополнительно» в настройках этого эндпоинта.",
+        needsAccessKeyTencent:
+          "Нужен AccessKey: Tencent Cloud сообщает использование Token Plan Enterprise только SecretId и SecretKey аккаунта. Укажите их в разделе «Дополнительно» в настройках этого эндпоинта.",
+        fillAccessKey: "Указать AccessKey",
+        planTier: "Уровень: {{tier}}",
+        planStopped: "Тариф остановлен: {{status}}",
+        teamPlanStopped: "Тариф команды {{team}} остановлен: {{status}}",
+        unreadTeams: "Не удалось прочитать квоту для: {{teams}}",
         rowAmount: "Баланс {{amount}}",
         rowWindowUsed: "{{window}}: использовано {{percent}}",
         rowWindowLeft: "{{window}}: осталось {{percent}}",
@@ -3054,6 +3078,8 @@ export const ru: TranslationResources = {
           toppedUp: "Пополнено",
         },
         hint: {
+          accessKeyRefused:
+            "Проверьте AccessKey (AK/SK) и его права: открытая платформа отклонила ключ доступа, или он не может читать использование этого тарифа.",
           glmKeyRefused:
             "Срок действия ключа истёк, он удалён или вставлен с ошибкой: скопируйте действующий ключ в консоли и вставьте его в настройки этого эндпоинта.",
           opencodeGoNoSubscription:
@@ -3087,6 +3113,8 @@ export const ru: TranslationResources = {
           bucket: "{{bucket}} · {{window}}",
           bucketVideo: "Видео",
           bucketImage: "Изображения",
+          unitCredits: "кредитов",
+          unitTokens: "токенов",
           unitVideos: "видео",
         },
         pace: "Темп {{pace}}",

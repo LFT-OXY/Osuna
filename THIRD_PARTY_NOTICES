@@ -1165,6 +1165,24 @@ editor's team fields follow the zhipuTeam fields in internal/gui/assets/app.js:
   packages/app/src/api-endpoints/balance-settings-fields.tsx
   packages/app/src/api-endpoints/internal/balance-settings-form.ts
 
+Volcengine Ark's and Tencent Cloud's plan windows read with the account's
+access key (the plan an address is on and its region, Volcengine's request
+signed as its SDK signs it, Tencent's TC3-HMAC-SHA256 signature, the Coding
+Plan's and Agent Plan's windows, Tencent's team plans and their month, the
+error codes about the access key and the card that asks for one) follow
+volcPlanOf, volcRegion, volcSign, volcQuery, volcOpenAPICall, volcRefusesKey,
+volcReadCodingPlan, volcReadAFP, volcWindow and volcTime in magpie's
+internal/provider/volcengine_usage.go, tencentPlanRegion, tencentPlanCards,
+tencentPlan.window, tc3Sign, tencentAPICall and tcRefusesKey in
+tencent_usage.go, AccessKeyVendor and accessKeyCard in access_key_card.go, and
+the editor's access key fields in internal/gui/assets/app.js:
+
+  packages/server/src/server/api-endpoints/balance-access-key.ts
+  packages/server/src/server/api-endpoints/balance.ts
+  packages/protocol/src/api-endpoint/balance-settings.ts
+  packages/app/src/api-endpoints/balance-settings-fields.tsx
+  packages/app/src/api-endpoints/internal/balance-settings-form.ts
+
 Import from other apps (the five sources and where each keeps its file, how a
 CC Switch, Claude Code, Codex, Alma or OpenCode entry becomes an endpoint, a
 template's when the URLs are its own, entries of one account merged, Osuna's own

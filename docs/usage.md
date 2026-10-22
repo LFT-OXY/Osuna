@@ -265,8 +265,35 @@ organization ID** and **Team project ID**: `GET
 <site>/api/biz/customer-package-reset/list?targetType=TEAM` with the same headers
 for the team's resets by window; magpie reads those only with a ZCode sign-in,
 which Osuna doesn't read, so when the key isn't taken there no count shows.
-"Check balance" and "Detect URL" don't read plan windows. Each
-window carries its pace as of the read: the share used less the share of the
+"Check balance" and "Detect URL" don't read plan windows.
+
+Volcengine Ark's Coding Plan and Agent Plan and Tencent Cloud's Token Plan
+Enterprise tell their windows only to the account's cloud access key, never to
+the plan's key, so the endpoint's **AccessKey ID** and **Secret Access Key**
+(Tencent's SecretId and SecretKey) go to the vendor's open platform, not to the
+endpoint's address, on the same schedule as the balance:
+
+| Plan                                | Base URL                                                               | Request                                                                                                                                                          |
+| ----------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Volcengine Ark Coding Plan          | `ark.<region>.volces.com/api/coding`                                   | `POST https://open.volcengineapi.com/?Action=GetCodingPlanUsage&Version=2024-01-01`, body `{}`                                                                   |
+| Volcengine Ark Agent Plan           | `ark.<region>.volces.com/api/plan`                                     | `POST https://open.volcengineapi.com/?Action=GetAFPUsage&Version=2024-01-01`, body `{}`                                                                          |
+| Tencent Cloud Token Plan Enterprise | `tokenhub.tencentmaas.com/plan` / `tokenhub-intl.tencentmaas.com/plan` | `POST https://tokenhub.tencentcloudapi.com/`, `DescribeTokenPlanList` (`{"Offset":0,"Limit":100}`), then `DescribeTokenPlan` (`{"TeamId":…}`) for each team plan |
+
+Volcengine's request is signed as its SDK signs it (`HMAC-SHA256` over
+`content-type;host;x-content-sha256;x-date`, scope `<date>/<region>/ark/request`,
+the region from the host, `cn-beijing` when it names none). Tencent's carries
+`X-TC-Action`, `X-TC-Version: 2026-03-22`, `X-TC-Region` (`ap-guangzhou`, or
+`ap-singapore` on the intl host) and `X-TC-Timestamp`, signed `TC3-HMAC-SHA256`
+over `content-type;host;x-tc-action`. Both carry `User-Agent: Osuna/<version>`
+(Volcengine's also `Accept: application/json`) and only the signature, never the secret, the
+plan's key or the endpoint's Headers. An endpoint missing either half of the
+access key sends nothing and its section says "Needs AccessKey"; Ark's
+pay-as-you-go (`/api/v3`) has no windows and asks nothing. A refused signature or
+access key (401, 403, an `AuthFailure…`, `SignatureDoesNotMatch` or
+`AccessDenied` code) adds "check the AccessKey and its permissions". The access
+key never reaches a log, and no RPC returns it except the edit dialog's Show.
+
+Each window carries its pace as of the read: the share used less the share of the
 window gone by, the window starting its length before its reset, and a monthly
 one on the same day a month before.
 

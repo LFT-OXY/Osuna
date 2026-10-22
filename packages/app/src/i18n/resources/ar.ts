@@ -2760,6 +2760,20 @@ export const ar: TranslationResources = {
           teamProjectIdInfo: "معرّف مشروع الفريق من وحدة التحكم نفسها. يلزم المعرّفان معًا.",
           teamProjectIdPlaceholder: "اختياري · لخطة فريق GLM فقط",
           teamBothNeeded: "خطة الفريق: أدخل معرّف المؤسسة ومعرّف المشروع معًا",
+          volcAccessKeyId: "AccessKey ID",
+          volcSecretAccessKey: "Secret Access Key",
+          tencentSecretId: "SecretId",
+          tencentSecretKey: "SecretKey",
+          accessKeyVendor: {
+            volcengine: "Volcengine Ark",
+            tencent: "Tencent Cloud Token Plan Enterprise",
+          },
+          accessKeyInfo:
+            "لا يكشف {{vendor}} نوافذ استخدام الخطة إلا لمفتاح الوصول السحابي للحساب (يُنشأ من إدارة الوصول في وحدة تحكم السحابة)، ولا يكشفها أبدًا لمفتاح الخطة نفسه. عند ملء الحقلين تُقرأ النوافذ من المنصة المفتوحة للمزوّد. يُحفظ على هذا المضيف فقط ولا يُستخدم لأي شيء آخر.",
+          secretAccessKeyInfo:
+            "السر المقترن بالمعرّف. يُرسل توقيع مصنوع به فقط، ولا يُرسل السر نفسه أبدًا.",
+          accessKeySecretNeeded: "أدخل {{secret}} أيضًا",
+          accessKeyRemove: "إزالة",
           fixNewApiKeyQuery:
             "…/api/usage/token يقبل مفتاح API لا هذا الرمز. لرصيد الحساب يستخدم new-api العنوان /api/user/self، ويستخدم sub2api العنوان /api/v1/user/profile.",
           fixSub2apiKeyQuery:
@@ -2984,6 +2998,16 @@ export const ar: TranslationResources = {
         fillUrl: "تعبئة عنوان الرصيد",
         noKey: "لا يوجد مفتاح لنقطة النهاية هذه، لذا لا يمكن قراءة رصيدها",
         rowUnavailable: "الرصيد غير متاح",
+        rowNeedsAccessKey: "يلزم AccessKey",
+        needsAccessKeyVolcengine:
+          "يلزم AccessKey: لا يكشف Volcengine Ark نوافذ هذه الخطة إلا لـ AccessKey ID وSecret Access Key الخاصين بالحساب. أدخلهما في «متقدّم» ضمن إعدادات نقطة النهاية هذه.",
+        needsAccessKeyTencent:
+          "يلزم AccessKey: لا تكشف Tencent Cloud استخدام Token Plan Enterprise إلا لـ SecretId وSecretKey الخاصين بالحساب. أدخلهما في «متقدّم» ضمن إعدادات نقطة النهاية هذه.",
+        fillAccessKey: "إدخال AccessKey",
+        planTier: "المستوى: {{tier}}",
+        planStopped: "الخطة متوقفة: {{status}}",
+        teamPlanStopped: "خطة الفريق {{team}} متوقفة: {{status}}",
+        unreadTeams: "تعذّرت قراءة الحصة لـ: {{teams}}",
         rowAmount: "الرصيد {{amount}}",
         rowWindowUsed: "{{window}}: مستخدم {{percent}}",
         rowWindowLeft: "{{window}}: متبقٍ {{percent}}",
@@ -3004,6 +3028,8 @@ export const ar: TranslationResources = {
           toppedUp: "مشحون",
         },
         hint: {
+          accessKeyRefused:
+            "تحقّق من AccessKey (AK/SK) وصلاحياته: رفضت المنصة المفتوحة مفتاح الوصول، أو لا يملك صلاحية قراءة استخدام هذه الخطة.",
           glmKeyRefused:
             "انتهت صلاحية هذا المفتاح أو حُذف أو لُصق خطأً: انسخ مفتاحًا صالحًا من وحدة التحكم والصقه في إعدادات نقطة النهاية هذه.",
           opencodeGoNoSubscription:
@@ -3036,6 +3062,8 @@ export const ar: TranslationResources = {
           bucket: "{{bucket}} · {{window}}",
           bucketVideo: "فيديو",
           bucketImage: "صور",
+          unitCredits: "رصيد",
+          unitTokens: "رمز",
           unitVideos: "فيديو",
         },
         pace: "الوتيرة {{pace}}",

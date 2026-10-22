@@ -122,6 +122,30 @@ export function balanceTokenRequest(input: {
 }
 
 /**
+ * 云账号密钥在保存里的样子：各自打了的发（去掉首尾空白）；移除了的没重打的那样发空字符串；没动不发（daemon 留原来的）。
+ */
+export function accessKeyRequest(input: {
+  typedId: string;
+  typedSecret: string;
+  removed: boolean;
+}): Pick<ApiEndpointSaveRequest, "accessKeyId" | "secretAccessKey"> {
+  const id = input.typedId.trim();
+  const secret = input.typedSecret.trim();
+  const cleared = input.removed ? "" : undefined;
+  const accessKeyId = id === "" ? cleared : id;
+  const secretAccessKey = secret === "" ? cleared : secret;
+  return {
+    ...(accessKeyId === undefined ? {} : { accessKeyId }),
+    ...(secretAccessKey === undefined ? {} : { secretAccessKey }),
+  };
+}
+
+/** 存下来有 ID 却没有 Secret（打了的或存着没移除的）：要补上 Secret（照 magpie「Give the access key's Secret too」）。 */
+export function hasLoneAccessKey(input: { hasId: boolean; hasSecret: boolean }): boolean {
+  return input.hasId && !input.hasSecret;
+}
+
+/**
  * 令牌与地址对不上时的提示（照 magpie balanceFix）：令牌配了只认 key 的查询，或没填地址，给同站点该改用的账户查询；
  * new-api 的账户查询没有用户 ID（也没有 New-Api-User 头）时提示补上。没有令牌时什么都不说。
  */

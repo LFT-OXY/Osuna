@@ -7105,4 +7105,138 @@ test.describe("Balance", () => {
       "Open console ↗",
     );
   });
+
+  // 工单 10：火山方舟与腾讯云 Token Plan 企业版的窗口要云账号密钥，问的是两家的开放平台（封条回假回复）。
+  const VOLC_OPEN = "https://open.volcengineapi.com/?Action=GetCodingPlanUsage&Version=2024-01-01";
+  const TENCENT_OPEN = "https://tokenhub.tencentcloudapi.com/";
+
+  async function openPlatformAnswers(): Promise<void> {
+    const inHours = (hours: number) => Math.floor(Date.now() / 1000) + hours * 60 * 60;
+    const volc = {
+      Result: {
+        QuotaUsage: [
+          { Level: "session", Percent: 18, ResetTimestamp: inHours(3) },
+          { Level: "weekly", Percent: 35, ResetTimestamp: inHours(100) },
+          { Level: "monthly", Percent: 62, ResetTimestamp: inHours(400) },
+        ],
+      },
+    };
+    const cycleEnd = new Date(Date.now() + 12 * 24 * 60 * 60 * 1000).toISOString();
+    const cycleStart = new Date(Date.now() - 18 * 24 * 60 * 60 * 1000).toISOString();
+    // 列表与套餐自己的查询都问同一个地址：清单里的套餐包就够读出月窗口。
+    const tencent = {
+      Response: {
+        TokenPlanSet: [
+          {
+            TeamId: "team-1",
+            Name: "Core",
+            ProductType: "enterprise",
+            // 用完了：照 magpie 在分区里写出停用与原因。
+            Status: "exhausted",
+            StopReason: "QUOTA_USED_UP",
+            PackageInfo: { CycleQuota: "1000000", TotalUsed: "420000" },
+            TokenSummary: { CycleStartTime: cycleStart, CycleEndTime: cycleEnd },
+          },
+        ],
+      },
+    };
+    await writeFile(
+      fakeSites,
+      JSON.stringify({
+        [VOLC_OPEN]: { status: 200, body: JSON.stringify(volc) },
+        [TENCENT_OPEN]: { status: 200, body: JSON.stringify(tencent) },
+      }),
+    );
+  }
+
+  test("a Volcengine Ark plan with no access key says one is needed; Fill in AccessKey opens the two fields, both or neither, and then the windows show", async ({
+    page,
+  }) => {
+    await openPlatformAnswers();
+    const id = await seedApiEndpoint(client, {
+      name: "Ark Coding",
+      baseUrls: [{ format: "openai_chat", url: "https://ark.cn-beijing.volces.com/api/coding/v3" }],
+      models: ["ark-code-latest"],
+    });
+    await openApiEndpointsPage(page);
+    await expect(row(page, id).getByTestId("api-endpoint-row-balance")).toHaveText(
+      "Needs AccessKey",
+    );
+
+    await openEndpointDetail(page, id);
+    const section = balanceSection(page);
+    await expect(section.getByTestId("api-endpoint-balance-needs-access-key")).toContainText(
+      "AccessKey ID and Secret Access Key",
+    );
+    await section.getByTestId("api-endpoint-balance-fill-access-key").click();
+    const idInput = page.getByTestId("api-endpoint-connection-access-key-id-input");
+    await expect(idInput).toBeFocused();
+    await expect(page.getByTestId("api-endpoint-connection-access-key-id")).toContainText(
+      "AccessKey ID",
+    );
+    await idInput.fill("AKLTexample0001");
+    const both = page.getByTestId("api-endpoint-connection-access-key-both");
+    await expect(both).toHaveText("Give the Secret Access Key too");
+    await expect(page.getByTestId("api-endpoint-connection-save")).toBeDisabled();
+    await page.getByTestId("api-endpoint-connection-secret-access-key-input").fill("volc-secret");
+    await expect(both).toHaveCount(0);
+    await page.getByTestId("api-endpoint-connection-save").click();
+    await expect(page.getByTestId("api-endpoint-connection-form")).toHaveCount(0);
+    const listed = (await client.apiEndpointList("claude")).endpoints.find(
+      (endpoint) => endpoint.id === id,
+    );
+    expect(listed?.accessKeyIdMask).toBe("AKLT…0001");
+    expect(listed?.secretAccessKeyMask).toBeDefined();
+
+    await section.getByTestId("api-endpoint-balance-refresh").click();
+    await expect(section.getByTestId("api-endpoint-balance-window-5h")).toContainText("18%");
+    await expect(section.getByTestId("api-endpoint-balance-window-7d")).toContainText("35%");
+    await expect(section.getByTestId("api-endpoint-balance-window-month")).toContainText("62%");
+
+    // 编辑窗口里两栏打码；「显示」读回原文。
+    await page.getByTestId("api-endpoint-edit-connection").filter({ visible: true }).click();
+    const secretInput = page.getByTestId("api-endpoint-connection-secret-access-key-input");
+    await expect(secretInput).toHaveAttribute("placeholder", /^Saved: /);
+    await page.getByTestId("api-endpoint-connection-secret-access-key-show").click();
+    await expect(secretInput).toHaveValue("volc-secret");
+  });
+
+  test("a Tencent Cloud Token Plan Enterprise asks for the SecretId and SecretKey, then shows its month in credits; elsewhere there are no such fields", async ({
+    page,
+  }) => {
+    await openPlatformAnswers();
+    const relayId = await seedRelay();
+    await openEndpointDetail(page, relayId);
+    await page.getByTestId("api-endpoint-edit-connection").filter({ visible: true }).click();
+    await page.getByTestId("api-endpoint-connection-advanced-toggle").click();
+    await expect(page.getByTestId("api-endpoint-connection-balance-url")).toBeVisible();
+    await expect(page.getByTestId("api-endpoint-connection-access-key-id")).toHaveCount(0);
+    await page.getByRole("button", { name: "Cancel" }).click();
+
+    const id = await seedApiEndpoint(client, {
+      name: "Token Plan",
+      baseUrls: [{ format: "openai_chat", url: "https://tokenhub.tencentmaas.com/plan/v3" }],
+      models: ["auto"],
+    });
+    await openEndpointDetail(page, id);
+    const section = balanceSection(page);
+    await expect(section.getByTestId("api-endpoint-balance-needs-access-key")).toContainText(
+      "SecretId and SecretKey",
+    );
+    await section.getByTestId("api-endpoint-balance-fill-access-key").click();
+    await expect(page.getByTestId("api-endpoint-connection-access-key-id")).toContainText(
+      "SecretId",
+    );
+    await page.getByTestId("api-endpoint-connection-access-key-id-input").fill("AKIDexample");
+    await page.getByTestId("api-endpoint-connection-secret-access-key-input").fill("tc-secret");
+    await page.getByTestId("api-endpoint-connection-save").click();
+    await expect(page.getByTestId("api-endpoint-connection-form")).toHaveCount(0);
+    await section.getByTestId("api-endpoint-balance-refresh").click();
+    const month = section.getByTestId("api-endpoint-balance-window-month");
+    await expect(month).toContainText("Month");
+    await expect(month).toContainText("420,000 / 1,000,000 credits");
+    await expect(section.getByTestId("api-endpoint-balance-plan-stopped")).toHaveText(
+      "Plan stopped: exhausted, QUOTA_USED_UP",
+    );
+  });
 });

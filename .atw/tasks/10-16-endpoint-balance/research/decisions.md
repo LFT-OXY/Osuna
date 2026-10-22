@@ -108,6 +108,7 @@
 - 火山方舟（`provider/volcengine_usage.go`）：`ark.<region>.volces.com` 路径 `/api/coding` → GetCodingPlanUsage，`/api/plan` → GetAFPUsage；POST `https://open.volcengineapi.com/?Action=…&Version=2024-01-01`，body `{}`；HMAC-SHA256 签名，签名头 `content-type;host;x-content-sha256;x-date`，scope `日期/region/ark/request`（:185-277）；session / weekly / monthly。
 - 腾讯云 Token Plan 企业版（`provider/tencent_usage.go`）：`tokenhub(-intl).tencentmaas.com/plan` → ap-guangzhou / ap-singapore；POST `tokenhub.tencentcloudapi.com`，Version 2026-03-22，DescribeTokenPlanList（Limit 100）再 DescribeTokenPlan；TC3-HMAC-SHA256（:326-352）；一个月窗口。magpie 注释说没在真实接口上测过（:19-21）。
 - 没填 AK/SK 时也出卡，提示「需要 AccessKey」并带打开设置的按钮（`provider/access_key_card.go`）。
+- 工单 10 实现时定下：火山签名的单元测试向量取自 magpie `TestVolcSignMatchesSDK`（官方 SDK volc-sdk-golang 签出的值），火山文档没有完整的示例向量；腾讯用签名文档 api/213/30654 的例子。腾讯请求照 magpie 不带 Accept。名字旁的套餐档位与停用状态、多团队时读不到的团队，Osuna 的读数没有套餐名一栏，经用户 10-22 拍板加可选字段显示（`planTier`、`stoppedPlans`、`unreadTeams`）。几个团队时窗口 id 写成「团队名:month」，界面显示「团队名 · 月」。
 - 阶跃 Step Plan（`provider/stepfun_plan.go`）：**不做**（R1-Q7）。
 
 ### 查询时机、失败与界面

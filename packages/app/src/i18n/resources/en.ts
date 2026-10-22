@@ -2829,6 +2829,20 @@ export const en = {
             "The team's project ID, from the same console. Both IDs are needed to read the team's windows.",
           teamProjectIdPlaceholder: "Optional · GLM team plan only",
           teamBothNeeded: "Team plan: give both the organization ID and the project ID",
+          volcAccessKeyId: "AccessKey ID",
+          volcSecretAccessKey: "Secret Access Key",
+          tencentSecretId: "SecretId",
+          tencentSecretKey: "SecretKey",
+          accessKeyVendor: {
+            volcengine: "Volcengine Ark",
+            tencent: "Tencent Cloud Token Plan Enterprise",
+          },
+          accessKeyInfo:
+            "{{vendor}} tells a plan's usage windows only to the account's cloud access key (made under access management in the cloud console), never to the plan's own key. With both fields filled, the windows are read from the vendor's open platform. Kept on this host only and used for nothing else.",
+          secretAccessKeyInfo:
+            "The secret that goes with the ID. Only a signature made with it is sent, never the secret itself.",
+          accessKeySecretNeeded: "Give the {{secret}} too",
+          accessKeyRemove: "Remove",
           fixNewApiKeyQuery:
             "…/api/usage/token takes the API key, not this token. For the account's balance, new-api uses /api/user/self; sub2api uses /api/v1/user/profile.",
           fixSub2apiKeyQuery:
@@ -3058,6 +3072,16 @@ export const en = {
         fillUrl: "Fill in balance URL",
         noKey: "This endpoint has no key, so its balance can't be read",
         rowUnavailable: "Balance unavailable",
+        rowNeedsAccessKey: "Needs AccessKey",
+        needsAccessKeyVolcengine:
+          "Needs AccessKey: Volcengine Ark tells this plan's windows only to the account's AccessKey ID and Secret Access Key. Fill them in under Advanced in this endpoint's settings.",
+        needsAccessKeyTencent:
+          "Needs AccessKey: Tencent Cloud tells a Token Plan Enterprise's usage only to the account's SecretId and SecretKey. Fill them in under Advanced in this endpoint's settings.",
+        fillAccessKey: "Fill in AccessKey",
+        planTier: "Tier: {{tier}}",
+        planStopped: "Plan stopped: {{status}}",
+        teamPlanStopped: "{{team}}'s plan stopped: {{status}}",
+        unreadTeams: "No quota read for: {{teams}}",
         rowAmount: "Balance {{amount}}",
         rowWindowUsed: "{{window}} {{percent}} used",
         rowWindowLeft: "{{window}} {{percent}} left",
@@ -3078,6 +3102,8 @@ export const en = {
           toppedUp: "Topped up",
         },
         hint: {
+          accessKeyRefused:
+            "Check the AccessKey (AK/SK) and its permissions: the open platform refused the access key, or it may not read this plan's usage.",
           glmKeyRefused:
             "This key has expired, was deleted, or is mistyped: copy a current one from the console and paste it into this endpoint's settings.",
           opencodeGoNoSubscription:
@@ -3110,6 +3136,8 @@ export const en = {
           bucket: "{{bucket}} · {{window}}",
           bucketVideo: "Video",
           bucketImage: "Image",
+          unitCredits: "credits",
+          unitTokens: "tokens",
           unitVideos: "videos",
         },
         pace: "Pace {{pace}}",

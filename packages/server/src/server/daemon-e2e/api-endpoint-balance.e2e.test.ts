@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 import { BALANCE_VENDOR_URLS, type BalanceVendorId } from "../api-endpoints/balance.js";
+import { tc3Sign, volcSign } from "../api-endpoints/balance-access-key.js";
 
 /*
  * 接口的余额（工单 01、02）：真实 daemon + 本机假 DeepSeek 余额接口，时钟注入。
@@ -403,6 +404,9 @@ describe("API endpoint balance of the other known vendors", () => {
       // 套餐窗口第二批（工单 09）：智谱团队在 bigmodel.cn 的第二个站点，Command Code 的套餐。
       glm_cn_biz: "https://bigmodel.cn/api/monitor/usage/quota/limit",
       commandcode_subscriptions: "https://api.commandcode.ai/alpha/billing/subscriptions",
+      // 云账号密钥读的套餐窗口（工单 10）：两家的开放平台。
+      volcengine_open: "https://open.volcengineapi.com/",
+      tencent_open: "https://tokenhub.tencentcloudapi.com/",
     });
   });
 
@@ -2584,5 +2588,459 @@ describe("API endpoint plan windows", () => {
     });
     expect(checked.reading?.status).toBe("unsupported");
     expect(requests).toHaveLength(0);
+  });
+});
+
+/*
+ * 工单 10：火山方舟与腾讯云 Token Plan 企业版的套餐窗口用云账号密钥签名问开放平台（照 magpie volcengine_usage.go、
+ * tencent_usage.go）。一个本机假开放平台扮演两家：测试 daemon 把两家开放平台的地址换成它，它按收到的请求核对签名。
+ */
+describe("API endpoint plan windows read with a cloud access key", () => {
+  const ACCESS_KEY_ID = "AKLTvolc-access-key-id-0001";
+  const SECRET = "volc-secret-access-key-do-not-leak";
+  let daemon: TestPaseoDaemon;
+  let client: DaemonClient;
+  let logLines: string[] = [];
+  let open: {
+    origin: string;
+    requests: { url: string; headers: IncomingHttpHeaders; body: string }[];
+    reply: (input: { url: string; headers: IncomingHttpHeaders; body: string }) => {
+      status: number;
+      body: unknown;
+    };
+  };
+
+  beforeEach(async () => {
+    logLines = [];
+    const fake: typeof open = {
+      origin: "",
+      requests: [],
+      reply: () => ({ status: 404, body: { error: "no fake reply" } }),
+    };
+    const server = createServer(async (request, response) => {
+      let body = "";
+      for await (const chunk of request) body += String(chunk);
+      const received = { url: request.url ?? "", headers: request.headers, body };
+      fake.requests.push(received);
+      const answer = fake.reply(received);
+      sendJson(response, answer.status, answer.body);
+    });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    fake.origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    open = fake;
+    const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-access-key-"));
+    tempRoots.push(root);
+    daemon = await createTestPaseoDaemon({
+      daemonVersion: VERSION,
+      logger: pino({ level: "trace" }, { write: (line: string) => logLines.push(line) }),
+      apiEndpoints: {
+        env: { CLAUDE_CONFIG_DIR: path.join(root, "claude"), CODEX_HOME: path.join(root, "codex") },
+        homeDir: root,
+        now: () => new Date(NOW),
+        balanceUrls: {
+          volcengine_open: `${fake.origin}/`,
+          tencent_open: `${fake.origin}/`,
+        },
+      },
+    });
+    client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.17.0" });
+    await client.connect();
+    await client.fetchAgents({ subscribe: {} });
+  });
+
+  afterEach(async () => {
+    await client?.close();
+    await daemon?.close();
+    await Promise.all(servers.splice(0).map(closeServer));
+    await Promise.all(
+      tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
+    );
+  });
+
+  async function saveAt(input: {
+    baseUrl: string;
+    endpointId?: string;
+    accessKeyId?: string;
+    secretAccessKey?: string;
+    copyOf?: string;
+  }): Promise<string> {
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: input.copyOf ? "Copy" : "Plan",
+      baseUrl: input.baseUrl,
+      apiKey: "sk-plan-key",
+      ...(input.endpointId === undefined ? {} : { endpointId: input.endpointId }),
+      ...(input.copyOf === undefined ? {} : { copyOf: input.copyOf }),
+      ...(input.accessKeyId === undefined ? {} : { accessKeyId: input.accessKeyId }),
+      ...(input.secretAccessKey === undefined ? {} : { secretAccessKey: input.secretAccessKey }),
+      models: [{ id: "some-model" }],
+      defaultModelId: "some-model",
+    });
+    expect(saved.error).toBeNull();
+    if (!saved.endpoint) throw new Error("Expected a saved endpoint");
+    return saved.endpoint.id;
+  }
+
+  async function read(endpointId: string) {
+    const answer = await client.apiEndpointReadBalance({ endpointIds: [endpointId], force: true });
+    expect(answer.error).toBeNull();
+    return answer.readings[0]!;
+  }
+
+  const ARK_CODING = "https://ark.cn-beijing.volces.com/api/coding/v3";
+  const TOKEN_PLAN = "https://tokenhub-intl.tencentmaas.com/plan/v3";
+  const port = () => new URL(open.origin).host;
+
+  test("a Volcengine Coding Plan is asked of the open platform, signed with the access key, and shows its three windows", async () => {
+    open.reply = () => ({
+      status: 200,
+      body: {
+        ResponseMetadata: { RequestId: "r1", Action: "GetCodingPlanUsage" },
+        Result: {
+          QuotaUsage: [
+            {
+              Level: "session",
+              Percent: 12.5,
+              ResetTimestamp: Date.parse("2026-10-22T10:00:00Z") / 1000,
+            },
+            {
+              Level: "weekly",
+              Percent: 40,
+              ResetTimestamp: Date.parse("2026-10-27T00:00:00Z") / 1000,
+            },
+            {
+              Level: "monthly",
+              Percent: "55.5",
+              ResetTimestamp: Date.parse("2026-11-01T00:00:00Z") / 1000,
+            },
+          ],
+        },
+      },
+    });
+    const id = await saveAt({
+      baseUrl: ARK_CODING,
+      accessKeyId: ACCESS_KEY_ID,
+      secretAccessKey: SECRET,
+    });
+    const reading = await read(id);
+    expect(reading.status).toBe("ok");
+    expect(reading.windows?.map((window) => [window.id, window.usedPct, window.resetsAt])).toEqual([
+      ["5h", 12.5, "2026-10-22T10:00:00.000Z"],
+      ["7d", 40, "2026-10-27T00:00:00.000Z"],
+      ["month", 55.5, "2026-11-01T00:00:00.000Z"],
+    ]);
+    expect(open.requests).toHaveLength(1);
+    const sent = open.requests[0]!;
+    expect(sent.url).toBe("/?Action=GetCodingPlanUsage&Version=2024-01-01");
+    expect(sent.body).toBe("{}");
+    expect(sent.headers["content-type"]).toBe("application/json");
+    expect(sent.headers["x-date"]).toBe("20261022T080000Z");
+    expect(sent.headers["user-agent"]).toBe(`Osuna/${VERSION}`);
+    // 签名头与 scope 同官方 SDK；签名本身按收到的请求重算核对。
+    expect(sent.headers.authorization).toBe(
+      volcSign({
+        accessKeyId: ACCESS_KEY_ID,
+        secretAccessKey: SECRET,
+        region: "cn-beijing",
+        host: port(),
+        query: { Action: "GetCodingPlanUsage", Version: "2024-01-01" },
+        body: sent.body,
+        now: NOW,
+      }).authorization,
+    );
+    expect(sent.headers.authorization).toMatch(
+      new RegExp(
+        `^HMAC-SHA256 Credential=${ACCESS_KEY_ID}/20261022/cn-beijing/ark/request, SignedHeaders=content-type;host;x-content-sha256;x-date, Signature=[0-9a-f]{64}$`,
+      ),
+    );
+    expect(sent.headers.host).toBe(port());
+    expect(JSON.stringify(sent.headers)).not.toContain(SECRET);
+    expect(JSON.stringify(sent.headers)).not.toContain("sk-plan-key");
+  });
+
+  test("an Agent Plan in another region asks GetAFPUsage there", async () => {
+    open.reply = () => ({
+      status: 200,
+      body: {
+        Result: {
+          Tier: "Pro",
+          AFPFiveHour: { Quota: 100, Used: 42 },
+          AFPMonthly: { Quota: 200, Used: 50 },
+        },
+      },
+    });
+    const id = await saveAt({
+      baseUrl: "https://ark.cn-shanghai.volces.com/api/plan/v3",
+      accessKeyId: ACCESS_KEY_ID,
+      secretAccessKey: SECRET,
+    });
+    const reading = await read(id);
+    expect(reading.windows?.map((window) => [window.id, window.used, window.limit])).toEqual([
+      ["5h", 42, 100],
+      ["month", 50, 200],
+    ]);
+    expect(reading.planTier).toBe("Pro");
+    expect(open.requests[0]?.url).toBe("/?Action=GetAFPUsage&Version=2024-01-01");
+    expect(open.requests[0]?.headers.authorization).toContain("/cn-shanghai/ark/request");
+  });
+
+  test("a Tencent Cloud Token Plan Enterprise lists its plans, then asks the team's cycle, signed TC3", async () => {
+    open.reply = ({ headers }) => {
+      if (headers["x-tc-action"] === "DescribeTokenPlanList") {
+        return {
+          status: 200,
+          body: {
+            Response: { TokenPlanSet: [{ TeamId: "team-1", Name: "Core" }], RequestId: "r" },
+          },
+        };
+      }
+      return {
+        status: 200,
+        body: {
+          Response: {
+            TeamId: "team-1",
+            ProductType: "enterprise",
+            PackageInfo: { CycleQuota: "1000", TotalUsed: "250" },
+            TokenSummary: {
+              CycleStartTime: "2026-10-01T00:00:00+08:00",
+              CycleEndTime: "2026-11-01T00:00:00+08:00",
+            },
+          },
+        },
+      };
+    };
+    const id = await saveAt({
+      baseUrl: TOKEN_PLAN,
+      accessKeyId: "AKIDtencent-secret-id",
+      secretAccessKey: "tencent-secret-key-do-not-leak",
+    });
+    const reading = await read(id);
+    expect(reading.status).toBe("ok");
+    expect(reading.windows).toEqual([
+      expect.objectContaining({
+        id: "month",
+        usedPct: 25,
+        used: 250,
+        limit: 1000,
+        unit: "credits",
+        resetsAt: "2026-10-31T16:00:00.000Z",
+      }),
+    ]);
+    expect(open.requests.map((sent) => [sent.url, sent.headers["x-tc-action"], sent.body])).toEqual(
+      [
+        ["/", "DescribeTokenPlanList", '{"Offset":0,"Limit":100}'],
+        ["/", "DescribeTokenPlan", '{"TeamId":"team-1"}'],
+      ],
+    );
+    for (const sent of open.requests) {
+      expect(sent.headers["x-tc-version"]).toBe("2026-03-22");
+      expect(sent.headers["x-tc-region"]).toBe("ap-singapore");
+      expect(sent.headers["x-tc-timestamp"]).toBe(String(NOW / 1000));
+      expect(sent.headers["content-type"]).toBe("application/json; charset=utf-8");
+      expect(sent.headers["user-agent"]).toBe(`Osuna/${VERSION}`);
+      expect(sent.headers.authorization).toBe(
+        tc3Sign({
+          secretId: "AKIDtencent-secret-id",
+          secretKey: "tencent-secret-key-do-not-leak",
+          service: "tokenhub",
+          host: port(),
+          action: String(sent.headers["x-tc-action"]),
+          contentType: "application/json; charset=utf-8",
+          body: sent.body,
+          timestamp: NOW / 1000,
+        }),
+      );
+      expect(sent.headers.authorization).toMatch(
+        /^TC3-HMAC-SHA256 Credential=AKIDtencent-secret-id\/2026-10-22\/tokenhub\/tc3_request, SignedHeaders=content-type;host;x-tc-action, Signature=[0-9a-f]{64}$/,
+      );
+    }
+  });
+
+  test("several Tencent team plans each show a month named for the team; a stopped one says so, one with no quota is named", async () => {
+    open.reply = ({ headers, body }) => {
+      if (headers["x-tc-action"] === "DescribeTokenPlanList") {
+        return {
+          status: 200,
+          body: {
+            Response: {
+              TokenPlanSet: [
+                { TeamId: "team-1", Name: "Core", PackageInfo: { TotalQuota: 100, TotalUsed: 10 } },
+                { TeamId: "team-2", Name: "", PackageInfo: { TotalQuota: 100, TotalUsed: 90 } },
+                { TeamId: "team-3", Name: "Lab" },
+              ],
+            },
+          },
+        };
+      }
+      const teamId = JSON.parse(body).TeamId;
+      // 团队 2 自己的回复说它欠费停用了。
+      const status = teamId === "team-2" ? { Status: "isolated", StopReason: "ARREARS" } : {};
+      return { status: 200, body: { Response: { TeamId: teamId, ...status } } };
+    };
+    const id = await saveAt({ baseUrl: TOKEN_PLAN, accessKeyId: "AKID", secretAccessKey: "SK" });
+    const reading = await read(id);
+    expect(reading.windows?.map((window) => [window.id, window.label, window.usedPct])).toEqual([
+      ["Core:month", "Core · Month", 10],
+      ["team-2:month", "team-2 · Month", 90],
+    ]);
+    expect(reading.stoppedPlans).toEqual([
+      { team: "team-2", status: "isolated", reason: "ARREARS" },
+    ]);
+    expect(reading.unreadTeams).toEqual(["Lab"]);
+  });
+
+  test("without both keys nothing is asked and the reading says an access key is needed", async () => {
+    const volc = await saveAt({ baseUrl: ARK_CODING });
+    const tencent = await saveAt({ baseUrl: TOKEN_PLAN, accessKeyId: "AKID" });
+    for (const id of [volc, tencent]) {
+      expect(await read(id)).toEqual({
+        endpointId: id,
+        status: "needs_access_key",
+        items: [],
+        readAt: null,
+        failure: null,
+      });
+    }
+    expect(open.requests).toHaveLength(0);
+  });
+
+  test("Ark's pay as you go has no plan: nothing is asked and no access key is wanted", async () => {
+    const id = await saveAt({ baseUrl: "https://ark.cn-beijing.volces.com/api/v3" });
+    expect((await read(id)).status).toBe("unsupported");
+    expect(open.requests).toHaveLength(0);
+  });
+
+  test.each([
+    {
+      name: "a refused signature code",
+      status: 200,
+      body: {
+        ResponseMetadata: { Error: { Code: "SignatureDoesNotMatch", Message: "bad signature" } },
+      },
+      detail: "SignatureDoesNotMatch bad signature",
+      httpStatus: 200,
+    },
+    {
+      name: "a 403 with another code",
+      status: 403,
+      body: { ResponseMetadata: { Error: { Code: "NotAllowed", Message: "no rights" } } },
+      detail: "NotAllowed no rights",
+      httpStatus: 403,
+    },
+    {
+      name: "a bare 401",
+      status: 401,
+      body: { message: "who are you" },
+      detail: "who are you",
+      httpStatus: 401,
+    },
+  ])(
+    "$name says to check the access key and its rights",
+    async ({ status, body, detail, httpStatus }) => {
+      open.reply = () => ({ status, body });
+      const id = await saveAt({
+        baseUrl: ARK_CODING,
+        accessKeyId: ACCESS_KEY_ID,
+        secretAccessKey: SECRET,
+      });
+      const reading = await read(id);
+      expect(reading.status).toBe("failed");
+      expect(reading.failure).toEqual({
+        reason: "token_rejected",
+        detail,
+        status: httpStatus,
+        hint: "access_key_refused",
+      });
+    },
+  );
+
+  test("Tencent's auth failure in a 200 says to check the key; a busy platform is temporary", async () => {
+    open.reply = () => ({
+      status: 200,
+      body: {
+        Response: { Error: { Code: "AuthFailure.SecretIdNotFound", Message: "no such id" } },
+      },
+    });
+    const id = await saveAt({ baseUrl: TOKEN_PLAN, accessKeyId: "AKID", secretAccessKey: "SK" });
+    expect((await read(id)).failure).toMatchObject({
+      reason: "token_rejected",
+      hint: "access_key_refused",
+      detail: "AuthFailure.SecretIdNotFound no such id",
+    });
+    open.reply = () => ({
+      status: 200,
+      body: { Response: { Error: { Code: "RequestLimitExceeded", Message: "slow down" } } },
+    });
+    expect((await read(id)).failure).toMatchObject({ reason: "temporary" });
+  });
+
+  test("an account with no such plan has no value, said in so many words", async () => {
+    open.reply = () => ({ status: 200, body: { Result: { QuotaUsage: [] } } });
+    const id = await saveAt({
+      baseUrl: ARK_CODING,
+      accessKeyId: ACCESS_KEY_ID,
+      secretAccessKey: SECRET,
+    });
+    const reading = await read(id);
+    expect(reading.failure?.reason).toBe("no_value");
+    expect(reading.failure?.detail).toContain("has no Coding Plan");
+  });
+
+  test("the keys stay in the daemon: masked in the list, revealed on asking, kept on a copy, never in a reply or the log", async () => {
+    open.reply = () => ({
+      status: 403,
+      body: {
+        ResponseMetadata: {
+          Error: { Code: "AccessDenied", Message: `denied ${ACCESS_KEY_ID} ${SECRET}` },
+        },
+      },
+    });
+    const id = await saveAt({
+      baseUrl: ARK_CODING,
+      accessKeyId: ACCESS_KEY_ID,
+      secretAccessKey: SECRET,
+    });
+    const list = await client.apiEndpointList("claude");
+    const endpoint = list.endpoints.find((entry) => entry.id === id);
+    expect(endpoint?.accessKeyIdMask).toBe("AKLT…0001");
+    expect(endpoint?.secretAccessKeyMask).toBe("volc…leak");
+    const reading = await read(id);
+    expect(reading.failure?.hint).toBe("access_key_refused");
+    for (const answer of [list, reading]) {
+      expect(JSON.stringify(answer)).not.toContain(SECRET);
+      expect(JSON.stringify(answer)).not.toContain(ACCESS_KEY_ID);
+    }
+    expect(logLines.length).toBeGreaterThan(0);
+    expect(logLines.join("\n")).not.toContain(SECRET);
+    expect(
+      await client.apiEndpointRevealSecret({ endpointId: id, secret: "access_key_id" }),
+    ).toMatchObject({ value: ACCESS_KEY_ID, error: null });
+    expect(
+      await client.apiEndpointRevealSecret({ endpointId: id, secret: "secret_access_key" }),
+    ).toMatchObject({ value: SECRET, error: null });
+    const endpointsFile = await readFile(
+      path.join(daemon.paseoHome, "api-endpoints", "endpoints.json"),
+      "utf8",
+    );
+    expect(endpointsFile).not.toContain(SECRET);
+
+    const copy = await saveAt({ baseUrl: ARK_CODING, copyOf: id });
+    expect(
+      await client.apiEndpointRevealSecret({ endpointId: copy, secret: "secret_access_key" }),
+    ).toMatchObject({ value: SECRET });
+
+    // 只换 Secret：ID 留着；空字符串清掉。
+    await saveAt({ baseUrl: ARK_CODING, endpointId: id, secretAccessKey: "new-secret-value" });
+    expect(
+      await client.apiEndpointRevealSecret({ endpointId: id, secret: "access_key_id" }),
+    ).toMatchObject({ value: ACCESS_KEY_ID });
+    await saveAt({ baseUrl: ARK_CODING, endpointId: id, accessKeyId: "", secretAccessKey: "" });
+    const cleared = (await client.apiEndpointList("claude")).endpoints.find(
+      (entry) => entry.id === id,
+    );
+    expect(cleared?.accessKeyIdMask).toBeUndefined();
+    expect(cleared?.secretAccessKeyMask).toBeUndefined();
+    expect((await read(id)).status).toBe("needs_access_key");
   });
 });

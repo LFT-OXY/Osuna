@@ -2779,6 +2779,20 @@ export const ko: TranslationResources = {
           teamProjectIdInfo: "같은 콘솔에 있는 팀의 프로젝트 ID. 두 ID가 모두 있어야 합니다.",
           teamProjectIdPlaceholder: "선택 사항 · GLM 팀 플랜만",
           teamBothNeeded: "팀 플랜: 조직 ID와 프로젝트 ID를 모두 입력하세요",
+          volcAccessKeyId: "AccessKey ID",
+          volcSecretAccessKey: "Secret Access Key",
+          tencentSecretId: "SecretId",
+          tencentSecretKey: "SecretKey",
+          accessKeyVendor: {
+            volcengine: "Volcengine Ark",
+            tencent: "Tencent Cloud Token Plan Enterprise",
+          },
+          accessKeyInfo:
+            "{{vendor}}는 플랜의 사용량 창을 계정의 클라우드 액세스 키(클라우드 콘솔의 액세스 관리에서 생성)에만 알려 주며, 플랜 자체의 키로는 조회할 수 없습니다. 두 칸을 모두 채우면 공급자의 오픈 플랫폼에서 창을 읽습니다. 이 호스트에만 저장되며 다른 용도로 쓰이지 않습니다.",
+          secretAccessKeyInfo:
+            "ID와 짝을 이루는 시크릿입니다. 이것으로 만든 서명만 보내고 시크릿 자체는 보내지 않습니다.",
+          accessKeySecretNeeded: "{{secret}}도 입력하세요",
+          accessKeyRemove: "제거",
           fixNewApiKeyQuery:
             "…/api/usage/token은 이 토큰이 아니라 API 키를 받습니다. 계정 잔액은 new-api는 /api/user/self, sub2api는 /api/v1/user/profile입니다.",
           fixSub2apiKeyQuery:
@@ -3010,6 +3024,16 @@ export const ko: TranslationResources = {
         fillUrl: "잔액 조회 URL 입력",
         noKey: "이 엔드포인트에는 키가 없어 잔액을 조회할 수 없습니다",
         rowUnavailable: "잔액을 가져올 수 없음",
+        rowNeedsAccessKey: "AccessKey 필요",
+        needsAccessKeyVolcengine:
+          "AccessKey 필요: Volcengine Ark는 이 플랜의 창을 계정의 AccessKey ID와 Secret Access Key에만 알려 줍니다. 이 엔드포인트 설정의 고급에서 입력하세요.",
+        needsAccessKeyTencent:
+          "AccessKey 필요: Tencent Cloud는 Token Plan Enterprise의 사용량을 계정의 SecretId와 SecretKey에만 알려 줍니다. 이 엔드포인트 설정의 고급에서 입력하세요.",
+        fillAccessKey: "AccessKey 입력",
+        planTier: "등급: {{tier}}",
+        planStopped: "플랜 중지됨: {{status}}",
+        teamPlanStopped: "{{team}} 팀의 플랜 중지됨: {{status}}",
+        unreadTeams: "사용량을 읽지 못한 팀: {{teams}}",
         rowAmount: "잔액 {{amount}}",
         rowWindowUsed: "{{window}} {{percent}} 사용",
         rowWindowLeft: "{{window}} {{percent}} 남음",
@@ -3030,6 +3054,8 @@ export const ko: TranslationResources = {
           toppedUp: "충전",
         },
         hint: {
+          accessKeyRefused:
+            "AccessKey(AK/SK)와 권한을 확인하세요: 오픈 플랫폼이 액세스 키를 거부했거나, 이 플랜의 사용량을 읽을 권한이 없습니다.",
           glmKeyRefused:
             "이 키는 만료되었거나 삭제되었거나 잘못 붙여넣었습니다. 콘솔에서 유효한 키를 복사해 이 엔드포인트 설정에 붙여넣으세요.",
           opencodeGoNoSubscription:
@@ -3063,6 +3089,8 @@ export const ko: TranslationResources = {
           bucket: "{{bucket}} · {{window}}",
           bucketVideo: "동영상",
           bucketImage: "이미지",
+          unitCredits: "크레딧",
+          unitTokens: "토큰",
           unitVideos: "개 동영상",
         },
         pace: "페이스 {{pace}}",

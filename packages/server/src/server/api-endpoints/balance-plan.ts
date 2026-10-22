@@ -42,6 +42,9 @@ export const PLAN_VENDOR_URLS = {
   ollama: "https://ollama.com/api/balance",
   // credits 回复没写套餐时问这把 key 的订阅，拿套餐每月给多少 credits。
   commandcode_subscriptions: "https://api.commandcode.ai/alpha/billing/subscriptions",
+  // 火山方舟与腾讯云 Token Plan 企业版的开放平台：用云账号密钥签名问套餐窗口（balance-access-key.ts）。
+  volcengine_open: "https://open.volcengineapi.com/",
+  tencent_open: "https://tokenhub.tencentcloudapi.com/",
 } as const;
 
 export type PlanVendorId = keyof typeof PLAN_VENDOR_URLS;

@@ -1965,3 +1965,51 @@ return {
   ...(planned.resets === undefined ? {} : { resets: planned.resets }),
 };
 ```
+
+## Scenario: Plan windows read with a cloud access key (Volcengine Ark, Tencent Token Plan Enterprise)
+
+### 1. Scope / Trigger
+- Trigger: new secrets in `keys.json`, new save/endpoint/reveal fields, a new reading status, and signed requests to two vendors' open platforms (api-endpoint balance ticket 10, after magpie `volcengine_usage.go`, `tencent_usage.go`, `access_key_card.go`).
+
+### 2. Signatures
+- Protocol `balance-settings.ts`: `accessKeyVendorOf(addresses) → "volcengine" | "tencent" | null` (any `ark.*.volces.com` host; `tokenhub(-intl).tencentmaas.com` under `/plan/`), `TENCENT_TOKEN_PLAN_REGIONS` (host → `ap-guangzhou` / `ap-singapore`). The app and daemon both use it.
+- Server `balance-access-key.ts` (pure): `volcSign`, `tc3Sign`, `accessKeyPlanOf(baseUrls) → { vendor: "volcengine", action: "GetCodingPlanUsage" | "GetAFPUsage", region } | { vendor: "tencent", region } | null` (`/api/v3` pay-as-you-go → null), `volcRequest`, `tencentRequest`, `openApiErrorOf`, `readVolcPlan → { windows, tier }`, `readTencentPlanList`, `withTencentDetail`, `tencentPlanWindow`, `tencentStopped`, `tencentTeamOf`.
+- `PLAN_VENDOR_URLS.volcengine_open` (`https://open.volcengineapi.com/`), `.tencent_open` (`https://tokenhub.tencentcloudapi.com/`); tests inject both; the browser seal covers both origins. Signing uses the host actually sent to (`new URL(openUrl).host`), so a local fake verifies the real signature.
+- Store: `keys.json` `accessKeys?: { [endpointId]: { id?, secret? } }`; `getAccessKey(id) → { id: string | null, secret: string | null }`, `setAccessKey(id, { id, secret })` (both null drops the entry); `removeSecrets` drops it too.
+- Service: `revealSecret(endpointId, secret: ApiEndpointSecret)` replaces `revealBalanceToken`; `ReadBalanceInput.accessKey?`; `BalanceSettings.accessKey` (in the last-reading fingerprint only when set).
+
+### 3. Contracts
+- Save: `accessKeyId?`, `secretAccessKey?` — each non-empty (trimmed) replaces, `""` clears, omitted keeps; both omitted on a copy takes the source's pair.
+- Endpoint: `accessKeyIdMask?`, `secretAccessKeyMask?` (`maskApiKey`). Reveal: `secret` `access_key_id` / `secret_access_key`.
+- Reading: status `needs_access_key` (either half missing; nothing sent; `readAt` and `failure` null); hint `access_key_refused`; optional `planTier` (Agent Plan `Tier`), `stoppedPlans: [{ team: string | null, status, reason: string | null }]` (Tencent `Status` ≠ `enable`; `NORMAL`/`none` reasons → null; `team` only with several plans), `unreadTeams: string[]` (several plans, some with no quota). All carried through the merge and kept by `LastBalanceReadings`.
+- Requests: Volcengine `POST <open>/?Action=…&Version=2024-01-01`, body `{}`, headers `content-type`, `x-date`, `x-content-sha256`, `authorization`, `accept`, `user-agent`. Tencent `POST <open>/` with `x-tc-action`, `x-tc-version: 2026-03-22`, `x-tc-region`, `x-tc-timestamp`, TC3 `authorization`, `user-agent` (no `Accept`, as magpie); `DescribeTokenPlanList {"Offset":0,"Limit":100}` then `DescribeTokenPlan {"TeamId"}` per team. Never the plan key or endpoint headers.
+- Windows: `5h`, `7d`, `month` (30-day span for pace); Tencent `month` with `used`/`limit`, `unit` `credits` or `tokens`, span = cycle end − start; several teams → id `<team>:month`, label `<team> · Month`.
+
+### 4. Validation & Error Matrix
+- Error code about the key (Volc: accesskey/signature/accessdenied/unauthorized/forbidden/credential/authfailure; Tencent: `AuthFailure*`/unauthorized) or HTTP 401/403 → `token_rejected` + `access_key_refused`, detail `Code Message` masked.
+- Code containing limitexceeded/internalerror/unavailable/timeout → `temporary` (last reading stands in). Other code → by HTTP status, `no_value` on 200.
+- Non-JSON 2xx → `wrong_url`; network → `temporary`.
+- No windows → `no_value` with magpie's sentence; Tencent no team plans → `no_value` naming the region.
+- Edit dialog: the two fields only when `accessKeyVendorOf` matches; an ID without a Secret shows `accessKeySecretNeeded` and disables Save (a Secret alone is allowed, as magpie).
+
+### 5. Good/Base/Bad Cases
+- Good: Ark Coding Plan with both keys → three windows, signature verified by the fake.
+- Base: Tencent with three teams, one stopped, one without quota → two windows, `stoppedPlans`, `unreadTeams`.
+- Bad: Ark endpoint with only an ID saved → `needs_access_key`, no request.
+
+### 6. Tests Required
+- `balance-access-key.test.ts`: SDK vectors for `volcSign` (from magpie `TestVolcSignMatchesSDK`; Volcengine's docs give no worked example), Tencent doc vector for `tc3Sign`, plan-of, readers, `tencentStopped`.
+- `daemon-e2e/api-endpoint-balance.e2e.test.ts` › "…read with a cloud access key": signature recomputed from the received request, URLs, bodies, `needs_access_key` without requests, refusals, temporary, masks/reveal/copy/clear, no secret in replies or logs.
+- App: `connection-form-model.test.ts` › "the cloud access key…"; browser `Balance` › Volcengine and Tencent cases.
+
+### 7. Wrong vs Correct
+#### Wrong
+```ts
+// 签名里写死真实主机：测试把地址换成本机后签名对不上
+volcSign({ ..., host: "open.volcengineapi.com" });
+```
+#### Correct
+```ts
+const open = new URL(input.openUrl);
+volcSign({ ..., host: open.host });
+```

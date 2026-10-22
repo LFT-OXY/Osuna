@@ -286,6 +286,10 @@ export const ApiEndpointSchema = z.object({
   balance: ApiEndpointBalanceSettingsSchema.optional(),
   // 账户令牌的打码（同 apiKeyMask）；原文只在 daemon，经 reveal_secret 读回。没有令牌时不发，老 daemon 不发。
   balanceTokenMask: z.string().optional(),
+  // 云账号密钥的打码（火山的 AccessKey ID 与 Secret Access Key、腾讯的 SecretId 与 SecretKey，读套餐窗口用）；原文只在
+  // daemon，经 reveal_secret 读回。各自存了才发，老 daemon 不发。
+  accessKeyIdMask: z.string().optional(),
+  secretAccessKeyMask: z.string().optional(),
 });
 export type ApiEndpoint = z.infer<typeof ApiEndpointSchema>;
 
@@ -470,6 +474,10 @@ export type ApiEndpointListResponse = z.infer<typeof ApiEndpointListResponseSche
  *
  * balanceToken：账户令牌（new-api 的系统访问令牌、sub2api 的登录令牌、AiHubMix 的系统访问令牌），只存在 daemon 的 key 文件里。
  * 非空即换成它，空字符串清掉，省略即保留（复制时是原来那家的）。老 daemon 忽略它。
+ *
+ * accessKeyId、secretAccessKey：云账号密钥（火山的 AccessKey ID 与 Secret Access Key、腾讯的 SecretId 与 SecretKey，
+ * 读火山方舟与腾讯云 Token Plan 企业版的套餐窗口用），只存在 daemon 的 key 文件里。各自非空即换成它，空字符串清掉，
+ * 省略即保留（两个都省略的复制时是原来那家的）。老 daemon 忽略它们。
  */
 export const ApiEndpointSaveRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.save.request"),
@@ -496,6 +504,8 @@ export const ApiEndpointSaveRequestSchema = z.object({
   cooldownSettings: ApiEndpointCooldownSettingsSchema.optional(),
   balance: ApiEndpointBalanceSettingsSchema.optional(),
   balanceToken: z.string().optional(),
+  accessKeyId: z.string().optional(),
+  secretAccessKey: z.string().optional(),
   ...ApiEndpointRequestExtrasSchema.shape,
 });
 export type ApiEndpointSaveRequest = z.infer<typeof ApiEndpointSaveRequestSchema>;
@@ -849,10 +859,15 @@ export type ApiEndpointSetBalanceAutoRefreshResponse = z.infer<
 >;
 
 /**
- * 读回一家接口已保存的别的机密原文（编辑窗口里账户令牌的「显示」）：secret 为 balance_token；没有时 value 为 null。
+ * 读回一家接口已保存的别的机密原文（编辑窗口里账户令牌与云账号密钥的「显示」）：secret 为 balance_token、
+ * access_key_id 或 secret_access_key；没有时 value 为 null。
  * 不认得的 secret 拒收（invalid_input）。照 magpie 不确认、不限次数。只有声明了 apiEndpointBalance 的 daemon 认它。
  */
-export const API_ENDPOINT_SECRETS = ["balance_token"] as const;
+export const API_ENDPOINT_SECRETS = [
+  "balance_token",
+  "access_key_id",
+  "secret_access_key",
+] as const;
 export type ApiEndpointSecret = (typeof API_ENDPOINT_SECRETS)[number];
 
 export const ApiEndpointRevealSecretRequestSchema = z.object({
@@ -1390,12 +1405,18 @@ export type ApiEndpointVendorStatusResponse = z.infer<typeof ApiEndpointVendorSt
 
 /**
  * 接口的余额（Balance）：厂商自己说这把 key 或它的账户还剩多少（照 magpie provider/balance.go），只显示，不进选路。
- * 读数的 status：ok（有读数）、unsupported（认不出查法，或这家没 key）、failed（失败，原因在 failure）。
+ * 读数的 status：ok（有读数）、unsupported（认不出查法，或这家没 key）、failed（失败，原因在 failure）、
+ * needs_access_key（火山方舟、腾讯云 Token Plan 企业版的套餐窗口要云账号密钥，这家还没填；不发请求，failure 为 null）。
  * failure.reason：wrong_url（地址不对：404、回的是网页或不是 JSON）、token_rejected（401、403、success:false）、
  * not_offered（这家不给查余额）、no_value（回复里取不到数）、temporary（网络、超时、429、5xx）。
  * 线上都是字符串，daemon 以后多一种老客户端照样解析。
  */
-export const API_ENDPOINT_BALANCE_STATUSES = ["ok", "unsupported", "failed"] as const;
+export const API_ENDPOINT_BALANCE_STATUSES = [
+  "ok",
+  "unsupported",
+  "failed",
+  "needs_access_key",
+] as const;
 export type ApiEndpointBalanceStatus = (typeof API_ENDPOINT_BALANCE_STATUSES)[number];
 export const API_ENDPOINT_BALANCE_FAILURES = [
   "wrong_url",
@@ -1411,7 +1432,8 @@ export type ApiEndpointBalanceFailureReason = (typeof API_ENDPOINT_BALANCE_FAILU
  * 关着，这次读取不是用户要求的，也还没有读数）、token_on_key_url（账户令牌配了只认 key 的查询，该改用的地址在 useUrl，
  * 没发请求）、new_api_user_missing（new-api 说缺 New-Api-User，要填用户 ID）、glm_key_refused（智谱或 Z.ai 不认这把
  * key：过期、删了或粘错，去 seeAt 换一把）、opencode_go_no_subscription（这把 key 没有 OpenCode Go：Go 归订阅的成员，
- * 要用那位成员在那个工作区建的 key）、opencode_key_refused（OpenCode 不认这把 key：删了或粘错）。
+ * 要用那位成员在那个工作区建的 key）、opencode_key_refused（OpenCode 不认这把 key：删了或粘错）、access_key_refused（火山或
+ * 腾讯的开放平台不认云账号密钥或它没有权限：401、403 或认证类错误码，检查 AK/SK 与权限）。
  */
 export const API_ENDPOINT_BALANCE_HINTS = [
   "opencode_no_balance",
@@ -1423,6 +1445,7 @@ export const API_ENDPOINT_BALANCE_HINTS = [
   "glm_key_refused",
   "opencode_go_no_subscription",
   "opencode_key_refused",
+  "access_key_refused",
 ] as const;
 export type ApiEndpointBalanceHint = (typeof API_ENDPOINT_BALANCE_HINTS)[number];
 export const API_ENDPOINT_BALANCE_PARTS = ["granted", "topped_up"] as const;
@@ -1503,6 +1526,17 @@ export const ApiEndpointBalanceResetsSchema = z.object({
 });
 export type ApiEndpointBalanceResets = z.infer<typeof ApiEndpointBalanceResetsSchema>;
 
+/**
+ * 停用的套餐（腾讯云 Token Plan 企业版的 Status 不是 enable：用完、欠费、冻结），照 magpie 写在套餐名旁：status 与
+ * stopReason 是对方的原话（NORMAL、none 一类不算原因，为 null）；team 是几个团队套餐时的团队名，只有一个时为 null。
+ */
+export const ApiEndpointStoppedPlanSchema = z.object({
+  team: z.string().nullable(),
+  status: z.string(),
+  reason: z.string().nullable(),
+});
+export type ApiEndpointStoppedPlan = z.infer<typeof ApiEndpointStoppedPlanSchema>;
+
 export const ApiEndpointBalanceReadingSchema = z.object({
   endpointId: z.string(),
   status: z.string(),
@@ -1513,6 +1547,12 @@ export const ApiEndpointBalanceReadingSchema = z.object({
   team: z.boolean().optional(),
   // 套餐还有几次重置；没有或读不到不发，老 daemon 不发。
   resets: ApiEndpointBalanceResetsSchema.optional(),
+  // 套餐的档位（火山 Agent Plan 的 Tier，照 magpie 写在套餐名后）；没有不发，老 daemon 不发。
+  planTier: z.string().optional(),
+  // 停用的套餐；没有不发，老 daemon 不发。
+  stoppedPlans: z.array(ApiEndpointStoppedPlanSchema).optional(),
+  // 读不到额度的团队套餐的名字（腾讯几个团队时，照 magpie 每个团队各报）；都读到不发，老 daemon 不发。
+  unreadTeams: z.array(z.string()).optional(),
   // 这次读的时刻；unsupported 为 null。带 stale 的是上次读数读到的时刻。
   readAt: z.string().nullable(),
   failure: ApiEndpointBalanceFailureSchema.nullable(),

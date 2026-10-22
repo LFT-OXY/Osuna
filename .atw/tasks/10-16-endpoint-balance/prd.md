@@ -161,7 +161,7 @@
 ### 数据与存储
 
 17. **接口的新字段**（可选，缺省等于没有，不做迁移）：余额设置，含余额查询地址、方法、取值写法、new-api 用户 ID、智谱团队组织 ID 与项目 ID。存在接口自己的存储里。工单 05 起线上与存储都是 `balance: { url, method?, field? }`：方法只存 POST（GET 是缺省），空的取值写法不存，没有地址即没有这一项；工单 09 加 `teamOrgId`、`teamProjectId`，没有地址也可单独存（这时 `balance` 只有它们，`url` 在存储里可选）；保存时整份替换，省略即保留，没有地址也没有团队 ID 即清掉；方法不是 GET、POST 的拒收（`invalid_balance_settings`，同 magpie 命令行）。
-18. **新的机密**：账户令牌、火山 AccessKey ID 与 Secret Access Key、腾讯 SecretId 与 SecretKey 存在 key 文件里，和 key 一样只有 daemon 读。客户端只看到有没有和打码；保存请求里可写入、可清空。复制接口时与 key 一样按「沿用哪家」拷贝。工单 06 起：账户令牌在 `keys.json` 的 `balanceTokens`，接口带 `balanceTokenMask`，保存与查询余额的 `balanceToken` 非空换上、空字符串清掉、省略保留；编辑窗口的「显示」经新 RPC `provider.api_endpoint.reveal_secret`（`secret` 为 `balance_token`）读回原文。
+18. **新的机密**：账户令牌、火山 AccessKey ID 与 Secret Access Key、腾讯 SecretId 与 SecretKey 存在 key 文件里，和 key 一样只有 daemon 读。客户端只看到有没有和打码；保存请求里可写入、可清空。复制接口时与 key 一样按「沿用哪家」拷贝。工单 06 起：账户令牌在 `keys.json` 的 `balanceTokens`，接口带 `balanceTokenMask`，保存与查询余额的 `balanceToken` 非空换上、空字符串清掉、省略保留；编辑窗口的「显示」经新 RPC `provider.api_endpoint.reveal_secret`（`secret` 为 `balance_token`）读回原文。工单 10 起：云账号密钥在 `keys.json` 的 `accessKeys`（每家 `{ id?, secret? }`），接口带 `accessKeyIdMask`、`secretAccessKeyMask`，保存的 `accessKeyId`、`secretAccessKey` 各自非空换上、空字符串清掉、省略保留（两个都省略的复制取原来那家的）；`reveal_secret` 加 `access_key_id`、`secret_access_key`。编辑窗口照 magpie 只拦「有 ID 没 Secret」。没填齐时读数 `status` 为 `needs_access_key`（不发请求）；被拒的提示 `access_key_refused`。用户 10-22 拍板：照 magpie 补上读数的可选 `planTier`（火山 Agent Plan 档位）、`stoppedPlans`（腾讯停用的套餐与原因）、`unreadTeams`（几个团队时读不到额度的团队），详情分区窗口上方各写一行。
 19. **主机级新字段**：「自动刷新余额与套餐用量」开关，缺省开。
 
 ### 协议
