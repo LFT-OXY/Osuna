@@ -780,6 +780,20 @@ describe("when the API endpoint balance is read", () => {
     expect(await listedAutoRefresh()).toBe(true);
   });
 
+  test("auto refresh and the price table's auto-update are two switches: turning one off leaves the other", async () => {
+    await client.patchDaemonConfig({ usage: { pricing: { autoUpdate: false } } });
+    expect((await client.getDaemonConfig()).config.usage?.pricing?.autoUpdate).toBe(false);
+    expect(await listedAutoRefresh()).toBe(true);
+    const id = await saveDeepSeek();
+    expect((await read(id)).status).toBe("ok");
+    expect(deepseek.requests).toHaveLength(1);
+
+    await client.patchDaemonConfig({ usage: { pricing: { autoUpdate: true } } });
+    await setAutoRefresh(false);
+    expect((await client.getDaemonConfig()).config.usage?.pricing?.autoUpdate).toBe(true);
+    expect(await listedAutoRefresh()).toBe(false);
+  });
+
   test("with auto refresh on, a timed read goes out", async () => {
     const id = await saveDeepSeek();
     const reading = await read(id);
@@ -1123,6 +1137,7 @@ describe("API endpoint balance at an address the user gave", () => {
     relay.replies[queryPath] = (response) => sendJson(response, 200, reply);
     const id = await savedRelayId({ balance: { url: `${relay.origin}${queryPath}` } });
     expect((await read(id)).items[0]?.text).toBe(want);
+    expect(relay.requests[0]?.headers["user-agent"]).toBe(`Osuna/${VERSION}`);
   });
 
   test("an address with no default and no field says where to write one, as no value", async () => {
@@ -1390,6 +1405,7 @@ describe("API endpoint balance at an address the user gave", () => {
       expect(answer.attempts[0]?.reading.failure?.reason).toBe("wrong_url");
       expect(answer.attempts[1]?.reading.items[0]?.text).toBe("$3.50");
       expect(balancePaths()).toEqual(["/api/usage/token", "/v1/usage"]);
+      expect(relay.requests.at(-1)?.headers["user-agent"]).toBe(`Osuna/${VERSION}`);
     });
 
     test("neither answering says why for each address, the key masked", async () => {
@@ -1602,6 +1618,7 @@ describe("API endpoint balance at an address the user gave", () => {
     });
     expect((await read(id)).items[0]?.text).toBe("$3.00");
     expect(relay.requests[0]?.headers.authorization).toBe(`Bearer ${RELAY_KEY}`);
+    expect(relay.requests[0]?.headers["user-agent"]).toBe(`Osuna/${VERSION}`);
   });
 
   test("sub2api's key query shows its 5-hour, day and week windows in dollars, with their resets", async () => {
@@ -1761,6 +1778,7 @@ describe("API endpoint balance at an address the user gave", () => {
     );
     expect(kept).toContain("$5.00");
     expect(kept).not.toContain(TOKEN);
+    expect(kept).not.toContain(RELAY_KEY);
     relay.replies["/api/user/self"] = (response) => sendJson(response, 503, { error: "busy" });
     await savedRelayId({ endpointId: id, balanceToken: "another-token" });
     const reading = await read(id);
@@ -1936,6 +1954,7 @@ describe("API endpoint plan windows", () => {
     const reading = await readAt("https://api.z.ai/api/coding/paas/v4");
     expect(reading.windows?.map((window) => window.id)).toEqual(["5h", "7d", "mcp_month"]);
     expect(requests[0]?.url).toBe(pathOf("glm_z"));
+    expect(requests[0]?.headers["user-agent"]).toBe(`Osuna/${VERSION}`);
   });
 
   test("a GLM key refused (401, or a 1000–1005 code) says to paste a current one, and where", async () => {
@@ -2014,6 +2033,7 @@ describe("API endpoint plan windows", () => {
     expect(requests[0]?.url).toBe(usages);
     expect(requests[0]?.headers.authorization).toBe(`Bearer ${KEY}`);
     expect(requests[0]?.headers["accept-language"]).toBe("en-US,en");
+    expect(requests[0]?.headers["user-agent"]).toBe(`Osuna/${VERSION}`);
   });
 
   test("MiniMax shows each bucket's interval and week; another bucket is aside, a used-up window full, an unlimited one left out", async () => {
@@ -2110,6 +2130,7 @@ describe("API endpoint plan windows", () => {
     ]);
     expect(requests[0]?.url).toBe(pathOf("minimax_cn"));
     expect(requests[0]?.headers.authorization).toBe(`Bearer ${KEY}`);
+    expect(requests[0]?.headers["user-agent"]).toBe(`Osuna/${VERSION}`);
   });
 
   test("a MiniMax pay-as-you-go key, refused in base_resp, shows nothing", async () => {
@@ -2161,6 +2182,7 @@ describe("API endpoint plan windows", () => {
       ]);
       expect(requests[0]?.url).toBe(pathOf("opencode_go"));
       expect(requests[0]?.headers.authorization).toBe(`Bearer ${KEY}`);
+      expect(requests[0]?.headers["user-agent"]).toBe(`Osuna/${VERSION}`);
       expect(requests[0]?.headers["x-opencode-session"]).toMatch(
         /^ses_[0-9a-f]{12}[0-9A-Za-z]{14}$/,
       );
@@ -2557,6 +2579,11 @@ describe("API endpoint plan windows", () => {
         pacePct: expect.closeTo(27.5 - ((7 * 24 + 8) / (31 * 24)) * 100, 3),
       },
     ]);
+    // 余额与窗口各问一次，两次都带 Osuna 的名字。
+    expect(requests.map((request) => request.headers["user-agent"])).toEqual([
+      `Osuna/${VERSION}`,
+      `Osuna/${VERSION}`,
+    ]);
   });
 
   test("Ollama Cloud's legacy plan shows its session and weekly limits", async () => {
@@ -2757,6 +2784,13 @@ describe("API endpoint plan windows read with a cloud access key", () => {
     expect(sent.headers.host).toBe(port());
     expect(JSON.stringify(sent.headers)).not.toContain(SECRET);
     expect(JSON.stringify(sent.headers)).not.toContain("sk-plan-key");
+    const kept = await readFile(
+      path.join(daemon.paseoHome, "api-endpoints", "balance-readings.json"),
+      "utf8",
+    );
+    expect(kept).toContain('"usedPct": 12.5');
+    expect(kept).not.toContain(ACCESS_KEY_ID);
+    expect(kept).not.toContain(SECRET);
   });
 
   test("an Agent Plan in another region asks GetAFPUsage there", async () => {
@@ -2839,6 +2873,8 @@ describe("API endpoint plan windows read with a cloud access key", () => {
       expect(sent.headers["x-tc-timestamp"]).toBe(String(NOW / 1000));
       expect(sent.headers["content-type"]).toBe("application/json; charset=utf-8");
       expect(sent.headers["user-agent"]).toBe(`Osuna/${VERSION}`);
+      // Osuna 不给腾讯写 Accept（火山才写 application/json）；「*/*」是 fetch 自己补的缺省值。
+      expect(sent.headers.accept).toBe("*/*");
       expect(sent.headers.authorization).toBe(
         tc3Sign({
           secretId: "AKIDtencent-secret-id",
@@ -2855,6 +2891,22 @@ describe("API endpoint plan windows read with a cloud access key", () => {
         /^TC3-HMAC-SHA256 Credential=AKIDtencent-secret-id\/2026-10-22\/tokenhub\/tc3_request, SignedHeaders=content-type;host;x-tc-action, Signature=[0-9a-f]{64}$/,
       );
     }
+    // 腾讯的 SecretId / SecretKey 同样只在 daemon：列表、读数、日志与上次读数文件里都没有。
+    const list = await client.apiEndpointList("claude");
+    for (const answer of [list, reading]) {
+      expect(JSON.stringify(answer)).not.toContain("AKIDtencent-secret-id");
+      expect(JSON.stringify(answer)).not.toContain("tencent-secret-key-do-not-leak");
+    }
+    expect(logLines.length).toBeGreaterThan(0);
+    expect(logLines.join("\n")).not.toContain("AKIDtencent-secret-id");
+    expect(logLines.join("\n")).not.toContain("tencent-secret-key-do-not-leak");
+    const kept = await readFile(
+      path.join(daemon.paseoHome, "api-endpoints", "balance-readings.json"),
+      "utf8",
+    );
+    expect(kept).toContain('"used": 250');
+    expect(kept).not.toContain("AKIDtencent-secret-id");
+    expect(kept).not.toContain("tencent-secret-key-do-not-leak");
   });
 
   test("several Tencent team plans each show a month named for the team; a stopped one says so, one with no quota is named", async () => {
@@ -3013,6 +3065,7 @@ describe("API endpoint plan windows read with a cloud access key", () => {
     }
     expect(logLines.length).toBeGreaterThan(0);
     expect(logLines.join("\n")).not.toContain(SECRET);
+    expect(logLines.join("\n")).not.toContain(ACCESS_KEY_ID);
     expect(
       await client.apiEndpointRevealSecret({ endpointId: id, secret: "access_key_id" }),
     ).toMatchObject({ value: ACCESS_KEY_ID, error: null });
@@ -3028,6 +3081,15 @@ describe("API endpoint plan windows read with a cloud access key", () => {
     const copy = await saveAt({ baseUrl: ARK_CODING, copyOf: id });
     expect(
       await client.apiEndpointRevealSecret({ endpointId: copy, secret: "secret_access_key" }),
+    ).toMatchObject({ value: SECRET });
+
+    // 旧客户端的保存两项都不带：两项都留着。
+    await saveAt({ baseUrl: ARK_CODING, endpointId: id });
+    expect(
+      await client.apiEndpointRevealSecret({ endpointId: id, secret: "access_key_id" }),
+    ).toMatchObject({ value: ACCESS_KEY_ID });
+    expect(
+      await client.apiEndpointRevealSecret({ endpointId: id, secret: "secret_access_key" }),
     ).toMatchObject({ value: SECRET });
 
     // 只换 Secret：ID 留着；空字符串清掉。

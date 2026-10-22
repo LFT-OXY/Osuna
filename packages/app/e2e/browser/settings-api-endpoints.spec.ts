@@ -5104,6 +5104,29 @@ test.describe("Settings changed outside Osuna on the provider pages", () => {
   });
 });
 
+/** `isHolding` 为 true 时，读余额的回复先扣着不给页面，release() 才发回原来的连接（看刷新进行中的样子）。 */
+async function holdBalanceReads(page: Page): Promise<{ isHolding: boolean; release: () => void }> {
+  const held: { send: (message: string) => void; message: string }[] = [];
+  const reads = {
+    isHolding: false,
+    release() {
+      reads.isHolding = false;
+      for (const reply of held.splice(0)) reply.send(reply.message);
+    },
+  };
+  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
+    const server = ws.connectToServer();
+    const send = (message: string) => ws.send(message);
+    server.onMessage((message) => {
+      const isRead = typeof message === "string" && message.includes("read_balance.response");
+      if (reads.isHolding && isRead) held.push({ send, message });
+      else ws.send(message);
+    });
+    ws.onMessage((message) => server.send(message));
+  });
+  return reads;
+}
+
 /** `failing` 为 true 时，keep_current_settings 请求不送到 daemon，直接回一个失败响应。 */
 async function failKeepCurrentSettings(page: Page): Promise<{ failing: boolean }> {
   const host = { failing: true };
@@ -6642,6 +6665,34 @@ test.describe("Balance", () => {
     await deepseekAnswers(200, balanceOf("98.50"));
     await section.getByTestId("api-endpoint-balance-refresh").click();
     await expect(item).toHaveText(/Balance.*¥98\.50/);
+  });
+
+  test("Refresh shows it is reading and can't be pressed again; a failed read says why until a retry reads", async ({
+    page,
+  }) => {
+    await deepseekAnswers(200, balanceOf("110.00"));
+    const id = await seedDeepSeek("DeepSeek");
+    const reads = await holdBalanceReads(page);
+    await openEndpointDetail(page, id);
+    const section = balanceSection(page);
+    const refresh = section.getByTestId("api-endpoint-balance-refresh");
+    await expect(section.getByTestId("api-endpoint-balance-item")).toHaveText(/Balance.*¥110\.00/);
+
+    await deepseekAnswers(401, { error: { message: "Authentication Fails" } });
+    reads.isHolding = true;
+    await refresh.click();
+    await expect(refresh).toBeDisabled();
+    await expect(refresh.getByRole("progressbar")).toBeVisible();
+    reads.release();
+    const reason = section.getByTestId("api-endpoint-balance-failure-reason");
+    await expect(reason).toHaveText("Token rejected: the vendor refused the key (HTTP 401)");
+    await expect(refresh).toBeEnabled();
+    await expect(refresh.getByRole("progressbar")).toHaveCount(0);
+    // 失败原因是这次读数本身，下一次读（这里是重试）才换掉它。
+    await deepseekAnswers(200, balanceOf("98.50"));
+    await refresh.click();
+    await expect(section.getByTestId("api-endpoint-balance-item")).toHaveText(/Balance.*¥98\.50/);
+    await expect(section.getByTestId("api-endpoint-balance-failure")).toHaveCount(0);
   });
 
   test("a temporary failure keeps showing the last reading, marked as last time's, on the page and the row", async ({

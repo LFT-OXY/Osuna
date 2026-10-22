@@ -72,6 +72,8 @@ const SEALED_VENDOR_ORIGINS = [
   // 用例里火山方舟、腾讯云 Token Plan 接口自己的地址：打开详情页会拉模型清单，带着 key 去问。
   "https://ark.cn-beijing.volces.com/",
   "https://tokenhub.tencentmaas.com/",
+  // Codex 的套餐用量与重置卡（plugins/codex-usage-source）：测试的 CODEX_HOME 是空的不会去问，这里兜底。
+  "https://chatgpt.com/",
 ];
 
 const realFetch = globalThis.fetch;
