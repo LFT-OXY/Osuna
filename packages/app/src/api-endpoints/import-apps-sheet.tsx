@@ -337,7 +337,7 @@ function ImportItemRow({
             <Text weight="medium">{item.name}</Text>
             <StatusBadge label={standing.label} variant={standing.variant} size="xs" />
           </View>
-          <View style={styles.facts}>
+          <View style={styles.facts} testID={`${testID}-facts`}>
             {facts.map((fact, index) => (
               <Text
                 key={fact.text}
@@ -346,7 +346,7 @@ function ImportItemRow({
                 selectable
                 style={fact.isUnbroken ? styles.unbroken : null}
               >
-                {index > 0 ? `· ${fact.text}` : fact.text}
+                {index < facts.length - 1 ? `${fact.text}${TRAILING_SEPARATOR}` : fact.text}
               </Text>
             ))}
           </View>
@@ -499,7 +499,7 @@ function itemStanding(input: {
 }
 
 /**
- * 名称下面的一行（照 magpie 的 sub）：在那个软件里的哪儿、主机、打码的 key、模型数，只在「·」处换行；
+ * 名称下面的一行（照 magpie 的 sub）：在那个软件里的哪儿、主机、打码的 key、模型数，只在「·」后换行；
  * 打码的 key 整个不断开。
  */
 interface ImportFact {
@@ -521,6 +521,9 @@ function itemFacts(input: { t: TFunction; item: ApiEndpointImportItem }): Import
   }
   return facts;
 }
+
+// 不换行空格把「·」粘在前一段末尾：折行后新的一行不以「·」开头。
+const TRAILING_SEPARATOR = "\u00A0·";
 
 const SNAP_POINTS = ["90%"];
 

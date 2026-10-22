@@ -6057,6 +6057,30 @@ test.describe("Import from other apps", () => {
     await expect(list).toContainText("My Relay");
   });
 
+  for (const language of ["en", "zh-CN"] as const) {
+    test(`at 390 an entry's facts wrap without a line starting with the · separator (${language})`, async ({
+      page,
+    }) => {
+      await page.addInitScript((value) => {
+        localStorage.setItem("@paseo:app-settings", JSON.stringify({ language: value }));
+      }, language);
+      await writeImportSources();
+      await openApiEndpointsPage(page);
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.getByTestId("api-endpoints-import-button").click();
+      for (const ref of ["claude/team", "mine"]) {
+        // 窄窗口里导入窗口是底部弹出的那份，按条目自己的标记找。
+        const facts = page
+          .getByTestId(`api-endpoint-import-item-${ref}-facts`)
+          .filter({ visible: true });
+        const lines = await linesOf(facts);
+        // 390 宽放不下一行，否则这条测不到折行。
+        expect(lines.length).toBeGreaterThan(1);
+        for (const line of lines) expect(line.startsWith("·"), line).toBe(false);
+      }
+    });
+  }
+
   test("a scan that fails says why and can be tried again", async ({ page }) => {
     const scan = { fails: true };
     await answerImportRpc(page, {
@@ -6344,6 +6368,29 @@ async function failImportPickAt(page: Page, index: number): Promise<void> {
       );
       server.send(JSON.stringify({ ...request, message: { ...request.message, picks } }));
     });
+  });
+}
+
+// 按渲染出来的行切文字：逐字取位置，纵坐标变了就是新的一行；空白不算。
+async function linesOf(locator: Locator): Promise<string[]> {
+  return locator.evaluate((root) => {
+    const lines: { top: number; text: string }[] = [];
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const text = node.textContent ?? "";
+      for (let i = 0; i < text.length; i += 1) {
+        if (/\s/.test(text[i])) continue;
+        const range = document.createRange();
+        range.setStart(node, i);
+        range.setEnd(node, i + 1);
+        const top = Math.round(range.getBoundingClientRect().top);
+        const last = lines.at(-1);
+        // 同一行里的字纵坐标差不过几像素，换行要差一整个行高。
+        if (last && Math.abs(last.top - top) < 4) last.text += text[i];
+        else lines.push({ top, text: text[i] });
+      }
+    }
+    return lines.map((line) => line.text);
   });
 }
 

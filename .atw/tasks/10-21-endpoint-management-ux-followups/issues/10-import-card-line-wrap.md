@@ -4,10 +4,10 @@
 
 **Blocked by:** None — can start immediately
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
-- [ ] UI: 导入窗口 / 窄窗口 390 — 折行后每行都不以「·」开头，中英文都是。
-- [ ] 英文浅色、英文深色、中文浅色三版截图，用无头浏览器在临时目录里拍。
-- [ ] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
+- [x] UI: 导入窗口 / 窄窗口 390 — 折行后每行都不以「·」开头，中英文都是。
+- [x] 英文浅色、英文深色、中文浅色三版截图，用无头浏览器在临时目录里拍。
+- [x] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
 
 参考：工单 08 视觉评审第 2 条，`screenshots/08-import-dialog-compact-390-*.png`。
