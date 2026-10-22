@@ -709,6 +709,10 @@ type ApiEndpointVendorStatusPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.vendor_status.response" }
 >["payload"];
+type ApiEndpointReadBalancePayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.read_balance.response" }
+>["payload"];
 type ApiEndpointImportScanPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.import_scan.response" }
@@ -6670,6 +6674,17 @@ export class DaemonClient {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId,
       message: { type: "provider.api_endpoint.vendor_status.request", ...options },
+    });
+  }
+
+  /** 读这几家接口的余额；不存在的 id 不回。只有声明了 apiEndpointBalance 的 daemon 认。 */
+  async apiEndpointReadBalance(
+    options: { endpointIds: string[] },
+    requestId?: string,
+  ): Promise<ApiEndpointReadBalancePayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.read_balance.request", ...options },
     });
   }
 

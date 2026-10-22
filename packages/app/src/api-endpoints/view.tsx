@@ -16,6 +16,7 @@ import { useRouter } from "expo-router";
 import type {
   ApiEndpoint,
   ApiEndpointAgentSettings,
+  ApiEndpointBalanceReading,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { ScreenTitle } from "@/components/headers/screen-title";
 import { PrimaryTextAlert } from "./primary-text-alert";
@@ -35,6 +36,8 @@ import { ApiEndpointDetailHeader } from "./detail-header";
 import { ApiEndpointsListSection, NoticeCard, type ListManagement } from "./host-list-section";
 import { endpointVendorNotices } from "./internal/vendor-status";
 import { useVendorStatus } from "./use-vendor-status";
+import { useEndpointBalances } from "./use-endpoint-balances";
+import { ApiEndpointBalanceSection } from "./balance-section";
 import { AgentApiEndpointsFrame, AgentApiEndpointsSection } from "./agent-section";
 import { selectAgentApiEndpointsView, type AgentIssueAction } from "./internal/agent-settings";
 import type { ConnectionFormSeed, ConnectionSaveResult } from "./internal/connection-form-model";
@@ -309,6 +312,7 @@ function AgentApiEndpoints({
 
 // 冷却倒计时按分钟显示；列表数据没变时 React Query 不会重渲染，自己每半分钟取一次时间。
 const CLOCK_TICK_MS = 30_000;
+const NO_BALANCES: ReadonlyMap<string, ApiEndpointBalanceReading> = new Map();
 
 function useClock(): Date {
   const [now, setNow] = useState(() => new Date());
@@ -469,6 +473,14 @@ export function ApiEndpointsPage({ serverId }: { serverId: string }) {
   );
 }
 
+/** 开着的接口；列表还没读到时为 null。 */
+function enabledEndpointIds(state: UseHostEndpointsResult["state"]): string[] | null {
+  if (state.status !== "ready") return null;
+  return state.endpoints
+    .filter((endpoint) => endpoint.enabled !== false)
+    .map((endpoint) => endpoint.id);
+}
+
 function ApiEndpointsListPage({ serverId }: { serverId: string }) {
   const { t } = useTranslation();
   const router = useRouter();
@@ -493,12 +505,17 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
   // 这一页开着时每 5 分钟问一次厂商官方状态页；问不到只是不出提示。
   const vendorStatus = useVendorStatus({ serverId });
   const vendorNotices = useMemo(() => endpointVendorNotices(vendorStatus), [vendorStatus]);
+  // 打开这一页时读一次开着的接口的余额；关着的接口只在它自己的详情页读。
+  const enabledIds = useMemo(() => enabledEndpointIds(endpoints.state), [endpoints.state]);
+  const balances = useEndpointBalances({ serverId, endpointIds: enabledIds });
+  const balanceReadings = balances.status === "ready" ? balances.readings : NO_BALANCES;
   // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机不发 key 打码与默认模型落在哪家。
   const management = useMemo<ListManagement | undefined>(
     () =>
       hasManagement
         ? {
             vendorNotices,
+            balances: balanceReadings,
             providerLabel: (provider) => resolveProviderLabel(provider, providerEntries),
             onOpenProvider: (provider) =>
               router.push(buildProviderSettingsRoute(serverId, provider)),
@@ -507,7 +524,7 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
             onImport: () => setImportOpen({ offered: null }),
           }
         : undefined,
-    [hasManagement, providerEntries, router, serverId, t, vendorNotices],
+    [hasManagement, providerEntries, router, serverId, t, vendorNotices, balanceReadings],
   );
 
   // 主机声明了 apiEndpointManagement 时「+」先出模板列表，否则直接打开「自定义」表单。
@@ -782,6 +799,9 @@ function ApiEndpointDetailSections({
     hasManagement,
   });
   const { entries: providerEntries } = useProvidersSnapshot(serverId);
+  // 打开详情页时读一次这家的余额（关着的接口也读）。
+  const balanceIds = useMemo(() => [endpoint.id], [endpoint.id]);
+  const balances = useEndpointBalances({ serverId, endpointIds: balanceIds });
   // 「接口名显示方式」的预览：这家第一个模型在选单里叫什么（magpie 的 Agents’ lists show）。
   const hostState = hostEndpoints.state;
   const nameDisplayRow = useMemo(() => {
@@ -892,6 +912,14 @@ function ApiEndpointDetailSections({
         testResults={detail.testResults}
         onEdit={onEdit}
       />
+      {balances.status === "off" ? null : (
+        <ApiEndpointBalanceSection
+          endpointId={endpoint.id}
+          hasApiKey={endpoint.hasApiKey}
+          balances={balances}
+          now={now}
+        />
+      )}
       {hasCliWiring && canSearchWeb ? (
         <ApiEndpointWebSearchSection
           value={detail.searchesWeb}

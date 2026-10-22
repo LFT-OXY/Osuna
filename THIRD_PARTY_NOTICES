@@ -1084,6 +1084,16 @@ and upstreamOf, upstreamBadge and loadUpstream in internal/gui/assets/app.js:
   packages/app/src/api-endpoints/vendor-notice.tsx
   packages/app/src/api-endpoints/use-vendor-status.ts
 
+An API endpoint's balance (a vendor known by its base URLs' hosts, Chat
+Completions first, its balance query and how the reply reads, the currency
+written as its sign or its code with two decimals, a refusal of
+{"success":false} whatever the status, a non-JSON reply quoting only its status
+and a JSON one cut to 200 characters) follows balanceSourceOf, balanceRead,
+balanceRefusal, money, currencySign, number and readDeepSeek in magpie's
+internal/provider/balance.go:
+
+  packages/server/src/server/api-endpoints/balance.ts
+
 Import from other apps (the five sources and where each keeps its file, how a
 CC Switch, Claude Code, Codex, Alma or OpenCode entry becomes an endpoint, a
 template's when the URLs are its own, entries of one account merged, Osuna's own

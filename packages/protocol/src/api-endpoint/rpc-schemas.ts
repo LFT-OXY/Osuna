@@ -1309,6 +1309,74 @@ export const ApiEndpointVendorStatusResponseSchema = z.object({
 export type ApiEndpointVendorStatusResponse = z.infer<typeof ApiEndpointVendorStatusResponseSchema>;
 
 /**
+ * 接口的余额（Balance）：厂商自己说这把 key 或它的账户还剩多少（照 magpie provider/balance.go），只显示，不进选路。
+ * 读数的 status：ok（有读数）、unsupported（认不出查法，或这家没 key）、failed（失败，原因在 failure）。
+ * failure.reason：wrong_url（地址不对：404、回的是网页或不是 JSON）、token_rejected（401、403、success:false）、
+ * not_offered（这家不给查余额）、no_value（回复里取不到数）、temporary（网络、超时、429、5xx）。
+ * 线上都是字符串，daemon 以后多一种老客户端照样解析。
+ */
+export const API_ENDPOINT_BALANCE_STATUSES = ["ok", "unsupported", "failed"] as const;
+export type ApiEndpointBalanceStatus = (typeof API_ENDPOINT_BALANCE_STATUSES)[number];
+export const API_ENDPOINT_BALANCE_FAILURES = [
+  "wrong_url",
+  "token_rejected",
+  "not_offered",
+  "no_value",
+  "temporary",
+] as const;
+export type ApiEndpointBalanceFailureReason = (typeof API_ENDPOINT_BALANCE_FAILURES)[number];
+
+export const ApiEndpointBalanceItemSchema = z.object({
+  // 这一项叫什么；null 是余额本身（界面写「余额」）。
+  label: z.string().nullable(),
+  // 照显示的写法，如 ¥12.34、25%。
+  text: z.string(),
+  value: z.number().nullable(),
+  // 币种代码（CNY、USD）或单位；不知道为 null。
+  unit: z.string().nullable(),
+  // 0–1 的比例，带进度条的项才有。
+  ratio: z.number().nullable().optional(),
+});
+export type ApiEndpointBalanceItem = z.infer<typeof ApiEndpointBalanceItemSchema>;
+
+export const ApiEndpointBalanceFailureSchema = z.object({
+  reason: z.string(),
+  // 对方的原话（key 与请求头的值打码，截到 200 字）；对方没说话（网页、空回复）为 null。
+  detail: z.string().nullable(),
+  // 对方回的 HTTP 状态；没回（网络错误、超时）为 null。
+  status: z.number().nullable(),
+});
+export type ApiEndpointBalanceFailure = z.infer<typeof ApiEndpointBalanceFailureSchema>;
+
+export const ApiEndpointBalanceReadingSchema = z.object({
+  endpointId: z.string(),
+  status: z.string(),
+  items: z.array(ApiEndpointBalanceItemSchema),
+  // 这次读的时刻；unsupported 为 null。
+  readAt: z.string().nullable(),
+  failure: ApiEndpointBalanceFailureSchema.nullable(),
+});
+export type ApiEndpointBalanceReading = z.infer<typeof ApiEndpointBalanceReadingSchema>;
+
+/** 读这几家的余额；不存在的 id 不回。只有声明了 apiEndpointBalance 的 daemon 认它。 */
+export const ApiEndpointReadBalanceRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.read_balance.request"),
+  requestId: z.string(),
+  endpointIds: z.array(z.string()),
+});
+export type ApiEndpointReadBalanceRequest = z.infer<typeof ApiEndpointReadBalanceRequestSchema>;
+
+export const ApiEndpointReadBalanceResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.read_balance.response"),
+  payload: z.object({
+    requestId: z.string(),
+    readings: z.array(ApiEndpointBalanceReadingSchema),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointReadBalanceResponse = z.infer<typeof ApiEndpointReadBalanceResponseSchema>;
+
+/**
  * 从别的软件导入（Import）：daemon 只读地读本机别的软件的配置（ADR 0013）。每条发现照 Osuna 会加的那家给出，
  * key 打码，原文留在 daemon，导入时按指纹找回。线上的 status、skip、off 是字符串，daemon 以后多一种老客户端照样解析。
  * status：new（新的）、added（已添加）、name_taken（名称已被占用）、other_key（同一家、key 不同）。

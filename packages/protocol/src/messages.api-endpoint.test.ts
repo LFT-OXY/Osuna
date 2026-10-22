@@ -1932,3 +1932,61 @@ describe("provider.api_endpoint.test_models", () => {
     expect(SessionOutboundMessageSchema.parse(fetched)).toEqual(fetched);
   });
 });
+
+// 接口的余额（apiEndpointBalance）：新消息，读数的状态与失败原因是字符串，老主机不声明能力位。
+describe("API endpoint balance (apiEndpointBalance)", () => {
+  it("parses read_balance with a reading, an unsupported endpoint, a failure and a reason the client may not know", () => {
+    const request = {
+      type: "provider.api_endpoint.read_balance.request" as const,
+      requestId: "req-rb",
+      endpointIds: ["ep_1", "ep_2"],
+    };
+    expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+    const response = {
+      type: "provider.api_endpoint.read_balance.response" as const,
+      payload: {
+        requestId: "req-rb",
+        readings: [
+          {
+            endpointId: "ep_1",
+            status: "ok",
+            items: [{ label: null, text: "¥110.00", value: 110, unit: "CNY" }],
+            readAt: "2026-10-22T08:00:00.000Z",
+            failure: null,
+          },
+          { endpointId: "ep_2", status: "unsupported", items: [], readAt: null, failure: null },
+          {
+            endpointId: "ep_3",
+            status: "failed",
+            items: [],
+            readAt: "2026-10-22T08:00:00.000Z",
+            failure: { reason: "token_rejected", detail: "invalid api key ***", status: 401 },
+          },
+          {
+            endpointId: "ep_4",
+            status: "some_new_status",
+            items: [{ label: "Used", text: "25%", value: 0.25, unit: null, ratio: 0.25 }],
+            readAt: "2026-10-22T08:00:00.000Z",
+            failure: { reason: "some_new_reason", detail: null, status: null },
+          },
+        ],
+        error: null,
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+  });
+
+  it("parses a host that advertises apiEndpointBalance, and an older one without it", () => {
+    const base = { status: "server_info" as const, serverId: "srv_1" };
+    const current = ServerInfoStatusPayloadSchema.parse({
+      ...base,
+      features: { apiEndpointManagement: true, apiEndpointBalance: true },
+    });
+    expect(current.features?.apiEndpointBalance).toBe(true);
+    const older = ServerInfoStatusPayloadSchema.parse({
+      ...base,
+      features: { apiEndpointManagement: true },
+    });
+    expect(older.features?.apiEndpointBalance).toBeUndefined();
+  });
+});

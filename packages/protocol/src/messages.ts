@@ -126,6 +126,8 @@ import {
   ApiEndpointForgetCatalogResponseSchema,
   ApiEndpointVendorStatusRequestSchema,
   ApiEndpointVendorStatusResponseSchema,
+  ApiEndpointReadBalanceRequestSchema,
+  ApiEndpointReadBalanceResponseSchema,
   ApiEndpointImportScanRequestSchema,
   ApiEndpointImportScanResponseSchema,
   ApiEndpointImportRequestSchema,
@@ -3779,6 +3781,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ApiEndpointRevealKeyRequestSchema,
   ApiEndpointForgetCatalogRequestSchema,
   ApiEndpointVendorStatusRequestSchema,
+  ApiEndpointReadBalanceRequestSchema,
   ApiEndpointImportScanRequestSchema,
   ApiEndpointImportRequestSchema,
   ApiEndpointImportDiscoveryRequestSchema,
@@ -4175,6 +4178,9 @@ export const ServerInfoStatusPayloadSchema = z
         // import_discovery 与 import_ignore（「第三方接口」页的发现提示与忽略）；
         // import_link_preview、import_link_icon 与 import_link（桌面端收到的导入链接）。
         apiEndpointManagement: z.boolean().optional(),
+        // COMPAT(apiEndpointBalance): added in v0.17.0, remove gate after 2027-04-22.
+        // 任务 10-16-endpoint-balance：read_balance（接口的余额），接口列表行与详情页的「余额与套餐用量」。
+        apiEndpointBalance: z.boolean().optional(),
         // COMPAT(providerVersions): added in v0.14.0, remove gate after 2027-04-01.
         // 快照带内置提供方的已装版本 version；daemon 支持 provider.version.check.* 与 provider.upgrade.*。
         providerVersions: z.boolean().optional(),
@@ -7595,6 +7601,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ApiEndpointRevealKeyResponseSchema,
   ApiEndpointForgetCatalogResponseSchema,
   ApiEndpointVendorStatusResponseSchema,
+  ApiEndpointReadBalanceResponseSchema,
   ApiEndpointImportScanResponseSchema,
   ApiEndpointImportResponseSchema,
   ApiEndpointImportDiscoveryResponseSchema,

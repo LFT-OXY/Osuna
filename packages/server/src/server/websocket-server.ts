@@ -1882,6 +1882,8 @@ export class VoiceAssistantWebSocketServer {
         ...(this.apiEndpointService ? { apiEndpointCliWiring: true } : {}),
         // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19.
         ...(this.apiEndpointService ? { apiEndpointManagement: true } : {}),
+        // COMPAT(apiEndpointBalance): added in v0.17.0, remove gate after 2027-04-22.
+        ...(this.apiEndpointService ? { apiEndpointBalance: true } : {}),
         // COMPAT(providerVersions): added in v0.14.0, remove gate after 2027-04-01.
         providerVersions: true,
         // COMPAT(logicMap): added in v0.17.0, remove gate after 2027-04-19.

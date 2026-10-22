@@ -271,6 +271,11 @@ async function prepareTestDaemonConfig(
         moonshot: "http://127.0.0.1:9/moonshot/api/v2/summary.json",
         ...options.apiEndpoints?.vendorStatusUrls,
       },
+      // 厂商余额接口一律指到本机一个没人听的端口：绝不带着 key 去问真的厂商。关心它的用例指到本机假服务。
+      balanceUrls: {
+        deepseek: "http://127.0.0.1:9/deepseek/user/balance",
+        ...options.apiEndpoints?.balanceUrls,
+      },
       // 从别的软件导入：CC Switch、Alma、OpenCode 一律读临时目录（多半不存在），绝不读开发者真实的配置；
       // Claude Code、Codex 跟着上面的 env 与 homeDir。关心导入的用例自己放假配置。
       importSourcePaths: {

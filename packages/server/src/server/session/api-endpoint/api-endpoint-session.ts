@@ -5,6 +5,7 @@ import type {
   ApiEndpointIconImage,
   ApiEndpointRequestExtras,
   ApiEndpointVendorStatusResponse,
+  ApiEndpointReadBalanceResponse,
   ApiEndpointImportScanResponse,
   ApiEndpointImportDiscoveryResponse,
   ApiEndpointImportResponse,
@@ -46,6 +47,7 @@ export type ApiEndpointRequest = Extract<
       | "provider.api_endpoint.reveal_key.request"
       | "provider.api_endpoint.forget_catalog.request"
       | "provider.api_endpoint.vendor_status.request"
+      | "provider.api_endpoint.read_balance.request"
       | "provider.api_endpoint.import_scan.request"
       | "provider.api_endpoint.import.request"
       | "provider.api_endpoint.import_discovery.request"
@@ -82,6 +84,7 @@ const API_ENDPOINT_REQUEST_TYPES: Record<ApiEndpointRequest["type"], true> = {
   "provider.api_endpoint.reveal_key.request": true,
   "provider.api_endpoint.forget_catalog.request": true,
   "provider.api_endpoint.vendor_status.request": true,
+  "provider.api_endpoint.read_balance.request": true,
   "provider.api_endpoint.import_scan.request": true,
   "provider.api_endpoint.import.request": true,
   "provider.api_endpoint.import_discovery.request": true,
@@ -165,6 +168,8 @@ export class ApiEndpointSession {
         return this.handleForgetCatalog(request);
       case "provider.api_endpoint.vendor_status.request":
         return this.handleVendorStatus(request);
+      case "provider.api_endpoint.read_balance.request":
+        return this.handleReadBalance(request, connectionSignal);
       default:
         return this.handleAddingAids(request, connectionSignal);
     }
@@ -751,6 +756,27 @@ export class ApiEndpointSession {
     }
     this.host.emit({
       type: "provider.api_endpoint.vendor_status.response",
+      payload: { requestId: request.requestId, ...payload },
+    });
+  }
+
+  /** 读接口存储失败或请求被取消时整个请求失败；读不到余额只记在那家的读数里。 */
+  private async handleReadBalance(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.read_balance.request" }>,
+    connectionSignal: AbortSignal,
+  ): Promise<void> {
+    let payload: Omit<ApiEndpointReadBalanceResponse["payload"], "requestId">;
+    try {
+      const readings = await this.service.readBalances({
+        endpointIds: request.endpointIds,
+        signal: connectionSignal,
+      });
+      payload = { readings, error: null };
+    } catch (caught) {
+      payload = { readings: [], error: this.toWireError(caught, request) };
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.read_balance.response",
       payload: { requestId: request.requestId, ...payload },
     });
   }

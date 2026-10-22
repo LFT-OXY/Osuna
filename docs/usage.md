@@ -128,7 +128,7 @@ request it makes on its own is the daily model list refresh of each API
 endpoint that is on, which carries that endpoint's key. Its other requests are
 something you asked for, such as the CLI update check or an endpoint's tests;
 follow from a page you have open, such as the vendor status pages read while the
-API endpoints or usage page is open; or follow from a switch you turned on: the
+API endpoints or usage page is open, or an endpoint's balance; or follow from a switch you turned on: the
 API endpoint checks and the gateway's calls to endpoints, all below. Traffic the CLIs send
 through the gateway is theirs, not the daemon's.
 
@@ -200,6 +200,25 @@ are reached without checking their certificate.
 
 The dialog's requests use what is in the form, so they can reach an address and
 key you haven't saved yet.
+
+The balance read goes to the vendor's own balance query, which the daemon picks
+by the host of the endpoint's base URLs (Chat Completions first, then Responses,
+then Anthropic), never by its template. An endpoint on a host the daemon doesn't
+know, or with no key, sends nothing.
+
+| Vendor   | Host               | Request                                     |
+| -------- | ------------------ | ------------------------------------------- |
+| DeepSeek | `api.deepseek.com` | `GET https://api.deepseek.com/user/balance` |
+
+It carries the key as `Authorization: Bearer`, `Accept: application/json`,
+`User-Agent: Osuna/<version>` and the endpoint's own **Headers**, which can
+replace that user agent. It is sent once when you open the API endpoints page
+(for each endpoint that is on) or an endpoint's page (that endpoint, on or off),
+and again when you press Refresh in its "Balance and plan usage" section. It
+times out after 15 seconds, is never sent at startup, and the price table switch
+does not cover it. The answer is shown only: failover never reads it. What the
+vendor said on a failure is shown with the key and header values masked, cut to
+200 characters.
 
 "From the website" in the add or edit dialog of a custom API endpoint also runs
 only when you press it. The daemon looks for the icon of the site the endpoint's

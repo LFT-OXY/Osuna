@@ -6478,3 +6478,128 @@ async function boxOf(locator: Locator): Promise<{ y: number; height: number }> {
   if (!box) throw new Error("not laid out");
   return box;
 }
+
+test.describe("Balance", () => {
+  // 测试 daemon 的封条只让 DeepSeek 的余额接口回这份文件里写的回复（JSON），绝不真的去问；没写的连不上。
+  const fakeSites = path.join(cliHome, "fake-sites.json");
+  const DEEPSEEK_BALANCE = "https://api.deepseek.com/user/balance";
+
+  async function deepseekAnswers(status: number, body: unknown): Promise<void> {
+    await writeFile(
+      fakeSites,
+      JSON.stringify({ [DEEPSEEK_BALANCE]: { status, body: JSON.stringify(body) } }),
+    );
+  }
+
+  function balanceOf(total: string) {
+    return { is_available: true, balance_infos: [{ currency: "CNY", total_balance: total }] };
+  }
+
+  test.afterEach(async () => {
+    await rm(fakeSites, { force: true });
+  });
+
+  function seedDeepSeek(name: string): Promise<string> {
+    return seedApiEndpoint(client, {
+      name,
+      baseUrls: [{ format: "openai_chat", url: "https://api.deepseek.com/v1" }],
+      models: ["deepseek-chat"],
+    });
+  }
+
+  function seedRelay(): Promise<string> {
+    return seedApiEndpoint(client, {
+      name: "Relay",
+      baseUrls: [{ format: "openai_chat", url: `${relay.origin}/good/v1` }],
+      models: ["gpt-5"],
+    });
+  }
+
+  function balanceSection(page: Page): Locator {
+    return page.getByTestId("api-endpoint-balance-section").filter({ visible: true });
+  }
+
+  test("a row shows the balance it read, or that it is unavailable; a vendor with no known balance query adds nothing", async ({
+    page,
+  }) => {
+    await deepseekAnswers(200, balanceOf("110.00"));
+    const deepseek = await seedDeepSeek("DeepSeek");
+    const relayOnly = await seedRelay();
+    await openApiEndpointsPage(page);
+
+    await expect(row(page, deepseek).getByTestId("api-endpoint-row-balance")).toHaveText(
+      "Balance ¥110.00",
+    );
+    await expect(row(page, relayOnly).getByTestId("api-endpoint-row-balance")).toHaveCount(0);
+
+    await deepseekAnswers(401, { error: { message: "Authentication Fails" } });
+    await page.reload();
+    await expect(row(page, deepseek).getByTestId("api-endpoint-row-balance")).toHaveText(
+      "Balance unavailable",
+    );
+  });
+
+  test("the endpoint page shows each balance with when it was read, and Refresh reads again", async ({
+    page,
+  }) => {
+    await deepseekAnswers(200, balanceOf("110.00"));
+    const id = await seedDeepSeek("DeepSeek");
+    await openEndpointDetail(page, id);
+
+    const section = balanceSection(page);
+    await expect(section).toContainText("Balance and plan usage");
+    const item = section.getByTestId("api-endpoint-balance-item");
+    await expect(item).toHaveText(/Balance.*¥110\.00/);
+    await expect(section.getByTestId("api-endpoint-balance-read-at")).toHaveText("Read just now");
+
+    await deepseekAnswers(200, balanceOf("98.50"));
+    await section.getByTestId("api-endpoint-balance-refresh").click();
+    await expect(item).toHaveText(/Balance.*¥98\.50/);
+  });
+
+  test("a failed read says why on the endpoint page, with the vendor's own words and the key masked", async ({
+    page,
+  }) => {
+    await deepseekAnswers(401, {
+      error: { message: `Authentication Fails, Your api key: ${RELAY_KEY} is invalid` },
+    });
+    const id = await seedDeepSeek("DeepSeek");
+    await openEndpointDetail(page, id);
+
+    const failure = balanceSection(page).getByTestId("api-endpoint-balance-failure");
+    await expect(failure.getByTestId("api-endpoint-balance-failure-reason")).toHaveText(
+      "Token rejected: the vendor refused the key (HTTP 401)",
+    );
+    await expect(failure.getByTestId("api-endpoint-balance-failure-detail")).toHaveText(
+      "Authentication Fails, Your api key: *** is invalid",
+    );
+  });
+
+  test("a relay it cannot read says so, a DeepSeek endpoint with no key says it has none, and DeepSeek that cannot be reached is temporarily unavailable", async ({
+    page,
+  }) => {
+    const relayOnly = await seedRelay();
+    const keyless = await client.apiEndpointSave({
+      provider: "claude",
+      name: "DeepSeek no key",
+      baseUrls: [{ format: "openai_chat", url: "https://api.deepseek.com/v1" }],
+      models: [{ id: "deepseek-chat" }],
+    });
+    const keylessId = keyless.endpoint?.id ?? "";
+    // 没写假回复：封条让它连不上。
+    const unreachable = await seedDeepSeek("DeepSeek");
+
+    await openEndpointDetail(page, relayOnly);
+    await expect(balanceSection(page).getByTestId("api-endpoint-balance-unsupported")).toHaveText(
+      "No known way to read this vendor's balance",
+    );
+    await openEndpointDetail(page, keylessId);
+    await expect(balanceSection(page).getByTestId("api-endpoint-balance-unsupported")).toHaveText(
+      "This endpoint has no key, so its balance can't be read",
+    );
+    await openEndpointDetail(page, unreachable);
+    await expect(
+      balanceSection(page).getByTestId("api-endpoint-balance-failure-reason"),
+    ).toHaveText("Temporarily unavailable: try again later");
+  });
+});

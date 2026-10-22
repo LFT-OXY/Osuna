@@ -43,6 +43,7 @@ import {
   type ApiEndpointTemplate,
   type ApiEndpointTestConnectionResult,
   type ApiEndpointVendorStatusResponse,
+  type ApiEndpointBalanceReading,
   type ApiEndpointImportItem,
   type ApiEndpointImportPick,
   type ApiEndpointImportSource,
@@ -332,6 +333,7 @@ import {
 } from "./catalog-merge.js";
 import { CatalogRefreshSchedule, type CatalogRefreshOutcome } from "./catalog-refresh.js";
 import { VendorStatusPages, vendorOfBaseUrls, type VendorId } from "./vendor-status.js";
+import { readEndpointBalance, type BalanceVendorId } from "./balance.js";
 import type { DataFileSystem } from "./last-good.js";
 import {
   defaultImportSourcePaths,
@@ -681,6 +683,8 @@ export interface ApiEndpointServiceOptions {
   vendorStatusUrls?: Partial<Record<VendorId, string>>;
   // 界面第一次看状态页时等候的计时器；测试换成手动到点的。
   vendorStatusTimers?: UsagePricingTimers;
+  // 厂商余额接口换成别的地址；测试 daemon 一律指到本机，关心它的用例指到本机假服务。
+  balanceUrls?: Partial<Record<BalanceVendorId, string>>;
   // 从别的软件导入时读的 CC Switch 目录、Alma 数据库与 OpenCode 的 auth.json；缺省按 magpie 的位置，
   // 测试 daemon 一律指到临时目录。Claude Code、Codex 的配置跟着 env 与 homeDir 走。
   // endpoints.json 等文件的读与改名；只给测试换成会失败的假文件系统（如导入写到一半出错）。
@@ -717,6 +721,7 @@ export type ApiEndpointServiceOverrides = Pick<
   | "catalogRefreshTimers"
   | "vendorStatusUrls"
   | "vendorStatusTimers"
+  | "balanceUrls"
   | "importSourcePaths"
   | "dataFileSystem"
   | "modelTests"
@@ -940,6 +945,9 @@ export class ApiEndpointService {
   private readonly reachesUnasked: (baseUrl: string) => boolean;
   private readonly catalogRefresh: CatalogRefreshSchedule;
   private readonly vendorStatusPages: VendorStatusPages;
+  private readonly balanceUrls: Partial<Record<BalanceVendorId, string>> | undefined;
+  // daemon 自己发起的请求（查余额）自报的 User-Agent：Osuna/<版本>。
+  private readonly userAgent: string;
   private readonly importSourcePaths: ApiEndpointServiceOptions["importSourcePaths"];
   // 导入指纹的 HMAC 密钥：存在 api-endpoints/ 下（0600），第一次扫描时读出（import-apps.ts）。
   private importSecret: Buffer | null = null;
@@ -970,6 +978,8 @@ export class ApiEndpointService {
       options.readLoginShellEnv ?? createLoginShellEnvReader({ env: this.env });
     this.proxyEnv = options.proxyEnv ?? this.env;
     const userAgent = `Osuna/${options.daemonVersion}`;
+    this.userAgent = userAgent;
+    this.balanceUrls = options.balanceUrls;
     this.reachesGateway = createGatewayReach({
       probe: options.probeGatewayAt ?? createGatewayProbe({ userAgent }),
     });
@@ -3364,6 +3374,33 @@ export class ApiEndpointService {
     }
     const vendors = await this.vendorStatusPages.read({ vendors: vendorIds });
     return { autoUpdate: true, vendors, endpointVendors };
+  }
+
+  /**
+   * 这几家接口的余额（不存在的 id 不回），同时问。读不到只记在那家的读数里；只有取消才抛错。
+   * 余额只给界面看，不进中转站选路（docs/usage.md「Outbound requests」）。
+   */
+  async readBalances(input: {
+    endpointIds: readonly string[];
+    signal: AbortSignal;
+  }): Promise<ApiEndpointBalanceReading[]> {
+    const state = this.readState();
+    const endpoints = [...new Set(input.endpointIds)].flatMap(
+      (id) => findEndpoint(state, id) ?? [],
+    );
+    return Promise.all(
+      endpoints.map((endpoint) =>
+        readEndpointBalance({
+          endpoint,
+          apiKey: this.store.getApiKey(endpoint.id),
+          extras: storedRequestExtras(endpoint),
+          userAgent: this.userAgent,
+          now: this.now,
+          vendorUrls: this.balanceUrls,
+          signal: input.signal,
+        }),
+      ),
+    );
   }
 
   /**

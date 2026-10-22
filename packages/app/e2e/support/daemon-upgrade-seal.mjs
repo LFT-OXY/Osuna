@@ -25,6 +25,10 @@
  * 6. 不带开发者的代理：daemon 自己的 HTTP_PROXY、HTTPS_PROXY、ALL_PROXY、NO_PROXY（各种大小写）在这里删掉，
  *    查 Codex 经哪个代理时只会读到用例给的假系统代理（上面第 5 条）。spawn-node.ts 的 withUpgradeSeal 同样会删。
  *
+ * 8. 不带着 key 去问真的厂商：第三方接口读余额的厂商（balance.ts 的厂商表）的 API 主机，daemon 的 fetch 一律不真的去
+ *    （读余额、保存后拉模型清单都是）。PASEO_E2E_FAKE_SITES_PATH 里写了这个网址的，回那里写的回复（JSON）；
+ *    没写的当作连不上。厂商表加了新厂商，这里跟着加。
+ *
  * 2026-10-18 一条浏览器用例点中了升级按钮，测试 daemon 真的跑了 `brew upgrade --cask claude-code@latest`
  * 又被中途杀掉，弄坏了开发者本机的 Claude Code。
  */
@@ -39,12 +43,18 @@ const AGENT_CLIS = new Set(["claude", "codex", "copilot", "opencode", "pi", "omp
 const PACKAGE_MANAGERS = new Set(["npm", "pnpm", "yarn", "bun"]);
 const INSTALL_VERBS = new Set(["install", "i", "add", "update", "upgrade", "reinstall"]);
 
+// 读余额的厂商的 API 主机（packages/server/src/server/api-endpoints/balance.ts 的 BALANCE_VENDORS）。
+const SEALED_VENDOR_ORIGINS = ["https://api.deepseek.com/"];
+
 const realFetch = globalThis.fetch;
 if (typeof realFetch === "function") {
   globalThis.fetch = (input, init) => {
     const url = typeof input === "string" ? input : (input?.url ?? String(input));
     if (url.startsWith(NPM_REGISTRY)) {
       return Promise.resolve(new Response("sealed by the e2e harness", { status: 404 }));
+    }
+    if (SEALED_VENDOR_ORIGINS.some((origin) => url.startsWith(origin))) {
+      return sealedVendorReply(url);
     }
     return realFetch(input, init);
   };
@@ -158,11 +168,26 @@ globalThis[Symbol.for("paseo.e2e.hostProcesses")] = {
   readSystemProxy: async () => readFakeSystemProxy(),
 };
 
+function readFakeSites() {
+  const file = process.env.PASEO_E2E_FAKE_SITES_PATH;
+  return file && existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {};
+}
+
+/** 封住的厂商网址：PASEO_E2E_FAKE_SITES_PATH 写了的回那里的，没写的连不上。 */
+function sealedVendorReply(url) {
+  const site = readFakeSites()[url];
+  if (!site) return Promise.reject(new TypeError("fetch failed: sealed by the e2e harness"));
+  return Promise.resolve(
+    new Response(site.body, {
+      status: site.status,
+      headers: { "content-type": "application/json" },
+    }),
+  );
+}
+
 /** PASEO_E2E_FAKE_SITES_PATH 里的假站点；没写的网址抛错。 */
 globalThis[Symbol.for("paseo.e2e.fetchSite")] = async ({ url }) => {
-  const file = process.env.PASEO_E2E_FAKE_SITES_PATH;
-  const sites = file && existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {};
-  const site = sites[url];
+  const site = readFakeSites()[url];
   if (!site)
     throw new Error(`The e2e daemon never fetches ${url}: add it to PASEO_E2E_FAKE_SITES_PATH`);
   return { status: site.status, url, body: Buffer.from(site.body) };

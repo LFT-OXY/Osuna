@@ -14,7 +14,10 @@ import {
   Plus,
   ShieldAlert,
 } from "lucide-react-native";
-import type { ApiEndpoint } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type {
+  ApiEndpoint,
+  ApiEndpointBalanceReading,
+} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { isNative } from "@/constants/platform";
@@ -94,6 +97,8 @@ export interface ListManagement {
   onDuplicate: (endpoint: ApiEndpoint) => void;
   // 接口对上的厂商的官方状态页提示；没有提示的接口不在里面。
   vendorNotices: ReadonlyMap<string, VendorNotice>;
+  // 各接口的余额读数；主机没声明 apiEndpointBalance、还没读到或认不出查法的接口不在里面。
+  balances: ReadonlyMap<string, ApiEndpointBalanceReading>;
   // 「导入」：打开从别的软件导入的窗口。
   onImport: () => void;
 }
@@ -841,6 +846,10 @@ function EndpointFacts({
       node: <DefaultModelOf providers={providers} management={management} />,
     });
   }
+  const balance = management.balances.get(endpoint.id);
+  if (balance && balance.status !== "unsupported") {
+    facts.push({ key: "balance", node: <BalanceFact reading={balance} /> });
+  }
   return (
     <View style={styles.facts} testID="api-endpoint-row-facts">
       {/* 每条连同它前面的 · 是一块，换行时整块挪到下一行，行尾不挂分隔点。 */}
@@ -851,6 +860,24 @@ function EndpointFacts({
         </View>
       ))}
     </View>
+  );
+}
+
+/** 行上的一小段余额：有读数写金额，查不到只写「余额查不到」，原因留给详情页。 */
+function BalanceFact({ reading }: { reading: ApiEndpointBalanceReading }) {
+  const { t } = useTranslation();
+  const first = reading.status === "ok" ? reading.items[0] : undefined;
+  if (!first) {
+    return (
+      <Text style={[styles.fact, styles.balanceFailed]} testID="api-endpoint-row-balance">
+        {t("settings.apiEndpoints.balance.rowUnavailable")}
+      </Text>
+    );
+  }
+  return (
+    <Text style={styles.fact} testID="api-endpoint-row-balance">
+      {t("settings.apiEndpoints.balance.rowAmount", { amount: first.text })}
+    </Text>
   );
 }
 
@@ -1025,6 +1052,9 @@ const styles = StyleSheet.create((theme) => ({
   fact: {
     color: theme.colors.foregroundMuted,
     ...theme.typeScale.caption,
+  },
+  balanceFailed: {
+    color: theme.colors.statusWarning,
   },
   defaultModelOf: {
     flexDirection: "row",
