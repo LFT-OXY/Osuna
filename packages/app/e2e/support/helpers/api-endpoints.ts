@@ -37,6 +37,9 @@ export const RELAY_KEY = "sk-e2e-relay";
 /** /good 上一次 Anthropic 对话回的用量：输入 120、输出 30。 */
 export const GOOD_REPLY_TOKENS = 150;
 
+/** /good 上一次 Responses 对话回的用量：输入 200、输出 40。 */
+export const GOOD_RESPONSES_TOKENS = 240;
+
 export interface FakeRelay {
   origin: string;
   // 收到的请求，按到达顺序；只记路径、认证头与请求体里的模型名。
@@ -182,16 +185,7 @@ export async function startFakeRelay(): Promise<FakeRelay> {
         send(response, 200, { data: MANY_MODELS.map((id) => ({ id })) });
         return;
       }
-      if (url === "/good/v1/messages") {
-        // 带回复编号与用量：经中转站发来的这一条会记进账，用量页按接口分时看得到它（GOOD_REPLY_TOKENS）。
-        send(response, 200, {
-          id: `msg_relay_${relay.requests.length}`,
-          type: "message",
-          content: [{ type: "text", text: "hi" }],
-          usage: { input_tokens: 120, output_tokens: 30 },
-        });
-        return;
-      }
+      if (answersGoodTurn({ url, relay, response })) return;
       if (url === "/good/v1/chat/completions") {
         send(response, 200, { choices: [{ message: { role: "assistant", content: "hi" } }] });
         return;
@@ -218,6 +212,44 @@ export async function startFakeRelay(): Promise<FakeRelay> {
         server.close(() => resolve());
       }),
   });
+}
+
+/**
+ * 经中转站问 /good 的一轮对话：Claude Code 的 Messages 与 Codex 的 Responses 都回带编号与用量的整份回复，
+ * 这一条会记进账，用量页按接口分时看得到它（GOOD_REPLY_TOKENS、GOOD_RESPONSES_TOKENS）。返回 true 即已回。
+ */
+function answersGoodTurn(input: {
+  url: string;
+  relay: Pick<FakeRelay, "requests">;
+  response: ServerResponse;
+}): boolean {
+  const { url, response } = input;
+  const count = input.relay.requests.length;
+  if (url === "/good/v1/messages") {
+    send(response, 200, {
+      id: `msg_relay_${count}`,
+      type: "message",
+      content: [{ type: "text", text: "hi" }],
+      usage: { input_tokens: 120, output_tokens: 30 },
+    });
+    return true;
+  }
+  if (url !== "/good/v1/responses") return false;
+  send(response, 200, {
+    id: `resp_relay_${count}`,
+    object: "response",
+    status: "completed",
+    output: [
+      {
+        type: "message",
+        id: "msg_1",
+        role: "assistant",
+        content: [{ type: "output_text", text: "hi" }],
+      },
+    ],
+    usage: { input_tokens: 200, output_tokens: 40 },
+  });
+  return true;
 }
 
 export const CLAUDE_CODE_ONLY = "This group only allows Claude Code clients";
@@ -603,6 +635,30 @@ export async function sendThroughGateway(model: string): Promise<number> {
         model,
         max_tokens: 16,
         messages: [{ role: "user", content: "hi" }],
+      }),
+    },
+  );
+  await response.text();
+  return response.status;
+}
+
+/** 像 Codex（API key 接法）那样经中转站问一次 Responses，不流式；返回状态码。 */
+export async function sendCodexThroughGateway(model: string): Promise<number> {
+  const home = process.env.E2E_PASEO_HOME;
+  if (!home) throw new Error("E2E_PASEO_HOME is not set (expected from the Playwright worker).");
+  const tokens = JSON.parse(
+    await readFile(path.join(home, "api-endpoints", "gateway-tokens.json"), "utf8"),
+  ) as { tokens: Record<string, string> };
+  const token = tokens.tokens.codex;
+  if (!token) throw new Error("Codex has no gateway token; turn its switch on first.");
+  const response = await fetch(
+    `http://127.0.0.1:${getE2EDaemonPort()}/api-endpoint-gateway/v1/responses`,
+    {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        model,
+        input: [{ role: "user", content: [{ type: "input_text", text: "hi" }] }],
       }),
     },
   );

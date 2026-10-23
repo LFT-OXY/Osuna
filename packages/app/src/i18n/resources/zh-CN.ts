@@ -4761,6 +4761,8 @@ export const zhCN: TranslationResources = {
       empty: "此周期没有用量",
       topProjects: "前 {{count}}",
       projectLimit: "显示多少个项目",
+      unknownProject: "未知项目",
+      unknownProjectHint: "会话记录里找不到的中转站请求",
       projectKind: {
         non_git: "非 Git",
         directory: "目录",

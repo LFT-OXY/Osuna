@@ -114,6 +114,7 @@ import {
 } from "./upstream-call.js";
 import type { GatewayLedger } from "../../usage/ledger.js";
 import { LedgerCall, type LedgerAttemptEnd } from "./ledger-call.js";
+import { ChatGptLedgerWatch } from "./chatgpt-ledger.js";
 import {
   asksAnthropicWebSearch,
   asksWebSearch,
@@ -349,6 +350,7 @@ async function serveChatGptBackend(input: {
   failover: Failover;
 }): Promise<void> {
   const { req, res, rest, chatgpt, logger } = input;
+  const since = Date.now();
   if (req.method === "GET" && rest === "/models") {
     await answerChatGptModels({ req, res, ...chatgpt, waitMs: chatgpt.modelsWaitMs, logger });
     return;
@@ -394,7 +396,11 @@ async function serveChatGptBackend(input: {
       return;
     }
     const isShaped = text !== sentText;
-    relayChatGpt({ ...input, sent: chatgptBodyFor({ rest, raw: raw.body, text, isShaped }) });
+    relayChatGpt({
+      ...input,
+      sent: chatgptBodyFor({ rest, raw: raw.body, text, isShaped }),
+      watch: chatgptWatch({ ...input, since, model, text }),
+    });
     return;
   }
   if (rest === "/responses" && hasSealedAgentTask(parseJson(text))) {
@@ -478,12 +484,36 @@ function chatgptBodyFor(input: {
   return { kind: "raw", body: input.raw };
 }
 
+/**
+ * ChatGPT 自带模型的对话（/responses）记进账本，接口记为官方（magpie 同样只记这一条路径）；压缩与搜索不记。
+ */
+function chatgptWatch(input: {
+  req: Request;
+  rest: string;
+  failover: Failover;
+  since: number;
+  model: string;
+  text: string;
+}): ChatGptLedgerWatch | undefined {
+  if (input.rest !== "/responses") return undefined;
+  const parsed = parseJson(input.text);
+  const call = new LedgerCall({
+    ledger: input.failover.ledger,
+    agent: "codex",
+    sessionId: sessionHeaderOf(input.req.headers),
+    model: input.model,
+    since: input.since,
+  });
+  return new ChatGptLedgerWatch({ call, streams: isRecord(parsed) && parsed.stream === true });
+}
+
 function relayChatGpt(input: {
   req: Request;
   res: Response;
   chatgpt: ChatGptBackend;
   logger: pino.Logger;
   sent: ChatGptBody;
+  watch?: ChatGptLedgerWatch;
 }): void {
   const { req, chatgpt, logger, sent } = input;
   logger.debug({ agent: "codex", method: req.method, path: req.path }, "Relaying to ChatGPT");
@@ -501,6 +531,7 @@ function relayChatGpt(input: {
     body: sent?.body,
     headers,
     listTag: () => chatgpt.listing().tag,
+    watch: input.watch,
   });
 }
 
@@ -1057,6 +1088,13 @@ async function handleAgentRequest(input: {
     return;
   }
 
+  const call = new LedgerCall({
+    ledger: input.failover.ledger,
+    agent: input.agent,
+    sessionId: sessionHeaderOf(input.forwardedHeaders ?? req.headers),
+    model,
+    since,
+  });
   const conversation = `${input.agent}|${model}|${conversationId(req.headers, parsed)}`;
   const planned = planAttempts({
     passable,
@@ -1065,7 +1103,9 @@ async function handleAgentRequest(input: {
     within: turnOf(wire, parsed).within,
   });
   if (planned.kind === "rest") {
-    sendRest({ res, wire, ...planned });
+    // 没问任何一家：交出冷却里记着的那次错误，账本也记这一行失败。
+    call.failedWithout(sendRest({ res, wire, ...planned }));
+    call.finish();
     return;
   }
   const { modelFacts } = input.failover;
@@ -1093,13 +1133,6 @@ async function handleAgentRequest(input: {
     streams: isRecord(parsed) && parsed.stream === true,
     everyMs: input.failover.keepAliveMs,
     quietMostMs: input.failover.keepAliveQuietMs,
-  });
-  const call = new LedgerCall({
-    ledger: input.failover.ledger,
-    agent: input.agent,
-    sessionId: sessionHeaderOf(input.forwardedHeaders ?? req.headers),
-    model,
-    since,
   });
   try {
     await askInTurn({
@@ -1342,10 +1375,14 @@ async function askInTurn(input: {
     });
     const noteAttempt = (end: LedgerAttemptEnd) =>
       call.attempt({ candidate, startedAt, reasked, end });
-    if (outcome.kind === "gone") return;
+    if (outcome.kind === "gone") {
+      call.cancelledAt({ candidate, startedAt, reasked });
+      return;
+    }
     if (outcome.kind === "answered") {
       const end = await outcome.finished;
-      noteAnswered({ call, candidate, end, noteAttempt });
+      if (end.kind === "gone") call.cancelledAt({ candidate, startedAt, reasked });
+      else noteAnswered({ call, candidate, end, noteAttempt });
       if (end.kind === "complete") {
         cooldowns.served(candidate.endpoint.id, candidate.upstreamModel);
         retired.restore({ endpoint: candidate.endpoint, model: candidate.upstreamModel });
@@ -1470,7 +1507,7 @@ async function askInTurn(input: {
 function noteAnswered(input: {
   call: LedgerCall;
   candidate: AskableCandidate;
-  end: AnswerEnd;
+  end: Exclude<AnswerEnd, { kind: "gone" }>;
   noteAttempt: (end: LedgerAttemptEnd) => void;
 }): void {
   const { end } = input;
@@ -1491,6 +1528,7 @@ function noteHandedBack(input: {
 }): void {
   const { end } = input;
   if (end?.kind === "refused" && end.reply) input.call.answered(input.refused.candidate, end.reply);
+  if (end?.kind === "gone") input.call.cancelled();
 }
 
 /** 一次拒答：哪家、它的失败（说法是安全过滤的原因）。 */
@@ -1537,7 +1575,7 @@ async function sendAllRefused(input: {
   const handsBackToClaude = wire === "anthropic" && handBack !== null;
   if (handsBackToClaude) {
     const outcome = await handBack();
-    if (outcome.kind === "gone") return null;
+    if (outcome.kind === "gone") return outcome;
     if (outcome.kind === "answered") return outcome.finished;
   }
   const { candidate, failed } = input.refused;
@@ -1854,27 +1892,26 @@ function retryAfterSeconds(at: number): string {
   return String(Math.max(Math.ceil((at - Date.now()) / 1000), 1));
 }
 
-/** 不问上游，直接交出冷却里记着的那次错误：全在额度冷却中，或都需要检查。 */
+/** 不问上游，直接交出冷却里记着的那次错误：全在额度冷却中，或都需要检查。返回交出的说法。 */
 function sendRest(input: {
   res: Response;
   wire: AgentWire;
   candidate: GatewayCandidate;
   rest: EndpointRest;
   backAt?: number;
-}): void {
+}): string {
   const { rest } = input;
+  const message = `${input.candidate.endpoint.name}: ${rest.said}${backAgainSuffix(rest, input.backAt)}`;
   sendAgentError({
     res: input.res,
     wire: input.wire,
-    error: {
-      status: rest.status,
-      message: `${input.candidate.endpoint.name}: ${rest.said}${backAgainSuffix(rest, input.backAt)}`,
-    },
+    error: { status: rest.status, message },
     headers: {
       [ANSWERED_BY_HEADER]: input.candidate.endpoint.slug,
       ...(input.backAt === undefined ? {} : { "retry-after": retryAfterSeconds(input.backAt) }),
     },
   });
+  return message;
 }
 
 function agentPath(path: string): AgentPath | null {

@@ -17,6 +17,7 @@ import { UsageSegmentedControl } from "@/components/usage/usage-segmented-contro
 import { UsageSessionList } from "@/components/usage/usage-session-list";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import {
+  isUnknownUsageProject,
   topUsageProjects,
   USAGE_DETAILS_TABS,
   USAGE_PROJECT_LIMITS,
@@ -451,7 +452,7 @@ function UsageProjectsList({
               isOpen={openProjects.has(key)}
               onToggle={onToggleProject}
             />
-            {openProjects.has(key) ? (
+            {openProjects.has(key) && !isUnknownUsageProject(project) ? (
               <View style={styles.cwds} testID={`usage-details-cwds-${key}`}>
                 {project.cwds.map((cwd) => (
                   <View key={cwd.cwd} style={styles.cwdRow}>
@@ -492,25 +493,31 @@ function UsageProjectRow({
   const accessibilityState = useMemo(() => ({ expanded: isOpen }), [isOpen]);
   const tokens = totalUsageTokens(project.totals);
   const width = maxTokens > 0 ? Math.max(2, (tokens / maxTokens) * 100) : 2;
+  // 只在账本里的中转站请求：没有目录可展开，路径处写一句它是什么。
+  const isUnknown = isUnknownUsageProject(project);
+  const name = isUnknown ? t("usage.details.unknownProject") : project.displayName;
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityState={accessibilityState}
+      disabled={isUnknown}
       onPress={handlePress}
       style={styles.projectRow}
       testID={`usage-details-project-${projectKey}`}
     >
       <View style={styles.avatar}>
-        <Text style={styles.avatarLetter}>{(project.displayName.at(0) ?? "?").toUpperCase()}</Text>
+        <Text style={styles.avatarLetter}>
+          {isUnknown ? "?" : (project.displayName.at(0) ?? "?").toUpperCase()}
+        </Text>
       </View>
       <View style={styles.projectBody}>
         <View style={styles.projectTitle}>
           <Text style={styles.projectName} numberOfLines={1}>
-            {project.displayName}
+            {name}
           </Text>
           {hostLabel ? <Text style={styles.projectBadge}>{hostLabel}</Text> : null}
-          {project.kind === "git" ? null : (
+          {project.kind === "git" || isUnknown ? null : (
             <Text style={styles.projectBadge}>
               {t(`usage.details.projectKind.${project.kind}`)}
             </Text>
@@ -525,7 +532,7 @@ function UsageProjectRow({
             />
           ))}
           <Text style={styles.projectPath} numberOfLines={1}>
-            {project.rootPath}
+            {isUnknown ? t("usage.details.unknownProjectHint") : project.rootPath}
           </Text>
         </View>
       </View>

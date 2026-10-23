@@ -4869,6 +4869,8 @@ export const ru: TranslationResources = {
       empty: "За этот период нет использования",
       topProjects: "Топ {{count}}",
       projectLimit: "Сколько проектов",
+      unknownProject: "Неизвестный проект",
+      unknownProjectHint: "Запросы через шлюз, которых нет в журналах сессий",
       projectKind: {
         non_git: "Без git",
         directory: "Каталог",

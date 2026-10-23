@@ -55,16 +55,32 @@ and what a rewritten file costs.
 
 ## The gateway ledger
 
-The gateway writes one row per Claude Code request it carried, when the request
-ends ([ADR 0014](adr/0014-gateway-ledger-merges-with-cli-logs.md)): the
+The gateway writes one row per Claude Code or Codex request it carried, when the
+request ends ([ADR 0014](adr/0014-gateway-ledger-merges-with-cli-logs.md)): the
 endpoint and model that answered, the six token columns, the duration, the time
 to first content, the stop reason, every try with its outcome, and the id of the
 reply the CLI got back. No prompt, reply text, tool arguments or body is
 written. On the translated path the id is the one the gateway wrote back to the
 CLI, so it is the one the CLI logs. Writing the row changes no byte sent to the
-endpoint or to the CLI. Codex requests are not recorded yet.
+endpoint or to the CLI.
 
-The ledger and the CLI log meet on that id (Claude `message.id`):
+Codex's ChatGPT models, which the gateway relays to ChatGPT when Codex signs in
+with ChatGPT, get a row too, under **Official** and never at an endpoint's
+multiplier. Only `/responses` is recorded, as in magpie; compaction and search
+are not.
+
+A request no one answered is a row of 0 tokens: every endpoint failed (or all
+were resting and the gateway handed back the stored error without asking),
+or the agent went away first. The first is `failed`, the second `cancelled`
+with a `canceled` try, magpie's words. Each try keeps its endpoint, result,
+failure class, the vendor's words (key masked, cut to 200 characters) and the
+cooldown it caused, so a failure, a refusal (result `refused`) and a re-ask
+without a refused field (`reasked`) read apart. These rows add nothing to the
+totals.
+
+The ledger and the CLI log meet on that id (Claude `message.id`, the
+`response_id` of Codex's `token_usage_record`; a rollout old enough to have only
+`token_count` names none, so its calls stay Official):
 
 - **Both have the call**: one row. Tokens and endpoint come from the ledger;
   project, session and turn from the log, since the gateway cannot tell which
@@ -72,7 +88,7 @@ The ledger and the CLI log meet on that id (Claude `message.id`):
   one reply are deduplicated first, as before, and the merge pairs the
   deduplicated reply.
 - **Only the ledger**: counted under no project and no session, at the time the
-  request started.
+  request started. The project split shows these as the unknown project.
 - **Only the log**: a direct call, counted as **Official**. Every call from
   before the ledger existed is in this group too, including ones that went
   through the gateway: there is no way back to which endpoint answered them.

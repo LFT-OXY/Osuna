@@ -685,9 +685,12 @@ A torn line is dropped on load. Three kinds, discriminated on `kind`
 
 - `gateway` — one ledger row per request the gateway carried: `at`, `agent`, the CLI's
   `sessionId` header, the requested `model`, `endpointId` / `endpointName` / `upstreamModel`
-  of the endpoint that answered (null for Official), the token columns plus `cacheWrite1h`,
-  `durationMs`, `ttftMs` and `firstTextMs` (from the gateway taking the request; null for a
-  reply that was not streamed), `replyId`, `stop`, `status`, and `attempts` (endpoint, model,
+  of the endpoint that answered (null for Official, and when no one answered), the token
+  columns plus `cacheWrite1h`, `durationMs`, `ttftMs` and `firstTextMs` (from the gateway
+  taking the request; null for a reply that was not streamed), `replyId` (Claude `message.id`,
+  Codex `response_id`), `stop`, `status` (`ok`, `failed`, `cancelled`), `error` (what the agent
+  was told when the request failed or was cancelled; absent on rows written before it), and
+  `attempts` (endpoint, model,
   start, duration, result, failure class, the vendor's words masked and cut to 200 characters,
   cooldown end, whether it was asked again without a refused field). No conversation content.
 - `cli` — one CLI log reply as deduplicated so far, with the session, cwd, bucket, model and

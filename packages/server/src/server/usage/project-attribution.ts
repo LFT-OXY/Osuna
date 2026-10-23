@@ -11,6 +11,16 @@ export interface UsageProjectAttribution {
 }
 
 /**
+ * Where a call only the gateway ledger knows is counted: no directory, no
+ * name. The client shows it as the unknown project.
+ */
+export const UNKNOWN_PROJECT: UsageProjectAttribution = {
+  rootPath: "",
+  displayName: "",
+  kind: "directory",
+};
+
+/**
  * A bucket row only knows its cwd. Attribution goes registered project first,
  * then the enclosing Git work tree, then the cwd itself — a directory that no
  * longer exists still lands on that last rung rather than disappearing.
@@ -33,7 +43,7 @@ export class UsageProjectResolver {
     }
     const resolved = new Map<string, UsageProjectAttribution>();
     for (const cwd of cwds) {
-      const attribution = this.cache.get(cwd);
+      const attribution = cwd === "" ? UNKNOWN_PROJECT : this.cache.get(cwd);
       if (attribution) resolved.set(cwd, attribution);
     }
     return resolved;

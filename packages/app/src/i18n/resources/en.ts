@@ -4921,6 +4921,8 @@ export const en = {
       empty: "No usage in this period",
       topProjects: "Top {{count}}",
       projectLimit: "How many projects",
+      unknownProject: "Unknown project",
+      unknownProjectHint: "Gateway requests no session log names",
       projectKind: {
         non_git: "Not git",
         directory: "Directory",

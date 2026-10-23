@@ -172,6 +172,7 @@ function consumeUsageRecord(
     at: timestamp,
     usage,
     key: asString(payload.response_id) ?? usageSignature(usage),
+    responseId: asString(payload.response_id),
     // From 0.153.2 a subagent's record names the turn of the thread that
     // spawned it outright, so it needs no matching by time.
     rootTurnId: asString(payload.root_turn_id),
@@ -192,7 +193,15 @@ function consumeTokenCount(
   if (!usage || timestamp === null) return;
   // `total_token_usage` is a per-process running sum that restarts at zero on
   // resume, so each event counts its own `last` instead of a difference.
-  recordUsage({ state, sink, at: timestamp, usage, key: usageSignature(usage), rootTurnId: null });
+  recordUsage({
+    state,
+    sink,
+    at: timestamp,
+    usage,
+    key: usageSignature(usage),
+    responseId: null,
+    rootTurnId: null,
+  });
 }
 
 function recordUsage(input: {
@@ -201,6 +210,8 @@ function recordUsage(input: {
   at: number;
   usage: Record<string, unknown>;
   key: string;
+  // 回复编号是账本对上这次调用的依据（ADR 0014）；只有 token_usage_record 带。
+  responseId: string | null;
   rootTurnId: string | null;
 }): void {
   const { state, sink } = input;
@@ -212,24 +223,26 @@ function recordUsage(input: {
   const model = state.model ?? UNKNOWN_MODEL;
   const identity = identityOf(state);
   const amounts = readUsageColumns(input.usage);
+  const bucket = toBucketStart(input.at);
+  const at = new Date(input.at).toISOString();
+  const attachment = turnAttachmentOf(state, input.rootTurnId);
   if (identity.sessionId && identity.cwd) {
-    sink.rows.push({
-      ...identity,
-      model,
-      bucket: toBucketStart(input.at),
-      ...amounts,
-      turns: 0,
-      durationMs: 0,
-    });
+    sink.rows.push({ ...identity, model, bucket, ...amounts, turns: 0, durationMs: 0 });
+    if (input.responseId) {
+      sink.calls.push({
+        replyId: input.responseId,
+        cli: "codex",
+        model,
+        sessionId: identity.sessionId,
+        cwd: identity.cwd,
+        bucket,
+        at,
+        turnKey: attachment?.turnKey ?? null,
+        amounts,
+      });
+    }
   }
-  pushTurnUsage({
-    sink,
-    identity,
-    attachment: turnAttachmentOf(state, input.rootTurnId),
-    model,
-    at: new Date(input.at).toISOString(),
-    amounts,
-  });
+  pushTurnUsage({ sink, identity, attachment, model, at, amounts });
 
   const openTurn = state.openTurn;
   if (!openTurn || openTurn.model) return;

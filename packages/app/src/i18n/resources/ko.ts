@@ -4819,6 +4819,8 @@ export const ko: TranslationResources = {
       empty: "이 기간에는 사용량이 없습니다",
       topProjects: "상위 {{count}}",
       projectLimit: "표시할 프로젝트 수",
+      unknownProject: "알 수 없는 프로젝트",
+      unknownProjectHint: "세션 기록에 없는 게이트웨이 요청",
       projectKind: {
         non_git: "git 아님",
         directory: "디렉터리",

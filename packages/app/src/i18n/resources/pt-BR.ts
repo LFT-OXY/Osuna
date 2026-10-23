@@ -4862,6 +4862,8 @@ export const ptBR: TranslationResources = {
       empty: "Sem uso neste período",
       topProjects: "Top {{count}}",
       projectLimit: "Quantos projetos",
+      unknownProject: "Projeto desconhecido",
+      unknownProjectHint: "Requisições do gateway que nenhum registro de sessão cita",
       projectKind: {
         non_git: "Sem git",
         directory: "Diretório",

@@ -4775,6 +4775,8 @@ export const ar: TranslationResources = {
       empty: "لا يوجد استخدام في هذه الفترة",
       topProjects: "أفضل {{count}}",
       projectLimit: "عدد المشاريع",
+      unknownProject: "مشروع غير معروف",
+      unknownProjectHint: "طلبات عبر البوابة لا يذكرها أي سجل جلسة",
       projectKind: {
         non_git: "بدون git",
         directory: "مجلد",

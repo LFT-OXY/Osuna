@@ -29,6 +29,14 @@ export interface TopUsageProjects {
 }
 
 /**
+ * The row of gateway requests no CLI log names (ADR 0014): the daemon reports
+ * them under a project with no directory.
+ */
+export function isUnknownUsageProject(project: Pick<MergedUsageProject, "rootPath">): boolean {
+  return project.rootPath === "";
+}
+
+/**
  * The first `limit` projects of the merged report. Merging already ordered them
  * by tokens across every host, so the cut is taken after the merge — a host's
  * own top three is not the top three.

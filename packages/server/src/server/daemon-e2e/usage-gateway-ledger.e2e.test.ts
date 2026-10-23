@@ -21,7 +21,14 @@ import { USAGE_TURN_ROW_SCHEMA, addTotals, emptyTotals } from "../usage/types.js
 
 const CLAUDE_TOKEN = "gateway-token-claude-0123456789";
 const KEY_A = "sk-real-key-alpha-SECRET";
+const KEY_B = "sk-real-key-beta-SECRET";
 const KEY_C = "sk-real-key-gamma-SECRET";
+const KEY_D = "sk-real-key-delta-SECRET";
+const CODEX_TOKEN = "gateway-token-codex-0123456789";
+// ChatGPT 登录的 Codex 带的令牌（假的）：只转给假 ChatGPT 后端。
+const CHATGPT_SIGN_IN = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ1c2VyIn0.c2lnbmF0dXJl";
+// Codex 的线程编号：会话记录的文件名与会话头都用它。
+const THREAD = "019a0000-1111-7222-8333-444455556666";
 const SESSION_ID = "sess-gw";
 const PROJECT_DIR = "-work-demo";
 const SCAN_INTERVAL_MS = 50;
@@ -52,6 +59,10 @@ const LEDGER_TOTALS = totals(40, 300, 50, 25);
 const CLI_TOTALS = totals(40, 300, 50, 20);
 // 只在会话记录里的一次调用（升级前、或直连）：算「官方」。
 const OLD_TOTALS = totals(7, 70, 0, 9);
+// 假 Responses 上游回的用量（input_tokens 500 其中缓存 400）：Codex 的账本记的就是它。
+const CODEX_LEDGER_TOTALS = totals(100, 400, 0, 60, 10);
+// Codex 会话记录里同一个回复记的数，与账本不同：合并后取账本。
+const CODEX_CLI_TOTALS = totals(100, 400, 0, 55, 10);
 // 翻译路径：假 Chat 上游报 prompt 120（缓存 100）、completion 30。
 const CHAT_TOTALS = totals(20, 100, 0, 30);
 
@@ -69,16 +80,6 @@ afterEach(async () => {
   }
   await Promise.all(tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
-
-async function startUpstream(respond: (res: ServerResponse) => void): Promise<string> {
-  const server = createServer((req, res) => {
-    req.resume();
-    req.on("end", () => respond(res));
-  });
-  servers.push(server);
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-}
 
 /** 假 Anthropic 上游的流式回复：编号 messageId，一段文字，用量即 LEDGER_TOTALS。 */
 function anthropicStream(messageId: string) {
@@ -113,6 +114,42 @@ function anthropicStream(messageId: string) {
   };
 }
 
+/** 假 Responses 上游（与假 ChatGPT 后端）的流式回复：编号 responseId，一段文字，用量即 CODEX_LEDGER_TOTALS。 */
+function responsesStream(responseId: string) {
+  return (res: ServerResponse) => {
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    for (const event of [
+      {
+        type: "response.created",
+        response: { id: responseId, model: "gpt-5.5", status: "in_progress" },
+      },
+      {
+        type: "response.output_item.added",
+        output_index: 0,
+        item: { id: "msg_1", type: "message", role: "assistant", content: [] },
+      },
+      { type: "response.output_text.delta", item_id: "msg_1", delta: REPLY_TEXT },
+      {
+        type: "response.completed",
+        response: {
+          id: responseId,
+          status: "completed",
+          output: [],
+          usage: {
+            input_tokens: 500,
+            output_tokens: 60,
+            input_tokens_details: { cached_tokens: 400 },
+            output_tokens_details: { reasoning_tokens: 10 },
+          },
+        },
+      },
+    ]) {
+      res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+    }
+    res.end();
+  };
+}
+
 function chatStream(res: ServerResponse): void {
   res.writeHead(200, { "content-type": "text/event-stream" });
   for (const chunk of [
@@ -137,16 +174,36 @@ function chatStream(res: ServerResponse): void {
   res.end("data: [DONE]\n\n");
 }
 
+/** 假上游怎么回：每家接口与假 ChatGPT 后端各一个，测试里可以换。请求体也交给它（看是否拒收重问）。 */
+type Respond = (res: ServerResponse, body: string) => void;
+type UpstreamName = "a" | "b" | "c" | "d" | "chatgpt";
+
 interface Harness {
   daemon: TestPaseoDaemon;
   client: DaemonClient;
   gateway: string;
   claudeRoot: string;
+  codexRoot: string;
   usageDir: string;
+  replies: Record<UpstreamName, Respond>;
   restart: () => Promise<void>;
 }
 
-/** 两家接口：A 只有 Anthropic 地址（直通），C 只有 Chat 地址（翻译）；Claude Code 走中转站。 */
+async function startUpstreamOf(replies: Record<UpstreamName, Respond>, name: UpstreamName) {
+  const server = createServer((req, res) => {
+    const chunks: Buffer[] = [];
+    req.on("data", (chunk: Buffer) => chunks.push(chunk));
+    req.on("end", () => replies[name](res, Buffer.concat(chunks).toString("utf8")));
+  });
+  servers.push(server);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+}
+
+/**
+ * 四家接口：A 只有 Anthropic 地址（直通），C 只有 Chat 地址（翻译），B 与 D 都有 Responses 地址、都给 gpt-5.5
+ * （Codex 先问 B，B 失败换 D）；Claude Code 与 Codex 都走中转站，ChatGPT 自带模型转给假 ChatGPT 后端。
+ */
 async function start(options: { messageId?: string } = {}): Promise<Harness> {
   const root = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-ledger-"));
   tempRoots.push(root);
@@ -154,8 +211,20 @@ async function start(options: { messageId?: string } = {}): Promise<Harness> {
   await mkdir(endpointsDir, { recursive: true });
   const claudeRoot = path.join(root, "claude-projects");
   await mkdir(path.join(claudeRoot, PROJECT_DIR), { recursive: true });
-  const urlA = await startUpstream(anthropicStream(options.messageId ?? "msg_gw_1"));
-  const urlC = await startUpstream(chatStream);
+  const codexRoot = path.join(root, "codex-sessions");
+  await mkdir(path.join(codexRoot, "2026", "10", "23"), { recursive: true });
+  const replies: Record<UpstreamName, Respond> = {
+    a: anthropicStream(options.messageId ?? "msg_gw_1"),
+    b: responsesStream("resp_gw_1"),
+    c: chatStream,
+    d: responsesStream("resp_gw_d"),
+    chatgpt: responsesStream("resp_native_1"),
+  };
+  const urlA = await startUpstreamOf(replies, "a");
+  const urlB = await startUpstreamOf(replies, "b");
+  const urlC = await startUpstreamOf(replies, "c");
+  const urlD = await startUpstreamOf(replies, "d");
+  const urlChatGpt = await startUpstreamOf(replies, "chatgpt");
   const endpoint = (input: {
     id: string;
     slug: string;
@@ -186,14 +255,28 @@ async function start(options: { messageId?: string } = {}): Promise<Harness> {
           baseUrls: [{ format: "openai_chat", url: `${urlC}/v1` }],
           models: ["deepseek-v3"],
         }),
+        endpoint({
+          id: "ep_b",
+          slug: "relay-b",
+          name: "Relay B",
+          baseUrls: [{ format: "openai_responses", url: `${urlB}/v1` }],
+          models: ["gpt-5.5"],
+        }),
+        endpoint({
+          id: "ep_d",
+          slug: "relay-d",
+          name: "Relay D",
+          baseUrls: [{ format: "openai_responses", url: `${urlD}/v1` }],
+          models: ["gpt-5.5"],
+        }),
       ],
       agents: {
         claude: { enabled: true, defaultModelId: "kimi-k2" },
-        codex: { enabled: false, defaultModelId: null },
+        codex: { enabled: true, defaultModelId: "gpt-5.5" },
       },
     },
-    "keys.json": { keys: { ep_a: KEY_A, ep_c: KEY_C } },
-    "gateway-tokens.json": { tokens: { claude: CLAUDE_TOKEN, codex: "gateway-token-codex-x" } },
+    "keys.json": { keys: { ep_a: KEY_A, ep_b: KEY_B, ep_c: KEY_C, ep_d: KEY_D } },
+    "gateway-tokens.json": { tokens: { claude: CLAUDE_TOKEN, codex: CODEX_TOKEN } },
   };
   for (const [name, value] of Object.entries(files)) {
     await writeFile(path.join(endpointsDir, name), JSON.stringify(value, null, 2));
@@ -206,9 +289,13 @@ async function start(options: { messageId?: string } = {}): Promise<Harness> {
       apiEndpoints: {
         env: { CLAUDE_CONFIG_DIR: path.join(root, "claude"), CODEX_HOME: path.join(root, "codex") },
         homeDir: root,
+        gatewayChatGptBaseUrl: urlChatGpt,
+        gatewayOpenAiApiBaseUrl: "http://127.0.0.1:9/v1",
+        // 最后一家原地重试前不等。
+        gatewayRetryPauseMs: 0,
       },
       usage: {
-        roots: { claude: [claudeRoot], codex: [], pi: [], omp: [] },
+        roots: { claude: [claudeRoot], codex: [codexRoot], pi: [], omp: [] },
         scanIntervalMs: SCAN_INTERVAL_MS,
         pricing: UNPRICED,
       },
@@ -227,7 +314,9 @@ async function start(options: { messageId?: string } = {}): Promise<Harness> {
   const harness: Harness = {
     ...(await launch()),
     claudeRoot,
+    codexRoot,
     usageDir: path.join(root, ".paseo", "usage"),
+    replies,
     restart: async () => {
       await harness.client.close();
       await harness.daemon.close();
@@ -263,6 +352,122 @@ async function askClaude(harness: Harness, model = "kimi-k2"): Promise<string> {
     .map((line) => JSON.parse(line.slice("data: ".length)) as Record<string, unknown>)
     .find((event) => event.type === "message_start") as { message: { id: string } };
   return opening.message.id;
+}
+
+/** Codex 打中转站的一轮（API key 接法的 /v1/responses，或 ChatGPT 登录的后端路径）：流式，读完整个回复。 */
+async function askCodex(
+  harness: Harness,
+  input: { via?: "api" | "chatgpt"; model?: string } = {},
+): Promise<Response> {
+  const isChatGpt = input.via === "chatgpt";
+  const url = isChatGpt
+    ? `${harness.gateway}/backend-api/codex/responses`
+    : `${harness.gateway}/v1/responses`;
+  return fetch(url, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${isChatGpt ? CHATGPT_SIGN_IN : CODEX_TOKEN}`,
+      "content-type": "application/json",
+      "user-agent": "codex_cli_rs/0.130.0 (Mac OS 26.0; arm64)",
+      session_id: THREAD,
+    },
+    body: JSON.stringify({
+      model: input.model ?? "gpt-5.5",
+      stream: true,
+      input: [{ role: "user", content: [{ type: "input_text", text: PROMPT_TEXT }] }],
+    }),
+  });
+}
+
+/** Codex 回复里 response.completed 的编号。 */
+async function codexReplyId(response: Response): Promise<string> {
+  expect(response.status).toBe(200);
+  const text = await response.text();
+  expect(text).toContain(REPLY_TEXT);
+  const completed = text
+    .split("\n")
+    .filter((line) => line.startsWith("data: "))
+    .map((line) => JSON.parse(line.slice("data: ".length)) as Record<string, unknown>)
+    .find((event) => event.type === "response.completed") as { response: { id: string } };
+  return completed.response.id;
+}
+
+/** 照 Codex 的样子追加一轮：第一次带 session_meta，再是这一轮的 token_usage_record。 */
+async function appendCodexTurn(
+  harness: Harness,
+  input: {
+    turnId: string;
+    responses: { responseId: string; model: string; totals: UsageTokenTotals }[];
+  },
+): Promise<void> {
+  const transcript = path.join(
+    harness.codexRoot,
+    "2026",
+    "10",
+    "23",
+    `rollout-2026-10-23T10-00-00-${THREAD}.jsonl`,
+  );
+  const at = Date.now();
+  const stamp = (offset: number) => new Date(at + offset).toISOString();
+  const lines: unknown[] = [];
+  const isNew = await stat(transcript).then(
+    () => false,
+    () => true,
+  );
+  if (isNew) {
+    lines.push({
+      timestamp: stamp(0),
+      type: "session_meta",
+      payload: { id: THREAD, timestamp: stamp(0), cwd: "/work/demo", originator: "codex_cli_rs" },
+    });
+  }
+  lines.push(
+    {
+      timestamp: stamp(1),
+      type: "event_msg",
+      payload: { type: "task_started", turn_id: input.turnId },
+    },
+    {
+      timestamp: stamp(2),
+      type: "turn_context",
+      payload: { turn_id: input.turnId, model: input.responses[0]?.model, cwd: "/work/demo" },
+    },
+  );
+  let offset = 3;
+  for (const response of input.responses) {
+    const usage = {
+      input_tokens: response.totals.input + response.totals.cachedInput,
+      cached_input_tokens: response.totals.cachedInput,
+      cache_write_input_tokens: response.totals.cacheWrite,
+      output_tokens: response.totals.output,
+      reasoning_output_tokens: response.totals.reasoning,
+    };
+    lines.push({
+      timestamp: stamp(offset++),
+      type: "token_usage_record",
+      payload: {
+        thread_id: THREAD,
+        turn_id: input.turnId,
+        session_id: THREAD,
+        root_turn_id: input.turnId,
+        response_id: response.responseId,
+        usage,
+      },
+    });
+  }
+  lines.push({
+    timestamp: stamp(offset),
+    type: "event_msg",
+    payload: { type: "task_complete", turn_id: input.turnId },
+  });
+  await writeFile(transcript, `${lines.map((line) => JSON.stringify(line)).join("\n")}\n`, {
+    flag: "a",
+  });
+}
+
+/** Codex 走接口 B 的那次调用在会话记录里的样子。 */
+function codexGatewayCall(responseId = "resp_gw_1") {
+  return { responseId, model: "gpt-5.5", totals: CODEX_CLI_TOTALS };
 }
 
 interface TranscriptCall {
@@ -328,6 +533,8 @@ function gatewayCall(messageId = "msg_gw_1"): TranscriptCall {
 }
 
 const ALL_TIME = { from: null, to: null, timezone: "UTC" };
+// 只在账本里的调用在按项目分时的那一行：没有目录。
+const UNKNOWN_PROJECT = "";
 
 async function waitForReport(
   harness: Harness,
@@ -447,12 +654,14 @@ describe("the gateway ledger merged with Claude Code's logs", () => {
       sameTotals(report.summary.totals, LEDGER_TOTALS),
     );
     expect(ledgerOnly.endpoints).toEqual([endpointGroup("ep_a", "Relay A", LEDGER_TOTALS, 1)]);
-    expect(ledgerOnly.projects).toEqual([]);
+    expect(ledgerOnly.projects.map((project) => [project.rootPath, project.totals])).toEqual([
+      [UNKNOWN_PROJECT, LEDGER_TOTALS],
+    ]);
     expect(ledgerOnly.summary.sessionCount).toBe(0);
 
     await appendTurn(harness, { promptId: "p1", calls: [gatewayCall()] });
 
-    await waitForReport(harness, (report) => report.projects.length === 1);
+    await waitForReport(harness, (report) => report.projects[0]?.rootPath === "/work/demo");
     await expectCountedOnce(harness);
   });
 
@@ -476,7 +685,7 @@ describe("the gateway ledger merged with Claude Code's logs", () => {
     await waitForLedgerRow(ledgerFirst.usageDir, "msg_gw_1");
     await ledgerFirst.restart();
     await appendTurn(ledgerFirst, { promptId: "p1", calls: [gatewayCall()] });
-    await waitForReport(ledgerFirst, (report) => report.projects.length === 1);
+    await waitForReport(ledgerFirst, (report) => report.projects[0]?.rootPath === "/work/demo");
     await expectCountedOnce(ledgerFirst);
     // 再起一次：读回的数一样。
     await ledgerFirst.restart();
@@ -535,7 +744,8 @@ describe("the gateway ledger merged with Claude Code's logs", () => {
     const report = await waitForReport(
       harness,
       (candidate) =>
-        candidate.projects.length === 1 && sameTotals(candidate.summary.totals, CHAT_TOTALS),
+        candidate.projects[0]?.rootPath === "/work/demo" &&
+        sameTotals(candidate.summary.totals, CHAT_TOTALS),
     );
     expect(report.endpoints).toEqual([endpointGroup("ep_c", "Relay C", CHAT_TOTALS, 1)]);
   });
@@ -573,6 +783,302 @@ describe("the gateway ledger merged with Claude Code's logs", () => {
     expect(row?.ttftMs).toEqual(expect.any(Number));
     expect(row?.attempts).toEqual([
       expect.objectContaining({ endpointId: "ep_a", model: "kimi-k2", result: "answered" }),
+    ]);
+  });
+});
+
+/** 账本里的各行（不含会话记录的回复与合并标记）。 */
+async function ledgerRows(usageDir: string): Promise<Record<string, unknown>[]> {
+  const ledger = await readLedger(usageDir).catch(() => ({ text: "" }));
+  return ledger.text
+    .split("\n")
+    .filter((line) => line.length > 0)
+    .map((line) => JSON.parse(line) as Record<string, unknown>)
+    .filter((entry) => entry.kind === "gateway");
+}
+
+async function waitForLedgerRows(
+  usageDir: string,
+  accept: (rows: Record<string, unknown>[]) => boolean,
+): Promise<Record<string, unknown>[]> {
+  const deadline = Date.now() + 10_000;
+  let rows: Record<string, unknown>[] = [];
+  while (Date.now() < deadline) {
+    rows = await ledgerRows(usageDir);
+    if (accept(rows)) return rows;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`The ledger never matched: ${JSON.stringify(rows)}`);
+}
+
+/** Codex 的一次调用只算一次、带上接口 B：汇总、按接口、按项目、按会话、每轮用量。 */
+async function expectCodexCountedOnce(harness: Harness): Promise<void> {
+  const report = await waitForReport(
+    harness,
+    (candidate) =>
+      sameTotals(candidate.summary.totals, CODEX_LEDGER_TOTALS) &&
+      candidate.projects[0]?.rootPath === "/work/demo",
+  );
+  expect(report.endpoints).toEqual([endpointGroup("ep_b", "Relay B", CODEX_LEDGER_TOTALS, 1)]);
+  expect(report.projects.map((project) => [project.rootPath, project.totals])).toEqual([
+    ["/work/demo", CODEX_LEDGER_TOTALS],
+  ]);
+  const { sessions } = await harness.client.usageSessionsList(ALL_TIME);
+  expect(sessions.map((session) => [session.sessionId, session.totals])).toEqual([
+    [THREAD, CODEX_LEDGER_TOTALS],
+  ]);
+  expect(await turnUsage(harness.usageDir)).toEqual([
+    { turnKey: "turn-1", endpointId: "ep_b", totals: CODEX_LEDGER_TOTALS },
+  ]);
+}
+
+describe("the gateway ledger merged with Codex's logs", () => {
+  test("a Codex call the ledger records first counts once, matched by response_id", async () => {
+    const harness = await start();
+    expect(await codexReplyId(await askCodex(harness))).toBe("resp_gw_1");
+    const ledgerOnly = await waitForReport(harness, (report) =>
+      sameTotals(report.summary.totals, CODEX_LEDGER_TOTALS),
+    );
+    expect(ledgerOnly.projects.map((project) => project.rootPath)).toEqual([UNKNOWN_PROJECT]);
+
+    await appendCodexTurn(harness, { turnId: "turn-1", responses: [codexGatewayCall()] });
+
+    await expectCodexCountedOnce(harness);
+  });
+
+  test("a Codex call the log shows first counts once, also across a restart", async () => {
+    const harness = await start();
+    await appendCodexTurn(harness, { turnId: "turn-1", responses: [codexGatewayCall()] });
+    const official = await waitForReport(harness, (report) =>
+      sameTotals(report.summary.totals, CODEX_CLI_TOTALS),
+    );
+    expect(official.endpoints).toEqual([endpointGroup(null, null, CODEX_CLI_TOTALS, 1)]);
+    await harness.restart();
+    await waitForReport(harness, (report) => sameTotals(report.summary.totals, CODEX_CLI_TOTALS));
+
+    await codexReplyId(await askCodex(harness));
+
+    await expectCodexCountedOnce(harness);
+    await harness.restart();
+    await expectCodexCountedOnce(harness);
+  });
+
+  test("a ledger row written before a restart still meets the Codex log after it", async () => {
+    const harness = await start();
+    await codexReplyId(await askCodex(harness));
+    await waitForLedgerRow(harness.usageDir, "resp_gw_1");
+    await harness.restart();
+    await appendCodexTurn(harness, { turnId: "turn-1", responses: [codexGatewayCall()] });
+    await expectCodexCountedOnce(harness);
+  });
+
+  test("a ChatGPT model's call is Official, counted once with the log, at the ledger's numbers and no multiplier", async () => {
+    const harness = await start();
+    expect(await codexReplyId(await askCodex(harness, { via: "chatgpt", model: "gpt-5.6" }))).toBe(
+      "resp_native_1",
+    );
+    const [row] = await waitForLedgerRows(harness.usageDir, (rows) => rows.length === 1);
+    expect(row).toMatchObject({
+      agent: "codex",
+      sessionId: THREAD,
+      model: "gpt-5.6",
+      endpointId: null,
+      replyId: "resp_native_1",
+      status: "ok",
+      input: 100,
+      cachedInput: 400,
+      output: 60,
+      attempts: [],
+    });
+    expect(row?.ttftMs).toEqual(expect.any(Number));
+
+    await appendCodexTurn(harness, {
+      turnId: "turn-1",
+      responses: [{ responseId: "resp_native_1", model: "gpt-5.6", totals: CODEX_CLI_TOTALS }],
+    });
+
+    const report = await waitForReport(
+      harness,
+      (candidate) =>
+        sameTotals(candidate.summary.totals, CODEX_LEDGER_TOTALS) &&
+        candidate.projects.length === 1 &&
+        candidate.projects[0]?.rootPath === "/work/demo",
+    );
+    expect(report.endpoints).toEqual([endpointGroup(null, null, CODEX_LEDGER_TOTALS, 1)]);
+  });
+
+  test("a request every endpoint failed is one row of 0 tokens with each try's endpoint, class, masked reason and cooldown", async () => {
+    const harness = await start();
+    harness.replies.b = (res) => {
+      res.writeHead(503, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          error: { message: `upstream overloaded for ${KEY_B} ${"x".repeat(400)}` },
+        }),
+      );
+    };
+    harness.replies.d = (res) => {
+      res.writeHead(402, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: { message: "insufficient balance" } }));
+    };
+    const response = await askCodex(harness);
+    expect(response.status).toBeGreaterThanOrEqual(400);
+    await response.text();
+
+    const [row] = await waitForLedgerRows(harness.usageDir, (rows) => rows.length === 1);
+    expect(row).toMatchObject({
+      agent: "codex",
+      status: "failed",
+      endpointId: null,
+      replyId: null,
+      input: 0,
+      cachedInput: 0,
+      output: 0,
+    });
+    expect(row?.error).toContain("insufficient balance");
+    const attempts = row?.attempts as Record<string, unknown>[];
+    expect(attempts.map((attempt) => [attempt.endpointId, attempt.result])).toEqual([
+      ["ep_b", "failed"],
+      ["ep_d", "failed"],
+    ]);
+    expect(attempts[0]?.failure).toBe("other");
+    expect(attempts[0]?.cooldownUntil).toEqual(expect.any(String));
+    expect(attempts[0]?.reason).toContain("upstream overloaded");
+    expect(attempts[0]?.reason).not.toContain(KEY_B);
+    expect(String(attempts[0]?.reason).length).toBeLessThanOrEqual(200);
+    expect(attempts[1]?.failure).toBe("credit");
+    expect(attempts[1]?.reason).toContain("insufficient balance");
+
+    // 0 token 的行不进汇总：按项目分也没有它。
+    const report = await waitForReport(harness, () => true);
+    expect(report.summary.totals).toEqual(emptyTotals());
+    expect(report.projects).toEqual([]);
+  });
+
+  test("a request the agent cancels before the reply is one cancelled row of 0 tokens", async () => {
+    const harness = await start();
+    let asked: () => void = () => undefined;
+    const reached = new Promise<void>((resolve) => {
+      asked = resolve;
+    });
+    // B 收到请求后迟迟不回，Codex 这时走掉。
+    harness.replies.b = () => asked();
+    const controller = new AbortController();
+    const pending = fetch(`${harness.gateway}/v1/responses`, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        authorization: `Bearer ${CODEX_TOKEN}`,
+        "content-type": "application/json",
+        session_id: THREAD,
+      },
+      body: JSON.stringify({ model: "gpt-5.5", stream: true, input: [] }),
+    }).catch(() => null);
+    await reached;
+    controller.abort();
+    await pending;
+
+    const [row] = await waitForLedgerRows(harness.usageDir, (rows) => rows.length === 1);
+    expect(row).toMatchObject({
+      agent: "codex",
+      status: "cancelled",
+      endpointId: null,
+      output: 0,
+      error: "the agent canceled the request",
+    });
+    expect(row?.attempts).toEqual([
+      expect.objectContaining({
+        endpointId: "ep_b",
+        result: "failed",
+        failure: "canceled",
+        reason: "the agent canceled the request",
+      }),
+    ]);
+  });
+});
+
+describe("tries in the ledger tell failures, refusals and re-asks apart", () => {
+  test("a refusal is a refused try, with the safety filter's reason and no cooldown", async () => {
+    const harness = await start();
+    harness.replies.a = (res) => {
+      res.writeHead(400, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          type: "error",
+          error: { type: "invalid_request_error", code: "content_filter", message: "blocked" },
+        }),
+      );
+    };
+    const response = await fetch(`${harness.gateway}/v1/messages`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${CLAUDE_TOKEN}`,
+        "content-type": "application/json",
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "kimi-k2",
+        max_tokens: 64,
+        messages: [{ role: "user", content: PROMPT_TEXT }],
+      }),
+    });
+    expect(response.status).toBe(400);
+    await response.text();
+
+    const [row] = await waitForLedgerRows(harness.usageDir, (rows) => rows.length === 1);
+    expect(row).toMatchObject({ status: "failed" });
+    expect(row?.attempts).toEqual([
+      expect.objectContaining({
+        endpointId: "ep_a",
+        result: "refused",
+        failure: "refused",
+        cooldownUntil: null,
+        reasked: false,
+      }),
+    ]);
+  });
+
+  test("a field the endpoint refuses is asked again without it: one answered try marked re-asked", async () => {
+    const harness = await start();
+    const answer = anthropicStream("msg_gw_1");
+    harness.replies.a = (res, body) => {
+      if (body.includes('"temperature"')) {
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            type: "error",
+            error: {
+              type: "invalid_request_error",
+              message: "`temperature` is deprecated for this model.",
+            },
+          }),
+        );
+        return;
+      }
+      answer(res, body);
+    };
+    const response = await fetch(`${harness.gateway}/v1/messages`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${CLAUDE_TOKEN}`,
+        "content-type": "application/json",
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "kimi-k2",
+        max_tokens: 64,
+        temperature: 0.2,
+        stream: true,
+        messages: [{ role: "user", content: PROMPT_TEXT }],
+      }),
+    });
+    expect(response.status).toBe(200);
+    await response.text();
+
+    const [row] = await waitForLedgerRows(harness.usageDir, (rows) => rows.length === 1);
+    expect(row).toMatchObject({ status: "ok", replyId: "msg_gw_1" });
+    expect(row?.attempts).toEqual([
+      expect.objectContaining({ endpointId: "ep_a", result: "answered", reasked: true }),
     ]);
   });
 });

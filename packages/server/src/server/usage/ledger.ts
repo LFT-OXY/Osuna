@@ -26,7 +26,10 @@ export type GatewayLedgerAttempt = z.infer<typeof GATEWAY_LEDGER_ATTEMPT_SCHEMA>
  * One request the gateway carried, written when it ended (docs/data-model.md
  * §7). No conversation content: no prompt, reply, tool arguments or bodies.
  * `replyId` is the id the CLI got back (Claude `message.id`), which is how the
- * row finds the same call in the CLI's log. `endpointId` null is Official.
+ * row finds the same call in the CLI's log (Codex `response_id`). `endpointId`
+ * is the endpoint that answered; null is Official, or no one answered: a
+ * request every endpoint failed, or the agent cancelled, is a row of 0 tokens
+ * whose tries say what happened, and `error` what the agent was told.
  * Times are milliseconds from the gateway taking the request.
  */
 export const GATEWAY_LEDGER_ROW_SCHEMA = z.object({
@@ -50,6 +53,8 @@ export const GATEWAY_LEDGER_ROW_SCHEMA = z.object({
   replyId: z.string().nullable(),
   stop: z.string().nullable(),
   status: z.enum(["ok", "failed", "cancelled"]),
+  // 失败与取消时交给 Agent 的说法（key 已打码、截短）；成功为 null。工单 01 写的行没有它。
+  error: z.string().nullable().optional(),
   attempts: z.array(GATEWAY_LEDGER_ATTEMPT_SCHEMA),
 });
 export type GatewayLedgerRow = z.infer<typeof GATEWAY_LEDGER_ROW_SCHEMA>;

@@ -96,7 +96,7 @@ export class UsageCallMerge {
   /**
    * A request the gateway carried: counted under no project until `settle`
    * finds the log's reply. A second row for the same reply is kept on disk and
-   * counted nowhere.
+   * counted nowhere, and so is a row of 0 tokens (a failed or cancelled request).
    */
   addLedgerRow(row: GatewayLedgerRow): UsageMergeOutput {
     const output = emptyOutput();
@@ -107,7 +107,9 @@ export class UsageCallMerge {
       call.ledger = row;
       this.awaiting.add(callKey(row.agent, row.replyId));
     }
-    pushAt(output, unknownProjectKey(row), null, row.at, totalsOf(row));
+    const totals = totalsOf(row);
+    if (Object.values(totals).every((value) => value === 0)) return output;
+    pushAt(output, unknownProjectKey(row), null, row.at, totals);
     return output;
   }
 

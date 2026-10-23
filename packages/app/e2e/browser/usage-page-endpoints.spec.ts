@@ -3,8 +3,10 @@ import { expect, test, type Page } from "../support/fixtures";
 import {
   connectApiEndpointClient,
   GOOD_REPLY_TOKENS,
+  GOOD_RESPONSES_TOKENS,
   resetApiEndpoints,
   seedApiEndpoint,
+  sendCodexThroughGateway,
   sendThroughGateway,
   startFakeRelay,
   type FakeRelay,
@@ -14,7 +16,7 @@ import { createUsageFixtureRoots } from "../support/helpers/usage-fixtures";
 import { openUsagePage, waitForUsageTotal } from "../support/helpers/usage-page";
 
 /*
- * 用量页按接口分（任务 10-16-gateway-ledger-usage 工单 01）：真实 daemon 读用量夹具的会话记录，
+ * 用量页按接口分（任务 10-16-gateway-ledger-usage 工单 01、02）：真实 daemon 读用量夹具的会话记录，
  * 再像 Claude Code 那样经真实中转站问本机的假中转服务一次，中转站把这次记进账。
  */
 const fixtures = createUsageFixtureRoots("paseo-usage-endpoints-");
@@ -116,6 +118,35 @@ test.describe("Usage page by endpoint", () => {
       await page.getByTestId("usage-breakdown-sources").click();
       await expect(page.getByTestId("usage-source-card-claude")).toBeVisible();
       await expect(page.getByTestId("usage-endpoint-cards")).toHaveCount(0);
+    });
+  });
+
+  test("Codex's gateway usage is on its endpoint's card, and requests no log names are the unknown project", async ({
+    page,
+  }) => {
+    const endpointId = await seedApiEndpoint(client, {
+      name: "Relay Beta",
+      baseUrls: [{ format: "openai_responses", url: `${relay.origin}/good/v1` }],
+      models: ["gpt-5.5"],
+    });
+    await client.apiEndpointSetAgentSettings({ provider: "codex", enabled: true });
+    expect(await sendCodexThroughGateway("gpt-5.5")).toBe(200);
+
+    await openUsagePage(page);
+
+    await test.step("the endpoint's card counts the Codex request", async () => {
+      await page.getByTestId("usage-breakdown-endpoints").click();
+      const endpoint = page.getByTestId(`usage-endpoint-card-${endpointId}`);
+      await expect(endpoint).toContainText("Relay Beta", { timeout: 30_000 });
+      await expect(endpoint).toContainText(`${GOOD_RESPONSES_TOKENS} · $`);
+    });
+
+    await test.step("the Projects tab has the unknown project row, with no directory", async () => {
+      await page.getByTestId("usage-details-tab-projects").click();
+      const unknown = page.getByTestId(/^usage-details-project-.+:$/);
+      await expect(unknown).toContainText("Unknown project");
+      await expect(unknown).toContainText("Gateway requests no session log names");
+      await expect(unknown).not.toContainText("Directory");
     });
   });
 

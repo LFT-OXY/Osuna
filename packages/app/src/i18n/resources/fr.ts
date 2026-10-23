@@ -4914,6 +4914,8 @@ export const fr: TranslationResources = {
       empty: "Aucune utilisation sur cette période",
       topProjects: "Top {{count}}",
       projectLimit: "Nombre de projets",
+      unknownProject: "Projet inconnu",
+      unknownProjectHint: "Requêtes de la passerelle absentes des journaux de session",
       projectKind: {
         non_git: "Hors git",
         directory: "Répertoire",

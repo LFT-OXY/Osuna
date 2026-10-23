@@ -4851,6 +4851,8 @@ export const ja: TranslationResources = {
       empty: "この期間の使用量はありません",
       topProjects: "上位 {{count}}",
       projectLimit: "表示するプロジェクト数",
+      unknownProject: "不明なプロジェクト",
+      unknownProjectHint: "セッション記録にないゲートウェイ経由のリクエスト",
       projectKind: {
         non_git: "git 以外",
         directory: "ディレクトリ",
