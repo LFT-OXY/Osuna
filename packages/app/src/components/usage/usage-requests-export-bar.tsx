@@ -12,6 +12,9 @@ import type {
 } from "@/hooks/use-usage-requests-export";
 import type { UsageRequestsExportSkip } from "@/usage-stats/requests-export";
 
+/** How many lines a compact layout keeps below the button for the note. */
+const COMPACT_NOTE_LINES = 2;
+
 type Translate = ReturnType<typeof useTranslation>["t"];
 
 /** What sits beside the button after an export: a failure, or the hosts a saved file left out. */
@@ -28,8 +31,9 @@ interface ExportNoteContent {
  * Export CSV at the Requests tab's foot. Its height is the same in every state:
  * the button keeps its width while it spins; on a wide layout a failure or the
  * hosts a saved file left out sit beside it on one line, cut with an ellipsis;
- * on a compact one a line below the button is always reserved and the note
- * reads there in full. The full detail is in a tooltip. A note stays until
+ * on a compact one two lines below the button are always reserved and the
+ * note with its detail wraps there, cut after the second. The full detail is
+ * in a tooltip. A note stays until
  * dismissed or exported again.
  */
 export function UsageRequestsExportBar({ exporter }: { exporter: UsageRequestsExport }) {
@@ -133,9 +137,9 @@ function ExportButton({ exporting, onPress }: { exporting: boolean; onPress: () 
 }
 
 /**
- * The note's words. Inline it is one line with the detail muted after it; in
- * the compact reserved line the sentence reads in full and the detail is in
- * the tooltip, which opens on press there.
+ * The note's words with the detail muted after them: inline on one line, in
+ * the compact reserved lines on at most two. The tooltip holds the whole
+ * detail and opens on press on a phone.
  */
 function NoteMessage({ note, inline }: { note: ExportNoteContent; inline: boolean }) {
   const { detail, testID } = note;
@@ -146,11 +150,11 @@ function NoteMessage({ note, inline }: { note: ExportNoteContent; inline: boolea
           <Text
             variant="caption"
             color={note.color}
-            numberOfLines={inline ? 1 : undefined}
+            numberOfLines={inline ? 1 : COMPACT_NOTE_LINES}
             testID={testID}
           >
             {note.sentence}
-            {inline && detail !== null ? (
+            {detail !== null ? (
               <Text variant="caption" color="foregroundMuted" testID={`${testID}-detail`}>
                 {` · ${detail}`}
               </Text>
@@ -242,8 +246,8 @@ const styles = StyleSheet.create((theme) => ({
     marginLeft: "auto",
   },
   reservedLine: {
-    // 窄屏常留一行：说明出现、消失都不改变卡片高度。
-    minHeight: theme.typeScale.caption.lineHeight,
+    // 窄屏常留两行：说明与原因出现、消失都不改变卡片高度。
+    height: theme.typeScale.caption.lineHeight * COMPACT_NOTE_LINES,
   },
   note: {
     flex: 1,

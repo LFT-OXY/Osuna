@@ -350,7 +350,7 @@ test.describe("Usage page Requests tab", () => {
     await expect(page.getByTestId("usage-requests-export-retry")).toHaveCount(0);
   });
 
-  test("at phone width the footer keeps its height and the failure reads in the reserved line", async ({
+  test("at phone width the footer keeps its height and the failure and its reason read in the reserved lines", async ({
     page,
   }) => {
     writePagingSession();
@@ -367,8 +367,9 @@ test.describe("Usage page Requests tab", () => {
 
     await page.getByTestId("usage-requests-export").click();
     await expect(page.getByTestId("usage-requests-export-error")).toHaveText(
-      "Couldn't export requests",
+      "Couldn't export requests · usage ledger is unreadable",
     );
+    await expect(page.getByTestId("usage-requests-export-error-detail")).toBeVisible();
     expect((await bar.boundingBox())?.height).toBe(idleHeight);
     await page.getByTestId("usage-requests-export-dismiss").click();
     await expect(page.getByTestId("usage-requests-export-error")).toHaveCount(0);
@@ -404,7 +405,7 @@ test.describe("Usage page Requests tab", () => {
         .poll(() => rangeAfterPickingModel(page, PAGING_MODEL), { timeout: 60_000 })
         .toBe(`1–100 of ${PAGING_CALLS}`);
 
-      // 手机宽度：按钮下常留一行，说明在那一行写全，底栏高度不变。
+      // 手机宽度：按钮下常留两行，说明连同原因写在那里，底栏高度不变。
       await page.setViewportSize({ width: 390, height: 844 });
       await page.getByTestId("usage-details-tab-requests").click();
       await expect
@@ -416,7 +417,9 @@ test.describe("Usage page Requests tab", () => {
       const [, ...rows] = await exportAndRead(page, "usage-requests-export");
       expect(rows).toHaveLength(PAGING_CALLS);
       const partial = page.getByTestId("usage-requests-export-partial");
-      await expect(partial).toHaveText("Not included: Second box (error)");
+      await expect(partial).toHaveText(
+        "Not included: Second box (error) · Second box: usage ledger is unreadable",
+      );
       expect((await bar.boundingBox())?.height).toBe(idleHeight);
       await partial.click();
       await expect(page.getByTestId("usage-requests-export-partial-tooltip")).toContainText(
