@@ -209,6 +209,16 @@ only warns. It holds no key: each entry carries a digest of the settings it was
 read with and is dropped when they no longer match. Contract:
 rpc-and-protocol.md, "the last balance reading".
 
+`usage/exchange-rate.json` (`UsageExchangeRates`, `server/usage/exchange-rate.ts`,
+gateway-ledger-usage ticket 10) caches a value fetched from the network. The RPC
+never waits on that fetch: it answers at once with the cached rate (or the
+documented default 7.2, flagged), and a stale cache kicks one background fetch
+guarded by an in-flight lock, honouring the refetch interval, the failure
+back-off and the auto-update switch. When the new value lands the daemon emits
+`usage.pricing.updated` and clients re-read. `dispose()` awaits the in-flight
+fetch and then stops writing. This is magpie's `fx.Soon`; a request that blocks
+for the 15-second timeout shows the user stale defaults for no reason.
+
 `api-endpoints/cooldowns.json` (`EndpointCooldowns`, gateway-ledger-usage
 ticket 07) is a cache too: losing it costs one more failed request to that
 endpoint, never a wrong state, so no `.bak`. Two rules beyond the list above:

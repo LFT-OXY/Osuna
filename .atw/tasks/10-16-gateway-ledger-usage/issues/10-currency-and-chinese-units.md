@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately
 **Status:** ready-for-agent
-**Impl:** doing
+**Impl:** done
 
 - [ ] 新 RPC `usage.exchange_rate.get.request` / `.response`：回汇率、取得时间、是否缺省值；daemon 缓存存盘，一天内不重取；向 `open.er-api.com` GET、不带认证、Osuna 自己的 User-Agent、15 秒超时；失败回上次的值；从未取到回 7.2；价格表自动更新关掉时不发请求。
 - [ ] 只在客户端选了人民币时调用；daemon 不支持时货币选项不出现。
