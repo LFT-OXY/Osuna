@@ -13,6 +13,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { isNative } from "@/constants/platform";
 import { useCompactTimeAgo } from "@/hooks/use-time-ago";
+import { UsageResetsRow } from "@/plan-usage/resets-row";
 import { UsageBalanceBar } from "./balance-bar";
 import { usageCopy } from "./copy";
 import type { UsageDisplay } from "./display";
@@ -147,6 +148,8 @@ export function UsageCard({
           ))}
         </View>
       ) : null}
+
+      <UsageResetsRow serverId={serverId} entry={entry} />
 
       {details.length > 0 ? (
         <View style={styles.details}>

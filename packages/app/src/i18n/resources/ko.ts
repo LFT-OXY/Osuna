@@ -2748,6 +2748,61 @@ export const ko: TranslationResources = {
         apiKeyOptionalLabel: "API 키 (선택 사항)",
         apiKeyLocalPlaceholder: "로컬 서버는 선택 사항",
         keyRejected: "업스트림이 이 키를 거부했습니다 (401 / 403)",
+        balance: {
+          url: "잔액 조회 URL",
+          urlInfo:
+            "공급자가 키에 남은 금액을 알려 주는 주소로, GET 또는 본문 없는 POST로 조회합니다. 채팅 요청처럼 키(Bearer)와 이 엔드포인트의 헤더를 붙이며, 주소나 헤더의 {key}는 키로 바뀝니다. 설정하면 Osuna가 아는 공급자 주소 대신 이 주소로 조회합니다. 엔드포인트 페이지가 열려 있을 때만, 1분에 최대 한 번 조회합니다.",
+          field: "값 추출식",
+          fieldInfo:
+            "응답에서 잔액이 있는 위치입니다(예: data.balance). + - * /와 괄호로 계산할 수 있습니다(예: data.total / 500000). 앞에 “$”나 “¥”를 붙이면 기호가 붙고, 뒤에 “%”를 붙이면 막대와 함께 백분율로 표시합니다. 여러 개는 “;”로 나누고 각각 라벨을 붙일 수 있습니다(예: 5h: a.used / a.cap %; $credits.left). 목록의 각 항목은 a.*.used, 조건에 맞는 항목은 a[status=active].used로 쓰고 sum(), max(), min(), count()에 넣습니다. 비워 두면 new-api, sub2api, credit grants 주소는 자리 표시자의 식으로 읽습니다.",
+          check: "잔액 조회",
+          detect: "URL 자동 감지",
+          detectFound: "{{kind}}(으)로 확인되어 잔액 조회 URL을 채웠습니다",
+          detectMissed: "new-api와 sub2api의 잔액 조회 URL 모두 잔액을 돌려주지 않았습니다",
+          detectAttempt: "{{path}}: {{reason}}",
+          nothingToAsk: "잔액 조회 URL이 없고 이 공급자의 조회 방법도 알 수 없습니다",
+          token: "계정 토큰",
+          tokenInfo:
+            "잔액 조회 URL이 계정 자체의 토큰을 요구할 때 키 대신 사용합니다: new-api 중계의 시스템 액세스 토큰, 또는 sub2api 패널의 로그인 토큰(JWT, Bearer로 전송). AiHubMix에서는 시스템 액세스 토큰만 넣으면 잔액 조회 URL 없이 계정 전체 잔액을 보여 줍니다. 이 호스트에만 저장되며 다른 데는 쓰지 않습니다.",
+          tokenPlaceholder: "선택 사항 · 계정의 시스템 액세스 토큰 또는 로그인 토큰",
+          tokenSavedPlaceholder: "저장됨: {{mask}}",
+          tokenRemove: "삭제",
+          userId: "사용자 ID",
+          userIdInfo:
+            "new-api 중계에서의 사용자 ID(사이트 개인 설정에 표시). 잔액을 조회할 때만 New-Api-User로 보내며 채팅 요청에는 붙이지 않습니다. 이 엔드포인트 헤더의 New-Api-User도 인식하며, 둘 다 있으면 이 칸이 우선합니다.",
+          userIdPlaceholder: "선택 사항 · new-api만",
+          teamOrgId: "팀 조직 ID",
+          teamOrgIdInfo:
+            "GLM Coding Plan 팀의 조직 ID(BigModel 또는 Z.ai 콘솔에 표시). 프로젝트 ID도 넣으면 이 키에 자체 플랜이 없을 때 팀의 창을 읽습니다.",
+          teamOrgIdPlaceholder: "선택 사항 · GLM 팀 플랜만",
+          teamProjectId: "팀 프로젝트 ID",
+          teamProjectIdInfo: "같은 콘솔에 있는 팀의 프로젝트 ID. 두 ID가 모두 있어야 합니다.",
+          teamProjectIdPlaceholder: "선택 사항 · GLM 팀 플랜만",
+          teamBothNeeded: "팀 플랜: 조직 ID와 프로젝트 ID를 모두 입력하세요",
+          volcAccessKeyId: "AccessKey ID",
+          volcSecretAccessKey: "Secret Access Key",
+          tencentSecretId: "SecretId",
+          tencentSecretKey: "SecretKey",
+          accessKeyVendor: {
+            volcengine: "Volcengine Ark",
+            tencent: "Tencent Cloud Token Plan Enterprise",
+          },
+          accessKeyInfo:
+            "{{vendor}}는 플랜의 사용량 창을 계정의 클라우드 액세스 키(클라우드 콘솔의 액세스 관리에서 생성)에만 알려 주며, 플랜 자체의 키로는 조회할 수 없습니다. 두 칸을 모두 채우면 공급자의 오픈 플랫폼에서 창을 읽습니다. 이 호스트에만 저장되며 다른 용도로 쓰이지 않습니다.",
+          secretAccessKeyInfo:
+            "ID와 짝을 이루는 시크릿입니다. 이것으로 만든 서명만 보내고 시크릿 자체는 보내지 않습니다.",
+          accessKeySecretNeeded: "{{secret}}도 입력하세요",
+          accessKeyRemove: "제거",
+          fixNewApiKeyQuery:
+            "…/api/usage/token은 이 토큰이 아니라 API 키를 받습니다. 계정 잔액은 new-api는 /api/user/self, sub2api는 /api/v1/user/profile입니다.",
+          fixSub2apiKeyQuery:
+            "…/v1/usage는 이 토큰이 아니라 API 키를 받습니다. 계정 잔액은 sub2api 패널의 /api/v1/user/profile입니다.",
+          fixNoUrl:
+            "토큰에는 잔액 조회 URL이 필요합니다: new-api 중계는 /api/user/self, sub2api 패널은 /api/v1/user/profile입니다.",
+          fixUserId:
+            "new-api 중계는 사용자 ID도 필요합니다(사이트 개인 설정에 표시): 아래 「사용자 ID」를 입력하세요.",
+          useUrl: "{{url}} 사용",
+        },
         extras: {
           advanced: "고급",
           advancedShow: "고급 펼치기",
@@ -2952,6 +3007,141 @@ export const ko: TranslationResources = {
           removed: "{{name}}의 모델이 모든 에이전트의 선택 가능한 모델에서 빠집니다.",
           defaultChanged: "{{agent}}의 기본 모델이 {{from}}에서 {{to}}(으)로 바뀝니다.",
           confirm: "삭제",
+        },
+      },
+      balance: {
+        title: "잔액 및 요금제 사용량",
+        info: "이 엔드포인트의 공급업체가 알려 주는 키의 남은 금액입니다. 표시만 하며 장애 조치에는 쓰이지 않습니다.",
+        balance: "잔액",
+        refresh: "새로고침",
+        loading: "잔액을 읽는 중…",
+        readJustNow: "방금 읽음",
+        readAgo: "{{time}}에 읽음",
+        failedJustNow: "방금 읽지 못함",
+        failedAgo: "{{time}}에 읽지 못함",
+        staleTemporary: "지금은 가져올 수 없음 · {{time}}에 읽은 값",
+        staleNotAsked: "새로 고치지 않음 · {{time}}에 읽은 값",
+        staleMomentAgo: "조금 전",
+        unsupported: "이 공급업체의 잔액 조회 방법을 알 수 없습니다",
+        fillUrl: "잔액 조회 URL 입력",
+        noKey: "이 엔드포인트에는 키가 없어 잔액을 조회할 수 없습니다",
+        rowUnavailable: "잔액을 가져올 수 없음",
+        rowNeedsAccessKey: "AccessKey 필요",
+        needsAccessKeyVolcengine:
+          "Volcengine Ark는 이 플랜의 창을 계정의 AccessKey ID와 Secret Access Key에만 알려 줍니다. 이 엔드포인트 설정의 고급에서 입력하세요.",
+        needsAccessKeyTencent:
+          "Tencent Cloud는 Token Plan Enterprise의 사용량을 계정의 SecretId와 SecretKey에만 알려 줍니다. 이 엔드포인트 설정의 고급에서 입력하세요.",
+        fillAccessKey: "AccessKey 입력",
+        planTier: "등급: {{tier}}",
+        planStopped: "플랜 중지됨: {{status}}",
+        teamPlanStopped: "{{team}} 팀의 플랜 중지됨: {{status}}",
+        unreadTeams: "사용량을 읽지 못한 팀: {{teams}}",
+        rowAmount: "잔액 {{amount}}",
+        rowWindowUsed: "{{window}} {{percent}} 사용",
+        rowWindowLeft: "{{window}} {{percent}} 남음",
+        readFailed: "잔액을 읽지 못했습니다",
+        withStatus: "{{text}} (HTTP {{status}})",
+        failure: {
+          wrongUrl: "주소가 잘못됨: 공급업체가 잔액을 반환하지 않았습니다",
+          tokenRejected: "토큰 거부됨: 공급업체가 키를 거부했습니다",
+          notOffered: "이 공급업체는 잔액 조회를 제공하지 않습니다",
+          noValue: "값 없음: 응답에 잔액이 없습니다",
+          temporary: "일시적으로 가져올 수 없음: 잠시 후 다시 시도하세요",
+        },
+        noItems: "지금 이 업체에는 따로 표시할 잔액이 없습니다",
+        openConsole: "콘솔 열기 ↗",
+        openConsoleLabel: "브라우저에서 {{url}} 열기",
+        part: {
+          granted: "증정",
+          toppedUp: "충전",
+        },
+        hint: {
+          accessKeyRefused:
+            "AccessKey(AK/SK)와 권한을 확인하세요: 오픈 플랫폼이 액세스 키를 거부했거나, 이 플랜의 사용량을 읽을 권한이 없습니다.",
+          glmKeyRefused:
+            "이 키는 만료되었거나 삭제되었거나 잘못 붙여넣었습니다. 콘솔에서 유효한 키를 복사해 이 엔드포인트 설정에 붙여넣으세요.",
+          opencodeGoNoSubscription:
+            "이 키에는 OpenCode Go가 없습니다. Go는 구독한 멤버의, 구독한 워크스페이스에 속합니다. 그 멤버가 그 워크스페이스에서 만든 키를 사용하세요(opencode.ai 워크스페이스의 API Keys).",
+          opencodeKeyRefused: "OpenCode가 이 키를 받지 않습니다. 삭제되었거나 잘못 붙여넣었습니다.",
+          opencodeNoBalance:
+            "OpenCode는 API 키에 잔액을 알려 주지 않습니다. Zen의 종량제 크레딧은 OpenCode 콘솔의 Overview → Credits에서만 볼 수 있습니다(워크스페이스 소유자와 관리자만).",
+          siliconflowRetired:
+            "SiliconFlow가 잔액 조회 API를 종료했고 대체 API는 아직 없습니다. 잔액과 쿠폰은 콘솔에서 확인하세요 (중국 사이트: 余额充值 → 代金券).",
+          aihubmixNoLimit:
+            "이 키에는 한도가 없고, AiHubMix는 키에 남은 금액만 알려 줍니다. 계정 잔액을 보려면 이 엔드포인트 설정에 계정 액세스 토큰(AiHubMix → 설정 → 시스템 액세스 토큰 생성)을 입력하거나, AiHubMix 콘솔에서 키에 한도를 설정하세요.",
+          notAsked:
+            "아직 읽지 않았습니다: 자동 새로고침이 꺼져 있습니다. 새로고침을 눌러 읽으세요.",
+          tokenOnKeyUrl:
+            "이 잔액 조회 URL은 계정 토큰이 아니라 API 키를 받습니다. 계정 잔액을 보려면 {{url}}로 바꾸고, 키 자체의 잔액을 보려면 토큰을 삭제하세요.",
+          newApiUserMissing:
+            "중계가 사용자 ID를 요구합니다: 이 엔드포인트 설정에서 「사용자 ID」를 입력하세요(사이트 개인 설정에 표시).",
+        },
+        window: {
+          hoursOne: "{{count}}시간",
+          hoursMany: "{{count}}시간",
+          daysOne: "{{count}}일",
+          daysMany: "{{count}}일",
+          minutesOne: "{{count}}분",
+          minutesMany: "{{count}}분",
+          month: "월",
+          allowance: "플랜 사용량",
+          mcpMonth: "MCP · 월",
+          session: "세션",
+          credits: "크레딧",
+          bucket: "{{bucket}} · {{window}}",
+          bucketVideo: "동영상",
+          bucketImage: "이미지",
+          unitCredits: "크레딧",
+          unitTokens: "토큰",
+          unitVideos: "개 동영상",
+        },
+        pace: "페이스 {{pace}}",
+        asideTitle: "다 써도 모델은 멈추지 않음",
+        teamPlan: "팀 플랜",
+        resets: {
+          left: "{{resets}} 남음",
+          countOne: "리셋 {{count}}회",
+          countMany: "리셋 {{count}}회",
+          fiveHourOne: "5시간 리셋 {{count}}회",
+          fiveHourMany: "5시간 리셋 {{count}}회",
+          weeklyOne: "주간 리셋 {{count}}회",
+          weeklyMany: "주간 리셋 {{count}}회",
+          soonest: "가장 빠른 만료 {{when}}",
+          info: "리셋은 벤더 페이지에서 사용합니다. Osuna는 보여 주기만 합니다.",
+          eachExpires: "리셋 {{n}}: {{when}} 만료",
+          eachNever: "리셋 {{n}}: 만료 없음",
+          eachFiveHourExpires: "5시간 리셋: {{when}} 만료",
+          eachFiveHourNever: "5시간 리셋: 만료 없음",
+          eachWeeklyExpires: "주간 리셋: {{when}} 만료",
+          eachWeeklyNever: "주간 리셋: 만료 없음",
+          showEach: "리셋별 만료 시간 보기",
+          hideEach: "리셋별 만료 시간 숨기기",
+          use: {
+            action: "리셋 1회 사용",
+            confirmTitle: "{{source}} 리셋을 사용할까요?",
+            confirmOne:
+              "{{who}}에 리셋이 1회 있습니다. 사용하면 모든 창이 즉시 처음부터 다시 시작되어 아무것도 쓰지 않은 상태가 됩니다. 되돌릴 수 없습니다.",
+            confirmMany:
+              "{{who}}에 리셋이 {{count}}회 있습니다. 1회 사용하면 모든 창이 즉시 처음부터 다시 시작되어 아무것도 쓰지 않은 상태가 됩니다. 되돌릴 수 없습니다.",
+            confirmSoonest: "가장 먼저 만료되는 리셋을 사용합니다({{when}} 만료).",
+            confirmIdle: "아직 사용한 창이 없어 다시 시작할 것이 없습니다.",
+            hintSoonest:
+              "가장 먼저 만료되는 리셋({{when}})을 사용하며, 더 오래 남는 리셋을 먼저 쓰지 않습니다. 이 계정의 창이 즉시 다시 시작되어 아무것도 쓰지 않은 상태가 됩니다. 사용 전에 확인합니다.",
+            hintNoExpiry:
+              "리셋 하나를 사용합니다(만료 없음). 이 계정의 창이 즉시 다시 시작되어 아무것도 쓰지 않은 상태가 됩니다. 사용 전에 확인합니다.",
+            outcomeResetOne: "창 1개가 다시 시작되었습니다",
+            outcomeResetMany: "창 {{count}}개가 다시 시작되었습니다",
+            outcomeNothingToReset:
+              "사용한 창이 없어 다시 시작할 것이 없습니다. 리셋은 그대로 남아 있습니다",
+            outcomeNoCredit: "이 계정에 남은 리셋이 없습니다",
+            outcomeAlreadyRedeemed: "이미 사용된 리셋입니다",
+            failed: "리셋을 사용하지 못했습니다: {{error}}",
+          },
+        },
+        autoRefresh: {
+          label: "잔액과 요금제 사용량 자동 새로고침",
+          hint: "엔드포인트 목록이나 엔드포인트 페이지가 열려 있는 동안 1분마다 읽습니다. 끄면: 이 페이지를 열 때나 엔드포인트 페이지에서 새로고침을 누를 때만 읽습니다.",
+          saveFailed: "자동 새로고침을 변경하지 못했습니다: {{message}}",
         },
       },
       models: {

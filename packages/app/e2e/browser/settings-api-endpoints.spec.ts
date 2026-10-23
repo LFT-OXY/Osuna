@@ -16,6 +16,7 @@ import {
   connectApiEndpointClient,
   hideManagementCapability,
   openApiEndpointsPage,
+  RELAY_ACCOUNT_TOKEN,
   RELAY_KEY,
   setCliHeaderSamples,
   resetApiEndpoints,
@@ -5103,6 +5104,29 @@ test.describe("Settings changed outside Osuna on the provider pages", () => {
   });
 });
 
+/** `isHolding` 为 true 时，读余额的回复先扣着不给页面，release() 才发回原来的连接（看刷新进行中的样子）。 */
+async function holdBalanceReads(page: Page): Promise<{ isHolding: boolean; release: () => void }> {
+  const held: { send: (message: string) => void; message: string }[] = [];
+  const reads = {
+    isHolding: false,
+    release() {
+      reads.isHolding = false;
+      for (const reply of held.splice(0)) reply.send(reply.message);
+    },
+  };
+  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
+    const server = ws.connectToServer();
+    const send = (message: string) => ws.send(message);
+    server.onMessage((message) => {
+      const isRead = typeof message === "string" && message.includes("read_balance.response");
+      if (reads.isHolding && isRead) held.push({ send, message });
+      else ws.send(message);
+    });
+    ws.onMessage((message) => server.send(message));
+  });
+  return reads;
+}
+
 /** `failing` 为 true 时，keep_current_settings 请求不送到 daemon，直接回一个失败响应。 */
 async function failKeepCurrentSettings(page: Page): Promise<{ failing: boolean }> {
   const host = { failing: true };
@@ -6478,3 +6502,801 @@ async function boxOf(locator: Locator): Promise<{ y: number; height: number }> {
   if (!box) throw new Error("not laid out");
   return box;
 }
+
+test.describe("Balance", () => {
+  // 测试 daemon 的封条只让 DeepSeek 的余额接口回这份文件里写的回复（JSON），绝不真的去问；没写的连不上。
+  const fakeSites = path.join(cliHome, "fake-sites.json");
+  const DEEPSEEK_BALANCE = "https://api.deepseek.com/user/balance";
+
+  async function deepseekAnswers(status: number, body: unknown): Promise<void> {
+    await writeFile(
+      fakeSites,
+      JSON.stringify({ [DEEPSEEK_BALANCE]: { status, body: JSON.stringify(body) } }),
+    );
+  }
+
+  function balanceOf(total: string) {
+    return { is_available: true, balance_infos: [{ currency: "CNY", total_balance: total }] };
+  }
+
+  test.afterEach(async () => {
+    await rm(fakeSites, { force: true });
+  });
+
+  function seedDeepSeek(name: string): Promise<string> {
+    return seedApiEndpoint(client, {
+      name,
+      baseUrls: [{ format: "openai_chat", url: "https://api.deepseek.com/v1" }],
+      models: ["deepseek-chat"],
+    });
+  }
+
+  function seedRelay(): Promise<string> {
+    return seedApiEndpoint(client, {
+      name: "Relay",
+      baseUrls: [{ format: "openai_chat", url: `${relay.origin}/good/v1` }],
+      models: ["gpt-5"],
+    });
+  }
+
+  function balanceSection(page: Page): Locator {
+    return page.getByTestId("api-endpoint-balance-section").filter({ visible: true });
+  }
+
+  test("a row shows the balance it read, or that it is unavailable; a vendor with no known balance query adds nothing", async ({
+    page,
+  }) => {
+    await deepseekAnswers(200, balanceOf("110.00"));
+    const deepseek = await seedDeepSeek("DeepSeek");
+    const relayOnly = await seedRelay();
+    await openApiEndpointsPage(page);
+
+    await expect(row(page, deepseek).getByTestId("api-endpoint-row-balance")).toHaveText(
+      "Balance ¥110.00",
+    );
+    await expect(row(page, relayOnly).getByTestId("api-endpoint-row-balance")).toHaveCount(0);
+
+    await deepseekAnswers(401, { error: { message: "Authentication Fails" } });
+    // daemon 留着读数一分钟；保存这家后作废，重开页面才再问。
+    await client.apiEndpointSave({
+      provider: "claude",
+      endpointId: deepseek,
+      name: "DeepSeek",
+      baseUrls: [{ format: "openai_chat", url: "https://api.deepseek.com/v1" }],
+      models: [{ id: "deepseek-chat" }],
+    });
+    await page.reload();
+    await expect(row(page, deepseek).getByTestId("api-endpoint-row-balance")).toHaveText(
+      "Balance unavailable",
+    );
+  });
+
+  /** 页面发出的一次读余额：读哪几家、算不算用户要求、是不是刷新。 */
+  interface BalanceRead {
+    endpointIds: string[];
+    asked: boolean;
+    force: boolean;
+  }
+
+  function recordBalanceReads(page: Page): BalanceRead[] {
+    const reads: BalanceRead[] = [];
+    page.on("websocket", (socket) =>
+      socket.on("framesent", ({ payload }) => {
+        if (typeof payload !== "string" || !payload.includes("read_balance.request")) return;
+        const request = (
+          JSON.parse(payload) as {
+            message: { endpointIds: string[]; asked?: boolean; force?: boolean };
+          }
+        ).message;
+        reads.push({
+          endpointIds: request.endpointIds,
+          asked: request.asked === true,
+          force: request.force === true,
+        });
+      }),
+    );
+    return reads;
+  }
+
+  test("auto refresh on: the list reads its enabled endpoints when opened and every minute; off: only when a page is opened or Refresh is pressed", async ({
+    page,
+  }) => {
+    await deepseekAnswers(200, balanceOf("110.00"));
+    const on = await seedDeepSeek("DeepSeek");
+    const off = await seedDeepSeek("DeepSeek off");
+    await client.apiEndpointSetEndpointState({ endpointId: off, enabled: false });
+    await page.clock.install();
+    const reads = recordBalanceReads(page);
+    await openApiEndpointsPage(page);
+
+    const autoRefresh = page.getByTestId("api-endpoints-balance-auto-refresh-switch");
+    await expect(autoRefresh).toBeChecked();
+    await expect(row(page, on).getByTestId("api-endpoint-row-balance")).toHaveText(
+      "Balance ¥110.00",
+    );
+    // 关着的接口不随列表读。
+    await expect(row(page, off).getByTestId("api-endpoint-row-balance")).toHaveCount(0);
+    expect(reads).toEqual([{ endpointIds: [on], asked: true, force: false }]);
+    await page.clock.fastForward("01:00");
+    await expect.poll(() => reads.length).toBe(2);
+    expect(reads[1]).toEqual({ endpointIds: [on], asked: false, force: false });
+
+    await autoRefresh.click();
+    await expect(autoRefresh).not.toBeChecked();
+    // 等存好、列表读回来：开关不再是灰的。
+    await expect(autoRefresh).toBeEnabled();
+    expect((await client.apiEndpointList("claude")).balanceAutoRefresh).toBe(false);
+    await page.clock.fastForward("03:00");
+    // 关着的接口的详情页：打开就读这家，点刷新强制重读；开着的时候不再每分钟读。
+    await openEndpointRow(page, off);
+    await expect.poll(() => reads.length).toBe(3);
+    expect(reads[2]).toEqual({ endpointIds: [off], asked: true, force: false });
+    await page.clock.fastForward("03:00");
+    expect(reads).toHaveLength(3);
+    await balanceSection(page).getByTestId("api-endpoint-balance-refresh").click();
+    await expect.poll(() => reads.length).toBe(4);
+    expect(reads[3]).toEqual({ endpointIds: [off], asked: true, force: true });
+
+    // 回到列表再打开开关：列表恢复每分钟读一次。
+    await page.goBack();
+    await expect(page.getByTestId("api-endpoints-list")).toBeVisible();
+    await autoRefresh.click();
+    await expect(autoRefresh).toBeChecked();
+    await expect(autoRefresh).toBeEnabled();
+    const before = reads.length;
+    await page.clock.fastForward("01:00");
+    await expect.poll(() => reads.length).toBeGreaterThan(before);
+    expect(reads.at(-1)).toEqual({ endpointIds: [on], asked: false, force: false });
+  });
+
+  test("the endpoint page shows each balance with when it was read, and Refresh reads again", async ({
+    page,
+  }) => {
+    await deepseekAnswers(200, balanceOf("110.00"));
+    const id = await seedDeepSeek("DeepSeek");
+    await openEndpointDetail(page, id);
+
+    const section = balanceSection(page);
+    await expect(section).toContainText("Balance and plan usage");
+    const item = section.getByTestId("api-endpoint-balance-item");
+    await expect(item).toHaveText(/Balance.*¥110\.00/);
+    await expect(section.getByTestId("api-endpoint-balance-read-at")).toHaveText("Read just now");
+
+    await deepseekAnswers(200, balanceOf("98.50"));
+    await section.getByTestId("api-endpoint-balance-refresh").click();
+    await expect(item).toHaveText(/Balance.*¥98\.50/);
+  });
+
+  test("Refresh shows it is reading and can't be pressed again; a failed read says why until a retry reads", async ({
+    page,
+  }) => {
+    await deepseekAnswers(200, balanceOf("110.00"));
+    const id = await seedDeepSeek("DeepSeek");
+    const reads = await holdBalanceReads(page);
+    await openEndpointDetail(page, id);
+    const section = balanceSection(page);
+    const refresh = section.getByTestId("api-endpoint-balance-refresh");
+    await expect(section.getByTestId("api-endpoint-balance-item")).toHaveText(/Balance.*¥110\.00/);
+
+    await deepseekAnswers(401, { error: { message: "Authentication Fails" } });
+    reads.isHolding = true;
+    await refresh.click();
+    await expect(refresh).toBeDisabled();
+    await expect(refresh.getByRole("progressbar")).toBeVisible();
+    reads.release();
+    const reason = section.getByTestId("api-endpoint-balance-failure-reason");
+    await expect(reason).toHaveText("Token rejected: the vendor refused the key (HTTP 401)");
+    await expect(refresh).toBeEnabled();
+    await expect(refresh.getByRole("progressbar")).toHaveCount(0);
+    // 失败原因是这次读数本身，下一次读（这里是重试）才换掉它。
+    await deepseekAnswers(200, balanceOf("98.50"));
+    await refresh.click();
+    await expect(section.getByTestId("api-endpoint-balance-item")).toHaveText(/Balance.*¥98\.50/);
+    await expect(section.getByTestId("api-endpoint-balance-failure")).toHaveCount(0);
+  });
+
+  test("a temporary failure keeps showing the last reading, marked as last time's, on the page and the row", async ({
+    page,
+  }) => {
+    await deepseekAnswers(200, balanceOf("110.00"));
+    const id = await seedDeepSeek("DeepSeek");
+    await openEndpointDetail(page, id);
+    const section = balanceSection(page);
+    await expect(section.getByTestId("api-endpoint-balance-read-at")).toHaveText("Read just now");
+
+    await deepseekAnswers(503, { error: { message: "busy" } });
+    await section.getByTestId("api-endpoint-balance-refresh").click();
+    await expect(section.getByTestId("api-endpoint-balance-stale")).toHaveText(
+      "Couldn't read just now · last read a moment ago",
+    );
+    await expect(section.getByTestId("api-endpoint-balance-item")).toHaveText(/Balance.*¥110\.00/);
+    await expect(section.getByTestId("api-endpoint-balance-failure")).toHaveCount(0);
+
+    await openApiEndpointsPage(page);
+    await expect(row(page, id).getByTestId("api-endpoint-row-balance")).toHaveText(
+      "Balance ¥110.00",
+    );
+  });
+
+  test("a failed read says why on the endpoint page, with the vendor's own words and the key masked", async ({
+    page,
+  }) => {
+    await deepseekAnswers(401, {
+      error: { message: `Authentication Fails, Your api key: ${RELAY_KEY} is invalid` },
+    });
+    const id = await seedDeepSeek("DeepSeek");
+    await openEndpointDetail(page, id);
+
+    const failure = balanceSection(page).getByTestId("api-endpoint-balance-failure");
+    await expect(failure.getByTestId("api-endpoint-balance-failure-reason")).toHaveText(
+      "Token rejected: the vendor refused the key (HTTP 401)",
+    );
+    await expect(failure.getByTestId("api-endpoint-balance-failure-detail")).toHaveText(
+      "Authentication Fails, Your api key: *** is invalid",
+    );
+    // 标题下不写「刚刚读取」，免得失败看着像读成了。
+    await expect(balanceSection(page).getByTestId("api-endpoint-balance-read-at")).toHaveText(
+      "Read failed just now",
+    );
+  });
+
+  test("a relay it cannot read says so, a DeepSeek endpoint with no key says it has none, and DeepSeek that cannot be reached is temporarily unavailable", async ({
+    page,
+  }) => {
+    const relayOnly = await seedRelay();
+    const keyless = await client.apiEndpointSave({
+      provider: "claude",
+      name: "DeepSeek no key",
+      baseUrls: [{ format: "openai_chat", url: "https://api.deepseek.com/v1" }],
+      models: [{ id: "deepseek-chat" }],
+    });
+    const keylessId = keyless.endpoint?.id ?? "";
+    // 没写假回复：封条让它连不上。
+    const unreachable = await seedDeepSeek("DeepSeek");
+
+    await openEndpointDetail(page, relayOnly);
+    await expect(balanceSection(page).getByTestId("api-endpoint-balance-unsupported")).toHaveText(
+      "No known way to read this vendor's balance",
+    );
+    await openEndpointDetail(page, keylessId);
+    await expect(balanceSection(page).getByTestId("api-endpoint-balance-unsupported")).toHaveText(
+      "This endpoint has no key, so its balance can't be read",
+    );
+    await openEndpointDetail(page, unreachable);
+    await expect(
+      balanceSection(page).getByTestId("api-endpoint-balance-failure-reason"),
+    ).toHaveText("Temporarily unavailable: try again later");
+  });
+  test("Check balance asks the form's unsaved address and field and shows the balance in place; a refused key says why", async ({
+    page,
+  }) => {
+    const id = await seedRelay();
+    await openEndpointDetail(page, id);
+    await page.getByTestId("api-endpoint-edit-connection").filter({ visible: true }).click();
+    await page.getByTestId("api-endpoint-connection-advanced-toggle").click();
+    await page
+      .getByTestId("api-endpoint-connection-balance-url-input")
+      .fill(`${relay.origin}/balance/usage`);
+    await expect(page.getByTestId("api-endpoint-connection-balance-field-input")).toHaveAttribute(
+      "placeholder",
+      "data.balance",
+    );
+    await page.getByTestId("api-endpoint-connection-balance-field-input").fill("$data.left");
+    const check = page.getByTestId("api-endpoint-connection-check-balance");
+    const result = page.getByTestId("api-endpoint-connection-balance-result");
+
+    await check.click();
+    await expect(result).toHaveText("Balance $7.50");
+
+    await page.getByTestId("api-endpoint-connection-api-key").fill("sk-wrong");
+    await check.click();
+    await expect(result).toContainText("Token rejected: the vendor refused the key (HTTP 401)");
+    await expect(result).toContainText("Invalid API key");
+    // 地址一换，旧地址的结果就不留着。
+    await page
+      .getByTestId("api-endpoint-connection-balance-url-input")
+      .fill(`${relay.origin}/balance/other`);
+    await expect(result).toHaveCount(0);
+
+    // 只看不存：取消后这家没有余额设置。
+    await page.getByRole("button", { name: "Cancel" }).click();
+    const listed = await client.apiEndpointList("claude");
+    expect(listed.endpoints.find((endpoint) => endpoint.id === id)?.balance).toBeUndefined();
+  });
+
+  test("Detect URL fills in the balance URL it found and shows the balance; neither answering says why for each", async ({
+    page,
+  }) => {
+    const id = await seedRelay();
+    await openEndpointDetail(page, id);
+    await page.getByTestId("api-endpoint-edit-connection").filter({ visible: true }).click();
+    await page.getByTestId("api-endpoint-connection-advanced-toggle").click();
+    const detect = page.getByTestId("api-endpoint-connection-detect-balance-url");
+    const result = page.getByTestId("api-endpoint-connection-detect-balance-result");
+
+    // 假中转站没有 new-api 的 /api/usage/token，sub2api 的 /v1/usage 只给限额窗口：余额是剩得最少的 5 小时窗口。
+    await detect.click();
+    await expect(result).toContainText("Found a sub2api site; the Balance URL is filled in");
+    await expect(result).toContainText("Balance $5.00");
+    await expect(page.getByTestId("api-endpoint-connection-balance-url-input")).toHaveValue(
+      `${relay.origin}/v1/usage`,
+    );
+    await expect(page.getByTestId("api-endpoint-connection-balance-field-input")).toHaveAttribute(
+      "placeholder",
+      "$remaining",
+    );
+
+    await page.getByTestId("api-endpoint-connection-api-key").fill("sk-wrong");
+    await detect.click();
+    await expect(result).toContainText(
+      "Neither new-api's nor sub2api's balance query answered with a balance",
+    );
+    const attempts = result.getByTestId("api-endpoint-connection-detect-balance-attempt");
+    await expect(attempts).toHaveCount(2);
+    await expect(attempts.nth(0)).toContainText("/api/usage/token: Token rejected");
+    await expect(attempts.nth(1)).toContainText("/v1/usage: Token rejected");
+    await expect(attempts.nth(1)).toContainText("Invalid API key");
+
+    // 只填不存：取消后这家没有余额设置。
+    await page.getByRole("button", { name: "Cancel" }).click();
+    const listed = await client.apiEndpointList("claude");
+    expect(listed.endpoints.find((endpoint) => endpoint.id === id)?.balance).toBeUndefined();
+  });
+
+  test("an endpoint with no known balance query offers to fill in its balance URL, opening the editor at it", async ({
+    page,
+  }) => {
+    const id = await seedRelay();
+    await openEndpointDetail(page, id);
+    await balanceSection(page).getByTestId("api-endpoint-balance-fill-url").click();
+    const urlInput = page.getByTestId("api-endpoint-connection-balance-url-input");
+    await expect(urlInput).toBeFocused();
+    await urlInput.fill(`${relay.origin}/balance/usage`);
+    await page.getByTestId("api-endpoint-connection-balance-field-input").fill("$data.left");
+    await page.getByTestId("api-endpoint-connection-save").click();
+    await expect(page.getByTestId("api-endpoint-connection-form")).toHaveCount(0);
+
+    await balanceSection(page).getByTestId("api-endpoint-balance-refresh").click();
+    await expect(balanceSection(page).getByTestId("api-endpoint-balance-item")).toHaveText(
+      /Balance.*\$7\.50/,
+    );
+  });
+
+  test("a token beside the key's own query offers the account query; Use … fills it, the missing user ID is said, and the account's balance shows once saved", async ({
+    page,
+  }) => {
+    const id = await seedRelay();
+    await openEndpointDetail(page, id);
+    await page.getByTestId("api-endpoint-edit-connection").filter({ visible: true }).click();
+    await page.getByTestId("api-endpoint-connection-advanced-toggle").click();
+    await page
+      .getByTestId("api-endpoint-connection-balance-url-input")
+      .fill(`${relay.origin}/api/usage/token`);
+    await page.getByTestId("api-endpoint-connection-balance-token-input").fill(RELAY_ACCOUNT_TOKEN);
+    const fix = page.getByTestId("api-endpoint-connection-balance-fix");
+    await expect(fix).toContainText("…/api/usage/token takes the API key, not this token.");
+    const useButtons = page.getByTestId("api-endpoint-connection-balance-use-url");
+    await expect(useButtons).toHaveText([
+      `Use ${relay.origin}/api/user/self`,
+      `Use ${relay.origin}/api/v1/user/profile`,
+    ]);
+
+    await useButtons.first().click();
+    await expect(page.getByTestId("api-endpoint-connection-balance-url-input")).toHaveValue(
+      `${relay.origin}/api/user/self`,
+    );
+    await expect(page.getByTestId("api-endpoint-connection-balance-field-input")).toHaveAttribute(
+      "placeholder",
+      "$data.quota / 500000",
+    );
+    await expect(fix).toHaveText(
+      "A new-api relay also wants your user ID (shown in the site's personal settings): fill in User ID below.",
+    );
+
+    // 没填用户 ID 就查：中转站拒绝，并说要补用户 ID。
+    const check = page.getByTestId("api-endpoint-connection-check-balance");
+    const result = page.getByTestId("api-endpoint-connection-balance-result");
+    await check.click();
+    await expect(result).toContainText("(HTTP 200)");
+    await expect(result).toContainText("The relay wants your user ID");
+
+    await page.getByTestId("api-endpoint-connection-balance-user-id-input").fill("42");
+    await expect(fix).toHaveCount(0);
+    await check.click();
+    await expect(result).toHaveText("Balance $12.00");
+
+    await page.getByTestId("api-endpoint-connection-save").click();
+    await expect(page.getByTestId("api-endpoint-connection-form")).toHaveCount(0);
+    const listed = (await client.apiEndpointList("claude")).endpoints.find(
+      (endpoint) => endpoint.id === id,
+    );
+    expect(listed?.balance).toEqual({ url: `${relay.origin}/api/user/self`, userId: "42" });
+    expect(listed?.balanceTokenMask).toBe("rela…0042");
+    await balanceSection(page).getByTestId("api-endpoint-balance-refresh").click();
+    await expect(balanceSection(page).getByTestId("api-endpoint-balance-item")).toHaveText(
+      /Balance.*\$12\.00/,
+    );
+
+    // 再打开编辑：令牌打码，「显示」读回原文。
+    await page.getByTestId("api-endpoint-edit-connection").filter({ visible: true }).click();
+    const token = page.getByTestId("api-endpoint-connection-balance-token-input");
+    await expect(token).toHaveAttribute("placeholder", "Saved: rela…0042");
+    await page.getByTestId("api-endpoint-connection-balance-token-show").click();
+    await expect(token).toHaveValue(RELAY_ACCOUNT_TOKEN);
+  });
+
+  test("sub2api's key query shows its 5-hour, day and week windows with what is used of each", async ({
+    page,
+  }) => {
+    const id = await seedRelay();
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      endpointId: id,
+      name: "Relay",
+      baseUrls: [{ format: "openai_chat", url: `${relay.origin}/good/v1` }],
+      models: [{ id: "gpt-5" }],
+      balance: { url: `${relay.origin}/v1/usage` },
+    });
+    expect(saved.error).toBeNull();
+    await openEndpointDetail(page, id);
+
+    // 没有 remaining：余额是剩得最少的窗口（5 小时还剩 $5）。
+    await expect(balanceSection(page).getByTestId("api-endpoint-balance-item")).toHaveText(
+      /Balance.*\$5\.00/,
+    );
+    const windows = balanceSection(page).getByTestId("api-endpoint-balance-windows");
+    await expect(windows).toContainText("5 hours");
+    await expect(windows).toContainText("$15.00 / $20.00 · 75%");
+    await expect(windows).toContainText("1 day");
+    await expect(windows).toContainText("$10.00 / $50.00 · 20%");
+    await expect(windows).toContainText("7 days");
+    await expect(windows).toContainText("$200.00 / $800.00 · 25%");
+  });
+
+  // 工单 08：GLM Coding Plan 的套餐窗口。重置时间从写回复这一刻算起，配速跟着真实时钟走。
+  const GLM_QUOTA = "https://open.bigmodel.cn/api/monitor/usage/quota/limit";
+
+  async function glmAnswers(status: number, body: unknown): Promise<void> {
+    await writeFile(
+      fakeSites,
+      JSON.stringify({ [GLM_QUOTA]: { status, body: JSON.stringify(body) } }),
+    );
+  }
+
+  function glmQuota() {
+    const inHours = (hours: number) => Date.now() + hours * 60 * 60 * 1000;
+    return {
+      code: 200,
+      success: true,
+      data: {
+        level: "pro",
+        limits: [
+          { type: "TOKENS_LIMIT", unit: 3, number: 5, percentage: 12, nextResetTime: inHours(2) },
+          { type: "TOKENS_LIMIT", unit: 6, number: 1, percentage: 40, nextResetTime: inHours(96) },
+          { type: "TIME_LIMIT", unit: 5, number: 1, percentage: 3, nextResetTime: inHours(240) },
+        ],
+      },
+    };
+  }
+
+  function seedGlm(): Promise<string> {
+    return seedApiEndpoint(client, {
+      name: "GLM Coding",
+      baseUrls: [{ format: "openai_chat", url: "https://open.bigmodel.cn/api/coding/paas/v4" }],
+      models: ["glm-4.6"],
+    });
+  }
+
+  test("a GLM Coding Plan key shows its windows with pace, the MCP month aside; used or left is one choice for the page and the row", async ({
+    page,
+  }) => {
+    await glmAnswers(200, glmQuota());
+    const id = await seedGlm();
+    await openApiEndpointsPage(page);
+    // 行上是剩得最少的窗口（7 天用了 40%），不是放一旁的 MCP 月度。
+    await expect(row(page, id).getByTestId("api-endpoint-row-balance")).toHaveText(
+      "7 days 40% used",
+    );
+
+    await openEndpointDetail(page, id);
+    const section = balanceSection(page);
+    const fiveHours = section.getByTestId("api-endpoint-balance-window-5h");
+    // 5 小时窗口过了 3 小时（60%），只用了 12%：配速 −48%。
+    await expect(fiveHours).toContainText("5 hours");
+    await expect(fiveHours).toContainText("12%");
+    await expect(fiveHours).toContainText("Pace −48%");
+    await expect(section.getByTestId("api-endpoint-balance-window-7d")).toContainText("40%");
+    const aside = section.getByTestId("api-endpoint-balance-windows-aside");
+    await expect(aside).toContainText("Doesn't stop the models");
+    await expect(aside).toContainText("MCP · Month");
+    await expect(section.getByTestId("api-endpoint-balance-item")).toHaveCount(0);
+
+    await section.getByTestId("api-endpoint-balance-display-remaining").click();
+    await expect(fiveHours).toContainText("88% left");
+    // 看剩余时配速的符号反过来。
+    await expect(fiveHours).toContainText("Pace +48%");
+    await openApiEndpointsPage(page);
+    await expect(row(page, id).getByTestId("api-endpoint-row-balance")).toHaveText(
+      "7 days 60% left",
+    );
+  });
+
+  test("a GLM key it refuses says to paste a current one, with its console", async ({ page }) => {
+    await glmAnswers(401, { error: { code: "1000", message: "Authentication failed" } });
+    const id = await seedGlm();
+    await openEndpointDetail(page, id);
+    const failure = balanceSection(page).getByTestId("api-endpoint-balance-failure");
+    await expect(failure.getByTestId("api-endpoint-balance-failure-reason")).toContainText(
+      "(HTTP 401)",
+    );
+    await expect(failure.getByTestId("api-endpoint-balance-failure-hint")).toContainText(
+      "This key has expired, was deleted, or is mistyped",
+    );
+    await expect(failure.getByTestId("api-endpoint-balance-failure-console")).toBeVisible();
+  });
+
+  // 工单 09：智谱团队套餐。个人的查询没有窗口，填了团队组织 ID 与项目 ID 才问团队的窗口与重置次数。
+  async function glmTeamAnswers(): Promise<void> {
+    const inHours = (hours: number) => Date.now() + hours * 60 * 60 * 1000;
+    const team = {
+      code: 200,
+      success: true,
+      data: {
+        limits: [
+          { type: "CREDIT_LIMIT", unit: 3, percentage: 20, nextResetTime: inHours(2) },
+          { type: "CREDIT_LIMIT", unit: 6, number: 1, percentage: 50, nextResetTime: inHours(96) },
+        ],
+      },
+    };
+    const resets = {
+      code: 200,
+      success: true,
+      data: {
+        fiveHourResets: [
+          { available: true, expireTime: inHours(48) },
+          { available: true, expireTime: inHours(72) },
+        ],
+        weekResets: [{ available: true, expireTime: inHours(120) }],
+      },
+    };
+    const reply = (body: unknown) => ({ status: 200, body: JSON.stringify(body) });
+    await writeFile(
+      fakeSites,
+      JSON.stringify({
+        [GLM_QUOTA]: reply({ code: 200, success: true, data: { limits: [] } }),
+        [`${GLM_QUOTA}?type=2`]: reply(team),
+        "https://open.bigmodel.cn/api/biz/customer-package-reset/list?targetType=TEAM":
+          reply(resets),
+      }),
+    );
+  }
+
+  test("a GLM team's IDs are asked for at Zhipu's address only, both or neither; with them the team's windows and resets show", async ({
+    page,
+  }) => {
+    await glmTeamAnswers();
+    const relayId = await seedRelay();
+    await openEndpointDetail(page, relayId);
+    await page.getByTestId("api-endpoint-edit-connection").filter({ visible: true }).click();
+    await page.getByTestId("api-endpoint-connection-advanced-toggle").click();
+    await expect(page.getByTestId("api-endpoint-connection-balance-url")).toBeVisible();
+    await expect(page.getByTestId("api-endpoint-connection-balance-team-org")).toHaveCount(0);
+    await page.getByRole("button", { name: "Cancel" }).click();
+
+    const id = await seedGlm();
+    await openEndpointDetail(page, id);
+    // 个人没有窗口、还没填团队 ID：什么都读不到。
+    await expect(balanceSection(page).getByTestId("api-endpoint-balance-windows")).toHaveCount(0);
+    await page.getByTestId("api-endpoint-edit-connection").filter({ visible: true }).click();
+    await page.getByTestId("api-endpoint-connection-advanced-toggle").click();
+    await page.getByTestId("api-endpoint-connection-balance-team-org-input").fill("org-1");
+    const both = page.getByTestId("api-endpoint-connection-balance-team-both");
+    await expect(both).toHaveText("Team plan: give both the organization ID and the project ID");
+    await expect(page.getByTestId("api-endpoint-connection-save")).toBeDisabled();
+    await page.getByTestId("api-endpoint-connection-balance-team-project-input").fill("proj-1");
+    await expect(both).toHaveCount(0);
+    await page.getByTestId("api-endpoint-connection-save").click();
+    await expect(page.getByTestId("api-endpoint-connection-form")).toHaveCount(0);
+    const listed = (await client.apiEndpointList("claude")).endpoints.find(
+      (endpoint) => endpoint.id === id,
+    );
+    expect(listed?.balance).toEqual({ teamOrgId: "org-1", teamProjectId: "proj-1" });
+
+    const section = balanceSection(page);
+    await section.getByTestId("api-endpoint-balance-refresh").click();
+    await expect(section.getByTestId("api-endpoint-balance-team")).toHaveText("Team plan");
+    await expect(section.getByTestId("api-endpoint-balance-window-5h")).toContainText("20%");
+    await expect(section.getByTestId("api-endpoint-balance-window-7d")).toContainText("50%");
+    await expect(section.getByTestId("api-endpoint-balance-resets-count")).toHaveText(
+      "2 five-hour resets · 1 weekly reset left",
+    );
+    await expect(section.getByTestId("api-endpoint-balance-resets")).toContainText(
+      "Soonest expires",
+    );
+    await openApiEndpointsPage(page);
+    await expect(row(page, id).getByTestId("api-endpoint-row-balance")).toHaveText(
+      "7 days 50% used",
+    );
+  });
+
+  test("DeepSeek lists each currency and splits the granted from the topped up; OpenCode Zen says to read its console", async ({
+    page,
+  }) => {
+    await deepseekAnswers(200, {
+      is_available: true,
+      balance_infos: [
+        {
+          currency: "USD",
+          total_balance: "5.00",
+          granted_balance: "0.00",
+          topped_up_balance: "5.00",
+        },
+        {
+          currency: "CNY",
+          total_balance: "110.00",
+          granted_balance: "10.00",
+          topped_up_balance: "100.00",
+        },
+      ],
+    });
+    const deepseek = await seedDeepSeek("DeepSeek");
+    const zen = await seedApiEndpoint(client, {
+      name: "OpenCode Zen",
+      baseUrls: [{ format: "openai_chat", url: "https://opencode.ai/zen/v1" }],
+      models: ["kimi-k2"],
+    });
+
+    await openEndpointDetail(page, deepseek);
+    const items = balanceSection(page).getByTestId("api-endpoint-balance-item");
+    await expect(items).toHaveCount(3);
+    await expect(items.nth(0)).toHaveText(/Balance.*¥110\.00 · \$5\.00/);
+    await expect(items.nth(1)).toHaveText(/Granted.*¥10\.00/);
+    await expect(items.nth(2)).toHaveText(/Topped up.*¥100\.00/);
+
+    await openEndpointDetail(page, zen);
+    const failure = balanceSection(page).getByTestId("api-endpoint-balance-failure");
+    await expect(failure.getByTestId("api-endpoint-balance-failure-reason")).toHaveText(
+      "This vendor doesn't offer a balance query",
+    );
+    await expect(failure.getByTestId("api-endpoint-balance-failure-hint")).toContainText(
+      "Overview → Credits",
+    );
+    await expect(failure.getByTestId("api-endpoint-balance-failure-console")).toHaveText(
+      "Open console ↗",
+    );
+  });
+
+  // 工单 10：火山方舟与腾讯云 Token Plan 企业版的窗口要云账号密钥，问的是两家的开放平台（封条回假回复）。
+  const VOLC_OPEN = "https://open.volcengineapi.com/?Action=GetCodingPlanUsage&Version=2024-01-01";
+  const TENCENT_OPEN = "https://tokenhub.tencentcloudapi.com/";
+
+  async function openPlatformAnswers(): Promise<void> {
+    const inHours = (hours: number) => Math.floor(Date.now() / 1000) + hours * 60 * 60;
+    const volc = {
+      Result: {
+        QuotaUsage: [
+          { Level: "session", Percent: 18, ResetTimestamp: inHours(3) },
+          { Level: "weekly", Percent: 35, ResetTimestamp: inHours(100) },
+          { Level: "monthly", Percent: 62, ResetTimestamp: inHours(400) },
+        ],
+      },
+    };
+    const cycleEnd = new Date(Date.now() + 12 * 24 * 60 * 60 * 1000).toISOString();
+    const cycleStart = new Date(Date.now() - 18 * 24 * 60 * 60 * 1000).toISOString();
+    // 列表与套餐自己的查询都问同一个地址：清单里的套餐包就够读出月窗口。
+    const tencent = {
+      Response: {
+        TokenPlanSet: [
+          {
+            TeamId: "team-1",
+            Name: "Core",
+            ProductType: "enterprise",
+            // 用完了：照 magpie 在分区里写出停用与原因。
+            Status: "exhausted",
+            StopReason: "QUOTA_USED_UP",
+            PackageInfo: { CycleQuota: "1000000", TotalUsed: "420000" },
+            TokenSummary: { CycleStartTime: cycleStart, CycleEndTime: cycleEnd },
+          },
+        ],
+      },
+    };
+    await writeFile(
+      fakeSites,
+      JSON.stringify({
+        [VOLC_OPEN]: { status: 200, body: JSON.stringify(volc) },
+        [TENCENT_OPEN]: { status: 200, body: JSON.stringify(tencent) },
+      }),
+    );
+  }
+
+  test("a Volcengine Ark plan with no access key says one is needed; Fill in AccessKey opens the two fields, both or neither, and then the windows show", async ({
+    page,
+  }) => {
+    await openPlatformAnswers();
+    const id = await seedApiEndpoint(client, {
+      name: "Ark Coding",
+      baseUrls: [{ format: "openai_chat", url: "https://ark.cn-beijing.volces.com/api/coding/v3" }],
+      models: ["ark-code-latest"],
+    });
+    await openApiEndpointsPage(page);
+    await expect(row(page, id).getByTestId("api-endpoint-row-balance")).toHaveText(
+      "Needs AccessKey",
+    );
+
+    await openEndpointDetail(page, id);
+    const section = balanceSection(page);
+    await expect(section.getByTestId("api-endpoint-balance-needs-access-key")).toContainText(
+      "AccessKey ID and Secret Access Key",
+    );
+    await section.getByTestId("api-endpoint-balance-fill-access-key").click();
+    const idInput = page.getByTestId("api-endpoint-connection-access-key-id-input");
+    await expect(idInput).toBeFocused();
+    await expect(page.getByTestId("api-endpoint-connection-access-key-id")).toContainText(
+      "AccessKey ID",
+    );
+    await idInput.fill("AKLTexample0001");
+    const both = page.getByTestId("api-endpoint-connection-access-key-both");
+    await expect(both).toHaveText("Give the Secret Access Key too");
+    await expect(page.getByTestId("api-endpoint-connection-save")).toBeDisabled();
+    await page.getByTestId("api-endpoint-connection-secret-access-key-input").fill("volc-secret");
+    await expect(both).toHaveCount(0);
+    await page.getByTestId("api-endpoint-connection-save").click();
+    await expect(page.getByTestId("api-endpoint-connection-form")).toHaveCount(0);
+    const listed = (await client.apiEndpointList("claude")).endpoints.find(
+      (endpoint) => endpoint.id === id,
+    );
+    expect(listed?.accessKeyIdMask).toBe("AKLT…0001");
+    expect(listed?.secretAccessKeyMask).toBeDefined();
+
+    await section.getByTestId("api-endpoint-balance-refresh").click();
+    await expect(section.getByTestId("api-endpoint-balance-window-5h")).toContainText("18%");
+    await expect(section.getByTestId("api-endpoint-balance-window-7d")).toContainText("35%");
+    await expect(section.getByTestId("api-endpoint-balance-window-month")).toContainText("62%");
+
+    // 编辑窗口里两栏打码；「显示」读回原文。
+    await page.getByTestId("api-endpoint-edit-connection").filter({ visible: true }).click();
+    const secretInput = page.getByTestId("api-endpoint-connection-secret-access-key-input");
+    await expect(secretInput).toHaveAttribute("placeholder", /^Saved: /);
+    await page.getByTestId("api-endpoint-connection-secret-access-key-show").click();
+    await expect(secretInput).toHaveValue("volc-secret");
+  });
+
+  test("a Tencent Cloud Token Plan Enterprise asks for the SecretId and SecretKey, then shows its month in credits; elsewhere there are no such fields", async ({
+    page,
+  }) => {
+    await openPlatformAnswers();
+    const relayId = await seedRelay();
+    await openEndpointDetail(page, relayId);
+    await page.getByTestId("api-endpoint-edit-connection").filter({ visible: true }).click();
+    await page.getByTestId("api-endpoint-connection-advanced-toggle").click();
+    await expect(page.getByTestId("api-endpoint-connection-balance-url")).toBeVisible();
+    await expect(page.getByTestId("api-endpoint-connection-access-key-id")).toHaveCount(0);
+    await page.getByRole("button", { name: "Cancel" }).click();
+
+    const id = await seedApiEndpoint(client, {
+      name: "Token Plan",
+      baseUrls: [{ format: "openai_chat", url: "https://tokenhub.tencentmaas.com/plan/v3" }],
+      models: ["auto"],
+    });
+    await openEndpointDetail(page, id);
+    const section = balanceSection(page);
+    await expect(section.getByTestId("api-endpoint-balance-needs-access-key")).toContainText(
+      "SecretId and SecretKey",
+    );
+    await section.getByTestId("api-endpoint-balance-fill-access-key").click();
+    await expect(page.getByTestId("api-endpoint-connection-access-key-id")).toContainText(
+      "SecretId",
+    );
+    await page.getByTestId("api-endpoint-connection-access-key-id-input").fill("AKIDexample");
+    await page.getByTestId("api-endpoint-connection-secret-access-key-input").fill("tc-secret");
+    await page.getByTestId("api-endpoint-connection-save").click();
+    await expect(page.getByTestId("api-endpoint-connection-form")).toHaveCount(0);
+    await section.getByTestId("api-endpoint-balance-refresh").click();
+    const month = section.getByTestId("api-endpoint-balance-window-month");
+    await expect(month).toContainText("Month");
+    await expect(month).toContainText("420,000 / 1,000,000 credits");
+    await expect(section.getByTestId("api-endpoint-balance-plan-stopped")).toHaveText(
+      "Plan stopped: exhausted, QUOTA_USED_UP",
+    );
+  });
+});

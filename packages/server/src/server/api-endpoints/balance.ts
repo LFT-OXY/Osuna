@@ -1,0 +1,1409 @@
+// 按地址认出的厂商余额、失败的说法照 magpie（https://github.com/yetone/magpie，internal/provider/balance.go 的
+// balanceSourceOf、balanceRead、balanceRefusal、money、currencySign、number 与各厂商的 read*，7597c132；
+// DeepSeek 的赠送 / 充值拆分与 OpenCode Zen 的说明照最新版 ea6be159 的 readDeepSeekSplit、errOpenCodeNoBalance、openCodeZen）。
+// 填了余额查询地址时的自定义余额照 magpie 的 balanceRead、balanceMethodOf、balanceKeyNames、withBalanceKey（7597c132）。
+// 账户令牌照 magpie 的 keyQueryOf、keyNotToken、balanceAuthorization、errKeyQueryWithToken、newAPIUserHint、
+// readAiHubMixAccount，sub2api 的限额窗口照 sub2api_usage.go 的 readSub2APIKeyLimits 与 Balance；套餐窗口照
+// planquota.go 的 planKeyWindows、zhipuKeyTeamAt 与 commandcode_plan.go 的 cmdKeyWindows、cmdKeyPlanID，
+// 云账号密钥读的套餐照 volcengine_usage.go 的 volcPlanQuota、volcOpenAPICall，tencent_usage.go 的 tencentPlanCards、
+// tencentAPICall 与 access_key_card.go（7597c132）。
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+import {
+  balanceMethodOf,
+  balanceUrlPath,
+  defaultBalanceField,
+  NEW_API_BALANCE_QUERIES,
+  SUB2API_BALANCE_QUERIES,
+} from "@getpaseo/protocol/api-endpoint/balance-settings";
+import type {
+  ApiEndpointBalanceFailure,
+  ApiEndpointBalanceFailureReason,
+  ApiEndpointBalanceHint,
+  ApiEndpointBalanceItem,
+  ApiEndpointBalanceReading,
+  ApiEndpointBalanceResets,
+  ApiEndpointBalanceWindow,
+  ApiEndpointStoppedPlan,
+} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import {
+  secretsOf,
+  unsendableHeader,
+  unsendableHeaderMessage,
+  withUserHeaders,
+  type RequestExtras,
+} from "./request-extras.js";
+import { numberOf, readBalanceField } from "./balance-field.js";
+import {
+  commandCodeCreditsWindow,
+  commandCodePlanIdOf,
+  commandCodeSubscriptionPlanId,
+  PLAN_VENDOR_URLS,
+  planRequestHeaders,
+  planSourceOf,
+  readZhipuResets,
+  shownWindows,
+  withPace,
+  zhipuKeyRefusal,
+  zhipuTeamHeaders,
+  zhipuTeamQuotaUrl,
+  zhipuTeamResetsUrl,
+  type PlanSource,
+  type PlanWindow,
+} from "./balance-plan.js";
+import {
+  accessKeyPlanOf,
+  openApiErrorOf,
+  readTencentPlanList,
+  readVolcPlan,
+  tencentRequest,
+  tencentTeamOf,
+  volcRequest,
+  withTencentDetail,
+  type AccessKeyPlan,
+  type OpenApiError,
+  type OpenApiRequest,
+} from "./balance-access-key.js";
+import { upstreamFetch, type UpstreamResponse } from "./insecure-tls.js";
+import type { StoredAccessKey, StoredApiEndpoint } from "./store.js";
+import {
+  describeNetworkError,
+  isRecord,
+  parseJson,
+  redactKey,
+  structuredErrorMessage,
+} from "./upstream-http.js";
+import { hostOf } from "./vendor-status.js";
+
+/*
+ * 接口的余额：厂商自己的余额接口说这把 key 还剩多少。只显示，从不进中转站选路。
+ * 填了余额查询地址就按它查（GET 或不带正文的 POST），按取值写法取值，不再按地址认（照 magpie balanceSourceOf）；
+ * 地址与请求头里的 {key} 一类占位换成 key（地址里先转义）。
+ * 没填时厂商按接口各格式地址的主机名精确认（顺序同 magpie：Chat、Responses、Anthropic），不看模板。
+ * 请求带 key 的 Bearer 头、Accept、Osuna 的 User-Agent，再写上这家自己的请求头（用户的可以盖过 User-Agent，ADR 0008）。
+ * 填了账户令牌（new-api、sub2api、AiHubMix 的账户余额）时用它代替 key 作 Authorization：形如 JWT 的加「Bearer 」，
+ * 其余原样（照 magpie balanceAuthorization）；new-api 的用户 ID 只在这里作为 New-Api-User 发出。
+ * 回复里的 key、令牌与请求头的值打码后截到 200 字给界面看。
+ */
+
+/** 各厂商的余额查询（照 magpie balanceSourceOf）与套餐窗口查询；测试 daemon 把它们换成本机地址。 */
+export const BALANCE_VENDOR_URLS = {
+  deepseek: "https://api.deepseek.com/user/balance",
+  moonshot_cn: "https://api.moonshot.cn/v1/users/me/balance",
+  moonshot_ai: "https://api.moonshot.ai/v1/users/me/balance",
+  openrouter: "https://openrouter.ai/api/v1/credits",
+  siliconflow_cn: "https://api.siliconflow.cn/v1/user/info",
+  siliconflow_com: "https://api.siliconflow.com/v1/user/info",
+  stepfun_com: "https://api.stepfun.com/v1/accounts",
+  stepfun_ai: "https://api.stepfun.ai/v1/accounts",
+  aihubmix: "https://aihubmix.com/dashboard/billing/remain",
+  // 填了账户令牌时问整个账户的余额。
+  aihubmix_account: "https://aihubmix.com/api/user/self",
+  // 套餐窗口的查询；Command Code 与 Ollama Cloud 的余额也问这里的 commandcode、ollama。
+  ...PLAN_VENDOR_URLS,
+} as const;
+
+export type BalanceVendorId = keyof typeof BALANCE_VENDOR_URLS;
+
+/** 回复说明这家不给查（或要别的凭据），不是没取到值。 */
+interface BalanceNotOffered {
+  kind: "not_offered";
+  hint: ApiEndpointBalanceHint;
+  seeAt: string | null;
+}
+
+/**
+ * 读一份回复的结果：余额各项（空的是这家现在没有余额可显示）、这家不给查、取不到值（detail 是 magpie 给的说明）、
+ * 回复说令牌不对。
+ */
+type BalanceRead =
+  | { kind: "items"; items: ApiEndpointBalanceItem[] }
+  | BalanceNotOffered
+  | { kind: "no_value"; detail: string | null }
+  | { kind: "rejected"; detail: string };
+
+const NO_VALUE: BalanceRead = { kind: "no_value", detail: null };
+
+function itemsOf(...items: ApiEndpointBalanceItem[]): BalanceRead {
+  return { kind: "items", items };
+}
+
+interface BalanceVendor {
+  id: BalanceVendorId;
+  host: string;
+  read: (body: unknown) => BalanceRead;
+  // 状态 ≥300 时这家已知的说法（照 magpie balanceSource.failed）；不是它时 null。
+  failed?: (status: number, body: unknown) => BalanceNotOffered | null;
+  // 填了账户令牌时改问整个账户：令牌代替 key，这家自己的请求头不带（照 magpie）。
+  account?: { id: BalanceVendorId; read: (body: unknown) => BalanceRead };
+}
+
+const BALANCE_VENDORS: readonly BalanceVendor[] = [
+  { id: "deepseek", host: "api.deepseek.com", read: readDeepSeek },
+  { id: "moonshot_cn", host: "api.moonshot.cn", read: readMoonshot("CNY") },
+  { id: "moonshot_ai", host: "api.moonshot.ai", read: readMoonshot("USD") },
+  { id: "openrouter", host: "openrouter.ai", read: readOpenRouter },
+  {
+    id: "siliconflow_cn",
+    host: "api.siliconflow.cn",
+    read: readSiliconFlow("CNY"),
+    failed: siliconFlowGone("https://cloud.siliconflow.cn"),
+  },
+  {
+    id: "siliconflow_com",
+    host: "api.siliconflow.com",
+    read: readSiliconFlow("USD"),
+    failed: siliconFlowGone("https://cloud.siliconflow.com"),
+  },
+  { id: "stepfun_com", host: "api.stepfun.com", read: readStepFun("CNY") },
+  { id: "stepfun_ai", host: "api.stepfun.ai", read: readStepFun("USD") },
+  { id: "commandcode", host: "api.commandcode.ai", read: readCommandCode },
+  // 套餐之外买的 credits（magpie #1888）；套餐额度是套餐窗口，不在这里。
+  { id: "ollama", host: "ollama.com", read: readOllamaCredits },
+  // 不填令牌时问 key 自己还剩多少，填了问整个账户。
+  {
+    id: "aihubmix",
+    host: "aihubmix.com",
+    read: readAiHubMix,
+    account: { id: "aihubmix_account", read: readAiHubMixAccount },
+  },
+];
+
+/** OpenCode 的控制台：Zen 的按量 credits 只在这里（Overview → Credits）给工作区的所有者与管理员看。 */
+const OPENCODE_CONSOLE = "https://opencode.ai/console";
+
+// 照 magpie balanceSourceOf 的先后。
+const FORMAT_ORDER = ["openai_chat", "openai_responses", "anthropic_messages"] as const;
+
+export const BALANCE_READ_TIMEOUT_MS = 15_000;
+// 一次读余额请求（整页刷新）最多等这么久，照 magpie 单卡刷新的 30 秒（gui/usage.go）。
+export const BALANCE_PAGE_TIMEOUT_MS = 30_000;
+// 每家的读数留这么久，照 magpie keyBalanceCache。
+export const BALANCE_KEPT_MS = 60_000;
+// 回复最多读这么多字节（照 magpie io.LimitReader）。
+const MAX_BODY_BYTES = 1 << 20;
+const MAX_DETAIL_CHARS = 200;
+
+/** 这家接口的地址对上的余额厂商；中转站与认不出的为 null。 */
+export function balanceVendorOf(baseUrls: StoredApiEndpoint["baseUrls"]): BalanceVendorId | null {
+  for (const format of FORMAT_ORDER) {
+    const url = baseUrls.find((entry) => entry.format === format)?.url;
+    if (url === undefined) continue;
+    const host = hostOf(url);
+    const vendor = BALANCE_VENDORS.find((candidate) => candidate.host === host);
+    if (vendor) return vendor.id;
+  }
+  return null;
+}
+
+// 找站点用的地址先后，照 magpie 编辑器的「改用 …」（draft.chat || draft.anthropic || draft.responses）。
+const SITE_FORMAT_ORDER = ["openai_chat", "anthropic_messages", "openai_responses"] as const;
+
+/**
+ * 这家的站点（scheme 加主机），「自动识别」把 key 级余额查询拼在它上面：各格式地址依 Chat、Anthropic、Responses 的
+ * 先后，取第一个 http(s) 地址的 origin（同 magpie errKeyUsageWithToken 的 u.Scheme + "://" + u.Host）；都不是为 null。
+ */
+export function balanceSiteOf(baseUrls: StoredApiEndpoint["baseUrls"]): string | null {
+  for (const format of SITE_FORMAT_ORDER) {
+    const url = baseUrls.find((entry) => entry.format === format)?.url;
+    if (url === undefined) continue;
+    try {
+      const parsed = new URL(url.trim());
+      if (parsed.protocol === "http:" || parsed.protocol === "https:") return parsed.origin;
+    } catch {
+      // 读不懂的地址跳过，看下一种格式。
+    }
+  }
+  return null;
+}
+
+export interface ReadBalanceInput {
+  endpoint: Pick<StoredApiEndpoint, "id" | "baseUrls" | "balance">;
+  apiKey: string | null;
+  // 账户令牌；没有为 null。
+  balanceToken: string | null;
+  // 云账号密钥（火山、腾讯的套餐窗口用）；不读套餐时可不给。
+  accessKey?: StoredAccessKey;
+  extras: RequestExtras;
+  userAgent: string;
+  now: () => Date;
+  // 只给测试：把厂商表里的真实地址换成本机假服务。
+  vendorUrls?: Partial<Record<BalanceVendorId, string>>;
+  // 一并读套餐 key 的窗口：页面上的读余额读，编辑窗口的「查询余额」「自动识别」只查余额（照 magpie 编辑器的 Check balance）。
+  withPlan?: boolean;
+  // 这家有对得上的上次读数：认不准是套餐的 key 暂时没读成时，照 magpie 只在读到过时才显示（回上次读数）。
+  hasLastReading?: boolean;
+  // Command Code 每把 key 的套餐 id 与读到的时刻（照 magpie cmdKeyPlans，留 10 分钟）；daemon 一份，测试可不给。
+  commandCodePlans?: Map<string, { planId: string; at: number }>;
+  // 连接断了：抛错，不回读数。
+  signal: AbortSignal;
+  // 整页的期限到了：和单次超时一样算暂时查不到。
+  deadline: AbortSignal;
+}
+
+/** 「自动刷新余额与套餐用量」关着、这次不是用户要求的读取、也还没有读数：什么都不发（照 magpie errNotAsked）。 */
+export function notAskedReading(endpointId: string): ApiEndpointBalanceReading {
+  return {
+    endpointId,
+    status: "failed",
+    items: [],
+    readAt: null,
+    failure: { reason: "temporary", detail: null, status: null, hint: "not_asked" },
+  };
+}
+
+/**
+ * 读一家的余额与套餐窗口（withPlan 时）：两份同时问，读到的合成一份读数。认不出或没有 key 时什么都不发
+ * （magpie 同样不查没 key 的）。
+ */
+export async function readEndpointBalance(
+  input: ReadBalanceInput,
+): Promise<ApiEndpointBalanceReading> {
+  const keyed = input.withPlan ? accessKeyPlanOf(input.endpoint.baseUrls) : null;
+  if (keyed !== null) {
+    // 火山、腾讯的套餐窗口用云账号密钥问开放平台，和这家的 key 无关（照 magpie 不看 key）。
+    const [balance, planned] = await Promise.all([
+      readBalanceOnly(input),
+      readAccessKeyPlan({ input, plan: keyed }),
+    ]);
+    return mergedReading({ balance, planned });
+  }
+  const plan =
+    input.withPlan && input.apiKey
+      ? planSourceOf({ baseUrls: input.endpoint.baseUrls, vendorUrls: input.vendorUrls })
+      : null;
+  if (plan === null || !input.apiKey) return readBalanceOnly(input);
+  const [balance, planned] = await Promise.all([
+    readBalanceOnly(input),
+    readPlanWindows({ input, source: plan, apiKey: input.apiKey }),
+  ]);
+  return mergedReading({ balance, planned });
+}
+
+/**
+ * 余额与套餐窗口合成一份：有一份读到就是读到（余额各项在前、窗口接在余额自己的窗口后）；都没读到时说套餐的原因，
+ * 套餐没有可说的（不是套餐 key）时照余额的说。
+ */
+function mergedReading(input: {
+  balance: ApiEndpointBalanceReading;
+  planned: ApiEndpointBalanceReading | null;
+}): ApiEndpointBalanceReading {
+  const { balance, planned } = input;
+  if (planned === null) return balance;
+  if (planned.status === "ok" && balance.status === "ok") {
+    return {
+      ...balance,
+      windows: [...(balance.windows ?? []), ...(planned.windows ?? [])],
+      ...(planned.team ? { team: true } : {}),
+      ...(planned.resets === undefined ? {} : { resets: planned.resets }),
+      ...planNotesOf(planned),
+    };
+  }
+  if (balance.status === "ok") return balance;
+  return planned;
+}
+
+/** 套餐的档位、停用的套餐与读不到的团队：合成读数与上次读数都带着。 */
+export function planNotesOf(
+  reading: Pick<ApiEndpointBalanceReading, "planTier" | "stoppedPlans" | "unreadTeams">,
+): Pick<ApiEndpointBalanceReading, "planTier" | "stoppedPlans" | "unreadTeams"> {
+  return {
+    ...(reading.planTier === undefined ? {} : { planTier: reading.planTier }),
+    ...(reading.stoppedPlans === undefined ? {} : { stoppedPlans: reading.stoppedPlans }),
+    ...(reading.unreadTeams === undefined ? {} : { unreadTeams: reading.unreadTeams }),
+  };
+}
+
+/** 问一次套餐窗口的结果：读出的窗口（空的是没有套餐），或没读成的原因（还没按「认不准是套餐」筛过）。 */
+type PlanAnswer =
+  | { kind: "windows"; windows: PlanWindow[]; status: number }
+  | { kind: "failed"; failure: ApiEndpointBalanceFailure };
+
+/**
+ * 问套餐 key 的窗口（照 magpie planKeyWindows 与 PlanQuotas）。null 是没有可显示的：这把 key 没有套餐（回了空窗口），或认不准是
+ * 套餐（按量付费也走这个地址）时没读成——读到过且这次只是暂时查不到除外，那样回上次读数。
+ * 智谱的 key 自己没有窗口（或没读成，但不是 key 被拒）、又填了团队组织 ID 与项目 ID 时，问团队的窗口与重置次数。
+ */
+async function readPlanWindows(input: {
+  input: ReadBalanceInput;
+  source: PlanSource;
+  apiKey: string;
+}): Promise<ApiEndpointBalanceReading | null> {
+  const { source } = input;
+  const { endpoint } = input.input;
+  const now = input.input.now();
+  const readAt = now.toISOString();
+  const shown = (windows: PlanWindow[]): ApiEndpointBalanceReading => ({
+    endpointId: endpoint.id,
+    status: "ok",
+    items: [],
+    windows: shownWindows({ windows, now: now.getTime() }),
+    readAt,
+    failure: null,
+  });
+  const answer = await askPlan(input);
+  const isRefused = answer.kind === "failed" && answer.failure.hint === "glm_key_refused";
+  const hasWindows = answer.kind === "windows" && answer.windows.length > 0;
+  if (!hasWindows && !isRefused) {
+    const team = await readTeamWindows(input);
+    if (team !== null) {
+      return {
+        ...shown(team.windows),
+        team: true,
+        ...(team.resets === null ? {} : { resets: team.resets }),
+      };
+    }
+  }
+  if (answer.kind === "windows") {
+    // 没有窗口的 key 没有套餐，不显示（照 magpie）。
+    return answer.windows.length === 0 ? null : shown(answer.windows);
+  }
+  const keepsLast = answer.failure.reason === "temporary" && input.input.hasLastReading === true;
+  if (!source.sure && !keepsLast) return null;
+  return { endpointId: endpoint.id, status: "failed", items: [], readAt, failure: answer.failure };
+}
+
+/** GET 一个套餐相关的地址：回状态与正文，网络错误、超时为 null（连接断了照常抛）。 */
+async function fetchPlan(input: {
+  input: ReadBalanceInput;
+  url: string;
+  headers: Record<string, string>;
+}): Promise<{ status: number; text: string } | { error: unknown }> {
+  const { signal, deadline } = input.input;
+  try {
+    const response = await upstreamFetch({
+      url: input.url,
+      init: {
+        headers: input.headers,
+        signal: AbortSignal.any([signal, AbortSignal.timeout(BALANCE_READ_TIMEOUT_MS), deadline]),
+      },
+      uncheckedHosts: input.input.extras.uncheckedHosts,
+    });
+    return { status: response.status, text: await readCapped(response) };
+  } catch (error) {
+    if (signal.aborted) throw error;
+    return { error };
+  }
+}
+
+/** 问这把 key 自己的套餐窗口（照 magpie planBody）。 */
+async function askPlan(input: {
+  input: ReadBalanceInput;
+  source: PlanSource;
+  apiKey: string;
+}): Promise<PlanAnswer> {
+  const { source, apiKey } = input;
+  const secrets = [apiKey];
+  const failed = (failure: ApiEndpointBalanceFailure): PlanAnswer => ({ kind: "failed", failure });
+  const fetched = await fetchPlan({
+    input: input.input,
+    url: source.url,
+    headers: planRequestHeaders({
+      source,
+      apiKey,
+      userAgent: input.input.userAgent,
+      now: input.input.now().getTime(),
+    }),
+  });
+  if ("error" in fetched) {
+    return failed({
+      reason: "temporary",
+      detail: clip(redactKey(describeNetworkError(fetched.error), secrets)),
+      status: null,
+    });
+  }
+  const { status, text } = fetched;
+  const body = parseJson(text);
+  const glmRefused = (detail: string | null): ApiEndpointBalanceFailure => ({
+    reason: "token_rejected",
+    detail,
+    status,
+    hint: "glm_key_refused",
+    seeAt: source.keysAt,
+  });
+  if (status >= 300) {
+    const detail = quoted(text, secrets);
+    if (source.opencode && (status === 401 || status === 403)) {
+      // OpenCode 的 Go 归订阅的成员、在订阅的工作区里，按 key 的成员与工作区查：别人建的 key、别的工作区的没有 Go。
+      return failed({
+        reason: "token_rejected",
+        detail,
+        status,
+        hint: status === 403 ? "opencode_go_no_subscription" : "opencode_key_refused",
+      });
+    }
+    const isZhipuRefusal =
+      source.keysAt !== null && (status === 401 || zhipuKeyRefusal(body) !== null);
+    if (isZhipuRefusal) {
+      return failed(glmRefused(detail));
+    }
+    return failed({ reason: failureOfStatus(status), detail, status });
+  }
+  if (body === undefined) return failed({ reason: "wrong_url", detail: null, status });
+  const read = source.read(body);
+  if (read.kind === "key_refused") {
+    return failed(glmRefused(read.detail === "" ? null : clip(redactKey(read.detail, secrets))));
+  }
+  if (read.kind === "no_value") {
+    return failed({ reason: "no_value", detail: clip(redactKey(read.detail, secrets)), status });
+  }
+  if (source.vendor === "commandcode" && read.windows.length > 0) {
+    // 有窗口的才是套餐 key：月度 credits 另作一个窗口，回复没写套餐时问这把 key 的订阅（照 magpie cmdKeyWindows）。
+    const planId = commandCodePlanIdOf(body) ?? (await commandCodeKeyPlanId(input));
+    const credits = commandCodeCreditsWindow({ body, planId });
+    return {
+      kind: "windows",
+      windows: credits ? [...read.windows, credits] : read.windows,
+      status,
+    };
+  }
+  return { kind: "windows", windows: read.windows, status };
+}
+
+/** 开放平台的一份回复，或没读成的原因。 */
+type OpenApiAnswer = { body: unknown; text: string } | { failure: ApiEndpointBalanceFailure };
+
+/**
+ * 发一次开放平台请求（照 magpie volcOpenAPICall、tencentAPICall）：回复里说的错误、401 与 403 归到失败的分类，认证类的
+ * 带上「检查 AK/SK 与权限」；忙、限流与内部错误是暂时查不到。密钥只发往开放平台，原话里的打码。
+ */
+async function askOpenApi(input: {
+  input: ReadBalanceInput;
+  vendor: AccessKeyPlan["vendor"];
+  request: OpenApiRequest;
+  secrets: readonly string[];
+}): Promise<OpenApiAnswer> {
+  const { signal, deadline } = input.input;
+  const { secrets } = input;
+  let status: number;
+  let text: string;
+  try {
+    const response = await upstreamFetch({
+      url: input.request.url,
+      init: {
+        method: "POST",
+        headers: input.request.headers,
+        body: input.request.body,
+        signal: AbortSignal.any([signal, AbortSignal.timeout(BALANCE_READ_TIMEOUT_MS), deadline]),
+      },
+      uncheckedHosts: [],
+    });
+    status = response.status;
+    text = await readCapped(response);
+  } catch (error) {
+    if (signal.aborted) throw error;
+    return {
+      failure: {
+        reason: "temporary",
+        detail: clip(redactKey(describeNetworkError(error), secrets)),
+        status: null,
+      },
+    };
+  }
+  const body = parseJson(text);
+  const isRefusal = status === 401 || status === 403;
+  const error = openApiErrorOf({ vendor: input.vendor, body });
+  if (error !== null) {
+    const detail = clip(redactKey(`${error.code} ${error.message}`.trim(), secrets));
+    if (error.refusesKey || isRefusal) {
+      return {
+        failure: { reason: "token_rejected", detail, status, hint: "access_key_refused" },
+      };
+    }
+    return { failure: { reason: openApiFailureReason({ error, status }), detail, status } };
+  }
+  if (isRefusal) {
+    return {
+      failure: {
+        reason: "token_rejected",
+        detail: quoted(text, secrets),
+        status,
+        hint: "access_key_refused",
+      },
+    };
+  }
+  if (status >= 300) {
+    return { failure: { reason: failureOfStatus(status), detail: quoted(text, secrets), status } };
+  }
+  if (body === undefined) return { failure: { reason: "wrong_url", detail: null, status } };
+  return { body, text };
+}
+
+/** 开放平台说了错、但不是密钥的事：忙与限流是暂时查不到，别的按状态分，200 里说的错是取不到值。 */
+function openApiFailureReason(input: {
+  error: OpenApiError;
+  status: number;
+}): ApiEndpointBalanceFailureReason {
+  if (input.error.isPassing) return "temporary";
+  return input.status >= 300 ? failureOfStatus(input.status) : "no_value";
+}
+
+const VOLC_PLAN_NAMES = { GetCodingPlanUsage: "Coding Plan", GetAFPUsage: "Agent Plan" } as const;
+
+/**
+ * 云账号密钥读的套餐窗口（照 magpie volcPlanQuotas、tencentPlanQuotas）：没填齐两样密钥时不发请求，读数是
+ * needs_access_key（照 magpie accessKeyCard）。腾讯先列出账户在这个区的团队套餐，再逐个问本周期；有几个团队时窗口前
+ * 写团队名。
+ */
+async function readAccessKeyPlan(input: {
+  input: ReadBalanceInput;
+  plan: AccessKeyPlan;
+}): Promise<ApiEndpointBalanceReading> {
+  const { plan } = input;
+  const endpointId = input.input.endpoint.id;
+  const accessKeyId = input.input.accessKey?.id ?? null;
+  const secretAccessKey = input.input.accessKey?.secret ?? null;
+  if (!accessKeyId || !secretAccessKey) {
+    return { endpointId, status: "needs_access_key", items: [], readAt: null, failure: null };
+  }
+  const now = input.input.now();
+  const readAt = now.toISOString();
+  const secrets = [accessKeyId, secretAccessKey];
+  const urls = { ...PLAN_VENDOR_URLS, ...input.input.vendorUrls };
+  const failed = (failure: ApiEndpointBalanceFailure): ApiEndpointBalanceReading => ({
+    endpointId,
+    status: "failed",
+    items: [],
+    readAt,
+    failure,
+  });
+  const shown = (windows: PlanWindow[]): ApiEndpointBalanceReading => ({
+    endpointId,
+    status: "ok",
+    items: [],
+    windows: shownWindows({ windows, now: now.getTime() }),
+    readAt,
+    failure: null,
+  });
+  const ask = (request: OpenApiRequest) =>
+    askOpenApi({ input: input.input, vendor: plan.vendor, request, secrets });
+  if (plan.vendor === "volcengine") {
+    const answer = await ask(
+      volcRequest({
+        openUrl: urls.volcengine_open,
+        accessKeyId,
+        secretAccessKey,
+        action: plan.action,
+        region: plan.region,
+        userAgent: input.input.userAgent,
+        now: now.getTime(),
+      }),
+    );
+    if ("failure" in answer) return failed(answer.failure);
+    const { windows, tier } = readVolcPlan({ action: plan.action, body: answer.body });
+    if (windows.length === 0) {
+      const head = quoted(answer.text, secrets);
+      return failed({
+        reason: "no_value",
+        detail: `this Volcengine account has no ${VOLC_PLAN_NAMES[plan.action]}, or Ark answered ${plan.action} in a form Osuna doesn't know${head ? `: ${head}` : ""}`,
+        status: 200,
+      });
+    }
+    return { ...shown(windows), ...(tier === null ? {} : { planTier: tier }) };
+  }
+  const tencentAsk = (action: string, params: Record<string, unknown>) =>
+    ask(
+      tencentRequest({
+        openUrl: urls.tencent_open,
+        secretId: accessKeyId,
+        secretKey: secretAccessKey,
+        action,
+        params,
+        region: plan.region,
+        userAgent: input.input.userAgent,
+        now: now.getTime(),
+      }),
+    );
+  const listed = await tencentAsk("DescribeTokenPlanList", { Offset: 0, Limit: 100 });
+  if ("failure" in listed) return failed(listed.failure);
+  const plans = readTencentPlanList(listed.body);
+  if (plans === null) {
+    const head = quoted(listed.text, secrets);
+    return failed({
+      reason: "no_value",
+      detail: `Tencent Cloud DescribeTokenPlanList: a reply Osuna can't read${head ? `: ${head}` : ""}`,
+      status: 200,
+    });
+  }
+  if (plans.length === 0) {
+    return failed({
+      reason: "no_value",
+      detail: `this Tencent Cloud account has no Token Plan Enterprise in ${plan.region} that its API key can see (a sub-user sees only the plans it made)`,
+      status: 200,
+    });
+  }
+  const isSeveral = plans.length > 1;
+  const teams = await Promise.all(
+    plans.map(async (team) => {
+      // 套餐自己的回复有本周期的起止与状态；问不出时用清单里的。
+      const detail = await tencentAsk("DescribeTokenPlan", { TeamId: team.teamId });
+      const told = "failure" in detail ? team : withTencentDetail(team, detail.body);
+      return tencentTeamOf({ plan: told, isSeveral, now: now.getTime() });
+    }),
+  );
+  const read = teams.flatMap((team) => (team.window === null ? [] : [team.window]));
+  const stoppedPlans = teams.flatMap((team) => (team.stopped === null ? [] : [team.stopped]));
+  if (read.length === 0) {
+    return failed({ reason: "no_value", detail: tencentNoQuota(stoppedPlans[0]), status: 200 });
+  }
+  const unreadTeams = teams.flatMap((team) => (team.window === null ? [team.name] : []));
+  return {
+    ...shown(read),
+    ...(stoppedPlans.length === 0 ? {} : { stoppedPlans }),
+    ...(unreadTeams.length === 0 ? {} : { unreadTeams }),
+  };
+}
+
+/** 腾讯一个团队都读不出额度时怎么说；停用了的带上状态与原因（magpie 写在卡片的套餐名旁）。 */
+function tencentNoQuota(stopped: ApiEndpointStoppedPlan | undefined): string {
+  const told = "Tencent Cloud told no quota for this Token Plan Enterprise";
+  if (stopped === undefined) return told;
+  return `${told} (${stopped.reason ? `${stopped.status}, ${stopped.reason}` : stopped.status})`;
+}
+
+const COMMAND_CODE_PLAN_KEEP_MS = 10 * 60 * 1000;
+
+/**
+ * 这把 Command Code key 的套餐 id（照 magpie cmdKeyPlanID）：读到的留 10 分钟；读不出时用上次读到的，再没有为 null。
+ * 订阅有时要 15–20 秒才答，所以不每分钟问。
+ */
+async function commandCodeKeyPlanId(input: {
+  input: ReadBalanceInput;
+  apiKey: string;
+}): Promise<string | null> {
+  const cache = input.input.commandCodePlans;
+  const url =
+    input.input.vendorUrls?.commandcode_subscriptions ??
+    BALANCE_VENDOR_URLS.commandcode_subscriptions;
+  const cacheKey = `${url}\u0000${input.apiKey}`;
+  const now = input.input.now().getTime();
+  const seen = cache?.get(cacheKey);
+  if (seen !== undefined && now - seen.at < COMMAND_CODE_PLAN_KEEP_MS) return seen.planId;
+  const fetched = await fetchPlan({
+    input: input.input,
+    url,
+    headers: {
+      authorization: `Bearer ${input.apiKey}`,
+      accept: "application/json",
+      "user-agent": input.input.userAgent,
+    },
+  });
+  const planId =
+    "error" in fetched || fetched.status < 200 || fetched.status >= 300
+      ? null
+      : commandCodeSubscriptionPlanId(parseJson(fetched.text));
+  if (planId === null) return seen?.planId ?? null;
+  cache?.set(cacheKey, { planId, at: now });
+  return planId;
+}
+
+/**
+ * 智谱团队套餐的窗口（照 magpie zhipuKeyTeamWindows）：两个 ID 都填了才问，先这把 key 自己的站点、再 ZCode 问的站点，
+ * 取第一个答出窗口的。重置次数在答出窗口的那个站点问（magpie 只用 ZCode 登录读团队的重置次数，这里用 key 与团队的 ID 问；
+ * 读不出就不写次数）。都没答出为 null。
+ */
+async function readTeamWindows(input: {
+  input: ReadBalanceInput;
+  source: PlanSource;
+  apiKey: string;
+}): Promise<{ windows: PlanWindow[]; resets: ApiEndpointBalanceResets | null } | null> {
+  const { source, apiKey } = input;
+  const settings = input.input.endpoint.balance;
+  const org = settings?.teamOrgId?.trim() ?? "";
+  const project = settings?.teamProjectId?.trim() ?? "";
+  if (source.team === null || org === "" || project === "") return null;
+  const headers = zhipuTeamHeaders({
+    apiKey,
+    org,
+    project,
+    language: source.team.language,
+    userAgent: input.input.userAgent,
+  });
+  for (const quotaUrl of source.team.urls) {
+    const fetched = await fetchPlan({
+      input: input.input,
+      url: zhipuTeamQuotaUrl(quotaUrl),
+      headers,
+    });
+    if ("error" in fetched || fetched.status >= 300) continue;
+    const body = parseJson(fetched.text);
+    if (body === undefined) continue;
+    const read = source.read(body);
+    if (read.kind !== "windows" || read.windows.length === 0) continue;
+    const listed = await fetchPlan({
+      input: input.input,
+      url: zhipuTeamResetsUrl(quotaUrl),
+      headers,
+    });
+    const resets =
+      "error" in listed || listed.status < 200 || listed.status >= 300
+        ? null
+        : readZhipuResets(parseJson(listed.text));
+    return { windows: read.windows, resets };
+  }
+  return null;
+}
+
+/** 只读余额：认不出或没有 key 时什么都不发。 */
+async function readBalanceOnly(input: ReadBalanceInput): Promise<ApiEndpointBalanceReading> {
+  const endpointId = input.endpoint.id;
+  const readAt = input.now().toISOString();
+  const failed = (failure: ApiEndpointBalanceFailure): ApiEndpointBalanceReading => ({
+    endpointId,
+    status: "failed",
+    items: [],
+    readAt,
+    failure,
+  });
+  const source = sourceOf(input);
+  if (source === null && input.apiKey && openCodeZen(input.endpoint.baseUrls)) {
+    // OpenCode 不给 key 查 Zen 的余额：照 magpie 说明去哪看，不发请求，也就没有读数时间。
+    return {
+      endpointId,
+      status: "failed",
+      items: [],
+      readAt: null,
+      failure: {
+        reason: "not_offered",
+        detail: null,
+        status: null,
+        hint: "opencode_no_balance",
+        seeAt: OPENCODE_CONSOLE,
+      },
+    };
+  }
+  if (source === null || !input.apiKey) {
+    return { endpointId, status: "unsupported", items: [], readAt: null, failure: null };
+  }
+  const apiKey = input.apiKey;
+  const extras = withKeyInHeaders(input.extras, apiKey);
+  const secrets = [
+    ...secretsOf({ apiKey, extras }),
+    queryEscape(apiKey),
+    ...(source.token === null ? [] : [source.token]),
+  ];
+  const keyQuery = source.token === null ? null : keyQueryInsteadOf(source.url);
+  if (keyQuery !== null) {
+    // 令牌配了只认 key 的查询：问了也只会被拒，照 magpie 不发，说该改用哪个地址。
+    return failed({
+      reason: "wrong_url",
+      detail: null,
+      status: null,
+      hint: "token_on_key_url",
+      useUrl: keyQuery,
+    });
+  }
+  if (source.method === null) {
+    // 手改坏的方法照 magpie 不发，也不当 GET 发。
+    return failed({
+      reason: "wrong_url",
+      detail: `the balance method ${JSON.stringify(input.endpoint.balance?.method ?? "")} is neither GET nor POST`,
+      status: null,
+    });
+  }
+  const problem = unsendableHeader(extras);
+  if (problem !== null) {
+    // 这家自己的请求头发不出去：照 magpie 当作没查成（它原样报错，界面归为暂时查不到），原因写明是哪个头。
+    return failed({
+      reason: "temporary",
+      detail: unsendableHeaderMessage(problem),
+      status: null,
+    });
+  }
+  const headers = requestHeadersOf({ source, apiKey, extras, userAgent: input.userAgent });
+  let status: number;
+  let text: string;
+  try {
+    const response = await upstreamFetch({
+      url: withKeyInUrl(source.url, apiKey),
+      init: {
+        ...(source.method === "POST" ? { method: "POST" as const } : {}),
+        headers,
+        signal: AbortSignal.any([
+          input.signal,
+          AbortSignal.timeout(BALANCE_READ_TIMEOUT_MS),
+          input.deadline,
+        ]),
+      },
+      uncheckedHosts: input.extras.uncheckedHosts,
+    });
+    status = response.status;
+    text = await readCapped(response);
+  } catch (error) {
+    if (input.signal.aborted) throw error;
+    return failed({
+      reason: "temporary",
+      detail: clip(redactKey(describeNetworkError(error), secrets)),
+      status: null,
+    });
+  }
+  const replied = readReply({ source, status, text, secrets, now: input.now().getTime() });
+  if ("items" in replied) {
+    return {
+      endpointId,
+      status: "ok",
+      items: replied.items,
+      ...(replied.windows.length > 0 ? { windows: replied.windows } : {}),
+      readAt,
+      failure: null,
+    };
+  }
+  return failed(replied);
+}
+
+/**
+ * 这次请求的头。用 key 问：key 的 Bearer 头、Accept、User-Agent，再写这家的请求头（可以盖过前面的）。
+ * 用令牌问用户填的地址：这家的请求头照带，Authorization 换成令牌；问认得的厂商（AiHubMix）只带令牌（照 magpie balanceRead）。
+ * 用户填的地址带上用户 ID 作 New-Api-User，盖过请求头里的。
+ */
+function requestHeadersOf(input: {
+  source: BalanceSource;
+  apiKey: string;
+  extras: RequestExtras;
+  userAgent: string;
+}): Record<string, string> {
+  const { source, extras } = input;
+  const base = { accept: "application/json", "user-agent": input.userAgent };
+  let headers: Record<string, string>;
+  if (source.token === null) {
+    headers = withUserHeaders({ authorization: `Bearer ${input.apiKey}`, ...base }, extras);
+  } else if (source.isCustom) {
+    headers = withoutHeader(withUserHeaders(base, extras), "authorization");
+    headers.authorization = balanceAuthorization(source.token);
+  } else {
+    headers = { ...base, authorization: balanceAuthorization(source.token) };
+  }
+  if (source.userId !== null) {
+    headers = withoutHeader(headers, "new-api-user");
+    headers["new-api-user"] = source.userId;
+  }
+  return headers;
+}
+
+function withoutHeader(headers: Record<string, string>, name: string): Record<string, string> {
+  return Object.fromEntries(Object.entries(headers).filter(([key]) => key.toLowerCase() !== name));
+}
+
+/** 令牌作 Authorization（照 magpie balanceAuthorization）：带空格的原样（已写了方案），形如 JWT 的加「Bearer 」，其余原样。 */
+function balanceAuthorization(token: string): string {
+  if (token.includes(" ")) return token;
+  if (token.startsWith("eyJ") && token.split(".").length === 3) return `Bearer ${token}`;
+  return token;
+}
+
+/** 对方的回复读成余额各项，或失败的原因（照 magpie balanceRead 的先后：拒绝、状态、不是 JSON、取值）。 */
+function readReply(input: {
+  source: BalanceSource;
+  status: number;
+  text: string;
+  secrets: readonly string[];
+  now: number;
+}): BalanceReplyItems | ApiEndpointBalanceFailure {
+  const { source, status, text, secrets } = input;
+  const notOffered = (note: BalanceNotOffered): ApiEndpointBalanceFailure => ({
+    reason: "not_offered",
+    detail: null,
+    status,
+    hint: note.hint,
+    seeAt: note.seeAt,
+  });
+  const body = parseJson(text);
+  const refusal = refusalOf(body);
+  if (refusal !== null) {
+    // new-api 一类的 {"success":false,"message":…}：不论状态码都是拒绝；说缺 New-Api-User 的提示补上用户 ID（magpie newAPIUserHint）。
+    return {
+      reason: "token_rejected",
+      detail: clip(redactKey(refusal, secrets)),
+      status,
+      ...(refusal.toLowerCase().includes("new-api-user")
+        ? { hint: "new_api_user_missing" as const }
+        : {}),
+    };
+  }
+  if (status >= 300) {
+    const known = source.failed?.(status, body) ?? null;
+    if (known !== null) return notOffered(known);
+    return { reason: failureOfStatus(status), detail: quoted(text, secrets), status };
+  }
+  if (body === undefined) return { reason: "wrong_url", detail: null, status };
+  const windows = source.readsKeyLimits ? sub2ApiKeyLimits(body, input.now) : [];
+  const read = source.read(body);
+  if (read.kind === "not_offered") return notOffered(read);
+  if (read.kind === "rejected") {
+    return { reason: "token_rejected", detail: clip(redactKey(read.detail, secrets)), status };
+  }
+  if (read.kind === "no_value") {
+    const limitsOnly = windows.length > 0 && !source.namesField;
+    if (limitsOnly) {
+      // 只给了限额、没有总额度的 key 没有 remaining：它现在能花的是剩得最少的那个窗口（照 magpie Balance）。
+      const left = Math.min(...windows.map((window) => (window.limit ?? 0) - (window.used ?? 0)));
+      return { items: [moneyItem("USD", Math.max(0, left))], windows };
+    }
+    return {
+      reason: "no_value",
+      detail: read.detail && clip(redactKey(read.detail, secrets)),
+      status,
+    };
+  }
+  return { items: read.items, windows };
+}
+
+/** 去哪问、怎么问、怎么读回复；认不出且没填余额查询地址时为 null。 */
+interface BalanceSource {
+  url: string;
+  // 方法读不懂（手改坏的）为 null：不发。
+  method: "GET" | "POST" | null;
+  read: (body: unknown) => BalanceRead;
+  failed?: BalanceVendor["failed"];
+  // 用户填的余额查询地址（不是按主机名认的厂商）。
+  isCustom: boolean;
+  // 代替 key 作 Authorization 的账户令牌；用 key 问时为 null。
+  token: string | null;
+  // 作 New-Api-User 发出的用户 ID；没填或不是用户填的地址时为 null。
+  userId: string | null;
+  // 用户自己写了取值写法。
+  namesField: boolean;
+  // sub2api 的 key 级查询：回复里另读限额窗口。
+  readsKeyLimits: boolean;
+}
+
+// 先后照 magpie tokenQueries。
+const TOKEN_QUERIES = [SUB2API_BALANCE_QUERIES, NEW_API_BALANCE_QUERIES] as const;
+
+/** 用户填的余额查询地址与取值写法，问之前可能换成同站点的 key 查询（keyQueryWithoutToken）。 */
+interface AskedQuery {
+  url: string;
+  field: string;
+}
+
+/** 一份回复读出的余额各项与限额窗口。 */
+interface BalanceReplyItems {
+  items: ApiEndpointBalanceItem[];
+  windows: ApiEndpointBalanceWindow[];
+}
+
+function sourceOf(input: ReadBalanceInput): BalanceSource | null {
+  const token = tokenOtherThanKey(input.balanceToken, input.apiKey);
+  const custom = input.endpoint.balance;
+  const savedUrl = custom?.url?.trim() ?? "";
+  if (custom !== undefined && savedUrl !== "") {
+    const asked = keyQueryWithoutToken({
+      url: savedUrl,
+      field: custom.field?.trim() ?? "",
+      token,
+      extras: input.extras,
+    });
+    // 用户填的地址：取值写法空着时按地址给默认写法（magpie #881），都没有时照 magpie 说要写哪里。
+    const field = asked.field || defaultBalanceField(asked.url) || "";
+    return {
+      url: asked.url,
+      method: balanceMethodOf(custom.method),
+      read: (body) => readBalanceField(body, field),
+      isCustom: true,
+      token,
+      userId: custom.userId?.trim() || null,
+      namesField: asked.field !== "",
+      readsKeyLimits: balanceUrlPath(asked.url) === SUB2API_BALANCE_QUERIES.key,
+    };
+  }
+  const vendorId = balanceVendorOf(input.endpoint.baseUrls);
+  const vendor = BALANCE_VENDORS.find((candidate) => candidate.id === vendorId);
+  if (!vendor) return null;
+  const account = token === null ? undefined : vendor.account;
+  const asked = account ?? vendor;
+  // 认得的厂商照它的回答方式问：方法只跟用户自己的地址走。
+  return {
+    url: input.vendorUrls?.[asked.id] ?? BALANCE_VENDOR_URLS[asked.id],
+    method: "GET",
+    read: asked.read,
+    ...(vendor.failed ? { failed: vendor.failed } : {}),
+    isCustom: false,
+    token: account === undefined ? null : token,
+    userId: null,
+    namesField: false,
+    readsKeyLimits: false,
+  };
+}
+
+/** 令牌只是这家的 key 再粘一遍（可带「Bearer 」）时当没有令牌，照用 key 的方式问（magpie keyNotToken）。 */
+function tokenOtherThanKey(token: string | null, apiKey: string | null): string | null {
+  let bare = token?.trim() ?? "";
+  if (bare.length > 7 && bare.slice(0, 7).toLowerCase() === "bearer ") bare = bare.slice(7).trim();
+  if (bare === "" || bare === apiKey?.trim()) return null;
+  return token?.trim() ?? null;
+}
+
+/**
+ * 填的是只认账户令牌的查询却没有令牌：改问同站点只认 key 的查询（magpie keyQueryOf），取值写法是账户查询的默认写法时
+ * 改用 key 查询的默认写法。有令牌、用户自己写了 Authorization 或 Cookie 头时照填的问。
+ */
+function keyQueryWithoutToken(input: {
+  url: string;
+  field: string;
+  token: string | null;
+  extras: RequestExtras;
+}): AskedQuery {
+  const asSet = { url: input.url, field: input.field };
+  if (input.token !== null) return asSet;
+  const ownsAuth = Object.entries(input.extras.headers).some(
+    ([name, value]) =>
+      value.trim() !== "" && ["authorization", "cookie"].includes(name.toLowerCase()),
+  );
+  if (ownsAuth) return asSet;
+  let parsed: URL;
+  try {
+    parsed = new URL(input.url);
+  } catch {
+    return asSet;
+  }
+  const path = parsed.pathname.replace(/\/+$/, "");
+  for (const query of TOKEN_QUERIES) {
+    if (!path.endsWith(query.account)) continue;
+    const accountField = defaultBalanceField(input.url);
+    parsed.pathname = path.slice(0, -query.account.length) + query.key;
+    parsed.search = "";
+    parsed.hash = "";
+    return { url: parsed.toString(), field: input.field === accountField ? "" : input.field };
+  }
+  return asSet;
+}
+
+/**
+ * 令牌配了只认 key 的查询（new-api 的 /api/usage/token、sub2api 的 /v1/usage）：该改用的同站点账户查询（magpie
+ * errKeyUsageWithToken、errSub2APIKeyUsageWithToken）；别的地址为 null。
+ */
+function keyQueryInsteadOf(url: string): string | null {
+  const path = balanceUrlPath(url);
+  const query = TOKEN_QUERIES.find((candidate) => candidate.key === path);
+  if (query === undefined) return null;
+  try {
+    const parsed = new URL(url.trim());
+    return `${parsed.origin}${query.account}`;
+  } catch {
+    return query.account;
+  }
+}
+
+const HOUR_MS = 3_600_000;
+const SUB2API_WINDOWS = [
+  { id: "5h", label: "5 hours", span: 5 * HOUR_MS },
+  { id: "1d", label: "1 day", span: 24 * HOUR_MS },
+  { id: "7d", label: "7 days", span: 7 * 24 * HOUR_MS },
+] as const;
+
+/**
+ * sub2api key 的限额窗口（照 magpie readSub2APIKeyLimits）：rate_limits 里每个窗口的已用、上限（美元）与重置时间，
+ * 依 5 小时、1 天、7 天排；上限不是正数的不算。没有 reset_at 的窗口还没开始，或用完后还没再用。带上读数时的配速。
+ */
+function sub2ApiKeyLimits(body: unknown, now: number): ApiEndpointBalanceWindow[] {
+  if (!isRecord(body) || !Array.isArray(body.rate_limits)) return [];
+  const limits = body.rate_limits.filter(isRecord);
+  const windows: ApiEndpointBalanceWindow[] = [];
+  for (const known of SUB2API_WINDOWS) {
+    for (const entry of limits) {
+      const limit = numberOf(entry.limit);
+      const window = typeof entry.window === "string" ? entry.window.trim() : "";
+      if (window !== known.id || limit === null || limit <= 0) continue;
+      const used = Math.max(0, numberOf(entry.used) ?? 0);
+      const usedPct = Math.min(100, Math.max(0, (used / limit) * 100));
+      const shown = {
+        id: known.id,
+        label: known.label,
+        usedPct,
+        remainingPct: 100 - usedPct,
+        resetsAt: isoOf(entry.reset_at),
+        used,
+        limit,
+        unit: "USD",
+      };
+      windows.push(withPace({ window: shown, span: known.span, now }));
+      break;
+    }
+  }
+  return windows;
+}
+
+function isoOf(value: unknown): string | null {
+  if (typeof value !== "string" || value.trim() === "") return null;
+  const at = new Date(value);
+  return Number.isNaN(at.getTime()) ? null : at.toISOString();
+}
+
+/** 地址或请求头的值里怎么写 key（照 magpie balanceKeyNames）：{key} {apiKey} {api_key} {API_KEY} {token} {{key}} ${API_KEY}，大小写不论。 */
+const KEY_NAMES = /\$?\{\{?\s*(?:key|api[_-]?key|token)\s*\}?\}/gi;
+
+function withKeyInUrl(url: string, apiKey: string): string {
+  const escaped = queryEscape(apiKey);
+  return url.replace(KEY_NAMES, () => escaped);
+}
+
+/** 这家的请求头里写的 key 占位换成 key（照 magpie withBalanceKey，只在查余额时）。 */
+function withKeyInHeaders(extras: RequestExtras, apiKey: string): RequestExtras {
+  const headers: Record<string, string> = {};
+  for (const [name, value] of Object.entries(extras.headers)) {
+    headers[name] = value.replace(KEY_NAMES, () => apiKey);
+  }
+  return { ...extras, headers };
+}
+
+/** 照 Go 的 url.QueryEscape：空格写成 +，字母数字与 - _ . ~ 之外的都转义。 */
+function queryEscape(value: string): string {
+  return encodeURIComponent(value)
+    .replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)
+    .replace(/%20/g, "+");
+}
+
+/** 读回复的前 1 MB，读够就不再收。 */
+async function readCapped(response: UpstreamResponse): Promise<string> {
+  const parts: Uint8Array[] = [];
+  let size = 0;
+  for await (const chunk of response.chunks()) {
+    const left = MAX_BODY_BYTES - size;
+    parts.push(chunk.byteLength > left ? chunk.subarray(0, left) : chunk);
+    size += Math.min(chunk.byteLength, left);
+    if (size >= MAX_BODY_BYTES) break;
+  }
+  return Buffer.concat(parts).toString("utf8");
+}
+
+function failureOfStatus(status: number): ApiEndpointBalanceFailureReason {
+  if (status === 401 || status === 403) return "token_rejected";
+  if (status === 408 || status === 429 || status >= 500) return "temporary";
+  // 404 与别的 4xx：问的地址或请求不对。
+  return "wrong_url";
+}
+
+function refusalOf(body: unknown): string | null {
+  if (!isRecord(body) || body.success !== false || typeof body.message !== "string") return null;
+  const message = body.message.trim();
+  return message === "" ? null : message;
+}
+
+/** 对方回的 JSON 怎么说（它写的错误信息，没有就整份压成一行）；网页与别的文字不引。 */
+function quoted(text: string, secrets: readonly string[]): string | null {
+  const oneLine = text.replace(/\s+/g, " ").trim();
+  if (!oneLine.startsWith("{") && !oneLine.startsWith("[")) return null;
+  return clip(redactKey(structuredErrorMessage(text) ?? oneLine, secrets));
+}
+
+function clip(text: string): string {
+  const chars = [...text];
+  return chars.length > MAX_DETAIL_CHARS ? `${chars.slice(0, MAX_DETAIL_CHARS).join("")}…` : text;
+}
+
+/** 币种的符号：人民币 ¥、美元 $，别的写代码加空格。 */
+function currencySign(code: string): string {
+  const upper = code.toUpperCase();
+  if (upper === "CNY" || upper === "RMB") return "¥";
+  if (upper === "USD") return "$";
+  if (upper === "") return "";
+  return `${upper} `;
+}
+
+function moneyItem(code: string, value: number): ApiEndpointBalanceItem {
+  const unit = code.toUpperCase();
+  return {
+    label: null,
+    text: `${currencySign(unit)}${value.toFixed(2)}`,
+    value,
+    unit: unit === "" ? null : unit,
+  };
+}
+
+interface DeepSeekAmount {
+  code: string;
+  total: number;
+  // 赠送与充值：回复两项都给了才有。
+  split: { granted: number; topped: number } | null;
+}
+
+/**
+ * DeepSeek：{"balance_infos":[{"currency":"CNY","total_balance":"110.00","granted_balance":"10.00","topped_up_balance":"100.00"}]}。
+ * 各币种「 · 」拼成一项，有余额的在前、同组按币种代码排（DeepSeek 每次给的顺序不同）；
+ * 有赠送的币种在总额下拆出「赠送 / 充值」（magpie 最新版 readDeepSeekSplit）。
+ */
+function readDeepSeek(body: unknown): BalanceRead {
+  if (!isRecord(body) || !Array.isArray(body.balance_infos)) return NO_VALUE;
+  const amounts: DeepSeekAmount[] = [];
+  for (const info of body.balance_infos) {
+    if (!isRecord(info)) continue;
+    const total = numberOf(info.total_balance);
+    if (total === null) continue;
+    const granted = numberOf(info.granted_balance);
+    const topped = numberOf(info.topped_up_balance);
+    amounts.push({
+      code: typeof info.currency === "string" ? info.currency.toUpperCase() : "",
+      total,
+      split: granted !== null && topped !== null ? { granted, topped } : null,
+    });
+  }
+  if (amounts.length === 0) return NO_VALUE;
+  amounts.sort((a, b) => {
+    if (a.total > 0 !== b.total > 0) return a.total > 0 ? -1 : 1;
+    if (a.code === b.code) return 0;
+    return a.code < b.code ? -1 : 1;
+  });
+  const [first] = amounts;
+  const items: ApiEndpointBalanceItem[] = [
+    {
+      ...moneyItem(first.code, first.total),
+      text: amounts.map((amount) => moneyItem(amount.code, amount.total).text).join(" · "),
+    },
+  ];
+  for (const amount of amounts) {
+    // 没有赠送的币种全是充值，总额已经说了。
+    if (amount.split === null || amount.split.granted === 0) continue;
+    items.push(
+      { ...moneyItem(amount.code, amount.split.granted), label: "Granted", part: "granted" },
+      { ...moneyItem(amount.code, amount.split.topped), label: "Topped up", part: "topped_up" },
+    );
+  }
+  return itemsOf(...items);
+}
+
+/** Moonshot：{"code":0,"data":{"available_balance":49.58},"status":true}；.cn 人民币、.ai 美元。 */
+function readMoonshot(code: string) {
+  return (body: unknown): BalanceRead => {
+    const value =
+      isRecord(body) && isRecord(body.data) ? numberOf(body.data.available_balance) : null;
+    return value === null ? NO_VALUE : itemsOf(moneyItem(code, value));
+  };
+}
+
+/** OpenRouter：{"data":{"total_credits":20,"total_usage":3.5}}，美元，剩的是总额减已用。 */
+function readOpenRouter(body: unknown): BalanceRead {
+  if (!isRecord(body) || !isRecord(body.data)) return NO_VALUE;
+  const credits = numberOf(body.data.total_credits);
+  if (credits === null) return NO_VALUE;
+  return itemsOf(moneyItem("USD", credits - (numberOf(body.data.total_usage) ?? 0)));
+}
+
+/** 硅基流动：{"code":20000,"data":{"totalBalance":"88.88"}}。 */
+function readSiliconFlow(code: string) {
+  return (body: unknown): BalanceRead => {
+    const value = isRecord(body) && isRecord(body.data) ? numberOf(body.data.totalBalance) : null;
+    return value === null ? NO_VALUE : itemsOf(moneyItem(code, value));
+  };
+}
+
+/**
+ * 硅基流动 2026-08-14 下线了 /v1/user/info（410，code 20092，magpie #1094），还没有替代的接口，
+ * 余额与代金券只能去控制台看。key 本身被拒（401 30014）照原样说。
+ */
+function siliconFlowGone(consoleUrl: string) {
+  return (status: number, body: unknown): BalanceNotOffered | null => {
+    const code = isRecord(body) ? body.code : undefined;
+    if (status !== 410 && code !== 20092) return null;
+    return { kind: "not_offered", hint: "siliconflow_retired", seeAt: consoleUrl };
+  };
+}
+
+/** 阶跃：{"object":"account","balance":26.00,…}，balance 是还能花的，含代金券。 */
+function readStepFun(code: string) {
+  return (body: unknown): BalanceRead => {
+    const value = isRecord(body) ? numberOf(body.balance) : null;
+    return value === null ? NO_VALUE : itemsOf(moneyItem(code, value));
+  };
+}
+
+/** Command Code：{"credits":{"monthlyCredits":41.2,"purchasedCredits":5,"freeCredits":0}}，三项之和（负数按 0），美元。 */
+function readCommandCode(body: unknown): BalanceRead {
+  if (!isRecord(body) || !isRecord(body.credits)) return NO_VALUE;
+  const credits = body.credits;
+  let left = 0;
+  let found = false;
+  for (const value of [credits.monthlyCredits, credits.purchasedCredits, credits.freeCredits]) {
+    const amount = numberOf(value);
+    if (amount === null) continue;
+    left += Math.max(0, amount);
+    found = true;
+  }
+  return found ? itemsOf(moneyItem("USD", left)) : NO_VALUE;
+}
+
+/**
+ * Ollama Cloud：{"included":{…},"purchased":{"balance_usd":25.0}}，套餐之外买的 credits（美元）。
+ * 没买过的不出这一项；included、purchased 都没有的回复取不到值。
+ */
+function readOllamaCredits(body: unknown): BalanceRead {
+  if (!isRecord(body)) return NO_VALUE;
+  const purchased = isRecord(body.purchased) ? body.purchased : null;
+  if (purchased === null) {
+    if (isRecord(body.included)) return itemsOf();
+    return {
+      kind: "no_value",
+      detail: `Ollama's reply has no included or purchased balance: ${shapeOf(body)}`,
+    };
+  }
+  const value = numberOf(purchased.balance_usd);
+  return value === null ? itemsOf() : itemsOf(moneyItem("USD", value));
+}
+
+/** 回复的结构（照 magpie shapeOf）：顶层与第二层的字段名，排序后最多 12 个，不带值。 */
+function shapeOf(body: Record<string, unknown>): string {
+  const names: string[] = [];
+  for (const [key, value] of Object.entries(body)) {
+    const inner = isRecord(value) ? Object.keys(value) : [];
+    if (inner.length === 0) names.push(key);
+    else names.push(...inner.map((name) => `${key}.${name}`));
+  }
+  if (names.length === 0) return "an empty object";
+  names.sort();
+  const shown = names.length > 12 ? [...names.slice(0, 12), "…"] : names;
+  return `fields ${shown.join(", ")}`;
+}
+
+/**
+ * AiHubMix：{"object":"list","total_usage":12.5}，名字叫 usage 其实是 key 还剩的美元。
+ * 没设上限的 key 回负数：它没有自己的余额，账户余额只告诉账户令牌，不告诉 key。
+ */
+function readAiHubMix(body: unknown): BalanceRead {
+  const value = isRecord(body) ? numberOf(body.total_usage) : null;
+  if (value === null) return NO_VALUE;
+  if (value < 0) return { kind: "not_offered", hint: "aihubmix_no_limit", seeAt: null };
+  return itemsOf(moneyItem("USD", value));
+}
+
+/**
+ * AiHubMix 的账户（填了账户令牌）：{"success":true,"data":{"quota":2500000}}，按 500000 换 1 美元。
+ * 拒绝且有话说的在 refusalOf 里已经认出；没话说的照 magpie 说没收下令牌。
+ */
+function readAiHubMixAccount(body: unknown): BalanceRead {
+  if (!isRecord(body)) return NO_VALUE;
+  if (body.success !== true) {
+    return { kind: "rejected", detail: "AiHubMix didn't take the access token" };
+  }
+  const quota = isRecord(body.data) ? numberOf(body.data.quota) : null;
+  return quota === null ? NO_VALUE : itemsOf(moneyItem("USD", quota / 500000));
+}
+
+/**
+ * 接口在 OpenCode Zen 上（照 magpie openCodeZen / openCodeGateway）：opencode.ai 下 /zen、/inference 开头；
+ * 有一个地址是 Go（/zen/go、/inference/go）就不算，用户自己挂在 /inference/custom 下的也不算。
+ */
+function openCodeZen(baseUrls: StoredApiEndpoint["baseUrls"]): boolean {
+  let zen = false;
+  for (const format of FORMAT_ORDER) {
+    const url = baseUrls.find((entry) => entry.format === format)?.url;
+    if (url === undefined) continue;
+    const gateway = openCodeGateway(url);
+    if (gateway === "go") return false;
+    if (gateway === "zen") zen = true;
+  }
+  return zen;
+}
+
+function openCodeGateway(base: string): "go" | "zen" | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(base.trim());
+  } catch {
+    return null;
+  }
+  const host = parsed.hostname.toLowerCase().replace(/\.$/, "");
+  if (host !== "opencode.ai" && !host.endsWith(".opencode.ai")) return null;
+  const segments = parsed.pathname.replace(/^\/+|\/+$/g, "").split("/");
+  if (segments[0] !== "zen" && segments[0] !== "inference") return null;
+  if (segments[1] === "go") return "go";
+  if (segments[1] === "custom") return null;
+  return "zen";
+}

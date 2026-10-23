@@ -2788,6 +2788,64 @@ export const es: TranslationResources = {
         apiKeyOptionalLabel: "Clave de API (opcional)",
         apiKeyLocalPlaceholder: "Opcional en servidores locales",
         keyRejected: "El servidor rechazó esta clave (401 / 403)",
+        balance: {
+          url: "URL de saldo",
+          urlInfo:
+            "Dirección donde el proveedor dice cuánto queda en la clave; se consulta con GET, o POST sin cuerpo. Lleva la clave como Bearer, igual que una petición de chat, con las cabeceras de este endpoint; {key} en la dirección o en una cabecera se cambia por la clave. Si la rellenas, se consulta esta dirección en lugar de la que Osuna conoce para el proveedor. Solo se consulta con las páginas del endpoint abiertas, como mucho una vez por minuto.",
+          field: "Campo de saldo",
+          fieldInfo:
+            "Dónde está el importe en la respuesta, p. ej. data.balance. Puede ser una suma con + - * / y paréntesis, p. ej. data.total / 500000. “$” o “¥” delante añade el signo; “%” detrás lo muestra como porcentaje con barra. Varios, cada uno con etiqueta, se separan con “;”, p. ej. 5h: a.used / a.cap %; $credits.left. Los elementos de una lista son a.*.used, o a[status=active].used para los que cumplen, dentro de sum(), max(), min() o count(). Si lo dejas vacío, las direcciones de new-api, sub2api y credit grants se leen como muestra el ejemplo.",
+          check: "Consultar saldo",
+          detect: "Detectar URL",
+          detectFound: "Es un sitio {{kind}}; se rellenó la URL de saldo",
+          detectMissed: "Ni la URL de saldo de new-api ni la de sub2api devolvieron un saldo",
+          detectAttempt: "{{path}}: {{reason}}",
+          nothingToAsk:
+            "No hay URL de saldo que consultar y no se conoce el saldo de este proveedor",
+          token: "Token de la cuenta",
+          tokenInfo:
+            "Con qué se consulta la URL de saldo en lugar de la clave cuando pide el token propio de la cuenta: el token de acceso del sistema de un relay new-api, o el token de inicio de sesión de un panel sub2api (un JWT, enviado como Bearer). En AiHubMix, su token de acceso del sistema muestra el saldo de toda la cuenta sin URL de saldo. Se guarda solo en este host y no se usa para nada más.",
+          tokenPlaceholder:
+            "Opcional · el token de acceso del sistema o de inicio de sesión de la cuenta",
+          tokenSavedPlaceholder: "Guardado: {{mask}}",
+          tokenRemove: "Quitar",
+          userId: "ID de usuario",
+          userIdInfo:
+            "Tu ID de usuario en un relay new-api, visible en los ajustes personales del sitio. Se envía como New-Api-User solo al consultar el saldo, nunca con una solicitud de chat. Una cabecera New-Api-User en este endpoint también sirve; este campo tiene prioridad.",
+          userIdPlaceholder: "Opcional · solo new-api",
+          teamOrgId: "ID de organización del equipo",
+          teamOrgIdInfo:
+            "El ID de organización de un equipo de GLM Coding Plan, como lo muestra la consola de BigModel o Z.ai. Con el ID de proyecto, se leen las ventanas del equipo cuando esta clave no tiene plan propio.",
+          teamOrgIdPlaceholder: "Opcional · solo plan de equipo GLM",
+          teamProjectId: "ID de proyecto del equipo",
+          teamProjectIdInfo:
+            "El ID de proyecto del equipo, de la misma consola. Hacen falta los dos ID.",
+          teamProjectIdPlaceholder: "Opcional · solo plan de equipo GLM",
+          teamBothNeeded: "Plan de equipo: indica el ID de organización y el ID de proyecto",
+          volcAccessKeyId: "AccessKey ID",
+          volcSecretAccessKey: "Secret Access Key",
+          tencentSecretId: "SecretId",
+          tencentSecretKey: "SecretKey",
+          accessKeyVendor: {
+            volcengine: "Volcengine Ark",
+            tencent: "Tencent Cloud Token Plan Enterprise",
+          },
+          accessKeyInfo:
+            "{{vendor}} solo da las ventanas de uso de un plan a la clave de acceso a la nube de la cuenta (creada en la gestión de accesos de la consola), nunca a la clave del propio plan. Con ambos campos, las ventanas se leen de la plataforma abierta del proveedor. Se guarda solo en este host y no se usa para nada más.",
+          secretAccessKeyInfo:
+            "El secreto que acompaña al ID. Solo se envía una firma hecha con él, nunca el secreto.",
+          accessKeySecretNeeded: "Indica también la {{secret}}",
+          accessKeyRemove: "Quitar",
+          fixNewApiKeyQuery:
+            "…/api/usage/token acepta la clave de API, no este token. Para el saldo de la cuenta, new-api usa /api/user/self; sub2api usa /api/v1/user/profile.",
+          fixSub2apiKeyQuery:
+            "…/v1/usage acepta la clave de API, no este token. Para el saldo de la cuenta, un panel sub2api usa /api/v1/user/profile.",
+          fixNoUrl:
+            "El token necesita una URL de saldo: un relay new-api usa /api/user/self; un panel sub2api usa /api/v1/user/profile.",
+          fixUserId:
+            "Un relay new-api también pide tu ID de usuario (en los ajustes personales del sitio): rellena ID de usuario abajo.",
+          useUrl: "Usar {{url}}",
+        },
         extras: {
           advanced: "Avanzado",
           advancedShow: "Mostrar avanzado",
@@ -2994,6 +3052,142 @@ export const es: TranslationResources = {
             "Los modelos de {{name}} se quitarán de la lista de modelos de todos los agentes.",
           defaultChanged: "El modelo predeterminado de {{agent}} cambiará de {{from}} a {{to}}.",
           confirm: "Eliminar",
+        },
+      },
+      balance: {
+        title: "Saldo y uso del plan",
+        info: "Lo que el proveedor de este endpoint dice que queda en su clave. Solo se muestra: la conmutación por error nunca lo lee.",
+        balance: "Saldo",
+        refresh: "Actualizar",
+        loading: "Leyendo el saldo…",
+        readJustNow: "Leído justo ahora",
+        readAgo: "Leído {{time}}",
+        failedJustNow: "Error al leer justo ahora",
+        failedAgo: "Error al leer {{time}}",
+        staleTemporary: "No se pudo leer ahora · leído {{time}}",
+        staleNotAsked: "Sin actualizar · leído {{time}}",
+        staleMomentAgo: "hace un momento",
+        unsupported: "No se conoce cómo leer el saldo de este proveedor",
+        fillUrl: "Rellenar URL de saldo",
+        noKey: "Este endpoint no tiene clave, así que no se puede leer su saldo",
+        rowUnavailable: "Saldo no disponible",
+        rowNeedsAccessKey: "Falta AccessKey",
+        needsAccessKeyVolcengine:
+          "Volcengine Ark solo da las ventanas de este plan al AccessKey ID y la Secret Access Key de la cuenta. Rellénalos en Avanzado, en la configuración de este endpoint.",
+        needsAccessKeyTencent:
+          "Tencent Cloud solo da el uso de un Token Plan Enterprise al SecretId y la SecretKey de la cuenta. Rellénalos en Avanzado, en la configuración de este endpoint.",
+        fillAccessKey: "Rellenar AccessKey",
+        planTier: "Nivel: {{tier}}",
+        planStopped: "Plan detenido: {{status}}",
+        teamPlanStopped: "Plan del equipo {{team}} detenido: {{status}}",
+        unreadTeams: "No se pudo leer el uso del plan de: {{teams}}",
+        rowAmount: "Saldo {{amount}}",
+        rowWindowUsed: "{{window}} {{percent}} usado",
+        rowWindowLeft: "{{window}} {{percent}} restante",
+        readFailed: "No se pudo leer el saldo",
+        withStatus: "{{text}} (HTTP {{status}})",
+        failure: {
+          wrongUrl: "Dirección incorrecta: el proveedor no respondió con un saldo",
+          tokenRejected: "Token rechazado: el proveedor rechazó la clave",
+          notOffered: "Este proveedor no ofrece consulta de saldo",
+          noValue: "Sin valor: la respuesta no contiene saldo",
+          temporary: "No disponible temporalmente: inténtalo más tarde",
+        },
+        noItems: "Este proveedor no tiene ahora un saldo aparte que mostrar",
+        openConsole: "Abrir consola ↗",
+        openConsoleLabel: "Abrir {{url}} en el navegador",
+        part: {
+          granted: "Regalado",
+          toppedUp: "Recargado",
+        },
+        hint: {
+          accessKeyRefused:
+            "Revisa el AccessKey (AK/SK) y sus permisos: la plataforma abierta rechazó la clave de acceso, o no puede leer el uso de este plan.",
+          glmKeyRefused:
+            "Esta clave caducó, se eliminó o está mal escrita: copia una vigente desde la consola y pégala en los ajustes de este endpoint.",
+          opencodeGoNoSubscription:
+            "Esta clave no tiene OpenCode Go: Go pertenece al miembro que se suscribió, en ese espacio de trabajo. Usa una clave creada por ese miembro allí (opencode.ai, API Keys del espacio de trabajo).",
+          opencodeKeyRefused: "OpenCode no acepta esta clave: se eliminó o está mal escrita.",
+          opencodeNoBalance:
+            "OpenCode no da el saldo a una clave de API: los créditos de pago por uso de Zen solo se muestran en la consola de OpenCode, en Overview → Credits (para los propietarios y administradores del espacio de trabajo).",
+          siliconflowRetired:
+            "SiliconFlow retiró su consulta de saldo y aún no tiene otra API. Consulta el saldo y los cupones en su consola (en el sitio de China: 余额充值 → 代金券).",
+          aihubmixNoLimit:
+            "Esta clave no tiene límite y AiHubMix solo le dice a una clave lo que le queda. Para ver el saldo de la cuenta, añade el token de acceso de la cuenta en los ajustes de este endpoint (AiHubMix → Ajustes → Generar token de acceso del sistema), o ponle un límite a la clave en la consola de AiHubMix.",
+          notAsked:
+            "Aún sin leer: la actualización automática está desactivada. Pulsa Actualizar para leerlo.",
+          tokenOnKeyUrl:
+            "Esta URL de saldo acepta la clave de API, no el token de la cuenta. Cámbiala a {{url}} para ver el saldo de la cuenta, o quita el token para ver el de la clave.",
+          newApiUserMissing:
+            "El relay pide tu ID de usuario: rellena ID de usuario en los ajustes de este endpoint (visible en los ajustes personales del sitio).",
+        },
+        window: {
+          hoursOne: "{{count}} hora",
+          hoursMany: "{{count}} horas",
+          daysOne: "{{count}} día",
+          daysMany: "{{count}} días",
+          minutesOne: "{{count}} minuto",
+          minutesMany: "{{count}} minutos",
+          month: "Mes",
+          allowance: "Uso del plan",
+          mcpMonth: "MCP · Mes",
+          session: "Sesión",
+          credits: "Créditos",
+          bucket: "{{bucket}} · {{window}}",
+          bucketVideo: "Vídeo",
+          bucketImage: "Imagen",
+          unitCredits: "créditos",
+          unitTokens: "tokens",
+          unitVideos: "vídeos",
+        },
+        pace: "Ritmo {{pace}}",
+        asideTitle: "No detiene los modelos",
+        teamPlan: "Plan de equipo",
+        resets: {
+          left: "Quedan {{resets}}",
+          countOne: "{{count}} reinicio",
+          countMany: "{{count}} reinicios",
+          fiveHourOne: "{{count}} reinicio de 5 horas",
+          fiveHourMany: "{{count}} reinicios de 5 horas",
+          weeklyOne: "{{count}} reinicio semanal",
+          weeklyMany: "{{count}} reinicios semanales",
+          soonest: "El primero vence {{when}}",
+          info: "Los reinicios se usan en la página del proveedor; Osuna solo los muestra.",
+          eachExpires: "El reinicio {{n}} vence {{when}}",
+          eachNever: "El reinicio {{n}} no vence",
+          eachFiveHourExpires: "El reinicio de cinco horas vence {{when}}",
+          eachFiveHourNever: "El reinicio de cinco horas no vence",
+          eachWeeklyExpires: "El reinicio semanal vence {{when}}",
+          eachWeeklyNever: "El reinicio semanal no vence",
+          showEach: "Mostrar cuándo vence cada reinicio",
+          hideEach: "Ocultar cuándo vence cada reinicio",
+          use: {
+            action: "Usar un reinicio",
+            confirmTitle: "¿Usar un reinicio de {{source}}?",
+            confirmOne:
+              "{{who}} tiene 1 reinicio. Al usarlo, sus ventanas empiezan de nuevo al instante, como si no se hubiera usado ninguna. No se puede deshacer.",
+            confirmMany:
+              "{{who}} tiene {{count}} reinicios. Al usar uno, sus ventanas empiezan de nuevo al instante, como si no se hubiera usado ninguna. No se puede deshacer.",
+            confirmSoonest: "Se usa el que vence primero, {{when}}.",
+            confirmIdle:
+              "Todavía no se ha usado ninguna de sus ventanas, así que no hay nada que empezar de nuevo.",
+            hintSoonest:
+              "Usa el reinicio que vence primero ({{when}}), nunca uno que dure más. Las ventanas de esta cuenta empiezan de nuevo al instante, como si no se hubiera usado ninguna. Se te pregunta antes de usar nada.",
+            hintNoExpiry:
+              "Usa uno de sus reinicios; ninguno vence. Las ventanas de esta cuenta empiezan de nuevo al instante, como si no se hubiera usado ninguna. Se te pregunta antes de usar nada.",
+            outcomeResetOne: "1 ventana empezó de nuevo",
+            outcomeResetMany: "{{count}} ventanas empezaron de nuevo",
+            outcomeNothingToReset:
+              "Nada que empezar de nuevo: no se ha usado ninguna ventana y el reinicio se conserva",
+            outcomeNoCredit: "No quedan reinicios en la cuenta",
+            outcomeAlreadyRedeemed: "Ese reinicio ya se había usado",
+            failed: "No se pudo usar un reinicio: {{error}}",
+          },
+        },
+        autoRefresh: {
+          label: "Actualizar saldo y uso del plan automáticamente",
+          hint: "Cada minuto mientras la lista de endpoints o la página de un endpoint esté abierta. Desactivado: solo al abrir una de ellas o al pulsar Actualizar en la página de un endpoint.",
+          saveFailed: "No se pudo cambiar la actualización automática: {{message}}",
         },
       },
       models: {

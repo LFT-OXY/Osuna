@@ -1,3 +1,4 @@
+import { consumeSoonestReset, readResets } from "./resets.js";
 import { discoverOmp, piAuthPath, readHarness, readJson, type StoreLookup } from "./stores.js";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -10,6 +11,7 @@ import {
   toneFromUsedPct,
   windowFromReportedDuration,
   type UsageReport,
+  type UsageResetOutcome,
   type UsageWindow,
 } from "@getpaseo/plugin/server/usage";
 import { z } from "zod";
@@ -49,6 +51,7 @@ const responseSchema = z.object({
     .nullish(),
   code_review_rate_limit: rateLimitSchema.nullish(),
   credits: z.object({ balance: number.optional() }).nullish(),
+  rate_limit_reset_credits: z.object({ available_count: number.optional() }).nullish(),
 });
 
 interface Auth {
@@ -184,10 +187,33 @@ function usageWindows({
   });
 }
 
+/**
+ * 用掉这个账号最早过期的一次重置，用同一份 Codex 登录（只读登录文件，不写）。
+ * 这是 Osuna 用 CLI 的登录改变账号状态的唯一一处：只在用户确认后由 daemon 调用。
+ */
+export async function consumeReset(
+  input: CodexUsageInput,
+  fetchApi: typeof fetch = fetch,
+  lookup: StoreLookup = {},
+  userAgent = "Osuna",
+): Promise<UsageResetOutcome> {
+  const auth = await readAuth(input, lookup);
+  if (!auth) throw new Error("Codex login store no longer exists");
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${auth.token}`,
+    Accept: "application/json",
+    "User-Agent": userAgent,
+  };
+  if (auth.accountId) headers["ChatGPT-Account-Id"] = auth.accountId;
+  return consumeSoonestReset({ headers, fetchApi });
+}
+
 export async function fetchUsage(
   input: CodexUsageInput,
   fetchApi: typeof fetch = fetch,
   lookup: StoreLookup = {},
+  /** Osuna 自己的身份，写在 Osuna 新加的请求上（重置清单）；wham/usage 照上游原样。 */
+  userAgent = "Osuna",
 ): Promise<UsageReport> {
   const auth = await readAuth(input, lookup);
   if (!auth) throw new Error("Codex login store no longer exists");
@@ -233,6 +259,11 @@ export async function fetchUsage(
     }),
   ];
   const balance = usage.credits?.balance;
+  const resets = await readResets({
+    count: usage.rate_limit_reset_credits?.available_count,
+    headers: { ...headers, "User-Agent": userAgent },
+    fetchApi,
+  });
   return {
     status: "available",
     planLabel: usage.plan_type,
@@ -250,6 +281,7 @@ export async function fetchUsage(
             },
           ],
     details: [],
+    ...(resets ? { resets } : {}),
   };
 }
 

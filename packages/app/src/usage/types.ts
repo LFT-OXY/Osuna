@@ -14,3 +14,9 @@ export type UsageView =
   | { kind: "loading" }
   | { kind: "error"; message: string }
   | { kind: "ready"; reports: UsageReportEntry[]; isRefreshing: boolean };
+
+/** Osuna：窗口的配速文字（「配速 +12%」）；over 是照这样会在重置前用完。 */
+export interface UsageWindowPace {
+  text: string;
+  over: boolean;
+}

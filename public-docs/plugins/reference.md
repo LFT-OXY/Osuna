@@ -306,7 +306,8 @@ Paseo provides `@getpaseo/plugin`, `@getpaseo/plugin/server`,
 `@getpaseo/plugin/server/provider`, `@getpaseo/plugin/server/acp`, and `zod` to server code. Backend
 contributions run in a daemon subprocess with Node access to the host machine. Keep filesystem,
 process, credential, and other machine-local work under `server/`. A plugin without
-`index.server.ts` starts no subprocess.
+`index.server.ts` starts no subprocess. `server.appVersion` is the daemon's version; name it in
+your own outbound requests' `User-Agent` rather than posing as another app.
 
 ### Providers
 
@@ -348,7 +349,7 @@ SVG or URL.
 `server.registerUsageSource()`. Import its contract and helpers from
 `@getpaseo/plugin/server/usage`.
 
-A source implements two calls:
+A source implements two calls, and a third optional one:
 
 ```ts
 interface UsageAccount {
@@ -369,6 +370,15 @@ interface UsageSourceRegistration {
   input: ZodType;
   discover(scope: UsageScope): Promise<UsageAccount[]>;
   fetch(input: unknown): Promise<UsageReport>;
+  // Uses the account's reset that expires soonest. Throw, using none, when you can't tell which.
+  consumeReset?(input: unknown): Promise<UsageResetOutcome>;
+}
+
+// `code` is the vendor's word: "reset" (`windows` started again), "nothing_to_reset" (none was
+// used, the reset is kept), "no_credit" or "already_redeemed". Others are shown as given.
+interface UsageResetOutcome {
+  code: string;
+  windows: number;
 }
 
 type UsageReport =
@@ -378,9 +388,22 @@ type UsageReport =
       windows: UsageWindow[];
       balances?: UsageBalance[];
       details?: UsageDetail[];
+      resets?: UsageResets;
     }
   | { status: "unavailable"; problem: UsageProblem }
   | { status: "error"; error: string };
+
+// Resets the account holds, each starting its windows over early. `until` is when the soonest
+// expires; `each` lists them soonest first, ones that never expire last. Leave `each` out
+// unless it lists exactly `count` resets.
+interface UsageResets {
+  count: number;
+  until: string | null;
+  byWindow?: boolean;
+  fiveHour?: number;
+  weekly?: number;
+  each?: { until: string | null; window?: string }[];
+}
 
 type UsageProblem =
   | { kind: "expired"; expiresAt: string; refreshedBy?: string }
@@ -400,6 +423,10 @@ Inputs name credential stores; never put credentials in inputs or reports. Paseo
 input against your schema before calling `fetch()`. The same key in any scope is the same report;
 fetches share a five-minute cache only when their ordered login inputs match. Each login fetch
 has a 20-second deadline.
+
+`consumeReset()` gets the input of the login the card last showed, only after the user confirms,
+and Paseo then re-reads that account past the cache. Using a reset can't be undone; never call it
+on your own.
 
 Built-in session routes:
 

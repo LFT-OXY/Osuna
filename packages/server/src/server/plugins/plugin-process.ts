@@ -143,6 +143,7 @@ export function createPluginWorker(options: {
       !source.label.trim() ||
       typeof source.fetch !== "function" ||
       typeof source.discover !== "function" ||
+      (source.consumeReset !== undefined && typeof source.consumeReset !== "function") ||
       !source.input ||
       typeof source.input.parseAsync !== "function"
     ) {
@@ -280,6 +281,7 @@ export function createPluginWorker(options: {
         )
       : null;
     const contributedCleanup = contribute({
+      appVersion: message.appVersion,
       handle: (contract, handler) =>
         register(contract, (input, context) => handler(contract.input.parse(input), context)),
       registerProvider,
@@ -301,6 +303,7 @@ export function createPluginWorker(options: {
           icon: source.icon
             ? await readPluginProviderIcon(message.pluginDirectory, source.icon)
             : undefined,
+          consumesResets: source.consumeReset ? true : undefined,
         })),
     );
     send({
@@ -339,7 +342,10 @@ export function createPluginWorker(options: {
   }
 
   function handleUsageRequest(
-    message: Extract<PluginProcessRequest, { type: "usage.fetch" | "usage.discover" }>,
+    message: Extract<
+      PluginProcessRequest,
+      { type: "usage.fetch" | "usage.discover" | "usage.consume_reset" }
+    >,
   ): void {
     void (async () => {
       const source = usageSources.get(message.sourceId);
@@ -347,6 +353,11 @@ export function createPluginWorker(options: {
       if (message.type === "usage.discover")
         return jsonTransportValue(await source.discover(message.scope));
       const input = await source.input.parseAsync(message.input);
+      if (message.type === "usage.consume_reset") {
+        if (!source.consumeReset)
+          throw new Error(`Usage source can't use resets: ${message.sourceId}`);
+        return jsonTransportValue(await source.consumeReset(input));
+      }
       return jsonTransportValue(await source.fetch(input));
     })().then(
       (output) => send({ type: "result", requestId: message.requestId, output }),
@@ -359,7 +370,8 @@ export function createPluginWorker(options: {
       message.type === "provider.status" ||
       message.type === "provider.catalog_key" ||
       message.type === "usage.fetch" ||
-      message.type === "usage.discover"
+      message.type === "usage.discover" ||
+      message.type === "usage.consume_reset"
     ) {
       send({ type: "error", requestId: message.requestId, error: "Plugin is stopping" });
     } else if (message.type === "provider.connect") {
@@ -446,7 +458,11 @@ export function createPluginWorker(options: {
       );
       return;
     }
-    if (message.type === "usage.fetch" || message.type === "usage.discover") {
+    if (
+      message.type === "usage.fetch" ||
+      message.type === "usage.discover" ||
+      message.type === "usage.consume_reset"
+    ) {
       handleUsageRequest(message);
       return;
     }

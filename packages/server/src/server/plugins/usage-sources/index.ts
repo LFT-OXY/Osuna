@@ -1,3 +1,5 @@
+// 用掉重置的结果说法（resetOutcomeText）照 magpie（https://github.com/yetone/magpie，internal/provider/codex_resets.go 的 ResetOutcome.Text，7597c132）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import { createHash } from "node:crypto";
 import type { AgentUsageSession } from "../../agent/agent-sdk-types.js";
 import type { UsageScope } from "@getpaseo/plugin/server/usage";
@@ -5,10 +7,12 @@ import { z } from "zod";
 import type { Logger } from "pino";
 import {
   UsageReportSchema,
+  UsageResetOutcomeSchema,
   type ProviderUsage,
   type UsageReportEntry,
   type UsageProblem,
   type UsageReport,
+  type UsageResetOutcome,
 } from "@getpaseo/protocol/messages";
 
 export interface UsageSource {
@@ -17,6 +21,8 @@ export interface UsageSource {
   icon?: string;
   discover(scope: UsageScope): Promise<unknown>;
   fetch(input: unknown): Promise<unknown>;
+  /** Uses one of the account's resets; sources that can't leave it out. */
+  consumeReset?(input: unknown): Promise<unknown>;
 }
 
 interface Login {
@@ -42,6 +48,12 @@ export interface ListUsageReportsOptions {
   onReport?: (report: UsageReportEntry) => void;
 }
 
+/** What using a reset did, and the account read afresh after it. */
+export interface UsageResetResult {
+  outcome: UsageResetOutcome;
+  entry: UsageReportEntry;
+}
+
 interface AgentReports {
   provider: string;
   model?: string;
@@ -57,6 +69,8 @@ export class UsageSourceRegistry {
   private readonly byAgent = new Map<string, AgentReports>();
   private readonly cache = new Map<string, { at: number; entry: UsageReportEntry }>();
   private readonly pending = new Map<string, Promise<UsageReportEntry>>();
+  /** The login whose report each account's card last showed: a reset is used through it. */
+  private readonly answeredBy = new Map<string, Login>();
 
   constructor(
     private readonly now: () => number = Date.now,
@@ -82,6 +96,29 @@ export class UsageSourceRegistry {
     for (const key of this.known.keys()) if (key.startsWith(`${id}:`)) this.known.delete(key);
     for (const key of this.cache.keys()) if (key.startsWith(`${id}:`)) this.cache.delete(key);
     for (const key of this.pending.keys()) if (key.startsWith(`${id}:`)) this.pending.delete(key);
+    for (const key of this.answeredBy.keys())
+      if (key.startsWith(`${id}:`)) this.answeredBy.delete(key);
+  }
+
+  /**
+   * Uses one of the account's resets through the login its card shows, then reads the account
+   * afresh past the cache. Can't be undone: callers ask the user first.
+   */
+  async consumeReset(reportId: string): Promise<UsageResetResult> {
+    const known = this.known.get(reportId);
+    if (!known) throw new Error(`Unknown usage report: ${reportId}`);
+    const { consumeReset } = known.source;
+    if (!consumeReset) throw new Error(`${known.source.label} can't use resets`);
+    const login = this.answeredBy.get(reportId) ?? known.logins[0];
+    const outcome = UsageResetOutcomeSchema.omit({ message: true }).parse(
+      await consumeReset(login.input),
+    );
+    for (const key of this.cache.keys()) if (key.startsWith(`${reportId}:`)) this.cache.delete(key);
+    // A read started before the reset would answer the forced one with the old windows.
+    for (const key of this.pending.keys())
+      if (key.startsWith(`${reportId}:`)) this.pending.delete(key);
+    const entry = await this.fetchId(reportId, known, true);
+    return { outcome: { ...outcome, message: resetOutcomeText(outcome) }, entry };
   }
 
   async listReports(options: ListUsageReportsOptions = {}): Promise<UsageReportEntry[]> {
@@ -251,7 +288,8 @@ export class UsageSourceRegistry {
         icon: known.source.icon,
         account: { label: known.label },
         fetchedAt: new Date(this.now()).toISOString(),
-        ...(await this.fetchWithFallback(known)),
+        ...(known.source.consumeReset ? { consumesResets: true } : {}),
+        ...(await this.fetchWithFallback(id, known)),
       };
       if (this.sources.get(known.source.id) === known.source) this.writeCache(cacheKey, entry);
       return entry;
@@ -287,6 +325,7 @@ export class UsageSourceRegistry {
   }
 
   private async fetchWithFallback(
+    id: string,
     known: KnownReport,
   ): Promise<Pick<UsageReportEntry, "report" | "loginErrors">> {
     // Start each login within the same deadline window, then prefer discovery order.
@@ -297,7 +336,10 @@ export class UsageSourceRegistry {
     const loginErrors: NonNullable<UsageReportEntry["loginErrors"]> = [];
     for (const [index, login] of known.logins.entries()) {
       const report = await attempts[index]!;
-      if (report.status === "available") return { report };
+      if (report.status === "available") {
+        this.answeredBy.set(id, login);
+        return { report };
+      }
       loginErrors.push({ harness: login.harness, report });
     }
     // COMPAT(usageLoginErrors): added in v0.15.0, remove after 2027-04-05 once app floor >= v0.15.0.
@@ -313,6 +355,25 @@ export class UsageSourceRegistry {
       return { status: "error", error: error instanceof Error ? error.message : String(error) };
     }
   }
+}
+
+// Words for an outcome, as magpie's ResetOutcome.Text says them; the app shows its own translation
+// of the codes it knows and these for the rest.
+function resetOutcomeText(outcome: Omit<UsageResetOutcome, "message">): string {
+  switch (outcome.code) {
+    case "reset":
+      return outcome.windows === 1
+        ? "1 window started again"
+        : `${outcome.windows} windows started again`;
+    case "nothing_to_reset":
+      return "nothing to reset — no window has been used, and the reset is kept";
+    case "no_credit":
+      return "no reset left on the account";
+    case "already_redeemed":
+    case "already_used":
+      return "that reset was already used";
+  }
+  return outcome.code;
 }
 
 // The legacy RPC has only an error string; the current app owns its own presentation.

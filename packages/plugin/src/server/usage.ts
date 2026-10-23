@@ -38,6 +38,37 @@ export interface UsageDetail {
   tone?: UsageWindow["tone"];
 }
 
+/** One reset: when it expires (null: never), and for resets counted by window, whose ("fiveHour", "weekly"). */
+export interface UsageReset {
+  until: string | null;
+  window?: string;
+}
+
+/**
+ * Resets the account holds, each starting its windows over early: `until` is when the soonest
+ * expires (null when none does or that couldn't be read); `each` lists them soonest first, ones
+ * that never expire last, left out when the vendor didn't say. `byWindow` counts them per window
+ * (`fiveHour`, `weekly`) instead of in `count` alone.
+ */
+export interface UsageResets {
+  count: number;
+  until: string | null;
+  byWindow?: boolean;
+  fiveHour?: number;
+  weekly?: number;
+  each?: UsageReset[];
+}
+
+/**
+ * What using a reset did. `code` is the vendor's word for it: "reset" (`windows` started again),
+ * "nothing_to_reset" (no window was used, so the reset is kept), "no_credit" (none left) or
+ * "already_redeemed"; any other word is passed through as said.
+ */
+export interface UsageResetOutcome {
+  code: string;
+  windows: number;
+}
+
 export type UsageProblem =
   | { kind: "expired"; expiresAt: string; refreshedBy?: string }
   | { kind: "rejected"; status: number; refreshedBy?: string }
@@ -50,6 +81,7 @@ export type UsageReport =
       windows: UsageWindow[];
       balances?: UsageBalance[];
       details?: UsageDetail[];
+      resets?: UsageResets;
     }
   | { status: "unavailable"; problem: UsageProblem }
   | { status: "error"; error: string };
@@ -84,6 +116,12 @@ export interface UsageSourceRegistration {
   discover(scope: UsageScope): Promise<UsageAccount[]>;
   /** Re-reads the login store; never writes it. */
   fetch(input: unknown): Promise<UsageReport>;
+  /**
+   * Uses one of the account's resets, the one that expires soonest; throws when it can't tell
+   * which, using none. It can't be undone: the daemon calls it only after the user confirms, then
+   * reads the account afresh. Reads the login store like `fetch`, never writes it.
+   */
+  consumeReset?(input: unknown): Promise<UsageResetOutcome>;
 }
 
 export function windowFromUsedPct(input: {

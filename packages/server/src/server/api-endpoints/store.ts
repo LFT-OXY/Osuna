@@ -36,7 +36,8 @@ import { ModelFactsSchema } from "./model-facts.js";
 /*
  * $PASEO_HOME/api-endpoints/ 下的私有文件，全部 0600：
  * - endpoints.json：主机共用的接口与每个 Agent 的总开关、默认模型，不含 key；
- * - keys.json：API key，只有 daemon 读，任何 RPC 都不返回；
+ * - keys.json：API key、账户令牌（balanceTokens，查账户余额用）与云账号密钥（accessKeys，读火山、腾讯的套餐窗口用），
+ *   只有 daemon 读，RPC 只给打码（reveal_key、reveal_secret 除外）；
  * - takeover-claude.json：接管记录，含用户原先写在 settings.json 里的值（可能是别的 token）；
  * - takeover-codex.json：config.toml 的接管记录；
  * - codex-models.json：Codex 的 model_catalog_json，Codex 总开关开着时才有；
@@ -44,6 +45,7 @@ import { ModelFactsSchema } from "./model-facts.js";
  * - models-dev.json：models.dev 模型资料的精简缓存（models-dev.ts），给 Claude Code 的模型提示与 Codex 的模型目录用；
  * - gateway-tokens.json：每个开过总开关的 Agent 一个中转站口令，只说明是哪个 Agent；关掉总开关不作废（ADR 0010）；
  * - retired-models.json：厂商说已下线的「接口 + 模型」与时间，一周内不进列表（retired-models.ts）；
+ * - balance-readings.json：每家最近一次成功的余额读数，暂时查不到时回它；不含 key（balance-last.ts）；
  * - cli-rewrites.json：每个 Agent 最近一次改写 CLI 配置（含「重新应用」）的时刻，这之前 CLI 的使用不算「被绕过」（cli-bypass.ts）；
  * - cli-start-reads.json：每个 Agent 启动时读、Osuna 替它写的那部分的摘要与它变成这样的时刻，这之前启动的副本要重开（reopen-hints.ts）；
  * - gateway-seen.json：中转站最近一次收到每个 Agent 请求的时刻，重启后还在（cli-bypass.ts 的 GatewaySightings 读写）；
@@ -128,6 +130,19 @@ const StoredApiEndpointSchema = z.object({
   insecureTls: z.boolean().optional().catch(undefined),
   // 冷却设置（gateway/cooldown.ts）：分钟数，0 不存；手改成别的类型时当没设，不让整个文件读不懂，越界的用时按 0 到八天算。
   cooldownSettings: StoredCooldownSettingsSchema.optional().catch(undefined),
+  // 余额设置（balance.ts）：余额查询地址，方法只存 POST（GET 是缺省），取值写法、new-api 的用户 ID、智谱团队组织 ID 与
+  // 项目 ID 空着不存。地址和团队 ID 都没有即没有这项；手改成读不懂的当没设，不让整个文件读不懂。
+  balance: z
+    .object({
+      url: z.string().optional(),
+      method: z.string().optional(),
+      field: z.string().optional(),
+      userId: z.string().optional(),
+      teamOrgId: z.string().optional(),
+      teamProjectId: z.string().optional(),
+    })
+    .optional()
+    .catch(undefined),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -145,6 +160,8 @@ const EndpointsFileSchema = z.object({
   endpointNameDisplay: z.string().optional(),
   // 发现提示里点了「忽略」的那几条的指纹（HMAC，不含 key 原文）；没有即一条都没忽略。
   ignoredImports: z.array(z.string()).optional(),
+  // 「自动刷新余额与套餐用量」关着时存 false；没有即开着。
+  balanceAutoRefresh: z.boolean().optional(),
 });
 
 /** v0.15.0 及以前：接口按提供方各存一份，每个提供方一家「当前启用」。读时换算，写时升级。 */
@@ -187,6 +204,7 @@ export interface ApiEndpointState {
   // 接口名显示方式；always 不存。
   endpointNameDisplay?: Exclude<ApiEndpointNameDisplay, "always">;
   ignoredImports?: string[];
+  balanceAutoRefresh?: boolean;
 }
 
 /** 文件里的接口名显示方式：没有或认不出的当 always，always 不放进状态。 */
@@ -214,7 +232,23 @@ export class ApiEndpointsFileUnparsableError extends Error {
   }
 }
 
-const KeysFileSchema = z.object({ keys: z.record(z.string(), z.string()) });
+const StoredAccessKeySchema = z.object({
+  id: z.string().optional(),
+  secret: z.string().optional(),
+});
+/** 一家接口存的云账号密钥；没存的那样为 null。 */
+export interface StoredAccessKey {
+  id: string | null;
+  secret: string | null;
+}
+
+const KeysFileSchema = z.object({
+  keys: z.record(z.string(), z.string()),
+  // 账户令牌，按接口 id；没有的接口不留条目。升级前的文件没有这一项。
+  balanceTokens: z.record(z.string(), z.string()).optional(),
+  // 云账号密钥（火山的 AccessKey ID 与 Secret Access Key、腾讯的 SecretId 与 SecretKey），按接口 id；两样都没有的不留条目。
+  accessKeys: z.record(z.string(), StoredAccessKeySchema).optional(),
+});
 type KeysFile = z.infer<typeof KeysFileSchema>;
 
 // 导入指纹的 HMAC 密钥（import-apps.ts）。
@@ -368,8 +402,14 @@ export class ApiEndpointStore {
       return { endpoints: [], agents: { claude: OFFICIAL_AGENT, codex: OFFICIAL_AGENT } };
     }
     if (content.kind === "legacy") return upgradeLegacyFile(content.file);
-    const { agents, longConversations, disabledModels, endpointNameDisplay, ignoredImports } =
-      content.file;
+    const {
+      agents,
+      longConversations,
+      disabledModels,
+      endpointNameDisplay,
+      ignoredImports,
+      balanceAutoRefresh,
+    } = content.file;
     return {
       endpoints: content.file.endpoints,
       agents: {
@@ -380,6 +420,7 @@ export class ApiEndpointStore {
       ...(disabledModels === undefined ? {} : { disabledModels }),
       ...storedNameDisplay(endpointNameDisplay),
       ...(ignoredImports === undefined ? {} : { ignoredImports }),
+      ...(balanceAutoRefresh === undefined ? {} : { balanceAutoRefresh }),
     };
   }
 
@@ -422,8 +463,50 @@ export class ApiEndpointStore {
     this.writeKeys(keys);
   }
 
+  /** 接口删掉了：它的 key 与账户令牌一起删。 */
+  removeSecrets(id: string): void {
+    const file = this.readKeysFile();
+    const { [id]: _removed, ...keys } = file.keys;
+    const { [id]: _token, ...balanceTokens } = file.balanceTokens ?? {};
+    const { [id]: _accessKey, ...accessKeys } = file.accessKeys ?? {};
+    this.writeKeysFile({ keys, balanceTokens, accessKeys });
+  }
+
   getApiKey(id: string): string | null {
     return this.readKeys()[id] ?? null;
+  }
+
+  getBalanceToken(id: string): string | null {
+    return this.readKeysFile().balanceTokens?.[id] ?? null;
+  }
+
+  /** null 清掉。 */
+  setBalanceToken(id: string, token: string | null): void {
+    const file = this.readKeysFile();
+    const { [id]: _previous, ...rest } = file.balanceTokens ?? {};
+    this.writeKeysFile({
+      ...file,
+      balanceTokens: token === null ? rest : { ...rest, [id]: token },
+    });
+  }
+
+  getAccessKey(id: string): StoredAccessKey {
+    const stored = this.readKeysFile().accessKeys?.[id];
+    return { id: stored?.id ?? null, secret: stored?.secret ?? null };
+  }
+
+  /** 两样都为 null 即删掉这家的条目。 */
+  setAccessKey(id: string, accessKey: StoredAccessKey): void {
+    const file = this.readKeysFile();
+    const { [id]: _previous, ...rest } = file.accessKeys ?? {};
+    const entry = {
+      ...(accessKey.id === null ? {} : { id: accessKey.id }),
+      ...(accessKey.secret === null ? {} : { secret: accessKey.secret }),
+    };
+    this.writeKeysFile({
+      ...file,
+      accessKeys: Object.keys(entry).length === 0 ? rest : { ...rest, [id]: entry },
+    });
   }
 
   readGatewayTokens(): GatewayTokens {
@@ -583,11 +666,28 @@ export class ApiEndpointStore {
   }
 
   private readKeys(): Record<string, string> {
-    return this.keysFile.read()?.keys ?? {};
+    return this.readKeysFile().keys;
   }
 
   private writeKeys(keys: Record<string, string>): void {
-    this.keysFile.write(KeysFileSchema.parse({ keys }));
+    this.writeKeysFile({ ...this.readKeysFile(), keys });
+  }
+
+  private readKeysFile(): KeysFile {
+    return this.keysFile.read() ?? { keys: {} };
+  }
+
+  private writeKeysFile(file: KeysFile): void {
+    const { balanceTokens, accessKeys, ...rest } = file;
+    const hasTokens = balanceTokens !== undefined && Object.keys(balanceTokens).length > 0;
+    const hasAccessKeys = accessKeys !== undefined && Object.keys(accessKeys).length > 0;
+    this.keysFile.write(
+      KeysFileSchema.parse({
+        ...rest,
+        ...(hasTokens ? { balanceTokens } : {}),
+        ...(hasAccessKeys ? { accessKeys } : {}),
+      }),
+    );
   }
 
   private readJson(name: string): unknown {

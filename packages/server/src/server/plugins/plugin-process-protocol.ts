@@ -27,6 +27,8 @@ export interface PluginUsageSourceMetadata {
   id: string;
   label: string;
   icon?: string;
+  /** Whether the source can use one of an account's resets (`consumeReset`). */
+  consumesResets?: boolean;
 }
 
 export type PluginProcessRequest =
@@ -54,6 +56,7 @@ export type PluginProcessRequest =
   | { type: "hook.cancel"; requestId: string }
   | { type: "usage.fetch"; requestId: string; sourceId: string; input: unknown }
   | { type: "usage.discover"; requestId: string; sourceId: string; scope: UsageScope }
+  | { type: "usage.consume_reset"; requestId: string; sourceId: string; input: unknown }
   | { type: "invoke"; requestId: string; method: string; input: unknown }
   | {
       type: "provider.connect";
@@ -122,6 +125,7 @@ const usageSourceMetadataSchema = z
     id: z.string().min(1),
     label: z.string().min(1),
     icon: z.string().optional(),
+    consumesResets: z.boolean().optional(),
   })
   .strict();
 const providerConnectRequestSchema = z
@@ -205,6 +209,14 @@ export const PluginProcessRequestSchema: z.ZodType<PluginProcessRequest> = z.dis
         requestId: z.string(),
         sourceId: z.string(),
         scope: UsageScopeSchema,
+      })
+      .strict(),
+    z
+      .object({
+        type: z.literal("usage.consume_reset"),
+        requestId: z.string(),
+        sourceId: z.string(),
+        input: z.unknown(),
       })
       .strict(),
     z

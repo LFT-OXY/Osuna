@@ -5,6 +5,9 @@ import type {
   ApiEndpointIconImage,
   ApiEndpointRequestExtras,
   ApiEndpointVendorStatusResponse,
+  ApiEndpointReadBalanceResponse,
+  ApiEndpointCheckBalanceResponse,
+  ApiEndpointDetectBalanceUrlResponse,
   ApiEndpointImportScanResponse,
   ApiEndpointImportDiscoveryResponse,
   ApiEndpointImportResponse,
@@ -12,11 +15,14 @@ import type {
   ApiEndpointImportLinkIconResponse,
   ApiEndpointImportLinkResponse,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import { API_ENDPOINT_SECRETS } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { keyHeaderOf } from "@getpaseo/protocol/api-endpoint/request-extras";
 import type { SessionInboundMessage, SessionOutboundMessage } from "../../messages.js";
 import {
   ApiEndpointRequestError,
   type ApiEndpointAgentSettingsInput,
+  type ApiEndpointBalanceFormInput,
+  type ApiEndpointSaveInput,
   type ApiEndpointService,
   type ApiEndpointRequestExtrasInput,
   type KeepCurrentSettingsCode,
@@ -46,6 +52,11 @@ export type ApiEndpointRequest = Extract<
       | "provider.api_endpoint.reveal_key.request"
       | "provider.api_endpoint.forget_catalog.request"
       | "provider.api_endpoint.vendor_status.request"
+      | "provider.api_endpoint.read_balance.request"
+      | "provider.api_endpoint.set_balance_auto_refresh.request"
+      | "provider.api_endpoint.check_balance.request"
+      | "provider.api_endpoint.detect_balance_url.request"
+      | "provider.api_endpoint.reveal_secret.request"
       | "provider.api_endpoint.import_scan.request"
       | "provider.api_endpoint.import.request"
       | "provider.api_endpoint.import_discovery.request"
@@ -82,6 +93,11 @@ const API_ENDPOINT_REQUEST_TYPES: Record<ApiEndpointRequest["type"], true> = {
   "provider.api_endpoint.reveal_key.request": true,
   "provider.api_endpoint.forget_catalog.request": true,
   "provider.api_endpoint.vendor_status.request": true,
+  "provider.api_endpoint.read_balance.request": true,
+  "provider.api_endpoint.set_balance_auto_refresh.request": true,
+  "provider.api_endpoint.check_balance.request": true,
+  "provider.api_endpoint.detect_balance_url.request": true,
+  "provider.api_endpoint.reveal_secret.request": true,
   "provider.api_endpoint.import_scan.request": true,
   "provider.api_endpoint.import.request": true,
   "provider.api_endpoint.import_discovery.request": true,
@@ -99,6 +115,68 @@ const API_ENDPOINT_REQUEST_TYPES: Record<ApiEndpointRequest["type"], true> = {
   "provider.api_endpoint.test_models.request": true,
   "provider.api_endpoint.cancel.request": true,
 };
+
+type SavedBalance = Pick<
+  ApiEndpointSaveInput,
+  "balance" | "balanceToken" | "accessKeyId" | "secretAccessKey"
+>;
+
+/** 保存请求里的余额设置、账户令牌与云账号密钥：给了才带。 */
+function savedBalanceOf(
+  request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.save.request" }>,
+): SavedBalance {
+  return {
+    ...(request.balance !== undefined ? { balance: request.balance } : {}),
+    ...(request.balanceToken !== undefined ? { balanceToken: request.balanceToken } : {}),
+    ...(request.accessKeyId !== undefined ? { accessKeyId: request.accessKeyId } : {}),
+    ...(request.secretAccessKey !== undefined ? { secretAccessKey: request.secretAccessKey } : {}),
+  };
+}
+
+/** 「查询余额」与「自动识别」请求里的表单值：给了才带。 */
+function balanceFormOf(
+  request: Extract<
+    ApiEndpointRequest,
+    {
+      type:
+        | "provider.api_endpoint.check_balance.request"
+        | "provider.api_endpoint.detect_balance_url.request";
+    }
+  >,
+): ApiEndpointBalanceFormInput {
+  return {
+    ...(request.endpointId !== undefined ? { endpointId: request.endpointId } : {}),
+    ...(request.apiKey !== undefined ? { apiKey: request.apiKey } : {}),
+    ...(request.baseUrls !== undefined ? { baseUrls: request.baseUrls } : {}),
+    ...(request.templateId !== undefined ? { templateId: request.templateId } : {}),
+    ...requestExtrasOf(request),
+  };
+}
+
+/** 余额的几种请求，由 handleBalance 分发。 */
+type BalanceRequest = Extract<
+  ApiEndpointRequest,
+  {
+    type:
+      | "provider.api_endpoint.read_balance.request"
+      | "provider.api_endpoint.set_balance_auto_refresh.request"
+      | "provider.api_endpoint.check_balance.request"
+      | "provider.api_endpoint.detect_balance_url.request"
+      | "provider.api_endpoint.reveal_secret.request";
+  }
+>;
+
+const BALANCE_REQUEST_TYPES: Record<BalanceRequest["type"], true> = {
+  "provider.api_endpoint.read_balance.request": true,
+  "provider.api_endpoint.set_balance_auto_refresh.request": true,
+  "provider.api_endpoint.check_balance.request": true,
+  "provider.api_endpoint.detect_balance_url.request": true,
+  "provider.api_endpoint.reveal_secret.request": true,
+};
+
+function isBalanceRequest(request: ApiEndpointRequest): request is BalanceRequest {
+  return Object.hasOwn(BALANCE_REQUEST_TYPES, request.type);
+}
 
 export function isApiEndpointRequest(msg: SessionInboundMessage): msg is ApiEndpointRequest {
   return Object.hasOwn(API_ENDPOINT_REQUEST_TYPES, msg.type);
@@ -134,6 +212,7 @@ export class ApiEndpointSession {
 
   /** `connectionSignal`：发起请求的连接断开时触发，上游请求随之取消。 */
   async handle(request: ApiEndpointRequest, connectionSignal: AbortSignal): Promise<void> {
+    if (isBalanceRequest(request)) return this.handleBalance(request, connectionSignal);
     switch (request.type) {
       case "provider.api_endpoint.list.request":
         return this.handleList(request);
@@ -167,6 +246,25 @@ export class ApiEndpointSession {
         return this.handleVendorStatus(request);
       default:
         return this.handleAddingAids(request, connectionSignal);
+    }
+  }
+
+  /** 余额：读、自动刷新开关、编辑窗口的「查询余额」与「自动识别」、读回账户令牌。 */
+  private async handleBalance(
+    request: BalanceRequest,
+    connectionSignal: AbortSignal,
+  ): Promise<void> {
+    switch (request.type) {
+      case "provider.api_endpoint.read_balance.request":
+        return this.handleReadBalance(request, connectionSignal);
+      case "provider.api_endpoint.set_balance_auto_refresh.request":
+        return this.handleSetBalanceAutoRefresh(request);
+      case "provider.api_endpoint.check_balance.request":
+        return this.handleCheckBalance(request, connectionSignal);
+      case "provider.api_endpoint.detect_balance_url.request":
+        return this.handleDetectBalanceUrl(request, connectionSignal);
+      case "provider.api_endpoint.reveal_secret.request":
+        return this.handleRevealSecret(request);
     }
   }
 
@@ -315,6 +413,7 @@ export class ApiEndpointSession {
         ...(request.cooldownSettings !== undefined
           ? { cooldownSettings: request.cooldownSettings }
           : {}),
+        ...savedBalanceOf(request),
         ...requestExtrasOf(request),
       });
       this.host.emit({
@@ -585,6 +684,29 @@ export class ApiEndpointSession {
     });
   }
 
+  private async handleRevealSecret(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.reveal_secret.request" }>,
+  ): Promise<void> {
+    let value: string | null = null;
+    let error: ApiEndpointError | null = null;
+    try {
+      const secret = API_ENDPOINT_SECRETS.find((known) => known === request.secret);
+      if (secret === undefined) {
+        throw new ApiEndpointRequestError({
+          code: "invalid_input",
+          message: `Unknown secret: ${request.secret}`,
+        });
+      }
+      value = this.service.revealSecret(request.endpointId, secret);
+    } catch (caught) {
+      error = this.toWireError(caught, request);
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.reveal_secret.response",
+      payload: { requestId: request.requestId, value, error },
+    });
+  }
+
   private async handleForgetCatalog(
     request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.forget_catalog.request" }>,
   ): Promise<void> {
@@ -752,6 +874,99 @@ export class ApiEndpointSession {
     this.host.emit({
       type: "provider.api_endpoint.vendor_status.response",
       payload: { requestId: request.requestId, ...payload },
+    });
+  }
+
+  /** 读接口存储失败或请求被取消时整个请求失败；读不到余额只记在那家的读数里。 */
+  private async handleReadBalance(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.read_balance.request" }>,
+    connectionSignal: AbortSignal,
+  ): Promise<void> {
+    let payload: Omit<ApiEndpointReadBalanceResponse["payload"], "requestId">;
+    try {
+      const readings = await this.service.readBalances({
+        endpointIds: request.endpointIds,
+        asked: request.asked === true,
+        force: request.force === true,
+        signal: connectionSignal,
+      });
+      payload = { readings, error: null };
+    } catch (caught) {
+      payload = { readings: [], error: this.toWireError(caught, request) };
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.read_balance.response",
+      payload: { requestId: request.requestId, ...payload },
+    });
+  }
+
+  /** 「查询余额」：可以用 cancel 取消；查不到余额写在读数里，找不到接口或被取消时 reading 为 null。 */
+  private async handleCheckBalance(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.check_balance.request" }>,
+    connectionSignal: AbortSignal,
+  ): Promise<void> {
+    const { signal, release } = this.trackUpstreamRequest(request.requestId, connectionSignal);
+    let payload: Omit<ApiEndpointCheckBalanceResponse["payload"], "requestId">;
+    try {
+      const reading = await this.service.checkBalance(
+        {
+          ...balanceFormOf(request),
+          balance: request.balance,
+          ...(request.balanceToken !== undefined ? { balanceToken: request.balanceToken } : {}),
+        },
+        signal,
+      );
+      payload = { reading, error: null };
+    } catch (caught) {
+      payload = { reading: null, error: this.toWireError(caught, request) };
+    } finally {
+      release();
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.check_balance.response",
+      payload: { requestId: request.requestId, ...payload },
+    });
+  }
+
+  /** 「自动识别」余额地址：可以用 cancel 取消；都不中写在 attempts 里，请求本身被拒时 attempts 为空。 */
+  private async handleDetectBalanceUrl(
+    request: Extract<
+      ApiEndpointRequest,
+      { type: "provider.api_endpoint.detect_balance_url.request" }
+    >,
+    connectionSignal: AbortSignal,
+  ): Promise<void> {
+    const { signal, release } = this.trackUpstreamRequest(request.requestId, connectionSignal);
+    let payload: Omit<ApiEndpointDetectBalanceUrlResponse["payload"], "requestId">;
+    try {
+      const found = await this.service.detectBalanceUrl(balanceFormOf(request), signal);
+      payload = { ...found, error: null };
+    } catch (caught) {
+      payload = { detected: null, attempts: [], error: this.toWireError(caught, request) };
+    } finally {
+      release();
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.detect_balance_url.response",
+      payload: { requestId: request.requestId, ...payload },
+    });
+  }
+
+  private async handleSetBalanceAutoRefresh(
+    request: Extract<
+      ApiEndpointRequest,
+      { type: "provider.api_endpoint.set_balance_auto_refresh.request" }
+    >,
+  ): Promise<void> {
+    let error: ApiEndpointError | null = null;
+    try {
+      await this.service.setBalanceAutoRefresh({ enabled: request.enabled });
+    } catch (caught) {
+      error = this.toWireError(caught, request);
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.set_balance_auto_refresh.response",
+      payload: { requestId: request.requestId, error },
     });
   }
 

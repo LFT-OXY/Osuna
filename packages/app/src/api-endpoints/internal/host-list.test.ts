@@ -58,6 +58,8 @@ describe("selectHostEndpointsState", () => {
       // 老主机不发接口名显示方式：一直显示。
       endpointNameDisplay: "always",
       endpointNamesUnreached: [],
+      // 不发「自动刷新余额与套餐用量」：当开着。
+      balanceAutoRefresh: true,
     });
   });
 

@@ -1084,6 +1084,146 @@ and upstreamOf, upstreamBadge and loadUpstream in internal/gui/assets/app.js:
   packages/app/src/api-endpoints/vendor-notice.tsx
   packages/app/src/api-endpoints/use-vendor-status.ts
 
+An API endpoint's balance (a vendor known by its base URLs' hosts, Chat
+Completions first, its balance query and how the reply reads, the currency
+written as its sign or its code with two decimals, a refusal of
+{"success":false} whatever the status, a non-JSON reply quoting only its status
+and a JSON one cut to 200 characters) follows balanceSourceOf, balanceRead,
+balanceRefusal, money, currencySign, number and readDeepSeek in magpie's
+internal/provider/balance.go:
+
+  packages/server/src/server/api-endpoints/balance.ts
+
+A balance read at the address the user gave (GET, or POST with no body; the key
+put in for {key} and its other names, escaped in the address; the field left
+empty read by new-api's, sub2api's and credit grants' defaults) and the balance
+field (paths, sums, a sign or percent, lists by * and [k=v], sum() max() min()
+count(), several amounts by ";" with "—" for one missing), with the editor's
+Balance URL, method, field and Check balance, follow balanceRead,
+balanceMethodOf, balanceKeyNames, withBalanceKey, balancePathOf,
+readBalanceParts, readBalanceOne and balanceExpr in magpie's
+internal/provider/balance.go, its tests in balance_test.go and
+balance_parts_test.go, and balanceFieldOf and the Advanced section's balance
+fields in internal/gui/assets/app.js:
+
+  packages/protocol/src/api-endpoint/balance-settings.ts
+  packages/server/src/server/api-endpoints/balance-field.ts
+  packages/server/src/server/api-endpoints/balance-field.test.ts
+  packages/app/src/api-endpoints/internal/balance-settings-form.ts
+  packages/app/src/api-endpoints/balance-settings-fields.tsx
+
+An endpoint's last reading (kept when a read fails for a while, with a
+fingerprint of the address and key in place of either, and dropped once they
+change) follows keepLast, passing and keyTag in magpie's
+internal/provider/quota_last.go:
+
+  packages/server/src/server/api-endpoints/balance-last.ts
+
+Opening an endpoint's page again within 30 seconds of the last ask not counting
+as asking again follows quotasAskedAt and QUOTAS_OPEN_GAP in magpie's
+internal/gui/assets/app.js:
+
+  packages/app/src/api-endpoints/internal/balance-reads.ts
+
+An account's balance asked with its own token (the token as the whole
+Authorization, a JWT as a Bearer; a token that is only the key asked as the key;
+an account query without a token asking the same site's key query; a token
+beside a key query refused with the account query named; a refusal about
+New-Api-User; AiHubMix's account at /api/user/self) and a sub2api key's 5-hour,
+day and week windows (its balance, without "remaining", being what its fullest
+window has left), with the editor's account token and the Use … buttons, follow
+keyQueryOf, keyNotToken, balanceAuthorization, errKeyQueryWithToken,
+newAPIUserHint, readAiHubMixAccount and Balance in magpie's
+internal/provider/balance.go, readSub2APIKeyLimits in
+internal/provider/sub2api_usage.go, and balanceFix and the account balance field
+in internal/gui/assets/app.js:
+
+  packages/server/src/server/api-endpoints/balance.ts
+  packages/app/src/api-endpoints/internal/balance-settings-form.ts
+  packages/app/src/api-endpoints/balance-settings-fields.tsx
+
+A plan key's windows (GLM Coding Plan, Kimi Code, MiniMax and OpenCode Go known
+by their base URLs' hosts and paths, the bare key for GLM and a Bearer for the
+rest, only Accept and Accept-Language beside it, each reply's windows and their
+names, GLM's MCP month and MiniMax's other buckets set aside, a refused GLM key
+sent to its console, OpenCode Go's session headers and its 401 and 403) follows
+planQuotaSourceOf, readZhipuPlan, readKimiCode, kimiCodeBase, readMiniMaxPlan,
+miniMaxCount, readOpenCodeGo, planBody and zhipuRefused in magpie's
+internal/provider/planquota.go, zhipuEnvelope in zhipu_envelope.go and
+OpenCodeSession and openCodeNewID in opencode_client.go; a window's pace follows
+Pace in internal/provider/window_pace.go and Bounds in window_holds.go, and how
+it is written follows quotaPace and paceNumber in internal/gui/assets/app.js, and
+a window's used share and its limit follow quotaCount there:
+
+  packages/server/src/server/api-endpoints/balance-plan.ts
+  packages/server/src/server/api-endpoints/window-pace.ts
+  packages/app/src/api-endpoints/internal/balance-windows.ts
+  packages/app/src/api-endpoints/balance-section.tsx
+
+Command Code's and Ollama Cloud's plan windows (Command Code's 5-hour and
+weekly windows and the month's credits measured against its plan, the plan read
+from its subscription and kept ten minutes, Ollama's allowance named Month at
+27–32 days, its legacy session and weekly limits, set aside when credits are
+bought) follow cmdWindows, cmdLeft, cmdPlans, cmdQuotaOf, cmdKeyWindows,
+cmdKeyPlanID, cmdSubscription and cmdTime in magpie's
+internal/provider/commandcode_plan.go and readOllamaPlan in ollama_usage.go; a
+GLM team plan's windows (asked with type=2 and the team's organization and
+project, at the key's host then bigmodel.cn) and its resets by window follow
+planKeyWindows, zhipuKeyTeamWindows and zhipuTeamRoots in planquota.go,
+zcodeBizRoot, zcodeTeamHeaders, zhipuResets and zcodeWhen in zcode_team.go,
+zhipuTime in zcode.go and ResetCredits.Words in codex_resets.go, and the
+editor's team fields follow the zhipuTeam fields in internal/gui/assets/app.js:
+
+  packages/server/src/server/api-endpoints/balance-plan.ts
+  packages/server/src/server/api-endpoints/balance.ts
+  packages/app/src/api-endpoints/balance-copy.ts
+  packages/app/src/api-endpoints/balance-settings-fields.tsx
+  packages/app/src/api-endpoints/internal/balance-settings-form.ts
+
+Volcengine Ark's and Tencent Cloud's plan windows read with the account's
+access key (the plan an address is on and its region, Volcengine's request
+signed as its SDK signs it, Tencent's TC3-HMAC-SHA256 signature, the Coding
+Plan's and Agent Plan's windows, Tencent's team plans and their month, the
+error codes about the access key and the card that asks for one) follow
+volcPlanOf, volcRegion, volcSign, volcQuery, volcOpenAPICall, volcRefusesKey,
+volcReadCodingPlan, volcReadAFP, volcWindow and volcTime in magpie's
+internal/provider/volcengine_usage.go, tencentPlanRegion, tencentPlanCards,
+tencentPlan.window, tc3Sign, tencentAPICall and tcRefusesKey in
+tencent_usage.go, AccessKeyVendor and accessKeyCard in access_key_card.go, and
+the editor's access key fields in internal/gui/assets/app.js:
+
+  packages/server/src/server/api-endpoints/balance-access-key.ts
+  packages/server/src/server/api-endpoints/balance.ts
+  packages/protocol/src/api-endpoint/balance-settings.ts
+  packages/app/src/api-endpoints/balance-settings-fields.tsx
+  packages/app/src/api-endpoints/internal/balance-settings-form.ts
+
+A Codex account's resets on its plan usage card (the count read from the usage
+reading, the resets list asked once for when each expires within 4 seconds and
+left out on a failure, the soonest first and ones that never expire last, each
+listed only when they are as many as the count, and the line and per-reset
+lines the card shows) follow codexResets, codexResetCreditsWire,
+sortResetCards and codexResetDetailsTimeout in magpie's
+internal/provider/codex_resets.go and resetsWords and resetsEach in
+internal/gui/assets/app.js:
+
+  plugins/codex-usage-source/server/resets.ts
+  packages/app/src/plan-usage/resets-row.tsx
+
+Using one of a Codex account's resets from its card (the list read again to
+name the one that expires soonest and none used when it can't be read, the
+consume request with a random UUID v4 as its idempotency key, the four outcome
+codes and their words, the confirmation that says it can't be undone, which one
+is used and when no window has been used yet) follows useCodexReset,
+consumeCodexReset, newRedeemID, codexResetCreditsWire.first and
+ResetOutcome.Text in magpie's internal/provider/codex_resets.go and askReset,
+resetOutcome and resetUseTitle in internal/gui/assets/app.js:
+
+  plugins/codex-usage-source/server/resets.ts
+  packages/server/src/server/plugins/usage-sources/index.ts
+  packages/app/src/plan-usage/reset-consume.ts
+  packages/app/src/plan-usage/reset-consume-sheet.tsx
+
 Import from other apps (the five sources and where each keeps its file, how a
 CC Switch, Claude Code, Codex, Alma or OpenCode entry becomes an endpoint, a
 template's when the URLs are its own, entries of one account merged, Osuna's own

@@ -8,6 +8,7 @@ import type {
   ApiEndpointConnection,
   ApiEndpointError,
   ApiEndpointListResponse,
+  ApiEndpointSecret,
   ApiEndpointSetAgentSettingsRequest,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { DaemonConnectionError, DaemonRpcError } from "@getpaseo/client/internal/daemon-client";
@@ -27,12 +28,18 @@ import type {
   ConnectionFetchRequest,
   ConnectionFetchResult,
   ConnectionRevealKeyResult,
+  ConnectionRevealSecretResult,
+  ConnectionAccessKeyPart,
   ConnectionIconError,
   ConnectionIconResult,
   ConnectionSaveRequest,
   ConnectionSaveResult,
   ConnectionTestRequest,
   ConnectionTestResult,
+  ConnectionBalanceCheckRequest,
+  ConnectionBalanceCheckResult,
+  ConnectionBalanceDetectRequest,
+  ConnectionBalanceDetectResult,
 } from "./internal/connection-form-model";
 import { CONNECTION_ICON_ERROR_CODES } from "./internal/connection-form-model";
 import {
@@ -115,6 +122,8 @@ export interface UseHostEndpointsResult {
   setDisabledModels: (models: string[]) => Promise<string | null>;
   // 设接口名显示方式；返回失败原因，成功为 null。
   setEndpointNameDisplay: (display: ApiEndpointNameDisplay) => Promise<string | null>;
+  // 设「自动刷新余额与套餐用量」；返回失败原因，成功为 null。只有声明了 apiEndpointBalance 的主机认。
+  setBalanceAutoRefresh: (enabled: boolean) => Promise<string | null>;
   // 正在改总开关或默认模型的 Agent。
   pendingAgent: string | null;
   // 改失败的原因在 actionError 里。
@@ -147,6 +156,23 @@ export interface UseHostEndpointsResult {
     request: ConnectionTestRequest,
     signal: AbortSignal,
   ) => Promise<ConnectionTestResult>;
+  // 编辑窗口的「查询余额」；只在声明了 apiEndpointBalance 的主机上用。
+  checkBalance: (
+    request: ConnectionBalanceCheckRequest,
+    signal: AbortSignal,
+  ) => Promise<ConnectionBalanceCheckResult>;
+  // 编辑窗口「高级」里的「自动识别」余额地址；只在声明了 apiEndpointBalance 的主机上用。
+  detectBalanceUrl: (
+    request: ConnectionBalanceDetectRequest,
+    signal: AbortSignal,
+  ) => Promise<ConnectionBalanceDetectResult>;
+  // 编辑窗口账户令牌的「显示」；只在声明了 apiEndpointBalance 的主机上用。
+  revealBalanceToken: (endpointId: string) => Promise<ConnectionRevealSecretResult>;
+  // 编辑窗口云账号密钥的「显示」；同上。
+  revealAccessKey: (
+    endpointId: string,
+    part: ConnectionAccessKeyPart,
+  ) => Promise<ConnectionRevealSecretResult>;
 }
 
 /** 调用方已经确认主机声明了 apiEndpointGateway 能力。 */
@@ -352,6 +378,21 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     [client, describeError, refresh, t],
   );
 
+  const setBalanceAutoRefresh = useCallback(
+    async (enabled: boolean): Promise<string | null> => {
+      if (!client) return t("workspace.terminal.hostDisconnected");
+      try {
+        const result = await client.apiEndpointSetBalanceAutoRefresh({ enabled });
+        if (result.error) return describeError(result.error);
+        await refresh();
+        return null;
+      } catch (error) {
+        return requestFailureMessage(error);
+      }
+    },
+    [client, describeError, refresh, t],
+  );
+
   const setAgentSettings = useCallback(
     (provider: string, settings: AgentSettingsChange) => {
       if (!client) return;
@@ -500,6 +541,53 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     [client, t],
   );
 
+  const checkBalance = useCallback(
+    async (
+      request: ConnectionBalanceCheckRequest,
+      signal: AbortSignal,
+    ): Promise<ConnectionBalanceCheckResult> => {
+      if (!client) return { status: "failed", message: t("workspace.terminal.hostDisconnected") };
+      const requestId = createUpstreamRequestId();
+      const unlink = linkAbortToCancel(signal, () => client.apiEndpointCancel(requestId));
+      try {
+        const response = await client.apiEndpointCheckBalance(request, requestId);
+        if (signal.aborted || response.error?.code === "cancelled") return { status: "cancelled" };
+        if (response.error) return { status: "failed", message: response.error.message };
+        if (!response.reading) throw new Error("The host returned neither a reading nor an error");
+        return { status: "done", reading: response.reading };
+      } catch (error) {
+        if (signal.aborted) return { status: "cancelled" };
+        return { status: "failed", message: toErrorMessage(error) };
+      } finally {
+        unlink();
+      }
+    },
+    [client, t],
+  );
+
+  const detectBalanceUrl = useCallback(
+    async (
+      request: ConnectionBalanceDetectRequest,
+      signal: AbortSignal,
+    ): Promise<ConnectionBalanceDetectResult> => {
+      if (!client) return { status: "failed", message: t("workspace.terminal.hostDisconnected") };
+      const requestId = createUpstreamRequestId();
+      const unlink = linkAbortToCancel(signal, () => client.apiEndpointCancel(requestId));
+      try {
+        const response = await client.apiEndpointDetectBalanceUrl(request, requestId);
+        if (signal.aborted || response.error?.code === "cancelled") return { status: "cancelled" };
+        if (response.error) return { status: "failed", message: response.error.message };
+        return { status: "done", detected: response.detected, attempts: response.attempts };
+      } catch (error) {
+        if (signal.aborted) return { status: "cancelled" };
+        return { status: "failed", message: toErrorMessage(error) };
+      } finally {
+        unlink();
+      }
+    },
+    [client, t],
+  );
+
   const revealKey = useCallback(
     async (endpointId: string): Promise<ConnectionRevealKeyResult> => {
       if (!client) return { status: "failed", message: t("workspace.terminal.hostDisconnected") };
@@ -512,6 +600,32 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
       }
     },
     [client, t],
+  );
+
+  const revealSecret = useCallback(
+    async (
+      endpointId: string,
+      secret: ApiEndpointSecret,
+    ): Promise<ConnectionRevealSecretResult> => {
+      if (!client) return { status: "failed", message: t("workspace.terminal.hostDisconnected") };
+      try {
+        const result = await client.apiEndpointRevealSecret({ endpointId, secret });
+        if (result.error) return { status: "failed", message: result.error.message };
+        return { status: "revealed", value: result.value };
+      } catch (error) {
+        return { status: "failed", message: toErrorMessage(error) };
+      }
+    },
+    [client, t],
+  );
+  const revealBalanceToken = useCallback(
+    (endpointId: string) => revealSecret(endpointId, "balance_token"),
+    [revealSecret],
+  );
+  const revealAccessKey = useCallback(
+    (endpointId: string, part: ConnectionAccessKeyPart) =>
+      revealSecret(endpointId, part === "id" ? "access_key_id" : "secret_access_key"),
+    [revealSecret],
   );
 
   // 存图片与从网站取图标的回复一样：主机给的图标值，或失败原因。
@@ -565,6 +679,7 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     resume,
     arrange,
     setLongConversations,
+    setBalanceAutoRefresh,
     setDisabledModels,
     setEndpointNameDisplay,
     pendingAgent,
@@ -581,6 +696,10 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     fetchSiteIcon,
     fetchModels,
     testConnection,
+    checkBalance,
+    detectBalanceUrl,
+    revealBalanceToken,
+    revealAccessKey,
   };
 }
 

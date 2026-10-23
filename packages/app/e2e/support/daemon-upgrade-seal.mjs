@@ -25,6 +25,10 @@
  * 6. 不带开发者的代理：daemon 自己的 HTTP_PROXY、HTTPS_PROXY、ALL_PROXY、NO_PROXY（各种大小写）在这里删掉，
  *    查 Codex 经哪个代理时只会读到用例给的假系统代理（上面第 5 条）。spawn-node.ts 的 withUpgradeSeal 同样会删。
  *
+ * 8. 不带着 key 去问真的厂商：第三方接口读余额的厂商（balance.ts 的厂商表）的 API 主机，daemon 的 fetch 一律不真的去
+ *    （读余额、保存后拉模型清单都是）。PASEO_E2E_FAKE_SITES_PATH 里写了这个网址的，回那里写的回复（JSON）；
+ *    没写的当作连不上。厂商表加了新厂商，这里跟着加。
+ *
  * 2026-10-18 一条浏览器用例点中了升级按钮，测试 daemon 真的跑了 `brew upgrade --cask claude-code@latest`
  * 又被中途杀掉，弄坏了开发者本机的 Claude Code。
  */
@@ -39,12 +43,48 @@ const AGENT_CLIS = new Set(["claude", "codex", "copilot", "opencode", "pi", "omp
 const PACKAGE_MANAGERS = new Set(["npm", "pnpm", "yarn", "bun"]);
 const INSTALL_VERBS = new Set(["install", "i", "add", "update", "upgrade", "reinstall"]);
 
+// 读余额的厂商的 API 主机（packages/server/src/server/api-endpoints/balance.ts 的 BALANCE_VENDORS），
+// 与读套餐窗口的厂商（balance-plan.ts 的 PLAN_VENDOR_URLS）。
+const SEALED_VENDOR_ORIGINS = [
+  "https://api.deepseek.com/",
+  "https://api.moonshot.cn/",
+  "https://api.moonshot.ai/",
+  "https://openrouter.ai/",
+  "https://api.siliconflow.cn/",
+  "https://api.siliconflow.com/",
+  "https://api.stepfun.com/",
+  "https://api.stepfun.ai/",
+  "https://api.commandcode.ai/",
+  "https://ollama.com/",
+  "https://aihubmix.com/",
+  "https://open.bigmodel.cn/",
+  // 智谱团队套餐的第二个站点（balance-plan.ts 的 glm_cn_biz）。
+  "https://bigmodel.cn/",
+  "https://api.z.ai/",
+  "https://api.kimi.com/",
+  "https://api.kimi.ai/",
+  "https://api.minimaxi.com/",
+  "https://api.minimax.io/",
+  "https://opencode.ai/",
+  // 火山方舟与腾讯云的开放平台（balance-plan.ts 的 volcengine_open、tencent_open）：带的是云账号密钥的签名。
+  "https://open.volcengineapi.com/",
+  "https://tokenhub.tencentcloudapi.com/",
+  // 用例里火山方舟、腾讯云 Token Plan 接口自己的地址：打开详情页会拉模型清单，带着 key 去问。
+  "https://ark.cn-beijing.volces.com/",
+  "https://tokenhub.tencentmaas.com/",
+  // Codex 的套餐用量与重置卡（plugins/codex-usage-source）：测试的 CODEX_HOME 是空的不会去问，这里兜底。
+  "https://chatgpt.com/",
+];
+
 const realFetch = globalThis.fetch;
 if (typeof realFetch === "function") {
   globalThis.fetch = (input, init) => {
     const url = typeof input === "string" ? input : (input?.url ?? String(input));
     if (url.startsWith(NPM_REGISTRY)) {
       return Promise.resolve(new Response("sealed by the e2e harness", { status: 404 }));
+    }
+    if (SEALED_VENDOR_ORIGINS.some((origin) => url.startsWith(origin))) {
+      return sealedVendorReply(url);
     }
     return realFetch(input, init);
   };
@@ -158,11 +198,26 @@ globalThis[Symbol.for("paseo.e2e.hostProcesses")] = {
   readSystemProxy: async () => readFakeSystemProxy(),
 };
 
+function readFakeSites() {
+  const file = process.env.PASEO_E2E_FAKE_SITES_PATH;
+  return file && existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {};
+}
+
+/** 封住的厂商网址：PASEO_E2E_FAKE_SITES_PATH 写了的回那里的，没写的连不上。 */
+function sealedVendorReply(url) {
+  const site = readFakeSites()[url];
+  if (!site) return Promise.reject(new TypeError("fetch failed: sealed by the e2e harness"));
+  return Promise.resolve(
+    new Response(site.body, {
+      status: site.status,
+      headers: { "content-type": "application/json" },
+    }),
+  );
+}
+
 /** PASEO_E2E_FAKE_SITES_PATH 里的假站点；没写的网址抛错。 */
 globalThis[Symbol.for("paseo.e2e.fetchSite")] = async ({ url }) => {
-  const file = process.env.PASEO_E2E_FAKE_SITES_PATH;
-  const sites = file && existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {};
-  const site = sites[url];
+  const site = readFakeSites()[url];
   if (!site)
     throw new Error(`The e2e daemon never fetches ${url}: add it to PASEO_E2E_FAKE_SITES_PATH`);
   return { status: site.status, url, body: Buffer.from(site.body) };

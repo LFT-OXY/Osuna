@@ -13,6 +13,10 @@ import {
   type ApiEndpointTemplate,
   type ApiEndpointTemplateRegion,
   type ApiEndpointTestConnectionRequest,
+  type ApiEndpointCheckBalanceRequest,
+  type ApiEndpointDetectBalanceUrlRequest,
+  type ApiEndpointBalanceUrlAttempt,
+  type ApiEndpointBalanceReading,
   type ApiEndpointTestConnectionResult,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import equal from "fast-deep-equal";
@@ -47,6 +51,27 @@ import {
   type QuotaRestMode,
 } from "./cooldown-settings-form";
 import type { CooldownSettingsProblem } from "@getpaseo/protocol/api-endpoint/cooldown-settings";
+import {
+  balanceFieldPlaceholder,
+  balanceFieldsOf,
+  balanceFixOf,
+  balanceSettingsOf,
+  accessKeyRequest,
+  balanceTokenRequest,
+  fieldAfterUsing,
+  hasBalanceSettings,
+  hasLoneAccessKey,
+  hasLoneTeamId,
+  isZhipuAddress,
+  type BalanceCheck,
+  type BalanceDetect,
+  type BalanceFields,
+  type BalanceFix,
+} from "./balance-settings-form";
+import {
+  accessKeyVendorOf,
+  type ApiEndpointAccessKeyVendor,
+} from "@getpaseo/protocol/api-endpoint/balance-settings";
 
 /*
  * 第三方接口「添加 / 编辑连接」弹窗的表单模型：纯 TypeScript，无 React（docs/forms.md）。
@@ -77,7 +102,8 @@ import type { CooldownSettingsProblem } from "@getpaseo/protocol/api-endpoint/co
 export type ConnectionFormSeed =
   // templateId 为 null 是「自定义」；「再加一家」用那家的模板。认不出的模板按「自定义」开。
   | { mode: "create"; templateId: string | null }
-  | { mode: "edit"; endpoint: ApiEndpoint }
+  // focus：从详情页「填写余额查询地址」或「填写 AccessKey」打开，展开「高级」并把光标放在余额查询地址或 AccessKey 上。
+  | { mode: "edit"; endpoint: ApiEndpoint; focus?: "balance" | "access_key" }
   // name 是调用方按界面语言起好的「原名 副本」；重名由 daemon 避让。
   | { mode: "duplicate"; source: ApiEndpoint; name: string };
 
@@ -129,6 +155,24 @@ export type ConnectionRevealKeyResult =
   | { status: "revealed"; apiKey: string | null }
   | { status: "failed"; message: string };
 
+// 读回账户令牌或云账号密钥原文：没存时 value 为 null。
+export type ConnectionRevealSecretResult =
+  | { status: "revealed"; value: string | null }
+  | { status: "failed"; message: string };
+
+// 云账号密钥的哪一样：AccessKey ID（腾讯的 SecretId）或 Secret Access Key（腾讯的 SecretKey）。
+export type ConnectionAccessKeyPart = "id" | "secret";
+
+/** 一个打码框（云账号密钥的一样）：存了的打码（移除后为 null），框里显示的字，显示与读回中的状态。 */
+export interface SecretBoxState {
+  mask: string | null;
+  boxValue: string;
+  boxGeneration: number;
+  isVisible: boolean;
+  isRevealing: boolean;
+  revealError: string | null;
+}
+
 export type ConnectionDetectRequest = Omit<ApiEndpointDetectFormatsRequest, "type" | "requestId">;
 
 // failed：请求本身没成立（缺 key、地址无效、断线）；每种格式的失败在 done 的 results 里。
@@ -161,6 +205,34 @@ export type ConnectionTestRequest = Omit<
 // failed：请求本身没成立（断线、主机拒收）；上游的结论（含失败）在 done 的 result 里。
 export type ConnectionTestResult =
   | { status: "done"; result: ApiEndpointTestConnectionResult }
+  | { status: "failed"; message: string }
+  | { status: "cancelled" };
+
+// 「查询余额」：表单里还没保存的余额设置、key、地址与请求头。
+export type ConnectionBalanceCheckRequest = Omit<
+  ApiEndpointCheckBalanceRequest,
+  "type" | "requestId"
+>;
+
+// failed：请求本身没成立（断线、主机拒收）；查不到余额写在 done 的读数里。
+export type ConnectionBalanceCheckResult =
+  | { status: "done"; reading: ApiEndpointBalanceReading }
+  | { status: "failed"; message: string }
+  | { status: "cancelled" };
+
+// 「自动识别」余额地址：表单里还没保存的 key、地址与请求头。
+export type ConnectionBalanceDetectRequest = Omit<
+  ApiEndpointDetectBalanceUrlRequest,
+  "type" | "requestId"
+>;
+
+// failed：请求本身没成立（断线、主机拒收）；都不中时 done 的 detected 为 null。
+export type ConnectionBalanceDetectResult =
+  | {
+      status: "done";
+      detected: { url: string; field: string } | null;
+      attempts: ApiEndpointBalanceUrlAttempt[];
+    }
   | { status: "failed"; message: string }
   | { status: "cancelled" };
 
@@ -272,6 +344,8 @@ export interface ConnectionFormOptions {
   followsListWhenNew: boolean;
   // 同上：「高级」里能设请求头、附加请求体、key 放哪个头。
   canSetRequestExtras: boolean;
+  // 主机声明了 apiEndpointBalance：「高级」里有余额查询地址、方法、取值写法与「查询余额」。
+  canSetBalance: boolean;
   // 主机给的模板清单；老主机没有，为空。
   templates: readonly ApiEndpointTemplate[];
 }
@@ -415,6 +489,47 @@ export interface ConnectionFormState {
   showsRestCap: boolean;
   // 哪一项不对（分钟数不是 0 到八天的整数、时刻读不懂）；挡住保存。
   cooldownProblem: CooldownSettingsProblem | null;
+  // 「高级」里的余额设置（只在 canSetBalance 时有）：余额查询地址、方法、取值写法；占位是按地址给的默认写法。
+  canSetBalance: boolean;
+  balanceUrlText: string;
+  balanceMethod: BalanceFields["balanceMethod"];
+  balanceFieldText: string;
+  balanceFieldPlaceholder: string;
+  balanceCheck: BalanceCheck;
+  balanceDetect: BalanceDetect;
+  // 有 key、有地址且不在识别中时「自动识别」可点。
+  canDetectBalanceUrl: boolean;
+  // 从「填写余额查询地址」打开：光标放在余额查询地址上。
+  focusesBalance: boolean;
+  // 「改用 …」换了地址与取值写法时加一，框里的字按新值重新带进去。
+  balanceUrlGeneration: number;
+  balanceFieldGeneration: number;
+  balanceUserIdText: string;
+  // 智谱团队组织 ID 与项目 ID：只在这家的地址是智谱或 Z.ai 时给（isZhipuAddress）。
+  isZhipuAddress: boolean;
+  balanceTeamOrgIdText: string;
+  balanceTeamProjectIdText: string;
+  // 两个团队 ID 只填了一个：提示都填，挡住保存（照 magpie）。
+  hasLoneTeamId: boolean;
+  // 账户令牌：存了的打码（移除后为 null），框里显示的字（打的或读回的），显示与读回中的状态。
+  balanceTokenMask: string | null;
+  hasSavedBalanceToken: boolean;
+  balanceTokenBoxValue: string;
+  balanceTokenBoxGeneration: number;
+  isBalanceTokenVisible: boolean;
+  isRevealingBalanceToken: boolean;
+  balanceTokenRevealError: string | null;
+  // 令牌与地址对不上、缺用户 ID 的提示。
+  balanceFix: BalanceFix | null;
+  // 云账号密钥两栏：只在这家的地址是火山方舟或腾讯云 Token Plan 企业版时给（accessKeyVendorOf），按哪家写栏名。
+  accessKeyVendor: ApiEndpointAccessKeyVendor | null;
+  accessKeyId: SecretBoxState;
+  secretAccessKey: SecretBoxState;
+  hasSavedAccessKey: boolean;
+  // 存下来有 ID 却没有 Secret：提示补上，挡住保存（照 magpie）。
+  hasLoneAccessKey: boolean;
+  // 从「填写 AccessKey」打开：光标放在 AccessKey ID 上。
+  focusesAccessKey: boolean;
 }
 
 export interface ConnectionFormDeps {
@@ -434,6 +549,19 @@ export interface ConnectionFormDeps {
     request: ConnectionTestRequest,
     signal: AbortSignal,
   ) => Promise<ConnectionTestResult>;
+  checkBalance: (
+    request: ConnectionBalanceCheckRequest,
+    signal: AbortSignal,
+  ) => Promise<ConnectionBalanceCheckResult>;
+  detectBalanceUrl: (
+    request: ConnectionBalanceDetectRequest,
+    signal: AbortSignal,
+  ) => Promise<ConnectionBalanceDetectResult>;
+  revealBalanceToken: (endpointId: string) => Promise<ConnectionRevealSecretResult>;
+  revealAccessKey: (
+    endpointId: string,
+    part: ConnectionAccessKeyPart,
+  ) => Promise<ConnectionRevealSecretResult>;
 }
 
 export interface ConnectionFormModel {
@@ -497,6 +625,24 @@ export interface ConnectionFormModel {
   setQuotaResetAt(value: string): void;
   setRestCap(value: string): void;
   setNoFailRest(value: boolean): void;
+  setBalanceUrl(value: string): void;
+  setBalanceMethod(value: BalanceFields["balanceMethod"]): void;
+  setBalanceField(value: string): void;
+  setBalanceUserId(value: string): void;
+  setBalanceTeamOrgId(value: string): void;
+  setBalanceTeamProjectId(value: string): void;
+  setBalanceToken(value: string): void;
+  toggleBalanceTokenVisible(): void;
+  removeBalanceToken(): void;
+  setAccessKey(part: ConnectionAccessKeyPart, value: string): void;
+  toggleAccessKeyVisible(part: ConnectionAccessKeyPart): void;
+  // 两样一起移除。
+  removeAccessKey(): void;
+  // 「改用 …」：把余额查询地址换成账户查询。
+  useBalanceUrl(url: string): void;
+  // 「查询余额」：用表单里还没保存的值当场查一次；再按一次重来。
+  checkBalance(): void;
+  detectBalanceUrl(): void;
   detect(): void;
   // 「逐个模型」：表单里的模型（前 30 个）在每种格式上各问一次。
   detectEachModel(): void;
@@ -576,7 +722,52 @@ interface Values {
   quotaResetAtText: string;
   restCapText: string;
   noFailRest: boolean;
+  balanceUrlText: string;
+  balanceMethod: BalanceFields["balanceMethod"];
+  balanceFieldText: string;
+  balanceUserIdText: string;
+  balanceTeamOrgIdText: string;
+  balanceTeamProjectIdText: string;
+  balanceCheck: BalanceCheck;
+  balanceDetect: BalanceDetect;
+  balanceUrlGeneration: number;
+  balanceFieldGeneration: number;
+  // 打的令牌；读回来没改的不算。
+  balanceTokenText: string;
+  balanceTokenBoxValue: string;
+  balanceTokenBoxGeneration: number;
+  isBalanceTokenVisible: boolean;
+  isBalanceTokenRevealed: boolean;
+  isRevealingBalanceToken: boolean;
+  balanceTokenRevealError: string | null;
+  balanceTokenRemoved: boolean;
+  accessKeyIdBox: SecretBoxValues;
+  secretAccessKeyBox: SecretBoxValues;
+  accessKeyRemoved: boolean;
 }
+
+// 打码框的值：text 是打的（读回来没改的不算），boxValue 是框里显示的。
+interface SecretBoxValues {
+  text: string;
+  boxValue: string;
+  boxGeneration: number;
+  isVisible: boolean;
+  isRevealed: boolean;
+  isRevealing: boolean;
+  revealError: string | null;
+}
+
+const EMPTY_SECRET_BOX: SecretBoxValues = {
+  text: "",
+  boxValue: "",
+  boxGeneration: 0,
+  isVisible: false,
+  isRevealed: false,
+  isRevealing: false,
+  revealError: null,
+};
+
+const ACCESS_KEY_BOXES = { id: "accessKeyIdBox", secret: "secretAccessKeyBox" } as const;
 
 // 粘贴的 curl 给「自定义」填的地址与它的格式。
 interface CurlBaseUrl {
@@ -602,6 +793,7 @@ export function createConnectionFormModel(
     canCheckBeforeSave,
     followsListWhenNew,
     canSetRequestExtras,
+    canSetBalance,
     templates,
   } = options;
   // 添加窗口（新建或复制）：能在保存前拉模型，「模型」框一直显示。
@@ -616,6 +808,8 @@ export function createConnectionFormModel(
   let pendingDetect: AbortController | null = null;
   let pendingFetch: AbortController | null = null;
   let pendingTest: AbortController | null = null;
+  let pendingBalanceCheck: AbortController | null = null;
+  let pendingBalanceDetect: AbortController | null = null;
   const seededTemplate = templateOf(seed, templates);
   const seededRegion = seededTemplate ? initialRegionOf(seed, seededTemplate) : null;
   const seededUrls = initialUrlsOf({
@@ -627,10 +821,22 @@ export function createConnectionFormModel(
   const serviceAddressWas = originOf(seededUrls);
   const seededIcon = keyOwner?.icon ?? null;
   const seededCooldown = cooldownFieldsOf(keyOwner?.cooldownSettings);
+  const seededBalance = balanceFieldsOf(keyOwner?.balance);
+  const savedTokenMask = keyOwner?.balanceTokenMask ?? null;
+  const savedAccessKeyMasks = accessKeyMasksOf(keyOwner);
+  const focus = canSetBalance ? focusOf(seed) : null;
+  const focusesBalance = focus === "balance";
+  const focusesAccessKey = focus === "access_key";
+  const hasSeededBalance =
+    canSetBalance &&
+    (hasBalanceSettings(seededBalance) ||
+      savedTokenMask !== null ||
+      hasAccessKeyMask(savedAccessKeyMasks));
   const seededExtras = seededRequestExtras({
     keyOwner,
     isCustom: seededTemplate === null,
     hasCooldownSettings: hasCooldownSettings(seededCooldown),
+    opensAdvanced: focus !== null || hasSeededBalance,
   });
   let values: Values = {
     template: seededTemplate,
@@ -670,10 +876,27 @@ export function createConnectionFormModel(
     insecureTls: keyOwner?.insecureTls === true,
     isConfirmingInsecureTls: false,
     ...seededCooldown,
+    ...seededBalance,
+    balanceCheck: { status: "idle" },
+    balanceDetect: { status: "idle" },
+    balanceUrlGeneration: 0,
+    balanceFieldGeneration: 0,
+    balanceTokenText: "",
+    balanceTokenBoxValue: "",
+    balanceTokenBoxGeneration: 0,
+    isBalanceTokenVisible: false,
+    isBalanceTokenRevealed: false,
+    isRevealingBalanceToken: false,
+    balanceTokenRevealError: null,
+    balanceTokenRemoved: false,
+    accessKeyIdBox: EMPTY_SECRET_BOX,
+    secretAccessKeyBox: EMPTY_SECRET_BOX,
+    accessKeyRemoved: false,
   };
   let state = derive(values);
   const extrasAtOpen = extrasNow();
   const cooldownAtOpen = cooldownFieldsRead(seededCooldown);
+  const balanceAtOpen = balanceSettingsOf(seededBalance);
   const hasSeededExtras = !equal(extrasAtOpen, EMPTY_EXTRAS);
   // 当前这次换图标；再换一次或关掉表单后，旧请求晚到的结果不再生效。
   let pendingIcon: object | null = null;
@@ -753,7 +976,110 @@ export function createConnectionFormModel(
       submitError: next.submitError,
       ...extras,
       ...cooldown,
+      canSetBalance,
+      balanceUrlText: next.balanceUrlText,
+      balanceMethod: next.balanceMethod,
+      balanceFieldText: next.balanceFieldText,
+      balanceFieldPlaceholder: balanceFieldPlaceholder(next.balanceUrlText),
+      balanceCheck: next.balanceCheck,
+      balanceDetect: next.balanceDetect,
+      canDetectBalanceUrl:
+        canSetBalance && hasKey && hasValidUrls && next.balanceDetect.status !== "detecting",
+      focusesBalance,
+      ...deriveBalanceToken(next),
+      ...deriveAccessKey(next),
     };
+  }
+
+  /** 云账号密钥两栏的样子：哪家、两个打码框，存下来会不会只有一样。 */
+  function deriveAccessKey(next: Values) {
+    const box = (part: ConnectionAccessKeyPart): SecretBoxState => {
+      const boxValues = next[ACCESS_KEY_BOXES[part]];
+      return {
+        mask: next.accessKeyRemoved ? null : savedAccessKeyMasks[part],
+        boxValue: boxValues.boxValue,
+        boxGeneration: boxValues.boxGeneration,
+        isVisible: boxValues.isVisible,
+        isRevealing: boxValues.isRevealing,
+        revealError: boxValues.revealError,
+      };
+    };
+    const accessKeyId = box("id");
+    const secretAccessKey = box("secret");
+    return {
+      accessKeyVendor: accessKeyVendorOfForm(next),
+      accessKeyId,
+      secretAccessKey,
+      hasSavedAccessKey: accessKeyId.mask !== null || secretAccessKey.mask !== null,
+      hasLoneAccessKey: hasLoneShownAccessKey(next),
+      focusesAccessKey,
+    };
+  }
+
+  function accessKeyVendorOfForm(next: Values): ApiEndpointAccessKeyVendor | null {
+    if (!canSetBalance) return null;
+    return accessKeyVendorOf([
+      next.urls.openai_chat,
+      next.urls.anthropic_messages,
+      next.urls.openai_responses,
+    ]);
+  }
+
+  /** 给出了两栏，存下来却有 ID 没 Secret（打了的，或存着没移除的）。 */
+  function hasLoneShownAccessKey(next: Values): boolean {
+    if (accessKeyVendorOfForm(next) === null) return false;
+    const has = (part: ConnectionAccessKeyPart) =>
+      next[ACCESS_KEY_BOXES[part]].text.trim() !== "" ||
+      (!next.accessKeyRemoved && savedAccessKeyMasks[part] !== null);
+    return hasLoneAccessKey({ hasId: has("id"), hasSecret: has("secret") });
+  }
+
+  /** 账户令牌、用户 ID 与智谱团队 ID 这几栏的样子，和令牌、地址对不上的提示。 */
+  function deriveBalanceToken(next: Values) {
+    const mask = next.balanceTokenRemoved ? null : savedTokenMask;
+    const hasToken = next.balanceTokenText.trim() !== "" || mask !== null;
+    return {
+      balanceUrlGeneration: next.balanceUrlGeneration,
+      balanceFieldGeneration: next.balanceFieldGeneration,
+      balanceUserIdText: next.balanceUserIdText,
+      isZhipuAddress: isZhipuForm(next),
+      balanceTeamOrgIdText: next.balanceTeamOrgIdText,
+      balanceTeamProjectIdText: next.balanceTeamProjectIdText,
+      hasLoneTeamId: hasLoneShownTeamId(next),
+      balanceTokenMask: mask,
+      hasSavedBalanceToken: mask !== null,
+      balanceTokenBoxValue: next.balanceTokenBoxValue,
+      balanceTokenBoxGeneration: next.balanceTokenBoxGeneration,
+      isBalanceTokenVisible: next.isBalanceTokenVisible,
+      isRevealingBalanceToken: next.isRevealingBalanceToken,
+      balanceTokenRevealError: next.balanceTokenRevealError,
+      balanceFix: balanceFixOf({
+        hasToken,
+        balanceUrl: next.balanceUrlText,
+        userId: next.balanceUserIdText,
+        addresses: [
+          next.urls.openai_chat,
+          next.urls.anthropic_messages,
+          next.urls.openai_responses,
+        ],
+        headerNames: next.headerRows
+          .filter((row) => row.value.trim() !== "")
+          .map((row) => row.name),
+      }),
+    };
+  }
+
+  function isZhipuForm(next: Values): boolean {
+    return isZhipuAddress([
+      next.urls.openai_chat,
+      next.urls.anthropic_messages,
+      next.urls.openai_responses,
+    ]);
+  }
+
+  /** 给出了团队两栏、却只填了一个（照 magpie 只在给出两栏时查）。 */
+  function hasLoneShownTeamId(next: Values): boolean {
+    return canSetBalance && isZhipuForm(next) && hasLoneTeamId(next);
   }
 
   /** 能保存：不在忙、有名称、有 key（选填时不要求）、地址都像样，「高级」里也没有读不通的。 */
@@ -768,7 +1094,10 @@ export function createConnectionFormModel(
   }): boolean {
     // 发不出去的请求头只提示、不挡保存（magpie 照存）；读不通的附加请求体挡住，daemon 也会拒收。
     const hasExtrasProblem =
-      input.extras.extraBodyProblem !== null || input.cooldown.cooldownProblem !== null;
+      input.extras.extraBodyProblem !== null ||
+      input.cooldown.cooldownProblem !== null ||
+      hasLoneShownTeamId(input.next) ||
+      hasLoneShownAccessKey(input.next);
     const isFilled = input.next.name.trim() !== "" && input.hasKey && input.hasValidUrls;
     return !input.busy && isFilled && !input.serviceAddressInvalid && !hasExtrasProblem;
   }
@@ -1194,6 +1523,115 @@ export function createConnectionFormModel(
     return { cooldownSettings: now.value };
   }
 
+  /**
+   * 余额设置只在改过时整份带上；没改的省略，daemon 留着那家原来的（复制时由 daemon 拷）。账户令牌打了或移除了才带。
+   * 老主机不带。
+   */
+  function savedBalanceRequest(): Pick<
+    ConnectionSaveRequest,
+    "balance" | "balanceToken" | "accessKeyId" | "secretAccessKey"
+  > {
+    if (!canSetBalance) return {};
+    const now = balanceSettingsOf(values);
+    return {
+      ...(equal(now, balanceAtOpen) ? {} : { balance: now }),
+      ...balanceTokenRequest({
+        typed: values.balanceTokenText,
+        removed: values.balanceTokenRemoved,
+      }),
+      ...accessKeyRequest({
+        typedId: values.accessKeyIdBox.text,
+        typedSecret: values.secretAccessKeyBox.text,
+        removed: values.accessKeyRemoved,
+      }),
+    };
+  }
+
+  /** 「查询余额」与「自动识别」问的表单值：key、各格式地址、模板、请求头与证书设置，都还没保存。 */
+  function balanceFormRequest(): ConnectionBalanceDetectRequest {
+    return {
+      ...keyOwnerRequest(),
+      // 复制时打了 key 也带原来那家的 id：没动的账户令牌用它存的。
+      ...(keyOwner ? { endpointId: keyOwner.id } : {}),
+      baseUrls: checkedUrlsOf(values),
+      ...(values.template ? { templateId: values.template.id } : {}),
+      ...typedExtrasRequest(),
+      ...insecureTlsRequest(),
+    };
+  }
+
+  /**
+   * 余额查询地址换成 url：「查询余额」的结果读的是旧地址，连同正在查的那次一起作废；没变就什么都不动。
+   */
+  function balanceUrlPatch(url: string): Partial<Values> {
+    if (url === values.balanceUrlText) return {};
+    pendingBalanceCheck?.abort();
+    pendingBalanceCheck = null;
+    return { balanceUrlText: url, balanceCheck: { status: "idle" } };
+  }
+
+  /** 用户自己换了地址：「自动识别」说的「已填入」那个地址也不再是表单里的了。 */
+  function typedBalanceUrlPatch(url: string): Partial<Values> {
+    const patch = balanceUrlPatch(url);
+    if (!("balanceUrlText" in patch) || values.balanceDetect.status !== "found") return patch;
+    return { ...patch, balanceDetect: { status: "idle" } };
+  }
+
+  /** 「查询余额」：表单里的值加上余额设置与账户令牌。 */
+  async function runBalanceCheck(controller: AbortController): Promise<void> {
+    const outcome = await deps.checkBalance(
+      {
+        ...balanceFormRequest(),
+        balance: balanceSettingsOf(values),
+        ...balanceTokenRequest({
+          typed: values.balanceTokenText,
+          removed: values.balanceTokenRemoved,
+        }),
+      },
+      controller.signal,
+    );
+    if (pendingBalanceCheck !== controller) return;
+    pendingBalanceCheck = null;
+    if (outcome.status === "cancelled") update({ balanceCheck: { status: "idle" } });
+    else if (outcome.status === "done") {
+      update({ balanceCheck: { status: "done", reading: outcome.reading } });
+    } else update({ balanceCheck: { status: "failed", message: outcome.message } });
+  }
+
+  /**
+   * 「自动识别」：试中就把地址填进表单；取值写法同「改用 …」，空的或 key 查询那几种写法让位给默认写法（占位写出），
+   * 用户自己写的别的写法留着。
+   */
+  async function runBalanceDetect(controller: AbortController): Promise<void> {
+    const outcome = await deps.detectBalanceUrl(balanceFormRequest(), controller.signal);
+    if (pendingBalanceDetect !== controller) return;
+    pendingBalanceDetect = null;
+    if (outcome.status === "cancelled") {
+      update({ balanceDetect: { status: "idle" } });
+      return;
+    }
+    if (outcome.status === "failed") {
+      update({ balanceDetect: { status: "failed", message: outcome.message } });
+      return;
+    }
+    const found = outcome.detected;
+    const hitAttempt = found
+      ? outcome.attempts.find((attempt) => attempt.url === found.url)
+      : undefined;
+    if (!found || !hitAttempt) {
+      update({ balanceDetect: { status: "missed", attempts: outcome.attempts } });
+      return;
+    }
+    update({
+      ...balanceUrlPatch(found.url),
+      balanceUrlGeneration: values.balanceUrlGeneration + 1,
+      balanceMethod: "GET",
+      balanceFieldText: fieldAfterUsing(values.balanceFieldText),
+      balanceFieldGeneration: values.balanceFieldGeneration + 1,
+      balanceDetect: { status: "found", url: found.url, reading: hitAttempt.reading },
+    });
+  }
+
   /** 改一行请求头。 */
   function updateHeaderRow(id: number, change: (row: HeaderRow) => HeaderRow): void {
     const headerRows = values.headerRows.map((row) => {
@@ -1349,6 +1787,7 @@ export function createConnectionFormModel(
       ...savedExtrasRequest(),
       ...insecureTlsRequest(),
       ...savedCooldownRequest(),
+      ...savedBalanceRequest(),
     };
   }
 
@@ -1425,6 +1864,57 @@ export function createConnectionFormModel(
       detecting: false,
       detectError: null,
     };
+  }
+
+  function updateAccessKeyBox(part: ConnectionAccessKeyPart, patch: Partial<SecretBoxValues>) {
+    const name = ACCESS_KEY_BOXES[part];
+    update({ [name]: { ...values[name], ...patch } });
+  }
+
+  async function runAccessKeyReveal(
+    endpointId: string,
+    part: ConnectionAccessKeyPart,
+  ): Promise<void> {
+    const outcome = await deps.revealAccessKey(endpointId, part);
+    const box = values[ACCESS_KEY_BOXES[part]];
+    if (!box.isRevealing) return;
+    if (outcome.status === "failed") {
+      updateAccessKeyBox(part, { isRevealing: false, revealError: outcome.message });
+      return;
+    }
+    // 等的时候已经打了新的，或其实没存：只把框里的显示出来。
+    if (box.text !== "" || outcome.value === null) {
+      updateAccessKeyBox(part, { isRevealing: false, isVisible: true });
+      return;
+    }
+    updateAccessKeyBox(part, {
+      isRevealing: false,
+      isVisible: true,
+      isRevealed: true,
+      boxValue: outcome.value,
+      boxGeneration: box.boxGeneration + 1,
+    });
+  }
+
+  async function runTokenReveal(endpointId: string): Promise<void> {
+    const outcome = await deps.revealBalanceToken(endpointId);
+    if (!values.isRevealingBalanceToken) return;
+    if (outcome.status === "failed") {
+      update({ isRevealingBalanceToken: false, balanceTokenRevealError: outcome.message });
+      return;
+    }
+    // 等的时候已经打了新令牌，或其实没存：只把框里的显示出来。
+    if (values.balanceTokenText !== "" || outcome.value === null) {
+      update({ isRevealingBalanceToken: false, isBalanceTokenVisible: true });
+      return;
+    }
+    update({
+      isRevealingBalanceToken: false,
+      isBalanceTokenVisible: true,
+      isBalanceTokenRevealed: true,
+      balanceTokenBoxValue: outcome.value,
+      balanceTokenBoxGeneration: values.balanceTokenBoxGeneration + 1,
+    });
   }
 
   async function runReveal(endpointId: string): Promise<void> {
@@ -1709,6 +2199,144 @@ export function createConnectionFormModel(
     setNoFailRest(value) {
       update({ noFailRest: value });
     },
+    setBalanceUrl(value) {
+      update(typedBalanceUrlPatch(value));
+    },
+    setBalanceMethod(value) {
+      update({ balanceMethod: value });
+    },
+    setBalanceField(value) {
+      update({ balanceFieldText: value });
+    },
+    setBalanceUserId(value) {
+      update({ balanceUserIdText: value });
+    },
+    setBalanceTeamOrgId(value) {
+      update({ balanceTeamOrgIdText: value });
+    },
+    setBalanceTeamProjectId(value) {
+      update({ balanceTeamProjectIdText: value });
+    },
+    setBalanceToken(value) {
+      update({
+        balanceTokenText: value,
+        balanceTokenBoxValue: value,
+        isRevealingBalanceToken: false,
+        balanceTokenRevealError: null,
+      });
+    },
+    toggleBalanceTokenVisible() {
+      if (values.isRevealingBalanceToken) return;
+      if (values.isBalanceTokenVisible) {
+        // 读回来又没改的原令牌不留在框里（同 key）。
+        const clearsBox = values.isBalanceTokenRevealed && values.balanceTokenText === "";
+        update({
+          isBalanceTokenVisible: false,
+          isBalanceTokenRevealed: false,
+          ...(clearsBox
+            ? {
+                balanceTokenBoxValue: "",
+                balanceTokenBoxGeneration: values.balanceTokenBoxGeneration + 1,
+              }
+            : {}),
+        });
+        return;
+      }
+      const readsSaved =
+        seed.mode === "edit" &&
+        savedTokenMask !== null &&
+        !values.balanceTokenRemoved &&
+        values.balanceTokenText === "";
+      if (readsSaved) {
+        update({ isRevealingBalanceToken: true, balanceTokenRevealError: null });
+        void runTokenReveal(seed.endpoint.id);
+        return;
+      }
+      update({ isBalanceTokenVisible: true, balanceTokenRevealError: null });
+    },
+    removeBalanceToken() {
+      update({
+        balanceTokenRemoved: true,
+        balanceTokenText: "",
+        balanceTokenBoxValue: "",
+        balanceTokenBoxGeneration: values.balanceTokenBoxGeneration + 1,
+        isBalanceTokenRevealed: false,
+        isRevealingBalanceToken: false,
+        balanceTokenRevealError: null,
+      });
+    },
+    setAccessKey(part, value) {
+      updateAccessKeyBox(part, {
+        text: value,
+        boxValue: value,
+        isRevealing: false,
+        revealError: null,
+      });
+    },
+    toggleAccessKeyVisible(part) {
+      const box = values[ACCESS_KEY_BOXES[part]];
+      if (box.isRevealing) return;
+      if (box.isVisible) {
+        // 读回来又没改的原文不留在框里（同 key）。
+        const clearsBox = box.isRevealed && box.text === "";
+        updateAccessKeyBox(part, {
+          isVisible: false,
+          isRevealed: false,
+          ...(clearsBox ? { boxValue: "", boxGeneration: box.boxGeneration + 1 } : {}),
+        });
+        return;
+      }
+      const readsSaved =
+        seed.mode === "edit" &&
+        savedAccessKeyMasks[part] !== null &&
+        !values.accessKeyRemoved &&
+        box.text === "";
+      if (readsSaved) {
+        updateAccessKeyBox(part, { isRevealing: true, revealError: null });
+        void runAccessKeyReveal(seed.endpoint.id, part);
+        return;
+      }
+      updateAccessKeyBox(part, { isVisible: true, revealError: null });
+    },
+    removeAccessKey() {
+      const cleared = (box: SecretBoxValues): SecretBoxValues => ({
+        ...box,
+        text: "",
+        boxValue: "",
+        boxGeneration: box.boxGeneration + 1,
+        isRevealed: false,
+        isRevealing: false,
+        revealError: null,
+      });
+      update({
+        accessKeyRemoved: true,
+        accessKeyIdBox: cleared(values.accessKeyIdBox),
+        secretAccessKeyBox: cleared(values.secretAccessKeyBox),
+      });
+    },
+    useBalanceUrl(url) {
+      update({
+        ...typedBalanceUrlPatch(url),
+        balanceUrlGeneration: values.balanceUrlGeneration + 1,
+        balanceFieldText: fieldAfterUsing(values.balanceFieldText),
+        balanceFieldGeneration: values.balanceFieldGeneration + 1,
+      });
+    },
+    checkBalance() {
+      if (!canSetBalance) return;
+      pendingBalanceCheck?.abort();
+      const controller = new AbortController();
+      pendingBalanceCheck = controller;
+      update({ balanceCheck: { status: "checking" } });
+      void runBalanceCheck(controller);
+    },
+    detectBalanceUrl() {
+      if (!state.canDetectBalanceUrl) return;
+      const controller = new AbortController();
+      pendingBalanceDetect = controller;
+      update({ balanceDetect: { status: "detecting" } });
+      void runBalanceDetect(controller);
+    },
     cancelDetect() {
       if (!pendingDetect) return;
       abortPendingDetect();
@@ -1728,6 +2356,10 @@ export function createConnectionFormModel(
       abortPendingDetect();
       abortPendingFetch();
       abortPendingTest();
+      pendingBalanceCheck?.abort();
+      pendingBalanceCheck = null;
+      pendingBalanceDetect?.abort();
+      pendingBalanceDetect = null;
       pendingIcon = null;
       closed = true;
       listeners.clear();
@@ -1743,13 +2375,19 @@ function seededRequestExtras(input: {
   keyOwner: ApiEndpoint | null;
   isCustom: boolean;
   hasCooldownSettings: boolean;
+  // 填了余额查询地址，或从「填写余额查询地址」打开。
+  opensAdvanced: boolean;
 }): Pick<Values, "isAdvancedOpen" | "headerRows" | "nextHeaderId" | "extraBodyText" | "keyHeader"> {
   const { keyOwner } = input;
   const saved = headerRowsOf(keyOwner?.headers);
   const extraBodyText = extraBodyTextOf(keyOwner?.extraBody);
   const keyHeader = keyHeaderOf(keyOwner?.keyHeader);
   const isSet =
-    saved.length > 0 || extraBodyText !== "" || keyHeader !== "both" || input.hasCooldownSettings;
+    saved.length > 0 ||
+    extraBodyText !== "" ||
+    keyHeader !== "both" ||
+    input.hasCooldownSettings ||
+    input.opensAdvanced;
   const startsEmpty = input.isCustom && saved.length === 0;
   const headerRows = startsEmpty ? [{ id: 0, name: "", value: "", isJson: false }] : saved;
   return {
@@ -1820,6 +2458,22 @@ function initialNameOf(seed: ConnectionFormSeed): string {
 function endpointHasModel(endpoint: ApiEndpoint, modelId: string): boolean {
   const lists = [endpoint.models, endpoint.catalog?.models ?? [], endpoint.manualModels ?? []];
   return lists.some((models) => models.some((model) => model.id === modelId));
+}
+
+/** 编辑窗口从详情页的哪个按钮打开：光标放在余额查询地址还是 AccessKey 上；别的为 null。 */
+function focusOf(seed: ConnectionFormSeed): "balance" | "access_key" | null {
+  return seed.mode === "edit" ? (seed.focus ?? null) : null;
+}
+
+/** 编辑的这家或复制的原来那家存的云账号密钥打码。 */
+function accessKeyMasksOf(
+  owner: ApiEndpoint | null,
+): Record<ConnectionAccessKeyPart, string | null> {
+  return { id: owner?.accessKeyIdMask ?? null, secret: owner?.secretAccessKeyMask ?? null };
+}
+
+function hasAccessKeyMask(masks: Record<ConnectionAccessKeyPart, string | null>): boolean {
+  return masks.id !== null || masks.secret !== null;
 }
 
 function keyOwnerOf(seed: ConnectionFormSeed): ApiEndpoint | null {

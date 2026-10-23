@@ -2791,6 +2791,63 @@ export const fr: TranslationResources = {
         apiKeyOptionalLabel: "Clé d'API (facultative)",
         apiKeyLocalPlaceholder: "Facultative pour les serveurs locaux",
         keyRejected: "Le serveur a refusé cette clé (401 / 403)",
+        balance: {
+          url: "URL du solde",
+          urlInfo:
+            "Adresse où le fournisseur indique ce qui reste sur la clé, interrogée en GET, ou en POST sans corps. Elle reçoit la clé en Bearer, comme une requête de chat, avec les en-têtes de ce point de terminaison ; {key} dans l’adresse ou un en-tête devient la clé. Une fois renseignée, c’est cette adresse qui est interrogée, et non celle qu’Osuna connaît pour le fournisseur. Interrogée seulement quand les pages du point de terminaison sont ouvertes, au plus une fois par minute.",
+          field: "Champ du solde",
+          fieldInfo:
+            "Où se trouve le montant dans la réponse, p. ex. data.balance. Ce peut être un calcul avec + - * / et des parenthèses, p. ex. data.total / 500000. « $ » ou « ¥ » devant ajoute le symbole ; « % » après l’affiche en pourcentage avec une barre. Plusieurs, chacun avec une étiquette, se séparent par « ; », p. ex. 5h: a.used / a.cap %; $credits.left. Les éléments d’une liste s’écrivent a.*.used, ou a[status=active].used pour ceux qui correspondent, dans sum(), max(), min() ou count(). Laissé vide, les adresses new-api, sub2api et credit grants sont lues comme l’indique l’exemple.",
+          check: "Vérifier le solde",
+          detect: "Détecter l'URL",
+          detectFound: "Site {{kind}} détecté ; l'URL du solde est remplie",
+          detectMissed: "Ni l'URL du solde de new-api ni celle de sub2api n'ont renvoyé de solde",
+          detectAttempt: "{{path}} : {{reason}}",
+          nothingToAsk:
+            "Aucune URL du solde à interroger, et le solde de ce fournisseur n’est pas connu",
+          token: "Jeton du compte",
+          tokenInfo:
+            "Ce avec quoi l'URL du solde est interrogée à la place de la clé quand elle demande le jeton propre au compte : le jeton d'accès système d'un relais new-api, ou le jeton de connexion d'un panneau sub2api (un JWT, envoyé en Bearer). Sur AiHubMix, son jeton d'accès système affiche le solde de tout le compte sans URL du solde. Gardé sur cet hôte seulement et utilisé pour rien d'autre.",
+          tokenPlaceholder: "Facultatif · le jeton d'accès système ou de connexion du compte",
+          tokenSavedPlaceholder: "Enregistré : {{mask}}",
+          tokenRemove: "Retirer",
+          userId: "ID utilisateur",
+          userIdInfo:
+            "Votre ID utilisateur sur un relais new-api, affiché dans les paramètres personnels du site. Envoyé en New-Api-User seulement pour interroger le solde, jamais avec une requête de chat. Un en-tête New-Api-User sur ce point de terminaison marche aussi ; ce champ l'emporte.",
+          userIdPlaceholder: "Facultatif · new-api seulement",
+          teamOrgId: "ID d'organisation de l'équipe",
+          teamOrgIdInfo:
+            "L'ID d'organisation d'une équipe GLM Coding Plan, tel que l'affiche la console BigModel ou Z.ai. Avec l'ID de projet, les fenêtres de l'équipe sont lues quand cette clé n'a pas de forfait à elle.",
+          teamOrgIdPlaceholder: "Facultatif · forfait d'équipe GLM seulement",
+          teamProjectId: "ID de projet de l'équipe",
+          teamProjectIdInfo:
+            "L'ID de projet de l'équipe, dans la même console. Les deux ID sont nécessaires.",
+          teamProjectIdPlaceholder: "Facultatif · forfait d'équipe GLM seulement",
+          teamBothNeeded: "Forfait d'équipe : indiquez l'ID d'organisation et l'ID de projet",
+          volcAccessKeyId: "AccessKey ID",
+          volcSecretAccessKey: "Secret Access Key",
+          tencentSecretId: "SecretId",
+          tencentSecretKey: "SecretKey",
+          accessKeyVendor: {
+            volcengine: "Volcengine Ark",
+            tencent: "Tencent Cloud Token Plan Enterprise",
+          },
+          accessKeyInfo:
+            "{{vendor}} ne donne les fenêtres d'utilisation d'un forfait qu'à la clé d'accès cloud du compte (créée dans la gestion des accès de la console), jamais à la clé du forfait lui-même. Avec les deux champs, les fenêtres sont lues sur la plateforme ouverte du fournisseur. Conservée sur cet hôte uniquement et utilisée pour rien d'autre.",
+          secretAccessKeyInfo:
+            "Le secret associé à l'ID. Seule une signature faite avec lui est envoyée, jamais le secret.",
+          accessKeySecretNeeded: "Indiquez aussi la {{secret}}",
+          accessKeyRemove: "Retirer",
+          fixNewApiKeyQuery:
+            "…/api/usage/token prend la clé d'API, pas ce jeton. Pour le solde du compte, new-api utilise /api/user/self ; sub2api utilise /api/v1/user/profile.",
+          fixSub2apiKeyQuery:
+            "…/v1/usage prend la clé d'API, pas ce jeton. Pour le solde du compte, un panneau sub2api utilise /api/v1/user/profile.",
+          fixNoUrl:
+            "Le jeton a besoin d'une URL du solde : un relais new-api utilise /api/user/self ; un panneau sub2api utilise /api/v1/user/profile.",
+          fixUserId:
+            "Un relais new-api demande aussi votre ID utilisateur (dans les paramètres personnels du site) : remplissez ID utilisateur ci-dessous.",
+          useUrl: "Utiliser {{url}}",
+        },
         extras: {
           advanced: "Avancé",
           advancedShow: "Afficher les options avancées",
@@ -3004,6 +3061,142 @@ export const fr: TranslationResources = {
             "Les modèles de {{name}} seront retirés de la liste des modèles de tous les agents.",
           defaultChanged: "Le modèle par défaut de {{agent}} passera de {{from}} à {{to}}.",
           confirm: "Supprimer",
+        },
+      },
+      balance: {
+        title: "Solde et utilisation du forfait",
+        info: "Ce que le fournisseur de ce point de terminaison indique comme restant sur sa clé. Affichage seulement : le basculement ne le lit jamais.",
+        balance: "Solde",
+        refresh: "Actualiser",
+        loading: "Lecture du solde…",
+        readJustNow: "Lu à l’instant",
+        readAgo: "Lu {{time}}",
+        failedJustNow: "Échec de lecture à l’instant",
+        failedAgo: "Échec de lecture {{time}}",
+        staleTemporary: "Lecture impossible pour l’instant · relevé {{time}}",
+        staleNotAsked: "Non actualisé · relevé {{time}}",
+        staleMomentAgo: "il y a un instant",
+        unsupported: "Aucun moyen connu de lire le solde de ce fournisseur",
+        fillUrl: "Renseigner l’URL du solde",
+        noKey: "Ce point de terminaison n’a pas de clé, son solde ne peut donc pas être lu",
+        rowUnavailable: "Solde indisponible",
+        rowNeedsAccessKey: "AccessKey requise",
+        needsAccessKeyVolcengine:
+          "Volcengine Ark ne donne les fenêtres de ce forfait qu'à l'AccessKey ID et à la Secret Access Key du compte. Renseignez-les dans Avancé, dans les réglages de ce point d'accès.",
+        needsAccessKeyTencent:
+          "Tencent Cloud ne donne l'utilisation d'un Token Plan Enterprise qu'au SecretId et à la SecretKey du compte. Renseignez-les dans Avancé, dans les réglages de ce point d'accès.",
+        fillAccessKey: "Renseigner l'AccessKey",
+        planTier: "Niveau : {{tier}}",
+        planStopped: "Forfait arrêté : {{status}}",
+        teamPlanStopped: "Forfait de l'équipe {{team}} arrêté : {{status}}",
+        unreadTeams: "Impossible de lire l’utilisation du forfait de : {{teams}}",
+        rowAmount: "Solde {{amount}}",
+        rowWindowUsed: "{{window}} {{percent}} utilisé",
+        rowWindowLeft: "{{window}} {{percent}} restant",
+        readFailed: "Impossible de lire le solde",
+        withStatus: "{{text}} (HTTP {{status}})",
+        failure: {
+          wrongUrl: "Mauvaise adresse : le fournisseur n’a pas répondu avec un solde",
+          tokenRejected: "Jeton refusé : le fournisseur a refusé la clé",
+          notOffered: "Ce fournisseur ne propose pas de consultation du solde",
+          noValue: "Aucune valeur : la réponse ne contient pas de solde",
+          temporary: "Indisponible pour le moment : réessayez plus tard",
+        },
+        noItems: "Ce fournisseur n'a pas de solde distinct à afficher pour le moment",
+        openConsole: "Ouvrir la console ↗",
+        openConsoleLabel: "Ouvrir {{url}} dans le navigateur",
+        part: {
+          granted: "Offert",
+          toppedUp: "Rechargé",
+        },
+        hint: {
+          accessKeyRefused:
+            "Vérifiez l'AccessKey (AK/SK) et ses droits : la plateforme ouverte a refusé la clé d'accès, ou elle ne peut pas lire l'utilisation de ce forfait.",
+          glmKeyRefused:
+            "Cette clé a expiré, a été supprimée ou est mal saisie : copiez une clé valide depuis la console et collez-la dans les réglages de ce point d'accès.",
+          opencodeGoNoSubscription:
+            "Cette clé n'a pas OpenCode Go : Go appartient au membre qui s'est abonné, dans cet espace de travail. Utilisez une clé créée par ce membre à cet endroit (opencode.ai, API Keys de l'espace de travail).",
+          opencodeKeyRefused: "OpenCode refuse cette clé : elle a été supprimée ou est mal saisie.",
+          opencodeNoBalance:
+            "OpenCode ne donne pas le solde à une clé d'API : les crédits à l'usage de Zen ne s'affichent que dans la console OpenCode, sous Overview → Credits (pour les propriétaires et administrateurs de l'espace de travail).",
+          siliconflowRetired:
+            "SiliconFlow a retiré sa requête de solde et n'a pas encore d'API pour la remplacer. Consultez le solde et les bons sur sa console (sur le site chinois : 余额充值 → 代金券).",
+          aihubmixNoLimit:
+            "Cette clé n'a pas de limite, et AiHubMix ne dit à une clé que ce qui lui reste. Pour voir le solde du compte, ajoutez le jeton d'accès du compte dans les réglages de ce point d'accès (AiHubMix → Paramètres → Générer un jeton d'accès système), ou donnez une limite à la clé dans la console AiHubMix.",
+          notAsked:
+            "Pas encore lu : l'actualisation automatique est désactivée. Appuyez sur Actualiser pour le lire.",
+          tokenOnKeyUrl:
+            "Cette URL du solde prend la clé d'API, pas le jeton du compte. Mettez {{url}} pour le solde du compte, ou retirez le jeton pour celui de la clé.",
+          newApiUserMissing:
+            "Le relais demande votre ID utilisateur : remplissez ID utilisateur dans les paramètres de ce point de terminaison (affiché dans les paramètres personnels du site).",
+        },
+        window: {
+          hoursOne: "{{count}} heure",
+          hoursMany: "{{count}} heures",
+          daysOne: "{{count}} jour",
+          daysMany: "{{count}} jours",
+          minutesOne: "{{count}} minute",
+          minutesMany: "{{count}} minutes",
+          month: "Mois",
+          allowance: "Utilisation du forfait",
+          mcpMonth: "MCP · Mois",
+          session: "Session",
+          credits: "Crédits",
+          bucket: "{{bucket}} · {{window}}",
+          bucketVideo: "Vidéo",
+          bucketImage: "Image",
+          unitCredits: "crédits",
+          unitTokens: "tokens",
+          unitVideos: "vidéos",
+        },
+        pace: "Rythme {{pace}}",
+        asideTitle: "N'arrête pas les modèles",
+        teamPlan: "Forfait d'équipe",
+        resets: {
+          left: "Il reste {{resets}}",
+          countOne: "{{count}} réinitialisation",
+          countMany: "{{count}} réinitialisations",
+          fiveHourOne: "{{count}} réinitialisation de 5 heures",
+          fiveHourMany: "{{count}} réinitialisations de 5 heures",
+          weeklyOne: "{{count}} réinitialisation hebdomadaire",
+          weeklyMany: "{{count}} réinitialisations hebdomadaires",
+          soonest: "La première expire {{when}}",
+          info: "Les réinitialisations s'utilisent sur la page du fournisseur ; Osuna les affiche seulement.",
+          eachExpires: "La réinitialisation {{n}} expire {{when}}",
+          eachNever: "La réinitialisation {{n}} n'expire pas",
+          eachFiveHourExpires: "La réinitialisation de cinq heures expire {{when}}",
+          eachFiveHourNever: "La réinitialisation de cinq heures n'expire pas",
+          eachWeeklyExpires: "La réinitialisation hebdomadaire expire {{when}}",
+          eachWeeklyNever: "La réinitialisation hebdomadaire n'expire pas",
+          showEach: "Afficher l'expiration de chaque réinitialisation",
+          hideEach: "Masquer l'expiration de chaque réinitialisation",
+          use: {
+            action: "Utiliser une réinitialisation",
+            confirmTitle: "Utiliser une réinitialisation {{source}} ?",
+            confirmOne:
+              "{{who}} a 1 réinitialisation. L'utiliser fait repartir ses fenêtres de zéro immédiatement, comme si aucune n'avait été utilisée. C'est irréversible.",
+            confirmMany:
+              "{{who}} a {{count}} réinitialisations. En utiliser une fait repartir ses fenêtres de zéro immédiatement, comme si aucune n'avait été utilisée. C'est irréversible.",
+            confirmSoonest: "Celle utilisée est celle qui expire en premier, {{when}}.",
+            confirmIdle:
+              "Aucune de ses fenêtres n'a encore été utilisée : il n'y a rien à faire repartir.",
+            hintSoonest:
+              "Utilise la réinitialisation qui expire en premier ({{when}}), jamais une qui dure plus longtemps. Les fenêtres de ce compte repartent de zéro immédiatement, comme si aucune n'avait été utilisée. Une confirmation vous est demandée avant.",
+            hintNoExpiry:
+              "Utilise l'une de ses réinitialisations ; aucune n'expire. Les fenêtres de ce compte repartent de zéro immédiatement, comme si aucune n'avait été utilisée. Une confirmation vous est demandée avant.",
+            outcomeResetOne: "1 fenêtre est repartie de zéro",
+            outcomeResetMany: "{{count}} fenêtres sont reparties de zéro",
+            outcomeNothingToReset:
+              "Rien à faire repartir : aucune fenêtre n'a été utilisée, la réinitialisation est conservée",
+            outcomeNoCredit: "Plus aucune réinitialisation sur le compte",
+            outcomeAlreadyRedeemed: "Cette réinitialisation a déjà été utilisée",
+            failed: "Impossible d'utiliser une réinitialisation : {{error}}",
+          },
+        },
+        autoRefresh: {
+          label: "Actualiser automatiquement le solde et l'usage du forfait",
+          hint: "Toutes les minutes tant que la liste des points d'accès ou la page d'un point d'accès est ouverte. Désactivé : seulement à l'ouverture de l'une d'elles, ou en appuyant sur Actualiser sur la page d'un point d'accès.",
+          saveFailed: "Impossible de modifier l'actualisation automatique : {{message}}",
         },
       },
       models: {

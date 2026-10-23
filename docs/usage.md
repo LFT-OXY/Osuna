@@ -128,7 +128,7 @@ request it makes on its own is the daily model list refresh of each API
 endpoint that is on, which carries that endpoint's key. Its other requests are
 something you asked for, such as the CLI update check or an endpoint's tests;
 follow from a page you have open, such as the vendor status pages read while the
-API endpoints or usage page is open; or follow from a switch you turned on: the
+API endpoints or usage page is open, or an endpoint's balance; or follow from a switch you turned on: the
 API endpoint checks and the gateway's calls to endpoints, all below. Traffic the CLIs send
 through the gateway is theirs, not the daemon's.
 
@@ -180,6 +180,29 @@ does not ask again; refresh does. Nothing is looked up at startup, on a timer,
 or for a CLI that is disabled, not installed, or whose version could not be read. The price table switch does not
 cover it.
 
+### Codex's resets
+
+The Codex plan usage card reads `chatgpt.com/backend-api/wham/usage` with
+Codex's own sign-in (`auth.json`) whenever the card is shown, at most once in 5
+minutes per account unless you press Refresh. When that answer says the ChatGPT
+account holds resets, the same read sends `GET
+chatgpt.com/backend-api/wham/rate-limit-reset-credits` with the same bearer
+token, `ChatGPT-Account-Id` and `User-Agent: Osuna/<version>`, for when each
+one expires. It waits 4 seconds; on any failure the card shows the count alone.
+The sign-in file is read, never written.
+
+**Use a reset** on the card is the one place Osuna uses a CLI's sign-in to change
+the account rather than read it; the sign-in itself is still only read. It sends
+nothing until you confirm. Then it reads the same list again, picks the
+available reset that expires soonest (ones without an expiry last), and sends
+`POST chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume` with the same
+headers and a body of `{credit_id, redeem_request_id}`, where
+`redeem_request_id` is a fresh random UUID so a retried request uses one reset
+at most. If the list can't be read, it uses none and says so. The answer's
+`code` (`reset` with `windows_reset`, `nothing_to_reset`, `no_credit`,
+`already_redeemed`) is shown on the card, and the account is read again past
+the 5-minute cache. Osuna never uses a reset on its own.
+
 ### API endpoints
 
 These go to the base URLs of one API endpoint and carry its key, unless it has
@@ -200,6 +223,159 @@ are reached without checking their certificate.
 
 The dialog's requests use what is in the form, so they can reach an address and
 key you haven't saved yet.
+
+The balance read goes to the endpoint's **Balance URL** when you set one in the
+edit dialog's Advanced, on any endpoint, templated or custom. It is asked with
+`GET`, or with `POST` and no body when you pick POST, and `{key}`, `{apiKey}`,
+`{api_key}`, `{token}`, `{{key}}` or `${API_KEY}` in the address (escaped) or in
+a header value is replaced with the key. Without one, it goes to the vendor's
+own balance query, which the daemon picks by the host of the endpoint's base
+URLs (Chat Completions first, then Responses, then Anthropic), never by its
+template. An endpoint on a host the daemon doesn't know with no Balance URL, or
+one with no key, sends nothing.
+
+| Vendor       | Host                                         | Request                                                   |
+| ------------ | -------------------------------------------- | --------------------------------------------------------- |
+| DeepSeek     | `api.deepseek.com`                           | `GET https://api.deepseek.com/user/balance`               |
+| Kimi         | `api.moonshot.cn` / `api.moonshot.ai`        | `GET https://api.moonshot.cn/v1/users/me/balance` (`.ai`) |
+| OpenRouter   | `openrouter.ai`                              | `GET https://openrouter.ai/api/v1/credits`                |
+| SiliconFlow  | `api.siliconflow.cn` / `api.siliconflow.com` | `GET https://api.siliconflow.cn/v1/user/info` (`.com`)    |
+| StepFun      | `api.stepfun.com` / `api.stepfun.ai`         | `GET https://api.stepfun.com/v1/accounts` (`.ai`)         |
+| Command Code | `api.commandcode.ai`                         | `GET https://api.commandcode.ai/alpha/billing/credits`    |
+| Ollama Cloud | `ollama.com`                                 | `GET https://ollama.com/api/balance`                      |
+| AiHubMix     | `aihubmix.com`                               | `GET https://aihubmix.com/dashboard/billing/remain`       |
+
+An endpoint on OpenCode Zen (`opencode.ai/zen` or `opencode.ai/inference`, not
+Go's `/go` or a `/custom` provider) sends nothing either: OpenCode tells no key
+its balance, so its section says to read it on the OpenCode console.
+
+An endpoint on a plan key also reads its **Plan usage** windows, beside the
+balance and on the same schedule, with or without a Balance URL. The daemon
+picks the query by the host and path of the base URLs (Chat Completions first,
+then Anthropic, then Responses):
+
+| Plan            | Base URL                                            | Request                                                                   |
+| --------------- | --------------------------------------------------- | ------------------------------------------------------------------------- |
+| GLM Coding Plan | `open.bigmodel.cn` / `api.z.ai`                     | `GET https://open.bigmodel.cn/api/monitor/usage/quota/limit` (`api.z.ai`) |
+| Kimi Code       | `api.kimi.com` / `api.kimi.ai`, path with `/coding` | `GET <base>/coding/v1/usages`, on the endpoint's own host                 |
+| MiniMax         | `api.minimaxi.com` / `api.minimax.io`               | `GET https://api.minimaxi.com/v1/token_plan/remains` (`.io`)              |
+| OpenCode Go     | `opencode.ai/zen/go` or `opencode.ai/inference/go`  | `GET https://opencode.ai/zen/go/v1/usage`                                 |
+| Command Code    | `api.commandcode.ai`                                | `GET https://api.commandcode.ai/alpha/billing/credits`                    |
+| Ollama Cloud    | `ollama.com`                                        | `GET https://ollama.com/api/balance`                                      |
+
+These carry only the key (`Authorization: Bearer`, the bare key for GLM),
+`Accept: application/json`, `Accept-Language: en-US,en` and
+`User-Agent: Osuna/<version>`, never the endpoint's Headers. OpenCode Go's also
+carries a new `x-opencode-session` and `x-opencode-session-id`, without which
+OpenCode's gateway answers 400. A key that has no plan shows nothing: a reply
+with no windows, or a failed read of a GLM key off `/api/coding/` or of any
+MiniMax key (pay-as-you-go keys use the same address), unless the failure is
+temporary, as does a Command Code or Ollama Cloud key with no windows. Command
+Code and Ollama Cloud are asked the same address twice, once for the balance and
+once for the windows, as magpie asks it. When Command Code's reply leaves out
+the plan, the daemon also asks `GET
+https://api.commandcode.ai/alpha/billing/subscriptions` with the same key, at
+most every ten minutes per key, for the month's credits the Credits window is
+measured against.
+
+A GLM key whose own read shows no windows (or fails, other than the key being
+refused) is asked as a team plan's, only when the endpoint has both the **Team
+organization ID** and **Team project ID**: `GET
+<site>/api/monitor/usage/quota/limit?type=2` with the bare key,
+`Bigmodel-Organization`, `Bigmodel-Project` and `Set-Language` (`zh` on BigModel,
+`en` on Z.ai), first at the key's own host and then, for BigModel, at
+`bigmodel.cn`. The site that answers is then asked `GET
+<site>/api/biz/customer-package-reset/list?targetType=TEAM` with the same headers
+for the team's resets by window; magpie reads those only with a ZCode sign-in,
+which Osuna doesn't read, so when the key isn't taken there no count shows.
+"Check balance" and "Detect URL" don't read plan windows.
+
+Volcengine Ark's Coding Plan and Agent Plan and Tencent Cloud's Token Plan
+Enterprise tell their windows only to the account's cloud access key, never to
+the plan's key, so the endpoint's **AccessKey ID** and **Secret Access Key**
+(Tencent's SecretId and SecretKey) go to the vendor's open platform, not to the
+endpoint's address, on the same schedule as the balance:
+
+| Plan                                | Base URL                                                               | Request                                                                                                                                                          |
+| ----------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Volcengine Ark Coding Plan          | `ark.<region>.volces.com/api/coding`                                   | `POST https://open.volcengineapi.com/?Action=GetCodingPlanUsage&Version=2024-01-01`, body `{}`                                                                   |
+| Volcengine Ark Agent Plan           | `ark.<region>.volces.com/api/plan`                                     | `POST https://open.volcengineapi.com/?Action=GetAFPUsage&Version=2024-01-01`, body `{}`                                                                          |
+| Tencent Cloud Token Plan Enterprise | `tokenhub.tencentmaas.com/plan` / `tokenhub-intl.tencentmaas.com/plan` | `POST https://tokenhub.tencentcloudapi.com/`, `DescribeTokenPlanList` (`{"Offset":0,"Limit":100}`), then `DescribeTokenPlan` (`{"TeamId":…}`) for each team plan |
+
+Volcengine's request is signed as its SDK signs it (`HMAC-SHA256` over
+`content-type;host;x-content-sha256;x-date`, scope `<date>/<region>/ark/request`,
+the region from the host, `cn-beijing` when it names none). Tencent's carries
+`X-TC-Action`, `X-TC-Version: 2026-03-22`, `X-TC-Region` (`ap-guangzhou`, or
+`ap-singapore` on the intl host) and `X-TC-Timestamp`, signed `TC3-HMAC-SHA256`
+over `content-type;host;x-tc-action`. Both carry `User-Agent: Osuna/<version>`
+(Volcengine's also `Accept: application/json`) and only the signature, never the secret, the
+plan's key or the endpoint's Headers. An endpoint missing either half of the
+access key sends nothing and its section says "Needs AccessKey"; Ark's
+pay-as-you-go (`/api/v3`) has no windows and asks nothing. A refused signature or
+access key (401, 403, an `AuthFailure…`, `SignatureDoesNotMatch` or
+`AccessDenied` code) adds "check the AccessKey and its permissions". The access
+key never reaches a log, and no RPC returns it except the edit dialog's Show.
+
+Each window carries its pace as of the read: the share used less the share of the
+window gone by, the window starting its length before its reset, and a monthly
+one on the same day a month before.
+
+An **Account token** saved on the endpoint replaces the key as the whole
+`Authorization` header: a JWT (a sub2api login token) as `Bearer <token>`, one
+written with its scheme as is, any other (a new-api or AiHubMix system access
+token) bare. It goes to the Balance URL with the endpoint's headers, or, on
+AiHubMix with no Balance URL, to `GET https://aihubmix.com/api/user/self` with
+none of them. The **User ID** goes as `New-Api-User` on the Balance URL's request
+only, over a `New-Api-User` header set on the endpoint, and never on a chat
+request. A token beside a query that takes only the key (new-api's
+`/api/usage/token`, sub2api's `/v1/usage`) sends nothing: the section names the
+account query to use instead. An account query (`/api/user/self`,
+`/api/v1/user/profile`) without a token asks the same site's key query with the
+key, unless the endpoint sets its own `Authorization` or `Cookie` header. The
+token never reaches a log, and no RPC returns it except the edit dialog's Show.
+
+"Check balance" in the edit dialog sends the same read once, when you press it,
+with what is in the form: its Balance URL, method, field, key, account token,
+user ID, base URLs and headers, saved or not. Its answer is not kept for the
+minute nor as the last reading.
+
+"Detect URL", under the Balance URL in the edit dialog, is the only request that
+guesses an address, and only when you press it. With the form's key, base URLs
+and headers (never the account token) it asks `GET <site>/api/usage/token`
+(new-api), then `GET <site>/v1/usage` (sub2api), and stops at the first that
+answers with a balance, filling that address into the form with its default
+field. The site is the scheme and host of the first http(s) base URL, taken in
+the order Chat, Anthropic, Responses. When neither answers, each address's
+reason stays under the button. Nothing is saved, kept for the minute, or taken
+as the last reading, and the daemon never sends these two requests on its own:
+not when listing, reading balances or starting.
+
+The balance read carries the key as `Authorization: Bearer`, `Accept: application/json`,
+`User-Agent: Osuna/<version>` and the endpoint's own **Headers**, which can
+replace that user agent. When both are sent depends on the "Auto-refresh balance
+and plan usage" switch at the bottom of the API endpoints page (on by default,
+for the whole host):
+
+| Switch | The API endpoints page (endpoints that are on)    | An endpoint's page (on or off)                    |
+| ------ | ------------------------------------------------- | ------------------------------------------------- |
+| On     | When you open it, then every minute it stays open | When you open it, then every minute it stays open |
+| Off    | When you open it                                  | When you open it                                  |
+
+Bringing the app back to the front counts as opening the page, and a page you
+can't see sends nothing. Refresh in the "Balance and plan usage" section always
+sends it. With the switch off, opening a page again within 30 seconds of the
+last read sends nothing, and the daemon refuses any read the app didn't mark as
+yours (as magpie's "When I ask"), answering with the reading it kept. The daemon
+keeps each endpoint's reading for a minute, so pages open together share one
+request; Refresh skips what it kept, and saving or deleting the endpoint drops
+it. When a read is temporarily unavailable (429, 5xx, a timeout, a network
+error), the section and the row show the last good reading with its age
+instead, kept on disk across restarts (`balance-readings.json` in
+[data-model.md](data-model.md)). Each request times out after 15 seconds and a
+whole read after 30. Nothing is sent at startup, and the price table switch
+does not cover it, nor does this switch cover the CLI logins' plan usage. The
+answer is shown only: failover never reads it. What the vendor said on a failure
+is shown with the key and header values masked, cut to 200 characters.
 
 "From the website" in the add or edit dialog of a custom API endpoint also runs
 only when you press it. The daemon looks for the icon of the site the endpoint's

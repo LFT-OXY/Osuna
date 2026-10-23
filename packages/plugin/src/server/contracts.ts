@@ -28,6 +28,8 @@ export interface PluginSettings<Schema extends ZodType> {
 }
 
 export interface PluginServerContext extends PluginLifecycleRegistration {
+  /** The daemon's version, for a plugin's own requests to name it (`Osuna/<appVersion>`). */
+  readonly appVersion: string;
   registerSettings<Schema extends ZodType>(
     definition: import("../settings.js").SettingsDefinition<Schema>,
   ): PluginSettings<Schema>;

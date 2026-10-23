@@ -2797,6 +2797,62 @@ export const en = {
         apiKeyOptionalLabel: "API key (optional)",
         apiKeyLocalPlaceholder: "Optional for local servers",
         keyRejected: "The upstream rejected this key (401 / 403)",
+        balance: {
+          url: "Balance URL",
+          urlInfo:
+            "Where the vendor tells what is left on the key, asked with GET, or POST with no body. It gets the key as a Bearer token, like a chat request, with this endpoint's headers; {key} in the address or a header becomes the key. Once set, this address is asked instead of the one Osuna knows for the vendor. Asked only while the endpoint pages are open, at most once a minute.",
+          field: "Balance field",
+          fieldInfo:
+            "Where the amount is in the reply, e.g. data.balance. It can be a sum with + - * / and brackets, e.g. data.total / 500000. “$” or “¥” in front adds the sign; “%” after it shows a percent with a bar. Several, each with a label, go apart by “;”, e.g. 5h: a.used / a.cap %; $credits.left. A list's items are a.*.used, or a[status=active].used for those that match, in sum(), max(), min() or count(). Left empty, new-api, sub2api and credit grants addresses are read as the placeholder shows.",
+          check: "Check balance",
+          detect: "Detect URL",
+          detectFound: "Found a {{kind}} site; the Balance URL is filled in",
+          detectMissed: "Neither new-api's nor sub2api's balance query answered with a balance",
+          detectAttempt: "{{path}}: {{reason}}",
+          nothingToAsk: "No balance URL to ask, and this vendor's balance isn't known",
+          token: "Account token",
+          tokenInfo:
+            "What the balance URL is asked with in place of the key when it wants the account's own token: a new-api relay's system access token, or a sub2api panel's login token (a JWT, sent as a Bearer). On AiHubMix, its system access token shows the whole account's balance with no balance URL. Kept on this host only and used for nothing else.",
+          tokenPlaceholder: "Optional · the account's system access token or login token",
+          tokenSavedPlaceholder: "Saved: {{mask}}",
+          tokenRemove: "Remove",
+          userId: "User ID",
+          userIdInfo:
+            "Your user ID on a new-api relay, shown in the site's personal settings. Sent as New-Api-User only when the balance is asked, never with a chat request. A New-Api-User header on this endpoint works too; this field wins over it.",
+          userIdPlaceholder: "Optional · new-api only",
+          teamOrgId: "Team organization ID",
+          teamOrgIdInfo:
+            "A GLM Coding Plan team's organization ID, as the BigModel or Z.ai console shows it. With the project ID too, the team's windows are read when this key has no plan of its own.",
+          teamOrgIdPlaceholder: "Optional · GLM team plan only",
+          teamProjectId: "Team project ID",
+          teamProjectIdInfo:
+            "The team's project ID, from the same console. Both IDs are needed to read the team's windows.",
+          teamProjectIdPlaceholder: "Optional · GLM team plan only",
+          teamBothNeeded: "Team plan: give both the organization ID and the project ID",
+          volcAccessKeyId: "AccessKey ID",
+          volcSecretAccessKey: "Secret Access Key",
+          tencentSecretId: "SecretId",
+          tencentSecretKey: "SecretKey",
+          accessKeyVendor: {
+            volcengine: "Volcengine Ark",
+            tencent: "Tencent Cloud Token Plan Enterprise",
+          },
+          accessKeyInfo:
+            "{{vendor}} tells a plan's usage windows only to the account's cloud access key (made under access management in the cloud console), never to the plan's own key. With both fields filled, the windows are read from the vendor's open platform. Kept on this host only and used for nothing else.",
+          secretAccessKeyInfo:
+            "The secret that goes with the ID. Only a signature made with it is sent, never the secret itself.",
+          accessKeySecretNeeded: "Give the {{secret}} too",
+          accessKeyRemove: "Remove",
+          fixNewApiKeyQuery:
+            "…/api/usage/token takes the API key, not this token. For the account's balance, new-api uses /api/user/self; sub2api uses /api/v1/user/profile.",
+          fixSub2apiKeyQuery:
+            "…/v1/usage takes the API key, not this token. For the account's balance, a sub2api panel uses /api/v1/user/profile.",
+          fixNoUrl:
+            "The token needs a balance URL: a new-api relay uses /api/user/self; a sub2api panel uses /api/v1/user/profile.",
+          fixUserId:
+            "A new-api relay also wants your user ID (shown in the site's personal settings): fill in User ID below.",
+          useUrl: "Use {{url}}",
+        },
         extras: {
           advanced: "Advanced",
           advancedShow: "Show advanced",
@@ -2999,6 +3055,141 @@ export const en = {
           removed: "{{name}}'s models will be removed from every agent's model list.",
           defaultChanged: "{{agent}}'s default model will change from {{from}} to {{to}}.",
           confirm: "Delete",
+        },
+      },
+      balance: {
+        title: "Balance and plan usage",
+        info: "What this endpoint's vendor says is left on its key. Shown only: failover never reads it.",
+        balance: "Balance",
+        refresh: "Refresh",
+        loading: "Reading the balance…",
+        readJustNow: "Read just now",
+        readAgo: "Read {{time}}",
+        failedJustNow: "Read failed just now",
+        failedAgo: "Read failed {{time}}",
+        staleTemporary: "Couldn't read just now · last read {{time}}",
+        staleNotAsked: "Not refreshed · last read {{time}}",
+        staleMomentAgo: "a moment ago",
+        unsupported: "No known way to read this vendor's balance",
+        fillUrl: "Fill in balance URL",
+        noKey: "This endpoint has no key, so its balance can't be read",
+        rowUnavailable: "Balance unavailable",
+        rowNeedsAccessKey: "Needs AccessKey",
+        needsAccessKeyVolcengine:
+          "Volcengine Ark tells this plan's windows only to the account's AccessKey ID and Secret Access Key. Fill them in under Advanced in this endpoint's settings.",
+        needsAccessKeyTencent:
+          "Tencent Cloud tells a Token Plan Enterprise's usage only to the account's SecretId and SecretKey. Fill them in under Advanced in this endpoint's settings.",
+        fillAccessKey: "Fill in AccessKey",
+        planTier: "Tier: {{tier}}",
+        planStopped: "Plan stopped: {{status}}",
+        teamPlanStopped: "{{team}}'s plan stopped: {{status}}",
+        unreadTeams: "Couldn't read plan usage for: {{teams}}",
+        rowAmount: "Balance {{amount}}",
+        rowWindowUsed: "{{window}} {{percent}} used",
+        rowWindowLeft: "{{window}} {{percent}} left",
+        readFailed: "Couldn't read the balance",
+        withStatus: "{{text}} (HTTP {{status}})",
+        failure: {
+          wrongUrl: "Wrong address: the vendor didn't answer with a balance",
+          tokenRejected: "Token rejected: the vendor refused the key",
+          notOffered: "This vendor doesn't offer a balance query",
+          noValue: "No value: the reply has no balance in it",
+          temporary: "Temporarily unavailable: try again later",
+        },
+        noItems: "This vendor has no separate balance to show right now",
+        openConsole: "Open console ↗",
+        openConsoleLabel: "Open {{url}} in the browser",
+        part: {
+          granted: "Granted",
+          toppedUp: "Topped up",
+        },
+        hint: {
+          accessKeyRefused:
+            "Check the AccessKey (AK/SK) and its permissions: the open platform refused the access key, or it may not read this plan's usage.",
+          glmKeyRefused:
+            "This key has expired, was deleted, or is mistyped: copy a current one from the console and paste it into this endpoint's settings.",
+          opencodeGoNoSubscription:
+            "This key has no OpenCode Go: Go belongs to the member who subscribed, in that workspace. Use a key that member made there (opencode.ai, the workspace's API Keys).",
+          opencodeKeyRefused: "OpenCode doesn't take this key: it was deleted, or is mistyped.",
+          opencodeNoBalance:
+            "OpenCode doesn't tell an API key its balance: Zen's pay-as-you-go credits are shown only in the OpenCode console, under Overview → Credits (to the workspace's owners and admins).",
+          siliconflowRetired:
+            "SiliconFlow retired its balance query and has no API in its place yet. See the balance and vouchers on its console (on the China site: 余额充值 → 代金券).",
+          aihubmixNoLimit:
+            "This key has no limit, and AiHubMix only tells a key what is left on it. To see the account's balance, add the account's access token in this endpoint's settings (AiHubMix → Settings → Generate System Access Token), or give the key a limit in the AiHubMix console.",
+          notAsked: "Not read yet: auto refresh is off. Press Refresh to read it.",
+          tokenOnKeyUrl:
+            "This balance URL takes the API key, not the account token. Set it to {{url}} for the account's balance, or remove the token for the key's own.",
+          newApiUserMissing:
+            "The relay wants your user ID: fill in User ID in this endpoint's settings (shown in the site's personal settings).",
+        },
+        window: {
+          hoursOne: "{{count}} hour",
+          hoursMany: "{{count}} hours",
+          daysOne: "{{count}} day",
+          daysMany: "{{count}} days",
+          minutesOne: "{{count}} minute",
+          minutesMany: "{{count}} minutes",
+          month: "Month",
+          allowance: "Plan usage",
+          mcpMonth: "MCP · Month",
+          session: "Session limit",
+          credits: "Credits",
+          bucket: "{{bucket}} · {{window}}",
+          bucketVideo: "Video",
+          bucketImage: "Image",
+          unitCredits: "credits",
+          unitTokens: "tokens",
+          unitVideos: "videos",
+        },
+        pace: "Pace {{pace}}",
+        asideTitle: "Doesn't stop the models",
+        teamPlan: "Team plan",
+        resets: {
+          left: "{{resets}} left",
+          countOne: "{{count}} reset",
+          countMany: "{{count}} resets",
+          fiveHourOne: "{{count}} five-hour reset",
+          fiveHourMany: "{{count}} five-hour resets",
+          weeklyOne: "{{count}} weekly reset",
+          weeklyMany: "{{count}} weekly resets",
+          soonest: "Soonest expires {{when}}",
+          info: "Resets are used on the vendor's own page; Osuna only shows them.",
+          eachExpires: "Reset {{n}} expires {{when}}",
+          eachNever: "Reset {{n}} never expires",
+          eachFiveHourExpires: "Five-hour reset expires {{when}}",
+          eachFiveHourNever: "Five-hour reset never expires",
+          eachWeeklyExpires: "Weekly reset expires {{when}}",
+          eachWeeklyNever: "Weekly reset never expires",
+          showEach: "Show when each reset expires",
+          hideEach: "Hide when each reset expires",
+          use: {
+            action: "Use a reset",
+            confirmTitle: "Use a {{source}} reset?",
+            confirmOne:
+              "{{who}} has 1 reset. Using it starts its windows again at once, as if none of them had been used. It can't be undone.",
+            confirmMany:
+              "{{who}} has {{count}} resets. Using one starts its windows again at once, as if none of them had been used. It can't be undone.",
+            confirmSoonest: "The one used is the one that runs out first, {{when}}.",
+            confirmIdle:
+              "None of its windows has been used yet, so there is nothing to start again.",
+            hintSoonest:
+              "Uses the reset that runs out first ({{when}}), never one that lasts longer. This account's windows start again at once, as if none had been used. You're asked before anything is used.",
+            hintNoExpiry:
+              "Uses one of its resets; none of them runs out. This account's windows start again at once, as if none had been used. You're asked before anything is used.",
+            outcomeResetOne: "1 window started again",
+            outcomeResetMany: "{{count}} windows started again",
+            outcomeNothingToReset:
+              "Nothing to start again — no window has been used, and the reset is kept",
+            outcomeNoCredit: "No reset left on the account",
+            outcomeAlreadyRedeemed: "That reset was already used",
+            failed: "Couldn't use a reset: {{error}}",
+          },
+        },
+        autoRefresh: {
+          label: "Auto-refresh balance and plan usage",
+          hint: "Every minute while the endpoint list or an endpoint's page is open. Off: only when you open one of them, or press Refresh on an endpoint's page.",
+          saveFailed: "Couldn't change auto-refresh: {{message}}",
         },
       },
       models: {

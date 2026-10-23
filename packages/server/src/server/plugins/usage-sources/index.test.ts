@@ -36,6 +36,24 @@ test("discovery preserves account IDs and updates input after token rotation", a
   expect(refreshed[0]?.report.windows[0]?.label).toBe("new");
 });
 
+test("a report's resets reach the client as the source gave them", async () => {
+  const registry = new UsageSourceRegistry();
+  const resets = {
+    count: 2,
+    until: "2026-10-25T14:30:00.000Z",
+    each: [{ until: "2026-10-25T14:30:00.000Z" }, { until: null }],
+  };
+  registry.register(
+    source({
+      id: "codex",
+      discover: async () => [{ key: "work", input: {} }],
+      fetch: async () => ({ status: "available", windows: [], resets }),
+    }),
+  );
+  const [entry] = await registry.listReports();
+  expect(entry?.report).toEqual({ status: "available", windows: [], resets });
+});
+
 test("coalesces per account, caches errors, and refreshes only requested IDs", async () => {
   let now = 0;
   const counts = new Map<string, number>();
@@ -555,4 +573,99 @@ test("a hung login records its own timeout and still tries the next login", asyn
     { harness: "Codex", report: { status: "error", error: "Usage fetch timed out" } },
     { harness: "OpenCode", report: { status: "error", error: "Login rejected" } },
   ]);
+});
+
+test("using a reset goes through the login the card shows, then reads the account past the cache", async () => {
+  const registry = new UsageSourceRegistry(() => 0);
+  let windowsUsed = 80;
+  const fetched: string[] = [];
+  const consumed: unknown[] = [];
+  registry.register({
+    ...source({
+      id: "codex",
+      discover: async () => [
+        { key: "work", input: { login: "expired" } },
+        { key: "work", input: { login: "live" } },
+      ],
+      fetch: async (input) => {
+        const login = (input as { login: string }).login;
+        fetched.push(login);
+        if (login === "expired")
+          return { status: "unavailable", problem: { kind: "rejected", status: 401 } };
+        return {
+          status: "available",
+          windows: [{ id: "five_hour", label: "5-hour", usedPct: windowsUsed }],
+        };
+      },
+    }),
+    consumeReset: async (input: unknown) => {
+      consumed.push(input);
+      windowsUsed = 0;
+      return { code: "reset", windows: 2 };
+    },
+  });
+  const [listed] = await registry.listReports();
+  expect(listed?.consumesResets).toBe(true);
+  fetched.length = 0;
+
+  const { outcome, entry } = await registry.consumeReset("codex:work");
+  expect(consumed).toEqual([{ login: "live" }]);
+  expect(outcome).toEqual({ code: "reset", windows: 2, message: "2 windows started again" });
+  expect(fetched).toEqual(["expired", "live"]);
+  expect(entry.report).toMatchObject({ status: "available", windows: [{ usedPct: 0 }] });
+  // 之后的普通读取拿到的是用掉之后的读数
+  const [cached] = await registry.listReports({ reportIds: ["codex:work"] });
+  expect(cached?.report).toMatchObject({ windows: [{ usedPct: 0 }] });
+});
+
+test("each reset outcome gets its words, and an unknown one is passed on as said", async () => {
+  for (const [code, windows, message] of [
+    ["reset", 1, "1 window started again"],
+    ["nothing_to_reset", 0, "nothing to reset — no window has been used, and the reset is kept"],
+    ["no_credit", 0, "no reset left on the account"],
+    ["already_redeemed", 0, "that reset was already used"],
+    ["already_used", 0, "that reset was already used"],
+    ["cooldown", 0, "cooldown"],
+  ] as const) {
+    const registry = new UsageSourceRegistry();
+    registry.register({
+      ...source({ id: "codex", discover: async () => [{ key: "work", input: {} }] }),
+      consumeReset: async () => ({ code, windows }),
+    });
+    await registry.listReports();
+    expect((await registry.consumeReset("codex:work")).outcome).toEqual({ code, windows, message });
+  }
+});
+
+test("a source that can't use resets says so and its reports don't offer it", async () => {
+  const registry = new UsageSourceRegistry();
+  registry.register(source({ id: "claude", discover: async () => [{ key: "me", input: {} }] }));
+  const [entry] = await registry.listReports();
+  expect(entry).not.toHaveProperty("consumesResets");
+  await expect(registry.consumeReset("claude:me")).rejects.toThrow("claude can't use resets");
+  await expect(registry.consumeReset("claude:nobody")).rejects.toThrow(
+    "Unknown usage report: claude:nobody",
+  );
+});
+
+test("a failed reset leaves the cached reading alone", async () => {
+  const registry = new UsageSourceRegistry(() => 0);
+  let fetches = 0;
+  registry.register({
+    ...source({
+      id: "codex",
+      discover: async () => [{ key: "work", input: {} }],
+      fetch: async () => {
+        fetches += 1;
+        return { status: "available", windows: [] };
+      },
+    }),
+    consumeReset: async () => {
+      throw new Error("Couldn't read which reset runs out first, so none was used");
+    },
+  });
+  await registry.listReports();
+  await expect(registry.consumeReset("codex:work")).rejects.toThrow("so none was used");
+  await registry.listReports({ reportIds: ["codex:work"] });
+  expect(fetches).toBe(1);
 });

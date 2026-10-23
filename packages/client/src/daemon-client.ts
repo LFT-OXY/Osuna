@@ -146,6 +146,7 @@ import type {
   MutableDaemonConfigPatch,
   SubscribeCheckoutDiffRequest,
 } from "@getpaseo/protocol/messages";
+import type { ApiEndpointSecret } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { isRelayClientWebSocketUrl } from "@getpaseo/protocol/daemon-endpoints";
 import {
   asUint8Array,
@@ -576,6 +577,10 @@ type ProviderUpgradePayload = Extract<
   SessionOutboundMessage,
   { type: "provider.upgrade.response" }
 >["payload"];
+type UsageResetConsumePayload = Extract<
+  SessionOutboundMessage,
+  { type: "usage.reset.consume.response" }
+>["payload"];
 interface UsageListReportsPayload {
   requestId: string;
   reports: UsageReportEntry[];
@@ -701,6 +706,10 @@ type ApiEndpointRevealKeyPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.reveal_key.response" }
 >["payload"];
+type ApiEndpointRevealSecretPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.reveal_secret.response" }
+>["payload"];
 type ApiEndpointForgetCatalogPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.forget_catalog.response" }
@@ -708,6 +717,22 @@ type ApiEndpointForgetCatalogPayload = Extract<
 type ApiEndpointVendorStatusPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.vendor_status.response" }
+>["payload"];
+type ApiEndpointReadBalancePayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.read_balance.response" }
+>["payload"];
+type ApiEndpointCheckBalancePayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.check_balance.response" }
+>["payload"];
+type ApiEndpointDetectBalanceUrlPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.detect_balance_url.response" }
+>["payload"];
+type ApiEndpointSetBalanceAutoRefreshPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.set_balance_auto_refresh.response" }
 >["payload"];
 type ApiEndpointImportScanPayload = Extract<
   SessionOutboundMessage,
@@ -5626,6 +5651,17 @@ export class DaemonClient {
     });
   }
 
+  /**
+   * 用掉这个账号最早过期的一次重置（不可撤回，先问用户），回结果与重读后的报告。
+   * 只有声明了 planUsageResets 的 daemon 认。
+   */
+  async consumeUsageReset(reportId: string, requestId?: string): Promise<UsageResetConsumePayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "usage.reset.consume.request", reportId },
+    });
+  }
+
   async listUsageReports(
     options?: {
       agentId?: string;
@@ -6648,6 +6684,17 @@ export class DaemonClient {
     });
   }
 
+  /** 读回一家接口已保存的别的机密原文（账户令牌）；只有声明了 apiEndpointBalance 的 daemon 认。 */
+  async apiEndpointRevealSecret(
+    options: { endpointId: string; secret: ApiEndpointSecret },
+    requestId?: string,
+  ): Promise<ApiEndpointRevealSecretPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.reveal_secret.request", ...options },
+    });
+  }
+
   /** 丢掉这家拉回的上游清单与拉取时间；只有声明了 apiEndpointManagement 的 daemon 认。 */
   async apiEndpointForgetCatalog(
     endpointId: string,
@@ -6670,6 +6717,65 @@ export class DaemonClient {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId,
       message: { type: "provider.api_endpoint.vendor_status.request", ...options },
+    });
+  }
+
+  /**
+   * 读这几家接口的余额；不存在的 id 不回。asked 是用户要求的读取（打开页面），force 是刷新（跳过 1 分钟缓存）。
+   * 只有声明了 apiEndpointBalance 的 daemon 认。
+   */
+  async apiEndpointReadBalance(
+    options: { endpointIds: string[]; asked?: boolean; force?: boolean },
+    requestId?: string,
+  ): Promise<ApiEndpointReadBalancePayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.read_balance.request", ...options },
+    });
+  }
+
+  /**
+   * 编辑窗口的「查询余额」：用表单里还没保存的余额设置、key、地址与请求头当场查一次，不进缓存与上次读数。
+   * 可以用 apiEndpointCancel 按 requestId 取消。只有声明了 apiEndpointBalance 的 daemon 认。
+   */
+  async apiEndpointCheckBalance(
+    options: Omit<
+      Extract<SessionInboundMessage, { type: "provider.api_endpoint.check_balance.request" }>,
+      "type" | "requestId"
+    >,
+    requestId?: string,
+  ): Promise<ApiEndpointCheckBalancePayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.check_balance.request", ...options },
+    });
+  }
+
+  /**
+   * 编辑窗口「高级」里的「自动识别」：用表单里还没保存的 key、地址与请求头依次试 new-api 与 sub2api 的 key 级余额地址。
+   * 可以用 apiEndpointCancel 按 requestId 取消。只有声明了 apiEndpointBalance 的 daemon 认。
+   */
+  async apiEndpointDetectBalanceUrl(
+    options: Omit<
+      Extract<SessionInboundMessage, { type: "provider.api_endpoint.detect_balance_url.request" }>,
+      "type" | "requestId"
+    >,
+    requestId?: string,
+  ): Promise<ApiEndpointDetectBalanceUrlPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.detect_balance_url.request", ...options },
+    });
+  }
+
+  /** 设整台主机的「自动刷新余额与套餐用量」。只有声明了 apiEndpointBalance 的 daemon 认。 */
+  async apiEndpointSetBalanceAutoRefresh(
+    options: { enabled: boolean },
+    requestId?: string,
+  ): Promise<ApiEndpointSetBalanceAutoRefreshPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.set_balance_auto_refresh.request", ...options },
     });
   }
 

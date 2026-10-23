@@ -1368,3 +1368,29 @@ PR #16 并入后在主工作树拉取 main、重装依赖并重建，核对同�
 ### Next Steps
 
 - 开始子任务 4：10-16-endpoint-balance（余额与套餐额度显示），先做需求确认
+
+
+## Session 42: 余额与套餐用量：工单 13–14 收尾、验收、PR #27 与归档
+<!-- atw-session: v=2 fp=51a85daaed97fc9f -->
+
+**Date**: 2026-10-22
+**Task**: 余额与套餐用量：工单 13–14 收尾、验收、PR #27 与归档
+**Package**: app
+**Branch**: `magpie-osuna-gaps-balance-quota`
+
+### Summary
+
+工单 13 收尾（e2e 封条补火山/腾讯接口主机、需要 AccessKey 改警告色标题+弱色说明、读失败写「刚刚读取失败」、余额地址一变清掉查询结果、补截图与文档）；整体验收核对查出测试缺口，开工单 14 补测试（UA 断言、腾讯/火山机密不泄露、两个开关互不牵连、刷新进行中与失败、封条加 chatgpt.com、prd 写明「显示」例外）；开 PR #27，CI 查出 window-bar 模块加载时读 styles 已修，桌面端装虚拟显示器超时重跑后全绿；用户验收通过，任务 10-16-endpoint-balance 已归档。归档与日志提交尚未推送到 PR 分支（推送会重跑 CI，待用户决定）。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ba60206be` | fix(api-endpoints): 余额任务收尾——补齐深色与中文验收截图，统一「需要 AccessKey」的颜色，测试不再真连火山方舟（工单 13） |
+| `88a5b70ea` | fix(api-endpoints): 读余额失败时标题下写「刚刚读取失败」；余额查询地址一变就清掉「查询余额」的旧结果（工单 13） |
+| `23f96419c` | test(api-endpoints): 补验收核对查出的测试缺口——请求名牌、机密不泄露、两个开关互不牵连、刷新进行中与失败（工单 14） |
+| `4965ded0a` | fix(usage): 窗口条标签样式改在渲染时取，不在模块加载时读 styles（CI unistyles-module-scope） |
+
+### Status
+
+[OK] **Completed**

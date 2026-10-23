@@ -208,6 +208,23 @@ export const ApiEndpointCooldownSettingsSchema = z.object({
 export type ApiEndpointCooldownSettings = z.infer<typeof ApiEndpointCooldownSettingsSchema>;
 
 /**
+ * 余额设置（照 magpie 的 Balance URL、Balance request method、Balance field）：填了余额查询地址就按它查余额，不再按接口地址认厂商。
+ * url：余额查询地址，地址与请求头里的 {key} 一类占位换成这家的 key；method：GET（缺省）或 POST（不带正文），见 balance-settings.ts；
+ * field：取值写法，空着时按地址给默认写法（defaultBalanceField）；userId：new-api 的用户 ID，只在查余额时作为
+ * New-Api-User 发出（接口请求头里的 New-Api-User 也认，二者都有以它为准）；teamOrgId、teamProjectId：智谱团队套餐的团队组织 ID
+ * 与项目 ID（照 magpie ZhipuTeam），两个都有时个人窗口为空才问团队窗口，和余额查询地址无关。都只在设了时有，老 daemon 不发、忽略。
+ */
+export const ApiEndpointBalanceSettingsSchema = z.object({
+  url: z.string().optional(),
+  method: z.string().optional(),
+  field: z.string().optional(),
+  userId: z.string().optional(),
+  teamOrgId: z.string().optional(),
+  teamProjectId: z.string().optional(),
+});
+export type ApiEndpointBalanceSettings = z.infer<typeof ApiEndpointBalanceSettingsSchema>;
+
+/**
  * 这家能用的一种 CLI 测法（ADR 0013）：`method` 是 test_models 的测法（claude_code、codex）。只列这家提供的：
  * 按 Claude Code 测只给有 Anthropic 地址的中转服务（模板分组是 relay，或「自定义」加的），按 Codex 测给有 Responses 或 Chat 地址的。
  * `unavailable` 为 null 即现在就能测；否则是现在测不了的原因（cli_sample_missing：还没有 Claude Code 请求经过中转站）。
@@ -265,6 +282,14 @@ export const ApiEndpointSchema = z.object({
   ...ApiEndpointRequestExtrasSchema.shape,
   // 冷却设置（cooldown 是正在冷却的状态，这是用户设的时长）；设了才发，老 daemon 不发。
   cooldownSettings: ApiEndpointCooldownSettingsSchema.optional(),
+  // 余额设置；设了余额查询地址才发，老 daemon 不发。
+  balance: ApiEndpointBalanceSettingsSchema.optional(),
+  // 账户令牌的打码（同 apiKeyMask）；原文只在 daemon，经 reveal_secret 读回。没有令牌时不发，老 daemon 不发。
+  balanceTokenMask: z.string().optional(),
+  // 云账号密钥的打码（火山的 AccessKey ID 与 Secret Access Key、腾讯的 SecretId 与 SecretKey，读套餐窗口用）；原文只在
+  // daemon，经 reveal_secret 读回。各自存了才发，老 daemon 不发。
+  accessKeyIdMask: z.string().optional(),
+  secretAccessKeyMask: z.string().optional(),
 });
 export type ApiEndpoint = z.infer<typeof ApiEndpointSchema>;
 
@@ -396,6 +421,8 @@ export const ApiEndpointListResponseSchema = z.object({
     // 接口名显示方式管不到的 Agent（provider）：它的模型列表里本来就没有 Osuna 给的接口名
     // （用 API key 接的 Codex 只列光秃秃的名字）。老 daemon 不发。
     endpointNamesUnreached: z.array(z.string()).optional(),
+    // 「自动刷新余额与套餐用量」，整台主机共用；缺省开。没声明 apiEndpointBalance 的 daemon 不发。
+    balanceAutoRefresh: z.boolean().optional(),
     error: ApiEndpointErrorSchema.nullable(),
   }),
 });
@@ -441,6 +468,16 @@ export type ApiEndpointListResponse = z.infer<typeof ApiEndpointListResponseSche
  * cooldownSettings：冷却设置，整份替换（空对象清掉），省略即保留（复制时是原来那家的）。分钟数不是 0 到八天
  * （API_ENDPOINT_COOLDOWN_MAX_MINUTES）的整数、时刻读不懂的拒收（invalid_cooldown_settings，params.field 为 quotaRestMinutes /
  * restCapMinutes / quotaResetAt，params.max）。老 daemon 忽略它。
+ *
+ * balance：余额设置，整份替换（没有余额查询地址即清掉），省略即保留（复制时是原来那家的），老客户端保存不会清掉它。
+ * 方法不是 GET、POST 的拒收（invalid_balance_settings，params.field 为 method）。老 daemon 忽略它。
+ *
+ * balanceToken：账户令牌（new-api 的系统访问令牌、sub2api 的登录令牌、AiHubMix 的系统访问令牌），只存在 daemon 的 key 文件里。
+ * 非空即换成它，空字符串清掉，省略即保留（复制时是原来那家的）。老 daemon 忽略它。
+ *
+ * accessKeyId、secretAccessKey：云账号密钥（火山的 AccessKey ID 与 Secret Access Key、腾讯的 SecretId 与 SecretKey，
+ * 读火山方舟与腾讯云 Token Plan 企业版的套餐窗口用），只存在 daemon 的 key 文件里。各自非空即换成它，空字符串清掉，
+ * 省略即保留（两个都省略的复制时是原来那家的）。老 daemon 忽略它们。
  */
 export const ApiEndpointSaveRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.save.request"),
@@ -465,6 +502,10 @@ export const ApiEndpointSaveRequestSchema = z.object({
   autoPick: z.array(z.string()).optional(),
   modelSettings: ApiEndpointModelSettingsSchema.optional(),
   cooldownSettings: ApiEndpointCooldownSettingsSchema.optional(),
+  balance: ApiEndpointBalanceSettingsSchema.optional(),
+  balanceToken: z.string().optional(),
+  accessKeyId: z.string().optional(),
+  secretAccessKey: z.string().optional(),
   ...ApiEndpointRequestExtrasSchema.shape,
 });
 export type ApiEndpointSaveRequest = z.infer<typeof ApiEndpointSaveRequestSchema>;
@@ -792,6 +833,60 @@ export const ApiEndpointSetEndpointNameDisplayResponseSchema = z.object({
 export type ApiEndpointSetEndpointNameDisplayResponse = z.infer<
   typeof ApiEndpointSetEndpointNameDisplayResponseSchema
 >;
+
+/**
+ * 设「自动刷新余额与套餐用量」（照 magpie Settings → Usage 的额度刷新：自动 / 仅手动）。主机级，缺省开；
+ * 不管价格表自动更新与 CLI 登录的套餐用量。只有声明了 apiEndpointBalance 的 daemon 认它。
+ */
+export const ApiEndpointSetBalanceAutoRefreshRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.set_balance_auto_refresh.request"),
+  requestId: z.string(),
+  enabled: z.boolean(),
+});
+export type ApiEndpointSetBalanceAutoRefreshRequest = z.infer<
+  typeof ApiEndpointSetBalanceAutoRefreshRequestSchema
+>;
+
+export const ApiEndpointSetBalanceAutoRefreshResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.set_balance_auto_refresh.response"),
+  payload: z.object({
+    requestId: z.string(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointSetBalanceAutoRefreshResponse = z.infer<
+  typeof ApiEndpointSetBalanceAutoRefreshResponseSchema
+>;
+
+/**
+ * 读回一家接口已保存的别的机密原文（编辑窗口里账户令牌与云账号密钥的「显示」）：secret 为 balance_token、
+ * access_key_id 或 secret_access_key；没有时 value 为 null。
+ * 不认得的 secret 拒收（invalid_input）。照 magpie 不确认、不限次数。只有声明了 apiEndpointBalance 的 daemon 认它。
+ */
+export const API_ENDPOINT_SECRETS = [
+  "balance_token",
+  "access_key_id",
+  "secret_access_key",
+] as const;
+export type ApiEndpointSecret = (typeof API_ENDPOINT_SECRETS)[number];
+
+export const ApiEndpointRevealSecretRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.reveal_secret.request"),
+  requestId: z.string(),
+  endpointId: z.string(),
+  secret: z.string(),
+});
+export type ApiEndpointRevealSecretRequest = z.infer<typeof ApiEndpointRevealSecretRequestSchema>;
+
+export const ApiEndpointRevealSecretResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.reveal_secret.response"),
+  payload: z.object({
+    requestId: z.string(),
+    value: z.string().nullable(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointRevealSecretResponse = z.infer<typeof ApiEndpointRevealSecretResponseSchema>;
 
 /**
  * 读回一家接口已保存的 key 原文（编辑窗口的「显示」）；没有 key 时 apiKey 为 null。照 magpie 不确认、不限次数。
@@ -1307,6 +1402,266 @@ export const ApiEndpointVendorStatusResponseSchema = z.object({
   }),
 });
 export type ApiEndpointVendorStatusResponse = z.infer<typeof ApiEndpointVendorStatusResponseSchema>;
+
+/**
+ * 接口的余额（Balance）：厂商自己说这把 key 或它的账户还剩多少（照 magpie provider/balance.go），只显示，不进选路。
+ * 读数的 status：ok（有读数）、unsupported（认不出查法，或这家没 key）、failed（失败，原因在 failure）、
+ * needs_access_key（火山方舟、腾讯云 Token Plan 企业版的套餐窗口要云账号密钥，这家还没填；不发请求，failure 为 null）。
+ * failure.reason：wrong_url（地址不对：404、回的是网页或不是 JSON）、token_rejected（401、403、success:false）、
+ * not_offered（这家不给查余额）、no_value（回复里取不到数）、temporary（网络、超时、429、5xx）。
+ * 线上都是字符串，daemon 以后多一种老客户端照样解析。
+ */
+export const API_ENDPOINT_BALANCE_STATUSES = [
+  "ok",
+  "unsupported",
+  "failed",
+  "needs_access_key",
+] as const;
+export type ApiEndpointBalanceStatus = (typeof API_ENDPOINT_BALANCE_STATUSES)[number];
+export const API_ENDPOINT_BALANCE_FAILURES = [
+  "wrong_url",
+  "token_rejected",
+  "not_offered",
+  "no_value",
+  "temporary",
+] as const;
+export type ApiEndpointBalanceFailureReason = (typeof API_ENDPOINT_BALANCE_FAILURES)[number];
+/**
+ * 失败附带的具体提示：opencode_no_balance（OpenCode 不给 key 查 Zen 的余额）、siliconflow_retired（硅基流动的
+ * 余额接口已下线）、aihubmix_no_limit（AiHubMix 的 key 没设上限，要填账户令牌）、not_asked（「自动刷新余额与套餐用量」
+ * 关着，这次读取不是用户要求的，也还没有读数）、token_on_key_url（账户令牌配了只认 key 的查询，该改用的地址在 useUrl，
+ * 没发请求）、new_api_user_missing（new-api 说缺 New-Api-User，要填用户 ID）、glm_key_refused（智谱或 Z.ai 不认这把
+ * key：过期、删了或粘错，去 seeAt 换一把）、opencode_go_no_subscription（这把 key 没有 OpenCode Go：Go 归订阅的成员，
+ * 要用那位成员在那个工作区建的 key）、opencode_key_refused（OpenCode 不认这把 key：删了或粘错）、access_key_refused（火山或
+ * 腾讯的开放平台不认云账号密钥或它没有权限：401、403 或认证类错误码，检查 AK/SK 与权限）。
+ */
+export const API_ENDPOINT_BALANCE_HINTS = [
+  "opencode_no_balance",
+  "siliconflow_retired",
+  "aihubmix_no_limit",
+  "not_asked",
+  "token_on_key_url",
+  "new_api_user_missing",
+  "glm_key_refused",
+  "opencode_go_no_subscription",
+  "opencode_key_refused",
+  "access_key_refused",
+] as const;
+export type ApiEndpointBalanceHint = (typeof API_ENDPOINT_BALANCE_HINTS)[number];
+export const API_ENDPOINT_BALANCE_PARTS = ["granted", "topped_up"] as const;
+export type ApiEndpointBalancePart = (typeof API_ENDPOINT_BALANCE_PARTS)[number];
+
+export const ApiEndpointBalanceItemSchema = z.object({
+  // 这一项叫什么；null 是余额本身（界面写「余额」）。
+  label: z.string().nullable(),
+  // 照显示的写法，如 ¥12.34、25%。
+  text: z.string(),
+  value: z.number().nullable(),
+  // 币种代码（CNY、USD）或单位；不知道为 null。
+  unit: z.string().nullable(),
+  // 0–1 的比例，带进度条的项才有。
+  ratio: z.number().nullable().optional(),
+  // 余额由哪部分组成（照 magpie BalancePart）：granted 赠送、topped_up 充值；界面按它翻译，认不得的写 label。
+  part: z.string().nullable().optional(),
+});
+export type ApiEndpointBalanceItem = z.infer<typeof ApiEndpointBalanceItemSchema>;
+
+export const ApiEndpointBalanceFailureSchema = z.object({
+  reason: z.string(),
+  // 对方的原话（key 与请求头的值打码，截到 200 字）；对方没说话（网页、空回复）为 null。
+  detail: z.string().nullable(),
+  // 对方回的 HTTP 状态；没回（网络错误、超时）为 null。
+  status: z.number().nullable(),
+  // magpie 的具体提示，界面按它翻译成一句（API_ENDPOINT_BALANCE_HINTS）；认不得的不显示。
+  hint: z.string().nullable().optional(),
+  // 余额该去哪看（厂商的控制台）。
+  seeAt: z.string().nullable().optional(),
+  // 余额查询地址该改成这个（hint 为 token_on_key_url 时）。
+  useUrl: z.string().nullable().optional(),
+});
+export type ApiEndpointBalanceFailure = z.infer<typeof ApiEndpointBalanceFailureSchema>;
+
+/**
+ * 一个限额窗口（如 sub2api key 的 5 小时 / 1 天 / 7 天、套餐 key 的 5 小时 / 周 / 月），字段名同套餐用量的窗口
+ * （ProviderUsageWindowSchema），另带用量与上限的数（used、limit，单位 unit，如 USD）。
+ * id 是窗口的代号，界面按它翻译，认不得的写 label：Nmin、Nh、Nd（N 分钟 / 小时 / 天）、month（月）、allowance（长度不明）、
+ * mcp_month（GLM 的 MCP 月度）；别的桶在前面加桶名与冒号，如 video:5h。
+ */
+export const ApiEndpointBalanceWindowSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  usedPct: z.number().nullable().optional(),
+  remainingPct: z.number().nullable().optional(),
+  resetsAt: z.string().nullable().optional(),
+  used: z.number().nullable().optional(),
+  limit: z.number().nullable().optional(),
+  unit: z.string().nullable().optional(),
+  // 窗口从什么时候开始（照 magpie startsAt）：重置时间往前一个窗口长度，月窗口往前一个自然月；不知道时没有。
+  startsAt: z.string().nullable().optional(),
+  // 配速（照 magpie Pace）：已用的百分比比照匀速该用的多（正）或少（负）几个点，按回复的时刻算；不知道窗口起点或已过重置时没有。
+  pacePct: z.number().nullable().optional(),
+  // 用完也不挡模型的窗口（GLM 的 MCP 月度、MiniMax 视频等别的桶）：放一旁显示，列表行不取它。
+  aside: z.boolean().optional(),
+});
+export type ApiEndpointBalanceWindow = z.infer<typeof ApiEndpointBalanceWindowSchema>;
+
+/** 一次重置：什么时候过期（null 是不过期），按窗口计的另写是哪个窗口的（fiveHour、weekly）。 */
+export const ApiEndpointBalanceResetSchema = z.object({
+  until: z.string().nullable(),
+  window: z.string().optional(),
+});
+export type ApiEndpointBalanceReset = z.infer<typeof ApiEndpointBalanceResetSchema>;
+
+/**
+ * 套餐还有几次重置（照 magpie ResetCredits）：until 是最早过期的那次（不知道或都不过期为 null），each 每次一项、
+ * 最早过期的在前、不过期的在后。byWindow 是按窗口计（智谱团队套餐）：fiveHour、weekly 各几次。只显示，不能在 Osuna 里用掉。
+ */
+export const ApiEndpointBalanceResetsSchema = z.object({
+  count: z.number(),
+  until: z.string().nullable(),
+  byWindow: z.boolean().optional(),
+  fiveHour: z.number().optional(),
+  weekly: z.number().optional(),
+  each: z.array(ApiEndpointBalanceResetSchema).optional(),
+});
+export type ApiEndpointBalanceResets = z.infer<typeof ApiEndpointBalanceResetsSchema>;
+
+/**
+ * 停用的套餐（腾讯云 Token Plan 企业版的 Status 不是 enable：用完、欠费、冻结），照 magpie 写在套餐名旁：status 与
+ * stopReason 是对方的原话（NORMAL、none 一类不算原因，为 null）；team 是几个团队套餐时的团队名，只有一个时为 null。
+ */
+export const ApiEndpointStoppedPlanSchema = z.object({
+  team: z.string().nullable(),
+  status: z.string(),
+  reason: z.string().nullable(),
+});
+export type ApiEndpointStoppedPlan = z.infer<typeof ApiEndpointStoppedPlanSchema>;
+
+export const ApiEndpointBalanceReadingSchema = z.object({
+  endpointId: z.string(),
+  status: z.string(),
+  items: z.array(ApiEndpointBalanceItemSchema),
+  // 回复里带的限额窗口；没有时不发，老 daemon 不发。
+  windows: z.array(ApiEndpointBalanceWindowSchema).optional(),
+  // 窗口是智谱团队套餐的（填了团队组织 ID 与项目 ID、个人窗口为空时问到的）；不是不发，老 daemon 不发。
+  team: z.boolean().optional(),
+  // 套餐还有几次重置；没有或读不到不发，老 daemon 不发。
+  resets: ApiEndpointBalanceResetsSchema.optional(),
+  // 套餐的档位（火山 Agent Plan 的 Tier，照 magpie 写在套餐名后）；没有不发，老 daemon 不发。
+  planTier: z.string().optional(),
+  // 停用的套餐；没有不发，老 daemon 不发。
+  stoppedPlans: z.array(ApiEndpointStoppedPlanSchema).optional(),
+  // 读不到额度的团队套餐的名字（腾讯几个团队时，照 magpie 每个团队各报）；都读到不发，老 daemon 不发。
+  unreadTeams: z.array(z.string()).optional(),
+  // 这次读的时刻；unsupported 为 null。带 stale 的是上次读数读到的时刻。
+  readAt: z.string().nullable(),
+  failure: ApiEndpointBalanceFailureSchema.nullable(),
+  // 有它即这是上次成功的读数（status ok）：这次暂时没读成（reason temporary，或 hint not_asked 没去读），原因在这里。
+  stale: ApiEndpointBalanceFailureSchema.optional(),
+});
+export type ApiEndpointBalanceReading = z.infer<typeof ApiEndpointBalanceReadingSchema>;
+
+/**
+ * 读这几家的余额；不存在的 id 不回。只有声明了 apiEndpointBalance 的 daemon 认它。
+ * daemon 对每家的读数缓存 1 分钟。「自动刷新余额与套餐用量」关着时，不是用户要求的读取不发请求（照 magpie quota_asked.go），
+ * 回缓存里的读数，没有就回上次读数（带 stale），再没有就回失败 temporary + hint not_asked。
+ * 暂时查不到（429、5xx、超时、网络错误）时也回上次读数（带 stale，照 magpie quota_last.go）。
+ */
+export const ApiEndpointReadBalanceRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.read_balance.request"),
+  requestId: z.string(),
+  endpointIds: z.array(z.string()),
+  // 用户要求的读取（打开页面）；省略即页面开着时的定时读取。
+  asked: z.boolean().optional(),
+  // 强制重读（刷新按钮）：跳过缓存，也算用户要求。
+  force: z.boolean().optional(),
+});
+export type ApiEndpointReadBalanceRequest = z.infer<typeof ApiEndpointReadBalanceRequestSchema>;
+
+export const ApiEndpointReadBalanceResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.read_balance.response"),
+  payload: z.object({
+    requestId: z.string(),
+    readings: z.array(ApiEndpointBalanceReadingSchema),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointReadBalanceResponse = z.infer<typeof ApiEndpointReadBalanceResponseSchema>;
+
+/**
+ * 查询余额（编辑窗口的「查询余额」，照 magpie 编辑器的 Check balance）：用表单里还没保存的值当场查一次，只读，
+ * 不进 1 分钟缓存，也不记作上次读数。key 的规则同 test_connection（apiKey 省略即用 endpointId 那家存的）；
+ * baseUrls、templateId 与请求头等附加项是表单里的，不校验证书的主机按它们算（省略即用那家存的）。
+ * balance 没有余额查询地址时按表单的地址认厂商，同读余额。balanceToken 是表单里的账户令牌：省略即用那家存的，空字符串即没有。
+ * 可以用 cancel 按 requestId 取消。只有声明了 apiEndpointBalance 的 daemon 认它。
+ */
+export const ApiEndpointCheckBalanceRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.check_balance.request"),
+  requestId: z.string(),
+  endpointId: z.string().optional(),
+  apiKey: z.string().optional(),
+  baseUrls: z.array(ApiEndpointBaseUrlSchema).optional(),
+  templateId: z.string().optional(),
+  balance: ApiEndpointBalanceSettingsSchema,
+  balanceToken: z.string().optional(),
+  ...ApiEndpointRequestExtrasSchema.shape,
+});
+export type ApiEndpointCheckBalanceRequest = z.infer<typeof ApiEndpointCheckBalanceRequestSchema>;
+
+/** 请求本身被拒（找不到接口、被取消）时 reading 为 null，原因在 error；查不到余额写在 reading 里。 */
+export const ApiEndpointCheckBalanceResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.check_balance.response"),
+  payload: z.object({
+    requestId: z.string(),
+    reading: ApiEndpointBalanceReadingSchema.nullable(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointCheckBalanceResponse = z.infer<typeof ApiEndpointCheckBalanceResponseSchema>;
+
+/**
+ * 自动识别余额地址（编辑窗口「高级」里的「自动识别」，magpie 没有）：用表单里还没保存的 key、地址与请求头，依次试
+ * new-api 的 /api/usage/token 与 sub2api 的 /v1/usage（拼在这家地址的站点上：Chat、Anthropic、Responses 里第一个
+ * http(s) 地址的 scheme 加主机），取第一个查出余额的。只在用户按下时发，不进 1 分钟缓存与上次读数，不用账户令牌。
+ * key 与附加项的规则同 check_balance。没有 key 或没有站点的拒收（invalid_input）。可以用 cancel 按 requestId 取消。
+ * 只有声明了 apiEndpointBalance 的 daemon 认它。
+ */
+export const ApiEndpointDetectBalanceUrlRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.detect_balance_url.request"),
+  requestId: z.string(),
+  endpointId: z.string().optional(),
+  apiKey: z.string().optional(),
+  baseUrls: z.array(ApiEndpointBaseUrlSchema).optional(),
+  templateId: z.string().optional(),
+  ...ApiEndpointRequestExtrasSchema.shape,
+});
+export type ApiEndpointDetectBalanceUrlRequest = z.infer<
+  typeof ApiEndpointDetectBalanceUrlRequestSchema
+>;
+
+/** 试过的一个地址与它的读数（查出余额的 status 为 ok）。 */
+export const ApiEndpointBalanceUrlAttemptSchema = z.object({
+  url: z.string(),
+  reading: ApiEndpointBalanceReadingSchema,
+});
+export type ApiEndpointBalanceUrlAttempt = z.infer<typeof ApiEndpointBalanceUrlAttemptSchema>;
+
+/**
+ * attempts 依试的先后，试中就停（最后一个是试中的）。detected 是试中的地址与它的默认取值写法，都不中为 null。
+ * 请求本身被拒（找不到接口、没有 key 或站点、被取消）时 attempts 为空，原因在 error。
+ */
+export const ApiEndpointDetectBalanceUrlResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.detect_balance_url.response"),
+  payload: z.object({
+    requestId: z.string(),
+    detected: z.object({ url: z.string(), field: z.string() }).nullable(),
+    attempts: z.array(ApiEndpointBalanceUrlAttemptSchema),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointDetectBalanceUrlResponse = z.infer<
+  typeof ApiEndpointDetectBalanceUrlResponseSchema
+>;
 
 /**
  * 从别的软件导入（Import）：daemon 只读地读本机别的软件的配置（ADR 0013）。每条发现照 Osuna 会加的那家给出，

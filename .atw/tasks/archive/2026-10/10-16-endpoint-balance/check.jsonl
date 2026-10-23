@@ -1,0 +1,25 @@
+{"file": ".atw/tasks/10-16-endpoint-balance/research/decisions.md", "reason": "两轮访谈的全部决定、照 magpie 的细则与 magpie 源码出处，判断实现是否越界、是否照 magpie"}
+{"file": ".atw/tasks/10-16-magpie-osuna-gaps/prd.md", "reason": "总任务的跨子任务规矩：身份如实（第 15 条）、对外请求（第 7 条）、协议、测试约束"}
+{"file": ".atw/spec/server/backend/index.md", "reason": "daemon 侧规范入口：余额查询、接口存储、套餐用量来源都在 server"}
+{"file": ".atw/spec/server/backend/persistence.md", "reason": "接口余额设置、新机密、主机开关、上次读数文件要守的持久化规则"}
+{"file": ".atw/spec/server/backend/rpc-and-protocol.md", "reason": "新 RPC、可选字段与 apiEndpointBalance、planUsageResets 能力位的写法"}
+{"file": ".atw/spec/server/backend/error-handling.md", "reason": "五类失败原因、对方原话打码、暂时失败回上次读数"}
+{"file": ".atw/spec/server/backend/logging.md", "reason": "令牌与密钥不进日志"}
+{"file": ".atw/spec/server/backend/testing.md", "reason": "daemon 端到端测试、本机假余额服务与厂商地址注入"}
+{"file": ".atw/spec/app/frontend/index.md", "reason": "接口列表行、详情分区、编辑窗口高级区、Codex 重置卡的界面规范"}
+{"file": ".atw/spec/app/frontend/hooks-and-data.md", "reason": "页面开着时按分钟读、开关关着时的读法"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "浏览器测试：每个会失败的操作测成功与失败"}
+{"file": ".atw/spec/guides/cross-layer-thinking-guide.md", "reason": "protocol、plugin、server、app 几层一起改时的检查点"}
+{"file": "docs/adr/0006-usage-in-code-is-upstream-plan-usage.md", "reason": "代码里 usage 指套餐用量；重置卡 RPC 的命名"}
+{"file": "docs/adr/0007-api-endpoints-route-through-daemon-gateway.md", "reason": "key 只在 daemon、旧客户端投影不变"}
+{"file": "docs/adr/0008-gateway-reshapes-rejected-requests-and-fails-over-refusals.md", "reason": "用户设的请求头可盖过 Osuna 的 User-Agent"}
+{"file": "docs/adr/0013-osuna-reads-other-apps-and-tests-as-the-cli.md", "reason": "身份如实的例外范围；本任务不新增例外"}
+{"file": "docs/glossary.md", "reason": "Balance、Plan usage 词条与本任务的界面名词"}
+{"file": "docs/usage.md", "reason": "Outbound requests：查余额、套餐窗口、开放平台签名请求、Codex 重置清单与用掉重置"}
+{"file": "docs/data-model.md", "reason": "文件持久化、可选字段、不做迁移"}
+{"file": "docs/protocol-compatibility.md", "reason": "旧客户端（官方 Paseo 手机 App）兼容规则与能力位"}
+{"file": "docs/rpc-namespacing.md", "reason": "新 RPC 的带点命名"}
+{"file": "docs/plugins.md", "reason": "套餐用量来源注册接口新增可选操作"}
+{"file": "docs/design.md", "reason": "界面设计规范：Switch、次要操作、状态"}
+{"file": "docs/forms.md", "reason": "编辑窗口高级区的表单写法"}
+{"file": "docs/i18n.md", "reason": "9 种界面语言，中文真翻译"}

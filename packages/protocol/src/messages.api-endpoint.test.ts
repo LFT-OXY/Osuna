@@ -6,7 +6,10 @@ import {
   SessionInboundMessageSchema,
   SessionOutboundMessageSchema,
 } from "./messages";
-import { API_ENDPOINT_ICON_MAX_BASE64_LENGTH } from "./api-endpoint/rpc-schemas";
+import {
+  API_ENDPOINT_ICON_MAX_BASE64_LENGTH,
+  ApiEndpointBalanceReadingSchema,
+} from "./api-endpoint/rpc-schemas";
 
 // 第三方接口 RPC。老客户端不认识 features.apiEndpoints 与这组消息，解析必须照常通过。
 const ENDPOINT = {
@@ -1930,5 +1933,417 @@ describe("provider.api_endpoint.test_models", () => {
       },
     };
     expect(SessionOutboundMessageSchema.parse(fetched)).toEqual(fetched);
+  });
+});
+
+// 接口的余额（apiEndpointBalance）：新消息，读数的状态与失败原因是字符串，老主机不声明能力位。
+describe("API endpoint balance (apiEndpointBalance)", () => {
+  it("parses read_balance with a reading, an unsupported endpoint, a failure, a reason the client may not know and a last reading", () => {
+    const request = {
+      type: "provider.api_endpoint.read_balance.request" as const,
+      requestId: "req-rb",
+      endpointIds: ["ep_1", "ep_2"],
+    };
+    expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+    const response = {
+      type: "provider.api_endpoint.read_balance.response" as const,
+      payload: {
+        requestId: "req-rb",
+        readings: [
+          {
+            endpointId: "ep_1",
+            status: "ok",
+            items: [{ label: null, text: "¥110.00", value: 110, unit: "CNY" }],
+            readAt: "2026-10-22T08:00:00.000Z",
+            failure: null,
+          },
+          { endpointId: "ep_2", status: "unsupported", items: [], readAt: null, failure: null },
+          {
+            endpointId: "ep_3",
+            status: "failed",
+            items: [],
+            readAt: "2026-10-22T08:00:00.000Z",
+            failure: { reason: "token_rejected", detail: "invalid api key ***", status: 401 },
+          },
+          {
+            endpointId: "ep_4",
+            status: "some_new_status",
+            items: [{ label: "Used", text: "25%", value: 0.25, unit: null, ratio: 0.25 }],
+            readAt: "2026-10-22T08:00:00.000Z",
+            failure: { reason: "some_new_reason", detail: null, status: null },
+          },
+          {
+            endpointId: "ep_5",
+            status: "ok",
+            items: [{ label: null, text: "¥110.00", value: 110, unit: "CNY" }],
+            readAt: "2026-10-22T07:55:00.000Z",
+            failure: null,
+            stale: { reason: "temporary", detail: "busy", status: 503 },
+          },
+        ],
+        error: null,
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+  });
+
+  it("parses read_balance asked and forced, and set_balance_auto_refresh with the list's switch and without it", () => {
+    for (const extra of [{ asked: true }, { force: true }, {}]) {
+      const request = {
+        type: "provider.api_endpoint.read_balance.request" as const,
+        requestId: "req-rb",
+        endpointIds: ["ep_1"],
+        ...extra,
+      };
+      expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+    }
+    const set = {
+      type: "provider.api_endpoint.set_balance_auto_refresh.request" as const,
+      requestId: "req-ar",
+      enabled: false,
+    };
+    expect(SessionInboundMessageSchema.parse(set)).toEqual(set);
+    const answered = {
+      type: "provider.api_endpoint.set_balance_auto_refresh.response" as const,
+      payload: { requestId: "req-ar", error: null },
+    };
+    expect(SessionOutboundMessageSchema.parse(answered)).toEqual(answered);
+    const listed = (extra: object) => ({
+      type: "provider.api_endpoint.list.response" as const,
+      payload: {
+        requestId: "req-l",
+        provider: "claude",
+        endpoints: [],
+        activeEndpointId: null,
+        error: null,
+        ...extra,
+      },
+    });
+    expect(SessionOutboundMessageSchema.parse(listed({ balanceAutoRefresh: false }))).toEqual(
+      listed({ balanceAutoRefresh: false }),
+    );
+    expect(SessionOutboundMessageSchema.parse(listed({}))).toEqual(listed({}));
+  });
+
+  it("parses a host that advertises apiEndpointBalance, and an older one without it", () => {
+    const base = { status: "server_info" as const, serverId: "srv_1" };
+    const current = ServerInfoStatusPayloadSchema.parse({
+      ...base,
+      features: { apiEndpointManagement: true, apiEndpointBalance: true },
+    });
+    expect(current.features?.apiEndpointBalance).toBe(true);
+    const older = ServerInfoStatusPayloadSchema.parse({
+      ...base,
+      features: { apiEndpointManagement: true },
+    });
+    expect(older.features?.apiEndpointBalance).toBeUndefined();
+  });
+
+  it("parses a balance's parts and a failure's hint and console, and a reading from a daemon without them", () => {
+    const withParts = {
+      endpointId: "ep_1",
+      status: "ok",
+      items: [
+        { label: null, text: "¥110.00 · $5.00", value: 110, unit: "CNY" },
+        { label: "Granted", text: "¥10.00", value: 10, unit: "CNY", part: "granted" },
+        { label: "Topped up", text: "¥100.00", value: 100, unit: "CNY", part: "some_new_part" },
+      ],
+      readAt: "2026-10-22T08:00:00.000Z",
+      failure: null,
+    };
+    expect(ApiEndpointBalanceReadingSchema.parse(withParts)).toEqual(withParts);
+    const notOffered = {
+      endpointId: "ep_2",
+      status: "failed",
+      items: [],
+      readAt: "2026-10-22T08:00:00.000Z",
+      failure: {
+        reason: "not_offered",
+        detail: null,
+        status: null,
+        hint: "opencode_no_balance",
+        seeAt: "https://opencode.ai/console",
+      },
+    };
+    expect(ApiEndpointBalanceReadingSchema.parse(notOffered)).toEqual(notOffered);
+    const older = {
+      ...notOffered,
+      failure: { reason: "temporary", detail: null, status: 503 },
+    };
+    expect(ApiEndpointBalanceReadingSchema.parse(older)).toEqual(older);
+  });
+
+  it("parses an endpoint and a save carrying balance settings, a save that clears them, and older ones without", () => {
+    const balance = {
+      url: "https://relay.example/query?key={key}",
+      method: "POST",
+      field: "$data.left",
+    };
+    const save = {
+      type: "provider.api_endpoint.save.request" as const,
+      requestId: "req-b1",
+      provider: "claude",
+      endpointId: "ep_1",
+      name: "Relay",
+      baseUrls: [{ format: "anthropic_messages", url: "https://relay.example" }],
+      models: [],
+      balance,
+    };
+    expect(SessionInboundMessageSchema.parse(save)).toEqual(save);
+    const cleared = { ...save, balance: {} };
+    expect(SessionInboundMessageSchema.parse(cleared)).toEqual(cleared);
+    const { balance: _balance, ...older } = save;
+    expect(SessionInboundMessageSchema.parse(older)).toEqual(older);
+    for (const endpoint of [{ ...ENDPOINT, balance: { url: balance.url } }, ENDPOINT]) {
+      const response = {
+        type: "provider.api_endpoint.save.response" as const,
+        payload: { requestId: "req-b1", endpoint, error: null },
+      };
+      expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+    }
+  });
+
+  it("parses check_balance with the form's values, its reading and its rejection", () => {
+    const request = {
+      type: "provider.api_endpoint.check_balance.request" as const,
+      requestId: "req-cb",
+      endpointId: "ep_1",
+      apiKey: "sk-typed",
+      baseUrls: [{ format: "openai_chat", url: "https://relay.example/v1" }],
+      balance: { url: "https://relay.example/api/usage/token", method: "GET" },
+      headers: { "X-Key": "{key}" },
+      insecureTls: true,
+    };
+    expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+    const bare = {
+      type: "provider.api_endpoint.check_balance.request" as const,
+      requestId: "req-cb2",
+      balance: {},
+    };
+    expect(SessionInboundMessageSchema.parse(bare)).toEqual(bare);
+    const reading = {
+      endpointId: "ep_1",
+      status: "ok",
+      items: [{ label: "Used", text: "90%", value: 90, unit: "%", ratio: 0.9 }],
+      readAt: "2026-10-22T08:00:00.000Z",
+      failure: null,
+    };
+    for (const payload of [
+      { requestId: "req-cb", reading, error: null },
+      { requestId: "req-cb", reading: null, error: { code: "not_found", message: "gone" } },
+    ]) {
+      const response = { type: "provider.api_endpoint.check_balance.response" as const, payload };
+      expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+    }
+  });
+  it("parses detect_balance_url with the form's values, what it found, what it tried and its rejection", () => {
+    const request = {
+      type: "provider.api_endpoint.detect_balance_url.request" as const,
+      requestId: "req-db",
+      endpointId: "ep_1",
+      apiKey: "sk-typed",
+      baseUrls: [{ format: "openai_chat", url: "https://relay.example/v1" }],
+      headers: { "X-Plain": "kept" },
+    };
+    expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+    const bare = {
+      type: "provider.api_endpoint.detect_balance_url.request" as const,
+      requestId: "r",
+    };
+    expect(SessionInboundMessageSchema.parse(bare)).toEqual(bare);
+    const failed = {
+      endpointId: "ep_1",
+      status: "failed",
+      items: [],
+      readAt: "2026-10-22T08:00:00.000Z",
+      failure: { reason: "wrong_url", detail: null, status: 404 },
+    };
+    const ok = {
+      endpointId: "ep_1",
+      status: "ok",
+      items: [{ label: null, text: "$3.50", value: 3.5, unit: "USD", ratio: null }],
+      readAt: "2026-10-22T08:00:00.000Z",
+      failure: null,
+    };
+    for (const payload of [
+      {
+        requestId: "req-db",
+        detected: { url: "https://relay.example/v1/usage", field: "$remaining" },
+        attempts: [
+          { url: "https://relay.example/api/usage/token", reading: failed },
+          { url: "https://relay.example/v1/usage", reading: ok },
+        ],
+        error: null,
+      },
+      {
+        requestId: "req-db",
+        detected: null,
+        attempts: [],
+        error: { code: "invalid_input", message: "no key" },
+      },
+    ]) {
+      const response = {
+        type: "provider.api_endpoint.detect_balance_url.response" as const,
+        payload,
+      };
+      expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+    }
+  });
+  it("parses an account token on a save and a check, its mask and user ID on an endpoint, and reveal_secret", () => {
+    const save = {
+      type: "provider.api_endpoint.save.request" as const,
+      requestId: "req-t1",
+      provider: "claude",
+      name: "Relay",
+      models: [],
+      balance: { url: "https://relay.example/api/user/self", userId: "42" },
+      balanceToken: "sys-token",
+    };
+    expect(SessionInboundMessageSchema.parse(save)).toEqual(save);
+    const check = {
+      type: "provider.api_endpoint.check_balance.request" as const,
+      requestId: "req-t2",
+      balance: { url: "https://relay.example/api/user/self" },
+      balanceToken: "",
+    };
+    expect(SessionInboundMessageSchema.parse(check)).toEqual(check);
+    const endpoint = { ...ENDPOINT, balance: save.balance, balanceTokenMask: "sys-…oken" };
+    const listed = {
+      type: "provider.api_endpoint.save.response" as const,
+      payload: { requestId: "req-t1", endpoint, error: null },
+    };
+    expect(SessionOutboundMessageSchema.parse(listed)).toEqual(listed);
+    const reveal = {
+      type: "provider.api_endpoint.reveal_secret.request" as const,
+      requestId: "req-t3",
+      endpointId: "ep_1",
+      secret: "balance_token",
+    };
+    expect(SessionInboundMessageSchema.parse(reveal)).toEqual(reveal);
+    for (const payload of [
+      { requestId: "req-t3", value: "sys-token", error: null },
+      { requestId: "req-t3", value: null, error: { code: "not_found", message: "gone" } },
+    ]) {
+      const response = { type: "provider.api_endpoint.reveal_secret.response" as const, payload };
+      expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+    }
+  });
+
+  it("parses a reading with limit windows and the wrong-address hint, and one without either", () => {
+    const withWindows = {
+      endpointId: "ep_1",
+      status: "ok",
+      items: [{ label: null, text: "$5.00", value: 5, unit: "USD" }],
+      windows: [
+        {
+          id: "5h",
+          label: "5 hours",
+          usedPct: 75,
+          remainingPct: 25,
+          resetsAt: "2026-10-22T10:00:00.000Z",
+          used: 15,
+          limit: 20,
+          unit: "USD",
+        },
+      ],
+      readAt: "2026-10-22T08:00:00.000Z",
+      failure: null,
+    };
+    expect(ApiEndpointBalanceReadingSchema.parse(withWindows)).toEqual(withWindows);
+    const wrongAddress = {
+      endpointId: "ep_1",
+      status: "failed",
+      items: [],
+      readAt: "2026-10-22T08:00:00.000Z",
+      failure: {
+        reason: "wrong_url",
+        detail: null,
+        status: null,
+        hint: "token_on_key_url",
+        useUrl: "https://relay.example/api/user/self",
+      },
+    };
+    expect(ApiEndpointBalanceReadingSchema.parse(wrongAddress)).toEqual(wrongAddress);
+    const { windows: _windows, ...older } = withWindows;
+    expect(ApiEndpointBalanceReadingSchema.parse(older)).toEqual(older);
+  });
+  it("parses plan windows with their pace and an aside window, and the GLM refusal with where to get a key", () => {
+    const plan = {
+      endpointId: "ep_glm",
+      status: "ok",
+      items: [],
+      windows: [
+        {
+          id: "5h",
+          label: "5 hours",
+          usedPct: 12,
+          remainingPct: 88,
+          resetsAt: "2026-10-22T10:00:00.000Z",
+          pacePct: -48,
+        },
+        {
+          id: "mcp_month",
+          label: "MCP · Month",
+          usedPct: 3,
+          remainingPct: 97,
+          resetsAt: "2026-11-01T00:00:00.000Z",
+          aside: true,
+        },
+      ],
+      readAt: "2026-10-22T08:00:00.000Z",
+      failure: null,
+    };
+    expect(ApiEndpointBalanceReadingSchema.parse(plan)).toEqual(plan);
+    const refused = {
+      endpointId: "ep_glm",
+      status: "failed",
+      items: [],
+      readAt: "2026-10-22T08:00:00.000Z",
+      failure: {
+        reason: "token_rejected",
+        detail: "Token expired",
+        status: 200,
+        hint: "glm_key_refused",
+        seeAt: "https://open.bigmodel.cn/usercenter/proj-mgmt/apikeys",
+      },
+    };
+    expect(ApiEndpointBalanceReadingSchema.parse(refused)).toEqual(refused);
+  });
+
+  it("parses a GLM team's windows with its resets by window, team settings on a save, and older ones without", () => {
+    const team = {
+      endpointId: "ep_glm",
+      status: "ok",
+      items: [],
+      windows: [{ id: "5h", label: "5 hours", usedPct: 20, remainingPct: 80, resetsAt: null }],
+      team: true,
+      resets: {
+        count: 3,
+        until: "2026-10-25T00:00:00.000Z",
+        byWindow: true,
+        fiveHour: 2,
+        weekly: 1,
+        each: [
+          { until: "2026-10-25T00:00:00.000Z", window: "fiveHour" },
+          { until: "2026-10-26T00:00:00.000Z", window: "weekly" },
+          { until: null, window: "fiveHour" },
+        ],
+      },
+      readAt: "2026-10-22T08:00:00.000Z",
+      failure: null,
+    };
+    expect(ApiEndpointBalanceReadingSchema.parse(team)).toEqual(team);
+    const { team: _team, resets: _resets, ...older } = team;
+    expect(ApiEndpointBalanceReadingSchema.parse(older)).toEqual(older);
+    const save = {
+      type: "provider.api_endpoint.save.request" as const,
+      requestId: "req-t1",
+      provider: "claude",
+      name: "GLM team",
+      baseUrls: [{ format: "anthropic_messages", url: "https://open.bigmodel.cn/api/anthropic" }],
+      models: [],
+      balance: { teamOrgId: "org-1", teamProjectId: "proj-1" },
+    };
+    expect(SessionInboundMessageSchema.parse(save)).toEqual(save);
   });
 });

@@ -47,6 +47,7 @@ interface PluginRuntimePort {
   getProviderRegistrations?(pluginId: string): readonly PluginProviderMetadata[];
   getUsageSourceRegistrations(pluginId: string): readonly PluginUsageSourceMetadata[];
   fetchUsage: PluginRuntime["fetchUsage"];
+  consumeUsageReset: PluginRuntime["consumeUsageReset"];
   discoverUsage: PluginRuntime["discoverUsage"];
   connectProvider: PluginRuntime["connectProvider"];
   getProviderCatalogCacheKey?: PluginRuntime["getProviderCatalogCacheKey"];
@@ -162,6 +163,10 @@ export class PluginService {
 
   listUsageReports(options?: ListUsageReportsOptions) {
     return this.usageSources.listReports(options);
+  }
+
+  consumeUsageReset(reportId: string) {
+    return this.usageSources.consumeReset(reportId);
   }
 
   listLegacyUsage() {
@@ -593,6 +598,12 @@ export class PluginService {
           fetch: (input) => {
             return this.runtime.fetchUsage(pluginId, source.id, input);
           },
+          ...(source.consumesResets
+            ? {
+                consumeReset: (input: unknown) =>
+                  this.runtime.consumeUsageReset(pluginId, source.id, input),
+              }
+            : {}),
         });
         registered.push(source.id);
       }

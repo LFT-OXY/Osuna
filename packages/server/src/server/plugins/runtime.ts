@@ -403,6 +403,17 @@ export class PluginRuntime {
     return this.request(loaded, { type: "usage.fetch", requestId: randomUUID(), sourceId, input });
   }
 
+  consumeUsageReset(pluginId: string, sourceId: string, input: unknown): Promise<unknown> {
+    const loaded = this.plugins.get(pluginId);
+    if (!loaded) throw new Error(`Plugin is not available: ${pluginId}`);
+    return this.request(loaded, {
+      type: "usage.consume_reset",
+      requestId: randomUUID(),
+      sourceId,
+      input,
+    });
+  }
+
   discoverUsage(pluginId: string, sourceId: string, scope: UsageScope): Promise<unknown> {
     const loaded = this.plugins.get(pluginId);
     if (!loaded) throw new Error(`Plugin is not available: ${pluginId}`);

@@ -175,6 +175,13 @@ const INBOUND_PERMISSION = {
   // 内置模板清单，不含任何 key，和列表同一级。
   "provider.api_endpoint.list_templates.request": "daemon.read",
   "provider.api_endpoint.vendor_status.request": "daemon.read",
+  "provider.api_endpoint.read_balance.request": "daemon.read",
+  "provider.api_endpoint.set_balance_auto_refresh.request": "daemon.manage",
+  // 用表单里的 key 当场查，和测试连接同一级。
+  "provider.api_endpoint.check_balance.request": "daemon.manage",
+  "provider.api_endpoint.detect_balance_url.request": "daemon.manage",
+  // 读回账户令牌原文，同 reveal_key。
+  "provider.api_endpoint.reveal_secret.request": "daemon.manage",
   // 读本机别的软件的配置（含 key，只发打码的）与导入，和保存同一级。
   "provider.api_endpoint.import_scan.request": "daemon.manage",
   "provider.api_endpoint.import.request": "daemon.manage",
@@ -243,6 +250,8 @@ const INBOUND_PERMISSION = {
   // Refreshing reaches the network and rewrites the cached table, like any other
   // daemon-level setting change.
   "usage.pricing.refresh.request": "daemon.manage",
+  // 用掉一次重置改变的是账号状态，不只是读
+  "usage.reset.consume.request": "daemon.manage",
   validate_branch_request: "workspace.read",
   voice_audio_chunk: "workspace.write",
   wait_for_finish_request: "workspace.read",
@@ -451,6 +460,11 @@ const OUTBOUND_PERMISSION = {
   "provider.api_endpoint.forget_catalog.response": "daemon.manage",
   "provider.api_endpoint.list_templates.response": "daemon.read",
   "provider.api_endpoint.vendor_status.response": "daemon.read",
+  "provider.api_endpoint.read_balance.response": "daemon.read",
+  "provider.api_endpoint.set_balance_auto_refresh.response": "daemon.manage",
+  "provider.api_endpoint.check_balance.response": "daemon.manage",
+  "provider.api_endpoint.detect_balance_url.response": "daemon.manage",
+  "provider.api_endpoint.reveal_secret.response": "daemon.manage",
   "provider.api_endpoint.import_scan.response": "daemon.manage",
   "provider.api_endpoint.import.response": "daemon.manage",
   "provider.api_endpoint.import_discovery.response": "daemon.manage",
@@ -515,6 +529,7 @@ const OUTBOUND_PERMISSION = {
   "usage.agent.turns.list.response": "daemon.read",
   "usage.pricing.list.response": "daemon.read",
   "usage.pricing.refresh.response": "daemon.manage",
+  "usage.reset.consume.response": "daemon.manage",
   "usage.pricing.updated": "daemon.read",
   "usage.updated": "daemon.read",
   validate_branch_response: "workspace.read",

@@ -35,6 +35,7 @@ import {
   type ApiEndpointModelFacts,
   type ApiEndpointModelSettings,
   type ApiEndpointCooldownSettings,
+  type ApiEndpointBalanceSettings,
   type ApiEndpointRef,
   type ApiEndpointRequestFormat,
   type ApiEndpointSwitchOffFile,
@@ -43,12 +44,15 @@ import {
   type ApiEndpointTemplate,
   type ApiEndpointTestConnectionResult,
   type ApiEndpointVendorStatusResponse,
+  type ApiEndpointBalanceReading,
+  type ApiEndpointBalanceUrlAttempt,
   type ApiEndpointImportItem,
   type ApiEndpointImportPick,
   type ApiEndpointImportSource,
   type ApiEndpointImportCandidate,
   type ApiEndpointImportLinkPreview,
   type ApiEndpointNameRef,
+  type ApiEndpointSecret,
   API_ENDPOINT_IMPORT_ACTIONS,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import {
@@ -227,6 +231,7 @@ import {
   type ApiEndpointProvider,
   type ApiEndpointState,
   type GatewayTokens,
+  type StoredAccessKey,
   type StoredApiEndpoint,
 } from "./store.js";
 import { testUpstreamConnection } from "./upstream-connection.js";
@@ -332,6 +337,16 @@ import {
 } from "./catalog-merge.js";
 import { CatalogRefreshSchedule, type CatalogRefreshOutcome } from "./catalog-refresh.js";
 import { VendorStatusPages, vendorOfBaseUrls, type VendorId } from "./vendor-status.js";
+import {
+  BALANCE_KEPT_MS,
+  BALANCE_PAGE_TIMEOUT_MS,
+  BALANCE_READ_TIMEOUT_MS,
+  balanceSiteOf,
+  notAskedReading,
+  readEndpointBalance,
+  type BalanceVendorId,
+} from "./balance.js";
+import { withPaceAt } from "./balance-plan.js";
 import type { DataFileSystem } from "./last-good.js";
 import {
   defaultImportSourcePaths,
@@ -391,7 +406,14 @@ import {
   releaseUncheckedHosts,
   uncheckedHostsOf,
 } from "./insecure-tls.js";
-import { storedRequestExtras, type RequestExtras } from "./request-extras.js";
+import { storedRequestExtras, unsendableHeader, type RequestExtras } from "./request-extras.js";
+import { LastBalanceReadings } from "./balance-last.js";
+import {
+  balanceMethodOf,
+  defaultBalanceField,
+  NEW_API_BALANCE_QUERIES,
+  SUB2API_BALANCE_QUERIES,
+} from "@getpaseo/protocol/api-endpoint/balance-settings";
 import { endpointKnowsModel, settleModelSettings } from "./model-settings.js";
 import {
   cleanAutoPickRules,
@@ -422,6 +444,8 @@ export type ApiEndpointErrorCode =
   | "insecure_tls_template"
   // 冷却设置的分钟数不是 0 到八天的整数（params.field、max）。
   | "invalid_cooldown_settings"
+  // 余额设置的方法不是 GET、POST（params.field 为 method）。
+  | "invalid_balance_settings"
   // 导入时那一条已经不在它的软件里了（重新扫描）；替换给的不是名称撞上的那条（params.name）。
   | "import_gone"
   | "import_cannot_replace"
@@ -526,6 +550,28 @@ export interface ApiEndpointSaveInput extends ApiEndpointRequestExtrasInput {
   modelSettings?: ApiEndpointModelSettings;
   // 冷却设置，整份替换、空对象清掉；undefined 保留原来的（复制时是原来那家的）。
   cooldownSettings?: ApiEndpointCooldownSettings;
+  // 余额设置，整份替换、没有地址即清掉；undefined 保留原来的（复制时是原来那家的）。
+  balance?: ApiEndpointBalanceSettings;
+  // 账户令牌：非空换上，空白清掉，undefined 保留原来的（复制时是原来那家的）。
+  balanceToken?: string;
+  // 云账号密钥：各自非空换上，空白清掉，undefined 保留原来的（两个都 undefined 的复制时是原来那家的）。
+  accessKeyId?: string;
+  secretAccessKey?: string;
+}
+
+/** 「查询余额」与「自动识别」带的表单值：key 与地址省略即用 endpointId 那家存的。 */
+export interface ApiEndpointBalanceFormInput extends ApiEndpointRequestExtrasInput {
+  endpointId?: string;
+  apiKey?: string;
+  baseUrls?: { format: string; url: string }[];
+  templateId?: string;
+}
+
+/** 「查询余额」带的表单值：key 与地址省略即用 endpointId 那家存的。 */
+export interface ApiEndpointCheckBalanceInput extends ApiEndpointBalanceFormInput {
+  balance: ApiEndpointBalanceSettings;
+  // 表单里的账户令牌：undefined 用 endpointId 那家存的，空白即没有。
+  balanceToken?: string;
 }
 
 export interface ApiEndpointAgentSettingsInput {
@@ -681,6 +727,8 @@ export interface ApiEndpointServiceOptions {
   vendorStatusUrls?: Partial<Record<VendorId, string>>;
   // 界面第一次看状态页时等候的计时器；测试换成手动到点的。
   vendorStatusTimers?: UsagePricingTimers;
+  // 厂商余额接口换成别的地址；测试 daemon 一律指到本机，关心它的用例指到本机假服务。
+  balanceUrls?: Partial<Record<BalanceVendorId, string>>;
   // 从别的软件导入时读的 CC Switch 目录、Alma 数据库与 OpenCode 的 auth.json；缺省按 magpie 的位置，
   // 测试 daemon 一律指到临时目录。Claude Code、Codex 的配置跟着 env 与 homeDir 走。
   // endpoints.json 等文件的读与改名；只给测试换成会失败的假文件系统（如导入写到一半出错）。
@@ -717,6 +765,7 @@ export type ApiEndpointServiceOverrides = Pick<
   | "catalogRefreshTimers"
   | "vendorStatusUrls"
   | "vendorStatusTimers"
+  | "balanceUrls"
   | "importSourcePaths"
   | "dataFileSystem"
   | "modelTests"
@@ -865,6 +914,7 @@ export type ApiEndpointListResult = Required<
     | "disabledModels"
     | "endpointNameDisplay"
     | "endpointNamesUnreached"
+    | "balanceAutoRefresh"
   >
 >;
 
@@ -940,12 +990,24 @@ export class ApiEndpointService {
   private readonly reachesUnasked: (baseUrl: string) => boolean;
   private readonly catalogRefresh: CatalogRefreshSchedule;
   private readonly vendorStatusPages: VendorStatusPages;
+  private readonly balanceUrls: Partial<Record<BalanceVendorId, string>> | undefined;
+  // Command Code 每把 key 的套餐 id，留 10 分钟（balance.ts 的 commandCodeKeyPlanId）；只在内存里。
+  private readonly commandCodePlans = new Map<string, { planId: string; at: number }>();
+  // daemon 自己发起的请求（查余额）自报的 User-Agent：Osuna/<版本>。
+  private readonly userAgent: string;
   private readonly importSourcePaths: ApiEndpointServiceOptions["importSourcePaths"];
   // 导入指纹的 HMAC 密钥：存在 api-endpoints/ 下（0600），第一次扫描时读出（import-apps.ts）。
   private importSecret: Buffer | null = null;
   // 发现提示上次真读别的软件的结果（不含 OpenCode）与时刻：一分钟内照用，导入之后丢掉。
   private discoveryRead: DiscoveryRead | null = null;
   private readonly isAutoUpdate: () => boolean;
+  // 每家最近一次读到的余额与读的时刻：一分钟内照用；保存或删掉这家时丢掉。只在内存里，开机为空。
+  private readonly keptBalances = new Map<
+    string,
+    { reading: ApiEndpointBalanceReading; at: number }
+  >();
+  // 每家最近一次成功的读数，存在磁盘上：暂时查不到时回它（balance-last.ts）。
+  private readonly lastBalances: LastBalanceReadings;
   private readonly readCodexSignIn: ReadCodexSignIn;
   // 最近一次判断出的 Codex 登录方式；还没判断过、或一直判断不出时为 null，按接管记录现在的接法。
   private codexSignIn: CodexSignIn | null = null;
@@ -970,6 +1032,12 @@ export class ApiEndpointService {
       options.readLoginShellEnv ?? createLoginShellEnvReader({ env: this.env });
     this.proxyEnv = options.proxyEnv ?? this.env;
     const userAgent = `Osuna/${options.daemonVersion}`;
+    this.userAgent = userAgent;
+    this.balanceUrls = options.balanceUrls;
+    this.lastBalances = new LastBalanceReadings({
+      filePath: path.join(this.store.endpointsDir, "balance-readings.json"),
+      logger: this.logger,
+    });
     this.reachesGateway = createGatewayReach({
       probe: options.probeGatewayAt ?? createGatewayProbe({ userAgent }),
     });
@@ -1125,6 +1193,7 @@ export class ApiEndpointService {
       disabledModels: state.disabledModels ?? [],
       endpointNameDisplay: endpointNameDisplayOf(state),
       endpointNamesUnreached: this.endpointNamesUnreached(state),
+      balanceAutoRefresh: state.balanceAutoRefresh !== false,
     };
   }
 
@@ -1400,6 +1469,7 @@ export class ApiEndpointService {
    */
   async save(provider: string, input: ApiEndpointSaveInput): Promise<ApiEndpoint> {
     const saved = await this.saveQueued(provider, input);
+    this.keptBalances.delete(saved.endpoint.id);
     if (!saved.fetchesList) return saved.endpoint;
     const supported = requireProvider(provider);
     await this.fetchListAfterSave({ provider: supported, endpointId: saved.endpoint.id });
@@ -1489,6 +1559,7 @@ export class ApiEndpointService {
         catalog: input.catalog,
         requestExtras: savedRequestExtras({ request: input, base, templateId }),
         cooldownSettings: savedCooldownSettings({ requested: input.cooldownSettings, base }),
+        balance: savedBalanceSettings({ requested: input.balance, base }),
         // 新客户端建的接口默认开着；老客户端建的要等 set_active 才开，和以前「保存不启用」一样。
         enabledWhenNew: !isLegacyForm,
         timestamp: this.now().toISOString(),
@@ -1524,6 +1595,10 @@ export class ApiEndpointService {
           keys: apiKey ? { [endpoint.id]: apiKey } : {},
         },
       );
+      const balanceToken = savedBalanceTokenOf({ input, copySource, store: this.store });
+      if (balanceToken !== undefined) this.store.setBalanceToken(endpoint.id, balanceToken);
+      const accessKey = savedAccessKeyOf({ input, copySource, store: this.store, endpoint });
+      if (accessKey !== undefined) this.store.setAccessKey(endpoint.id, accessKey);
       // 编辑过这家接口就解除「需要检查」；改了连接（key 或地址）时冷却也是旧连接的，一并清掉。
       if (existing) {
         const connectionEdited =
@@ -1631,6 +1706,16 @@ export class ApiEndpointService {
     }
   }
 
+  /** 读回一家接口已保存的账户令牌或云账号密钥原文（编辑窗口的「显示」）；没有为 null。 */
+  revealSecret(endpointId: string, secret: ApiEndpointSecret): string | null {
+    if (!findEndpoint(this.readState(), endpointId)) {
+      throw new ApiEndpointRequestError({ code: "not_found", message: "API endpoint not found" });
+    }
+    if (secret === "balance_token") return this.store.getBalanceToken(endpointId);
+    const accessKey = this.store.getAccessKey(endpointId);
+    return secret === "access_key_id" ? accessKey.id : accessKey.secret;
+  }
+
   /** 读回一家接口已保存的 key 原文（编辑窗口的「显示」）；没有 key 为 null。照 magpie 不确认、不限次数。 */
   revealKey(endpointId: string): string | null {
     if (!findEndpoint(this.readState(), endpointId)) {
@@ -1651,8 +1736,10 @@ export class ApiEndpointService {
         ...state,
         endpoints: state.endpoints.filter((endpoint) => endpoint.id !== endpointId),
       });
-      this.store.removeApiKey(endpointId);
+      this.store.removeSecrets(endpointId);
       this.cooldowns.clear(endpointId);
+      this.keptBalances.delete(endpointId);
+      this.lastBalances.forget(endpointId);
       return { activeEndpointId: agentTargetEndpoint(next, supported)?.id ?? null };
     });
   }
@@ -2565,6 +2652,15 @@ export class ApiEndpointService {
     });
   }
 
+  /** 「自动刷新余额与套餐用量」：关着存 false，开着不存。只管读余额，不碰 CLI，但照别的主机设置一样走 commit。 */
+  setBalanceAutoRefresh(input: { enabled: boolean }): Promise<void> {
+    return this.exclusiveFollowing(async () => {
+      const state = this.readState();
+      const { balanceAutoRefresh: _previous, ...rest } = state;
+      await this.commit(state, input.enabled ? rest : { ...rest, balanceAutoRefresh: false });
+    });
+  }
+
   /**
    * 接口名显示方式管不到的 Agent（magpie noNamesSaid / agent.NoNames）：开着、用 API key 接的 Codex，
    * 它的 /model 只列光秃秃的名字（模型目录），本来就不带接口名。
@@ -3367,6 +3463,171 @@ export class ApiEndpointService {
   }
 
   /**
+   * 这几家接口的余额（不存在的 id 不回），同时问。读不到只记在那家的读数里；只有取消才抛错。
+   * 余额只给界面看，不进中转站选路（docs/usage.md「Outbound requests」）。
+   */
+  async readBalances(input: {
+    endpointIds: readonly string[];
+    // 用户要求的读取（打开页面）；force（刷新）也算。
+    asked: boolean;
+    // 刷新：不用留着的读数。
+    force: boolean;
+    signal: AbortSignal;
+  }): Promise<ApiEndpointBalanceReading[]> {
+    const state = this.readState();
+    const endpoints = [...new Set(input.endpointIds)].flatMap(
+      (id) => findEndpoint(state, id) ?? [],
+    );
+    // 照 magpie quota_asked.go：开关关着时只有用户要求的读取发请求，别的回留着的读数，不论多旧。
+    const held = state.balanceAutoRefresh === false && !input.asked && !input.force;
+    const deadline = AbortSignal.timeout(BALANCE_PAGE_TIMEOUT_MS);
+    const readings = await Promise.all(
+      endpoints.map(async (endpoint) => {
+        const kept = this.keptBalances.get(endpoint.id);
+        const isFresh = kept !== undefined && this.now().getTime() - kept.at < BALANCE_KEPT_MS;
+        const usesKept = kept !== undefined && !input.force && (isFresh || held);
+        if (usesKept) return kept.reading;
+        const apiKey = this.store.getApiKey(endpoint.id);
+        const balanceToken = this.store.getBalanceToken(endpoint.id);
+        const accessKey = this.store.getAccessKey(endpoint.id);
+        const settings = { endpoint, apiKey, balanceToken, accessKey };
+        if (held) return this.lastBalances.standIn(settings, notAskedReading(endpoint.id));
+        const at = this.now().getTime();
+        const extras = storedRequestExtras(endpoint);
+        const fresh = await readEndpointBalance({
+          endpoint,
+          apiKey,
+          balanceToken,
+          accessKey,
+          extras,
+          userAgent: this.userAgent,
+          now: this.now,
+          vendorUrls: this.balanceUrls,
+          withPlan: true,
+          hasLastReading: this.lastBalances.has(settings, endpoint.id),
+          commandCodePlans: this.commandCodePlans,
+          signal: input.signal,
+          deadline,
+        });
+        this.lastBalances.keep(settings, fresh);
+        // 请求头发不出去也归 temporary，但那是设置的问题，不回上次读数（magpie 的 passing 同样认不出它）。
+        const reading =
+          unsendableHeader(extras) === null ? this.lastBalances.standIn(settings, fresh) : fresh;
+        this.keptBalances.set(endpoint.id, { reading, at });
+        return reading;
+      }),
+    );
+    // 留着的、上次的读数也按现在的时刻写配速。
+    const now = this.now().getTime();
+    return readings.map((reading) => withPaceAt({ reading, now }));
+  }
+
+  /**
+   * 编辑窗口的「查询余额」：用表单里还没保存的值当场查一次（照 magpie 编辑器的 Check balance）。只读，
+   * 不进 1 分钟缓存，也不记作上次读数；key、地址与请求头等表单没给的用 endpointId 那家存的。只有取消才抛错。
+   */
+  async checkBalance(
+    input: ApiEndpointCheckBalanceInput,
+    signal: AbortSignal,
+  ): Promise<ApiEndpointBalanceReading> {
+    const { apiKey, saved, baseUrls, extras } = this.formBalanceValues(input);
+    // 表单的值照保存时的样子读（方法不是 GET、POST 的同样拒收），只是不存。
+    const { balance } = savedBalanceSettings({ requested: input.balance, base: null });
+    const balanceToken = this.checkedBalanceToken(input.balanceToken, saved);
+    try {
+      return await readEndpointBalance({
+        endpoint: { id: input.endpointId ?? "", baseUrls, balance },
+        apiKey,
+        balanceToken,
+        extras,
+        userAgent: this.userAgent,
+        now: this.now,
+        vendorUrls: this.balanceUrls,
+        signal,
+        deadline: AbortSignal.timeout(BALANCE_READ_TIMEOUT_MS),
+      });
+    } catch (error) {
+      if (!signal.aborted) throw error;
+      throw new ApiEndpointRequestError({ code: "cancelled", message: "Request cancelled" });
+    }
+  }
+
+  /**
+   * 编辑窗口的「自动识别」：用表单里的 key（从不用账户令牌）依次问站点上 new-api 与 sub2api 的 key 级余额查询，
+   * 取第一个查出余额的，回它的地址与默认取值写法。只在用户按下时问；不进 1 分钟缓存，也不记作上次读数。只有取消才抛错。
+   */
+  async detectBalanceUrl(
+    input: ApiEndpointBalanceFormInput,
+    signal: AbortSignal,
+  ): Promise<{
+    detected: { url: string; field: string } | null;
+    attempts: ApiEndpointBalanceUrlAttempt[];
+  }> {
+    const { apiKey, baseUrls, extras } = this.formBalanceValues(input);
+    if (!apiKey) {
+      throw new ApiEndpointRequestError({
+        code: "invalid_input",
+        message: "An API key is needed to detect the balance address",
+      });
+    }
+    const site = balanceSiteOf(baseUrls);
+    if (site === null) {
+      throw new ApiEndpointRequestError({
+        code: "invalid_input",
+        message: "No http or https address to find the site on",
+      });
+    }
+    const attempts: ApiEndpointBalanceUrlAttempt[] = [];
+    for (const query of [NEW_API_BALANCE_QUERIES.key, SUB2API_BALANCE_QUERIES.key]) {
+      const url = site + query;
+      let reading: ApiEndpointBalanceReading;
+      try {
+        reading = await readEndpointBalance({
+          endpoint: { id: input.endpointId ?? "", baseUrls, balance: { url } },
+          apiKey,
+          balanceToken: null,
+          extras,
+          userAgent: this.userAgent,
+          now: this.now,
+          vendorUrls: this.balanceUrls,
+          signal,
+          deadline: AbortSignal.timeout(BALANCE_READ_TIMEOUT_MS),
+        });
+      } catch (error) {
+        if (!signal.aborted) throw error;
+        throw new ApiEndpointRequestError({ code: "cancelled", message: "Request cancelled" });
+      }
+      attempts.push({ url, reading });
+      if (reading.status === "ok") {
+        return { detected: { url, field: defaultBalanceField(url) ?? "" }, attempts };
+      }
+    }
+    return { detected: null, attempts };
+  }
+
+  /** 「查询余额」与「自动识别」用的表单值：key、各格式地址与请求头等附加项，表单没给的用 endpointId 那家存的。 */
+  private formBalanceValues(input: ApiEndpointBalanceFormInput): {
+    apiKey: string | null;
+    saved: StoredApiEndpoint | null;
+    baseUrls: StoredApiEndpoint["baseUrls"];
+    extras: RequestExtras;
+  } {
+    const apiKey = this.resolveRequestKey(input);
+    const saved = input.endpointId ? findEndpoint(this.readState(), input.endpointId) : null;
+    const formUrls = input.baseUrls?.flatMap(({ format, url }) => {
+      const known = API_ENDPOINT_REQUEST_FORMATS.find((candidate) => candidate === format);
+      return known === undefined ? [] : [{ format: known, url }];
+    });
+    const baseUrls = formUrls ?? saved?.baseUrls ?? [];
+    const extras = this.requestExtras({
+      ...input,
+      baseUrl: baseUrls[0]?.url ?? "",
+      ...(input.baseUrls === undefined ? {} : { baseUrls }),
+    });
+    return { apiKey, saved, baseUrls, extras };
+  }
+
+  /**
    * 本机别的软件里的接口配置，对照已有的接口（从别的软件导入，ADR 0013）。只读；key 只给打码的。
    * includeOpenCode 为 false 时不碰 OpenCode 的 auth.json。
    */
@@ -3502,7 +3763,10 @@ export class ApiEndpointService {
     if (found.key === null && this.store.getApiKey(endpoint.id) !== null) {
       this.store.removeApiKey(endpoint.id);
     }
-    if (replaceIndex !== null) this.cooldowns.clear(endpoint.id);
+    if (replaceIndex !== null) {
+      this.cooldowns.clear(endpoint.id);
+      this.keptBalances.delete(endpoint.id);
+    }
     return { endpointId: endpoint.id, name: endpoint.name };
   }
 
@@ -4800,6 +5064,8 @@ export class ApiEndpointService {
       enabled: endpoint.enabled,
       hasApiKey: apiKey !== null,
       ...(apiKey !== null ? { apiKeyMask: maskApiKey(apiKey) } : {}),
+      ...this.balanceTokenMaskOf(endpoint.id),
+      ...this.accessKeyMasksOf(endpoint.id),
       defaultModelProviders: defaultModelProvidersOf(state, endpoint.id),
       cooldown: this.cooldownOf(endpoint.id),
       ...(endpoint.catalog
@@ -4830,6 +5096,7 @@ export class ApiEndpointService {
       ...(endpoint.cooldownSettings !== undefined
         ? { cooldownSettings: endpoint.cooldownSettings }
         : {}),
+      ...(endpoint.balance !== undefined ? { balance: endpoint.balance } : {}),
     };
   }
 
@@ -4843,6 +5110,33 @@ export class ApiEndpointService {
     const facts: Record<string, ApiEndpointModelFacts> = {};
     for (const { id } of models) facts[id] ??= this.autoModelFacts(endpoint, id);
     return facts;
+  }
+
+  /** 「查询余额」用的账户令牌：表单给了用表单的（空白即没有），没给用那家存的。 */
+  private checkedBalanceToken(
+    typed: string | undefined,
+    saved: StoredApiEndpoint | null,
+  ): string | null {
+    if (typed !== undefined) return typed.trim() || null;
+    return saved ? this.store.getBalanceToken(saved.id) : null;
+  }
+
+  /** 账户令牌只发打码；没有令牌时没有这项。 */
+  private balanceTokenMaskOf(endpointId: string): { balanceTokenMask?: string } {
+    const token = this.store.getBalanceToken(endpointId);
+    return token === null ? {} : { balanceTokenMask: maskApiKey(token) };
+  }
+
+  /** 云账号密钥只发打码；没存的那样没有这项。 */
+  private accessKeyMasksOf(endpointId: string): {
+    accessKeyIdMask?: string;
+    secretAccessKeyMask?: string;
+  } {
+    const { id, secret } = this.store.getAccessKey(endpointId);
+    return {
+      ...(id === null ? {} : { accessKeyIdMask: maskApiKey(id) }),
+      ...(secret === null ? {} : { secretAccessKeyMask: maskApiKey(secret) }),
+    };
   }
 
   /** 整家接口的冷却；只冷却了某个模型的不算。 */
@@ -5305,6 +5599,8 @@ function buildEndpoint(input: {
   requestExtras: StoredRequestExtras;
   // 冷却设置：savedCooldownSettings 已按请求与 base 定好，没设就没有这项。
   cooldownSettings: StoredCooldownSettings;
+  // 余额设置：savedBalanceSettings 已按请求与 base 定好，没设就没有这项。
+  balance: StoredBalanceSettings;
   enabledWhenNew: boolean;
   timestamp: string;
 }): StoredApiEndpoint {
@@ -5323,6 +5619,7 @@ function buildEndpoint(input: {
     keyHeader: _keyHeader,
     insecureTls: _insecureTls,
     cooldownSettings: _cooldownSettings,
+    balance: _balance,
     ...kept
   } = base ?? {};
   const name = existing ? fields.name : freeEndpointName(state, fields.name);
@@ -5343,6 +5640,7 @@ function buildEndpoint(input: {
     ...catalogFieldOf({ requested: input.catalog, timestamp: input.timestamp }),
     ...input.requestExtras,
     ...input.cooldownSettings,
+    ...input.balance,
     createdAt: existing?.createdAt ?? input.timestamp,
     updatedAt: input.timestamp,
   };
@@ -5387,6 +5685,92 @@ function savedRequestExtras(input: {
 }
 
 type StoredCooldownSettings = Pick<StoredApiEndpoint, "cooldownSettings">;
+
+type StoredBalanceSettings = Pick<StoredApiEndpoint, "balance">;
+
+/**
+ * 存下的余额设置：请求给了就整份换上（地址、取值写法去掉首尾空白，空的不存；GET 是缺省不存），没给留 base 的。
+ * 没有余额查询地址即只留智谱团队组织 ID 与项目 ID（照 magpie ZhipuTeam.normal，有一个就存），都没有即清掉整项。
+ * 方法不是 GET、POST 的拒收（照 magpie 命令行的 balance.method=GET|POST）。
+ */
+function savedBalanceSettings(input: {
+  requested: ApiEndpointBalanceSettings | undefined;
+  base: StoredApiEndpoint | null;
+}): StoredBalanceSettings {
+  const { requested } = input;
+  const kept = input.base?.balance;
+  if (requested === undefined) return kept !== undefined ? { balance: kept } : {};
+  const method = balanceMethodOf(requested.method);
+  if (method === null) {
+    throw new ApiEndpointRequestError({
+      code: "invalid_balance_settings",
+      message: `The balance request method is GET or POST, not ${JSON.stringify(requested.method)}`,
+      params: { field: "method" },
+    });
+  }
+  const team = savedTeamIds(requested);
+  const url = requested.url?.trim() ?? "";
+  if (url === "") return Object.keys(team).length > 0 ? { balance: team } : {};
+  const field = requested.field?.trim() ?? "";
+  const userId = requested.userId?.trim() ?? "";
+  return {
+    balance: {
+      url,
+      ...(method === "POST" ? { method } : {}),
+      ...(field === "" ? {} : { field }),
+      ...(userId === "" ? {} : { userId }),
+      ...team,
+    },
+  };
+}
+
+/** 存下的智谱团队组织 ID 与项目 ID：去掉首尾空白，空的不存。 */
+function savedTeamIds(
+  requested: ApiEndpointBalanceSettings,
+): Pick<ApiEndpointBalanceSettings, "teamOrgId" | "teamProjectId"> {
+  const teamOrgId = requested.teamOrgId?.trim() ?? "";
+  const teamProjectId = requested.teamProjectId?.trim() ?? "";
+  return {
+    ...(teamOrgId === "" ? {} : { teamOrgId }),
+    ...(teamProjectId === "" ? {} : { teamProjectId }),
+  };
+}
+
+/**
+ * 存下的账户令牌：请求给了非空的就换上（去掉首尾空白），空白清掉（null）；没给时复制取原来那家的，编辑与新建不动（undefined）。
+ */
+function savedBalanceTokenOf(input: {
+  input: ApiEndpointSaveInput;
+  copySource: StoredApiEndpoint | null;
+  store: ApiEndpointStore;
+}): string | null | undefined {
+  const typed = input.input.balanceToken;
+  if (typed !== undefined) return typed.trim() || null;
+  if (!input.copySource) return undefined;
+  return input.store.getBalanceToken(input.copySource.id) ?? undefined;
+}
+
+/**
+ * 存下的云账号密钥：请求给了的那样换上（去掉首尾空白，空白清掉），没给的那样留原来的；两样都没给时复制取原来那家的，
+ * 编辑与新建不动（undefined）。
+ */
+function savedAccessKeyOf(input: {
+  input: ApiEndpointSaveInput;
+  copySource: StoredApiEndpoint | null;
+  store: ApiEndpointStore;
+  endpoint: StoredApiEndpoint;
+}): StoredAccessKey | undefined {
+  const { accessKeyId, secretAccessKey } = input.input;
+  if (accessKeyId === undefined && secretAccessKey === undefined) {
+    if (!input.copySource) return undefined;
+    return input.store.getAccessKey(input.copySource.id);
+  }
+  const kept = input.store.getAccessKey(input.endpoint.id);
+  return {
+    id: accessKeyId === undefined ? kept.id : accessKeyId.trim() || null,
+    secret: secretAccessKey === undefined ? kept.secret : secretAccessKey.trim() || null,
+  };
+}
 
 /**
  * 存下的冷却设置：请求给了就整份换上（0 是用中转站自己的，不存；「原因不明不冷却」开着时冷却上限不存，照 magpie 的

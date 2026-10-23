@@ -1640,3 +1640,472 @@ if (!isConnectionGone) throw error;
 - The prompt (ticket 27, magpie `GET /api/importapps/discovery`, `discoverLocalProviders`): `provider.api_endpoint.import_discovery` returns `{ fingerprint, sourceId, source }` for entries the dialog would preselect (`isPreselectedImport` in protocol `api-endpoint/import-offer.ts`, shared with the app's `initialImportPicks`) minus `ignoredImports`; never OpenCode. The daemon reads and settles at most once a minute (`DISCOVERY_READ_INTERVAL_MS`, injected `now`) and keeps only the candidates, never keys; a `commit` that changes endpoints or keys, an import, and the dialog's own scan replace or drop it (the browser spec calls `import_scan` after writing fake sources). `provider.api_endpoint.import_ignore` takes 64-hex fingerprints only (`invalid_input` otherwise), merges them into `ignoredImports` through `commit`, keeps the newest 500, and does not prune ones not seen now (magpie keeps them too). Its failures are `import_ignore_failed` with `params.reason`; the app words every failure itself and never shows the host's message. Review opens Import with only the prompt's fingerprints picked; a failed discovery shows no prompt; a failed Ignore keeps it with the reason.
 - Discovery prompt (ticket 27, magpie app.js:9846-9903, `gui/importapps.go:29-48`): `provider.api_endpoint.import_discovery` / `import_ignore` (`daemon.manage`). Runs on opening the API endpoints page, OpenCode excluded; the other apps' files are really read at most once a minute (injected clock), the cache keeps only fingerprints and sources and is dropped when stale or after an import. Offered = what the import dialog would preselect (one shared rule in protocol). The bar always sits at the page top (prd 42 says so; magpie's compact variant next to the add button is not used), "View" opens the dialog with only those preselected, "Ignore" stores the fingerprints in host-wide `ignoredImports` (64-hex, capped at 500, oldest dropped; not pruned, as magpie keeps them). To survive restarts the fingerprint HMAC secret is persisted in `api-endpoints/import-fingerprint-key.json` (0600, atomic); a corrupt file is regenerated with a warn line (ignored items re-prompt), an unreadable one makes discovery `unknown`. A changed key re-prompts. Failures are code + reason, localized; a failed discovery shows no bar.
 - Import links (ticket 28, magpie `importurl.go:11-160`, app.js:10139-10200, ADR 0002): only the desktop app receives `paseo://import?…`; the main process hands it to the focused window (opening one if needed, holding it until the renderer is ready); Agent links are untouched and the link is never logged. Nothing is added without the confirm dialog: `provider.api_endpoint.import_link_preview` parses and stores nothing, `import_link_icon` fetches the `icon=` picture separately so the dialog opens at once (magpie: "the dialog being open is the confirmation"; explicit `icon=` beats preset / `catalog=` icon, kept in memory, stored only when the add succeeds), `import_link` re-parses and re-validates in the daemon (`daemon.manage`). Rules as magpie: https only, http for loopback / LAN (incl. IPv4-mapped IPv6, `utils/local-host.ts`); no userinfo, non-empty query or fragment (an empty `?` / `#` is accepted and stripped); key ≤ 4096 bytes, no control chars; name cut to 80 bytes byte-safely (again after a " 2" rename); ≤ 200 models (extra dropped); unknown preset, Vertex, no address, only a Gemini address (until sub-task 7) are refused with `import_link_refused` + reason + params, never the key. Replace target = magpie `Find(id)`: same id, then an existing name equal to the link's id — never the link's name alone. `catalog=` picks the vendor icon via template `modelsDevIds` (`IconForCatalog`); facts have no field. Tests: the test daemon and the browser-test daemon both take a `fetchSite` seam that throws by default.
+
+## Scenario: when an endpoint's balance is read (endpoint-balance ticket 03, magpie `provider/quota_asked.go`, `balance.go` `KeyBalances` / `ForgetBalances`)
+
+### 1. Scope / Trigger
+- New RPC, a new optional request field pair and a host-wide setting in `endpoints.json`; the client and the daemon must agree on which reads are the user's.
+
+### 2. Signatures
+- `provider.api_endpoint.read_balance.request { endpointIds, asked?: boolean, force?: boolean }` (`daemon.read`).
+- `provider.api_endpoint.set_balance_auto_refresh.request { enabled: boolean }` → `.response { requestId, error }` (`daemon.manage`, service `setBalanceAutoRefresh` through `commit`).
+- List payload `balanceAutoRefresh?: boolean`; stored as `balanceAutoRefresh: false` only when off. All under the `apiEndpointBalance` capability.
+- Service `readBalances({ endpointIds, asked, force, signal })`; `readEndpointBalance({ …, signal, deadline })`.
+
+### 3. Contracts
+- `keptBalances` (service memory, empty at start): endpoint id → `{ reading, at }`. A read within `BALANCE_KEPT_MS` (60 s, injected `now`) of `at` returns the kept reading; `force` skips it. `save`, `delete` and an import that replaces an endpoint drop that id. Every result is kept, failures too.
+- Switch off (`state.balanceAutoRefresh === false`) and neither `asked` nor `force`: send nothing; return the kept reading however old, else `notAskedReading` = `failed`, `reason: "temporary"`, `hint: "not_asked"`, `readAt: null` (magpie `errNotAsked`); with a last reading on disk that reading answers instead, `stale` = the not-asked failure (ticket 04, below).
+- Timeouts: 15 s per request (`BALANCE_READ_TIMEOUT_MS`), 30 s for the whole RPC (`BALANCE_PAGE_TIMEOUT_MS`, the `deadline` signal). A deadline abort is a `temporary` failure; a connection abort (`signal`) still throws.
+- Nothing reads at startup; the switch doesn't touch the price table or the CLI logins' plan usage.
+
+### 4. Validation & Error Matrix
+- Unknown id → not in `readings`. Store unreadable → whole RPC `error`. Switch write failure → `error` from `toWireError`, the app shows it under the switch and the switch goes back.
+
+### 5. Good/Base/Bad Cases
+- Good: list and detail open together → one upstream request in the minute.
+- Base: switch off, page opened → `asked: true` → reads (cache still applies).
+- Bad: switch off, a timed read → no request, `not_asked` until the user opens a page or refreshes.
+
+### 6. Tests Required
+- `daemon-e2e/api-endpoint-balance.e2e.test.ts` "when the API endpoint balance is read": kept for a minute then asked again; force inside the minute; save drops it; switch default/off/restart; off + timed asks nothing; off + asked/force read, timed keeps old reading; no request at startup.
+- Browser `Balance` › "auto refresh on…": counts `read_balance` frames and their `asked`/`force` with `page.clock`.
+
+### 7. Wrong vs Correct
+#### Wrong
+```ts
+// a timed read with the switch off still reaches the vendor once the cache expires
+if (kept && isFresh) return kept.reading;
+```
+#### Correct
+```ts
+const held = state.balanceAutoRefresh === false && !input.asked && !input.force;
+const usesKept = kept !== undefined && !input.force && (isFresh || held);
+if (usesKept) return kept.reading;
+if (held) return this.lastBalances.standIn(settings, notAskedReading(endpoint.id));
+```
+
+## Scenario: the last balance reading (endpoint-balance ticket 04, magpie `provider/quota_last.go` `keepLast` / `passing` / `keyTag`)
+
+### 1. Scope / Trigger
+- A new persisted cache file and a new optional wire field on every balance reading; the app words the reading by it.
+
+### 2. Signatures
+- `LastBalanceReadings` (`api-endpoints/balance-last.ts`), built by the service on `api-endpoints/balance-readings.json`:
+  - `keep(settings: BalanceSettings, reading)`; `standIn(settings, reading) → reading`; `forget(endpointId)`.
+  - `BalanceSettings = { endpoint: Pick<StoredApiEndpoint, "baseUrls" | "balance">, apiKey, balanceToken }`.
+- Wire: `ApiEndpointBalanceReadingSchema.stale?: ApiEndpointBalanceFailure`.
+
+### 3. Contracts
+- File: `{ readings: { [endpointId]: { fingerprint, readAt, items, windows? } } }`. `fingerprint` = sha256 of `{ baseUrls, apiKey, balance?, balanceToken? }` (`balance` and the token only when set, so readings kept before tickets 05 and 06 still match), first 32 hex; never the key or a token.
+- `keep` stores only `status: "ok"` readings with at least one item or window (ticket 08); an empty `ok` (Ollama without purchased credits) and every failure leave the previous entry alone (magpie returns early on no windows and no balance).
+- `standIn` replaces a reading whose `failure.reason === "temporary"` (429, 408, 5xx, timeout, deadline, network error, and `not_asked`) with `{ status: "ok", items, readAt: <last readAt>, failure: null, stale: <this time's failure> }`. Other readings pass through unchanged.
+- Invalidation is lazy: a fingerprint mismatch at `standIn` drops the entry and returns the failure; `delete` calls `forget`. Renaming or saving unchanged settings keeps it.
+- In `readBalances`: fresh read → `keep` → `standIn`, except when `unsendableHeader(extras) !== null` (a settings problem; magpie's `passing` doesn't match it either). The result, stale or not, goes into `keptBalances` for the minute.
+- App: `stale` with `hint: "not_asked"` → caption "Not refreshed · last read {time}" (muted); any other `stale` → "Couldn't read just now · last read {time}" (`statusWarning`, testID `api-endpoint-balance-stale`). The row needs nothing: the reading is `ok`.
+- Later tickets: the token (ticket 06) is in `fingerprintOf`, the user ID rides in `balance`; ticket 06's `windows` are stored with the entry; plan windows (ticket 08) are stored the same way and get their pace recomputed when served ("a plan key's windows and their pace").
+
+### 4. Validation & Error Matrix
+- File missing → no last readings. Unreadable or schema-invalid → empty, one warn line. Write failure → warn only; the reading is still returned and memory updated.
+- `token_rejected`, `wrong_url`, `no_value`, `not_offered`, unsendable header → the failure itself, no `stale`.
+
+### 5. Good/Base/Bad Cases
+- Good: read ¥110, then 503 → `ok` ¥110 with the old `readAt` and `stale.status: 503`; same after a restart.
+- Base: switch off, restart, timed read → last reading with `stale.hint: "not_asked"`, no request.
+- Bad: key changed, then 503 → `failed temporary`; the old key's balance is never shown.
+
+### 6. Tests Required
+- `daemon-e2e/api-endpoint-balance.e2e.test.ts`: 503 and 429 give the last reading with `stale`; it survives a restart and the file has no key; 401 has no `stale`; base URL or key change drops it, a rename does not; delete removes it from the file; switch off + restart + timed read gives it with `not_asked`.
+- Protocol `messages.api-endpoint.test.ts`: a reading with `stale` parses.
+- Browser `Balance` › "a temporary failure keeps showing the last reading…": stale caption, item still shown, row still shows the amount.
+
+### 7. Wrong vs Correct
+#### Wrong
+```ts
+// the old balance survives a key change: the next outage shows another key's money
+lastBalances[endpoint.id] = { readAt, items };
+```
+#### Correct
+```ts
+this.lastBalances.keep({ endpoint, apiKey }, fresh); // stores fingerprintOf({ baseUrls, apiKey })
+const reading = unsendableHeader(extras) === null ? this.lastBalances.standIn(settings, fresh) : fresh;
+```
+
+## Scenario: a balance URL the user gave, and Check balance (endpoint-balance ticket 05, magpie `provider/balance.go` `balanceRead` / `readBalanceParts` / `balanceExpr`)
+
+### 1. Scope / Trigger
+- New optional endpoint field on the wire and on disk, a new save field, a new RPC, and a pure port of magpie's balance-field parser.
+
+### 2. Signatures
+- Protocol `ApiEndpointBalanceSettingsSchema = { url?, method?, field? }` (strings); `ApiEndpoint.balance?`, `ApiEndpointSaveRequest.balance?`.
+- `provider.api_endpoint.check_balance.request { endpointId?, apiKey?, baseUrls?, templateId?, balance, ...ApiEndpointRequestExtras }` → `.response { requestId, reading: ApiEndpointBalanceReading | null, error }` (`daemon.manage`, cancellable through `cancel`, gated by `apiEndpointBalance`).
+- Shared `protocol/api-endpoint/balance-settings.ts`: `balanceMethodOf(raw) → "GET" | "POST" | null`, `defaultBalanceField(url) → string | null`.
+- Server `balance-field.ts`: `readBalanceField(reply, field) → { kind: "items", items } | { kind: "no_value", detail }`, `numberOf`. Service `checkBalance(ApiEndpointCheckBalanceInput, signal)`.
+
+### 3. Contracts
+- Stored `balance: { url, method?: "POST", field? }`; GET and an empty field are not stored; no URL → no `balance`. Save: omitted keeps (old clients, copies take the source's), an object replaces whole, one without a URL clears.
+- A `balance.url` wins over the host table: `sourceOf` returns the custom source first, so an endpoint on `api.deepseek.com` with a Balance URL never asks DeepSeek. No key → `unsupported`, nothing sent.
+- Request: `GET`, or `POST` with no body; `Authorization: Bearer <key>`, `Accept`, `User-Agent: Osuna/<v>`, then the endpoint's headers with `{key}` names replaced (`KEY_NAMES`, magpie `balanceKeyNames`); in the URL the key is Go-`QueryEscape`d (space `+`). The escaped key joins the redaction secrets.
+- Reply read up to 1 MiB of bytes (`readCapped` over `response.chunks()`), not characters after a full `text()`.
+- Field empty → `defaultBalanceField(url)`; no default → `no_value` "no balance path: …".
+- Items: `{ label: string | null, text, value, unit, ratio }`; `$ ¥ € £` → `USD CNY EUR GBP`; a `%` item has `unit: "%"`, `value` = percent, `ratio` = 0–1. A missing amount among several is `text: "—"`, `value: null` — its reason is not on the wire (PRD 21's item shape has no error field; magpie keeps it for a hover).
+- Check balance: same `readEndpointBalance` with the form's values over the saved endpoint's; never touches `keptBalances` or `LastBalanceReadings`.
+- Port deviations kept on purpose: a custom reply that is not JSON is `wrong_url` (PRD 16), where magpie says "the reply is not JSON".
+
+### 4. Validation & Error Matrix
+- Save or check with `method` not GET/POST (any case, trimmed) → `invalid_balance_settings`, `params.field: "method"`, nothing sent.
+- Hand-edited stored method that reads as neither → `failed wrong_url`, detail magpie's sentence, nothing sent.
+- Field errors → `no_value` with magpie's English sentence as `detail` (key masked).
+- `check_balance` with an unknown `endpointId` → `reading: null`, `error.code: "not_found"`; aborted → `cancelled`.
+
+### 5. Good/Base/Bad Cases
+- Good: `{ url: ".../query?apikey={key}", field: "$data.left" }`, reply `{"data":{"left":"7.5"}}` → `$7.50`, URL carries the escaped key.
+- Base: `/v1/dashboard/billing/credit_grants` with no field → `$total_available` → `$12.50`.
+- Bad: field `data.list.*.left` → `no_value` "…several values where one is wanted…".
+
+### 6. Tests Required
+- `api-endpoints/balance-field.test.ts`: every magpie `TestReadBalancePath` / `TestBalancePathLists` / `TestBalanceParts` case, each error sentence, numbers in filters (`1e21`, `1e-7`), a `"0x10"` string staying a string, `defaultBalanceField`.
+- `daemon-e2e/api-endpoint-balance.e2e.test.ts` "at an address the user gave": GET with placeholders and headers, POST no body, labels/percent/dash, three defaults, no default, missing path, known host overridden, unreachable URL masks the key, 1 MB cut → `wrong_url`, old-client save keeps / empty URL clears / copy takes, PUT refused, settings change drops the last reading; check: unsaved new endpoint, edit with saved key, no URL finds the vendor, failure reading, not kept, unknown endpoint, PUT refused.
+- Protocol: save/endpoint with and without `balance`; `check_balance` request, reading and rejection.
+- App `connection-form-model.test.ts` and browser `Balance` › "Check balance asks…", "…fill in its balance URL…".
+
+### 7. Wrong vs Correct
+#### Wrong
+```ts
+// JS Number() takes "0x10" and "0b11"; a filter on 1e21 compares "1e+21"
+const n = Number(value.trim());
+got = String(value);
+```
+#### Correct
+```ts
+if (!DECIMAL.test(value.trim())) return null; // what Go's ParseFloat reads
+got = plainNumber(value); // FormatFloat(n, 'f', -1, 64): shortest digits, no exponent
+```
+
+## Scenario: an account's balance asked with its own token (endpoint-balance ticket 06, magpie `provider/balance.go` `keyQueryOf` / `keyNotToken` / `balanceAuthorization`, `sub2api_usage.go`)
+
+### 1. Scope / Trigger
+- A new secret beside the key (stored, masked on the wire, revealed on demand), a new RPC, new optional fields on save, check, endpoint, failure and reading.
+
+### 2. Signatures
+- Protocol: `ApiEndpointBalanceSettingsSchema` gains `userId?`; `ApiEndpoint.balanceTokenMask?`; `ApiEndpointSaveRequest.balanceToken?` and `ApiEndpointCheckBalanceRequest.balanceToken?`; failure `useUrl?`; hints `token_on_key_url`, `new_api_user_missing`; reading `windows?: ApiEndpointBalanceWindow[]` (`{ id, label, usedPct?, remainingPct?, resetsAt?, used?, limit?, unit? }` — `ProviderUsageWindowSchema`'s names written out again, because `messages.ts` imports `rpc-schemas.ts` and deriving would make a cycle).
+- `provider.api_endpoint.reveal_secret.request { endpointId, secret }` → `.response { requestId, value: string | null, error }` (`daemon.manage`). `secret` is a wire string; the session checks it against `API_ENDPOINT_SECRETS` (`["balance_token"]`, ticket 10's AK/SK join it) and answers `invalid_input` for any other, then calls the per-secret service method (`revealBalanceToken`).
+- Store: `keys.json` `{ keys, balanceTokens? }`; `getBalanceToken(id)`, `setBalanceToken(id, token | null)`, `removeSecrets(id)` on delete (`removeApiKey` stays key-only: import replacing a keyless endpoint keeps the token).
+- Shared paths: `protocol/api-endpoint/balance-settings.ts` `NEW_API_BALANCE_QUERIES`, `SUB2API_BALANCE_QUERIES` (`{ account, key }`) and `balanceUrlPath(url)`; the daemon's `TOKEN_QUERIES`, the editor's `balanceFixOf` and `defaultBalanceField` all read them.
+
+### 3. Contracts
+- `balanceToken` on save: non-empty (trimmed) replaces, `""` clears, omitted keeps; a copy without it takes the source's. On check: omitted uses the saved one of `endpointId`, `""` means none. The editor sends a duplicate's `endpointId` on check even with a typed key, so the source's token is used.
+- Token as `Authorization` (whole header): contains a space → as is; `eyJ…` with three dot parts → `Bearer <token>`; else bare. A token equal to the key (optionally `Bearer `-prefixed) counts as no token.
+- With a Balance URL: the endpoint's headers go along, then `Authorization` is the token. AiHubMix with a token and no Balance URL: `aihubmix_account` (`https://aihubmix.com/api/user/self`), only `Authorization`, `Accept`, UA; `data.quota / 500000`.
+- `balance.userId` → `New-Api-User` on Balance URL requests only, replacing any case variant from the endpoint's headers. Never on chat requests (it is not a header).
+- Token + path `/api/usage/token` or `/v1/usage` → `failed wrong_url`, `hint: token_on_key_url`, `useUrl` = same origin + the account query, nothing sent.
+- Account query without a token and without an own `Authorization`/`Cookie` header → asks `origin + prefix + key query` (query string and hash dropped); a field equal to the account default becomes empty so the key query's default applies.
+- `/v1/usage` (after that rewrite) also reads `rate_limits` → windows `5h`, `1d`, `7d` in that order, `limit > 0` only, `usedPct` clamped 0–100, `resetsAt` ISO or null, `unit: "USD"`. No `remaining` and no field of the user's → one item = `max(0, min(limit − used))` USD.
+- `success:false` whose message mentions `new-api-user` (any case) → `hint: new_api_user_missing` on the `token_rejected` failure.
+- The token joins the redaction secrets; no log line, list, read or check reply carries it.
+
+### 4. Validation & Error Matrix
+- `reveal_secret` unknown `secret` → `invalid_input`; unknown endpoint → `not_found`.
+- AiHubMix account reply `success` not true and no message → `token_rejected` "AiHubMix didn't take the access token".
+
+### 5. Good/Base/Bad Cases
+- Good: `/api/user/self` + token `abc` + userId `42` → `Authorization: abc`, `New-Api-User: 42`, `$5.00`.
+- Base: `/api/user/self` with no token → asks `/api/usage/token` with `Bearer <key>`.
+- Bad: token + `/v1/usage` → no request, `useUrl: <origin>/api/v1/user/profile`.
+
+### 6. Tests Required
+- `daemon-e2e/api-endpoint-balance.e2e.test.ts` (account-token tests and the AiHubMix one in "other known vendors"): header forms, header vs user ID, no user ID on test_connection's chat request, hint, both key queries refused, key-query fallback, own Authorization kept, key-as-token, sub2api windows with and without `remaining`, mask/reveal/no token in list, read, check, log (logger at `trace`) and `endpoints.json`, save keep/clear/copy, check typed/cleared/saved, token change drops the last reading and `balance-readings.json` has no token.
+- Protocol: token on save/check, mask and userId on endpoint, `reveal_secret`, reading with windows and `useUrl`, older reading.
+- App `connection-form-model.test.ts` "the account's balance token and user ID"; browser `Balance` › "a token beside the key's own query…", "sub2api's key query shows…".
+
+### 7. Wrong vs Correct
+#### Wrong
+```ts
+// the user's Authorization header wins over the token, and the token goes as Bearer always
+headers = withUserHeaders({ authorization: `Bearer ${token}`, ...base }, extras);
+```
+#### Correct
+```ts
+headers = withoutHeader(withUserHeaders(base, extras), "authorization");
+headers.authorization = balanceAuthorization(source.token);
+```
+
+## Scenario: Detect URL — a user-pressed guess at the balance URL (endpoint-balance ticket 07; magpie has no counterpart)
+
+### 1. Scope / Trigger
+- New RPC carrying the form's unsaved key and addresses to an address the user never typed; the only balance request that guesses, so when it may be sent is part of the contract.
+
+### 2. Signatures
+- `provider.api_endpoint.detect_balance_url.request { endpointId?, apiKey?, baseUrls?, templateId?, ...ApiEndpointRequestExtras }` → `.response { requestId, detected: { url, field } | null, attempts: { url, reading: ApiEndpointBalanceReading }[], error }` (`daemon.manage`, cancellable through `cancel`, gated by `apiEndpointBalance`).
+- Server `balance.ts` `balanceSiteOf(baseUrls) → string | null`; service `detectBalanceUrl(ApiEndpointBalanceFormInput, signal)`. `ApiEndpointBalanceFormInput` is the form values shared with `checkBalance` (`formBalanceValues` resolves key, addresses and extras for both; session `balanceFormOf` copies them off either request).
+- App: `ConnectionFormDeps.detectBalanceUrl`, state `balanceDetect: idle | detecting | found { url, reading } | missed { attempts } | failed { message }`, `canDetectBalanceUrl`.
+
+### 3. Contracts
+- Site = origin of the first http(s) base URL in the order Chat, Anthropic, Responses (magpie editor's `origin(draft.chat || draft.anthropic || draft.responses)`); path prefixes are dropped (see the task's `research/decisions.md`).
+- Tries `NEW_API_BALANCE_QUERIES.key` then `SUB2API_BALANCE_QUERIES.key` on the site, each through `readEndpointBalance` with `balance: { url }`, `balanceToken: null`, a fresh `BALANCE_READ_TIMEOUT_MS`; stops at the first `status: "ok"`. `detected.field` is `defaultBalanceField(url)`.
+- `attempts` lists every try in order (the last is the hit). Nothing touches `keptBalances` or `LastBalanceReadings`; the daemon never calls it from list, read_balance or startup.
+- App on `found`: URL filled (generation bumped), method `GET`, field through `fieldAfterUsing`. `missed` / `failed` stay until pressed again or the dialog closes; closing aborts the request.
+
+### 4. Validation & Error Matrix
+- No key (typed or saved) → `error.code: "invalid_input"`, `attempts: []`, nothing sent.
+- No http(s) base URL → `invalid_input`, nothing sent.
+- Unknown `endpointId` → `not_found`; aborted → `cancelled` (app maps to `idle`).
+- Each failed try keeps its own `reading.failure` (404 → `wrong_url`, 401 → `token_rejected`, key masked).
+
+### 5. Good/Base/Bad Cases
+- Good: new-api site answers `/api/usage/token` → one attempt, `detected.field: "$data.total_available / 500000"`.
+- Base: `/api/usage/token` 404, `/v1/usage` `{ remaining: 3.5 }` → two attempts, `detected.url` ends `/v1/usage`.
+- Bad: wrong key → `detected: null`, two `token_rejected` attempts.
+
+### 6. Tests Required
+- `daemon-e2e/api-endpoint-balance.e2e.test.ts` › "detecting the balance address…": new-api first try (headers, UA, nothing saved), sub2api second, neither with masked key, edited endpoint uses the saved key and never the token, no key / no site refused, never sent on list / read / restart.
+- Protocol `messages.api-endpoint.test.ts`: request, found, rejection.
+- App `connection-form-model.test.ts` › "detecting the balance address"; browser `Balance` › "Detect URL fills in…".
+
+### 7. Wrong vs Correct
+#### Wrong
+```ts
+// 填了令牌就用令牌试：两个 key 级地址只认 key，令牌在这里一定被拒（工单 06 的 token_on_key_url）
+readEndpointBalance({ ..., balanceToken: this.store.getBalanceToken(id) });
+```
+#### Correct
+```ts
+readEndpointBalance({ endpoint: { id, baseUrls, balance: { url } }, apiKey, balanceToken: null, ... });
+```
+
+## Scenario: a plan key's windows and their pace (endpoint-balance ticket 08, magpie `provider/planquota.go`, `window_pace.go`, `window_holds.go` `Bounds`)
+
+### 1. Scope / Trigger
+- New outbound requests (vendor plan queries) merged into the existing balance reading, new optional window fields on the wire, and a pace the daemon owns.
+
+### 2. Signatures
+- Server `balance-plan.ts`: `PLAN_VENDOR_URLS` (spread into `BALANCE_VENDOR_URLS`, so the test daemon's dead-port default and `balanceUrls` injection cover them; Kimi Code's entries are the site, the path comes from the endpoint), `planSourceOf({ baseUrls, vendorUrls }) → PlanSource | null`, `planRequestHeaders`, `shownWindows`, `withPace({ window, span, now })`, `withPaceAt({ reading, now })`, `zhipuKeyRefusal(body)`.
+- Server `window-pace.ts`: `windowStart({ resetsAt, span }) → ms | null` (span is ms or `"month"`), `paceBetween({ usedPct, start, end, now }) → number | null`, `windowPace`.
+- `ReadBalanceInput.withPlan?: boolean` (only `readBalances` sets it; Check balance and Detect URL never read plans), `hasLastReading?: boolean`; `LastBalanceReadings.has(settings, endpointId)`.
+
+### 3. Contracts
+- Window (`ApiEndpointBalanceWindowSchema`, all optional): `startsAt` (reset minus span; a month's on the same day a month before, Go `AddDate`), `pacePct` (used% − elapsed share; positive runs out before reset), `aside: true` (GLM `TIME_LIMIT` "MCP · Month", MiniMax non-`general` buckets). `id` convention: `Nmin` / `Nh` / `Nd` / `month` / `allowance` / `mcp_month`, a bucket as `video:24h`, a repeat as `#2`; the app translates by id and falls back to `label`.
+- `readBalances` returns every reading through `withPaceAt(now)`, so kept (1-minute or switch-off) and last readings show today's pace, none once `now >= resetsAt`.
+- Plan requests: `authorization` (`Bearer` except GLM's bare key), `accept: application/json`, `accept-language: en-US,en`, `user-agent: Osuna/<version>`; never the endpoint's headers. OpenCode Go adds a fresh `x-opencode-session` = `x-opencode-session-id` (`ses_` + 12 hex + 14 base62).
+- Merge: balance and plan run together; both ok → balance items + `[...balance.windows, ...plan.windows]`; only one ok → that one; neither → the plan's failure. A plan with no windows contributes nothing.
+- `PlanSource.sure` (GLM on `/api/coding/`, Kimi Code, OpenCode Go): failures show. Not sure (MiniMax, GLM elsewhere): a failure shows nothing, except a temporary one when `hasLastReading` (then `standIn` gives the last reading).
+- `LastBalanceReadings.keep` stores `ok` readings with items **or** windows.
+
+### 4. Validation & Error Matrix
+- GLM 401, or any status with `{ success: false, code: 1000–1005 }` → `token_rejected`, `hint: "glm_key_refused"`, `seeAt` = bigmodel / z.ai keys page, detail = vendor's words.
+- OpenCode Go 403 → `token_rejected` + `opencode_go_no_subscription`; 401 → `opencode_key_refused`.
+- Other ≥300 → `failureOfStatus`; non-JSON → `wrong_url`; reader `no_value` (GLM `success:false`, MiniMax `base_resp` code ≠ 0, no windows in Kimi/OpenCode) → `no_value` with detail.
+
+### 5. Good/Base/Bad Cases
+- Good: GLM coding key → 5h, 7d, MCP month aside, `items: []`, each with `startsAt` and `pacePct`.
+- Base: OpenCode Go weekly at 0% → `resetsAt: null`, no `startsAt`/`pacePct`.
+- Bad: pay-as-you-go MiniMax key → `unsupported`, not a failure card.
+
+### 6. Tests Required
+- `window-pace.test.ts`: +10 at half time, negative, month start, >100 clamp, null cases.
+- `daemon-e2e/api-endpoint-balance.e2e.test.ts` › "API endpoint plan windows": each vendor's URL, headers and windows; GLM refusals; non-sure GLM / MiniMax unsupported; OpenCode Go both paths with session headers, 401/403; last reading keeps windows; pace recomputed an hour later and gone after reset; MiniMax busy before first read unsupported, after it stale; Check balance asks no plan.
+- App `balance-windows.test.ts` (`tightestWindow`, `paceOf`), `balance-copy.test.ts` (ids → English and zh labels); browser `Balance` › GLM windows + used/remaining toggle + row, GLM refusal.
+
+### 7. Wrong vs Correct
+#### Wrong
+```ts
+// 上次读数带着读取那一刻的配速：几小时后、甚至窗口重置后还写「配速 −48%」
+return this.lastBalances.standIn(settings, fresh);
+```
+#### Correct
+```ts
+const readings = await Promise.all(/* … */);
+return readings.map((reading) => withPaceAt({ reading, now: this.now().getTime() }));
+```
+
+## Scenario: Command Code, Ollama Cloud and a GLM team's plan windows (endpoint-balance ticket 09, magpie `commandcode_plan.go`, `ollama_usage.go`, `planquota.go` `planKeyWindows` / `zhipuKeyTeamWindows`, `zcode_team.go` `zhipuResets`)
+
+### 1. Scope / Trigger
+- Two more plan sources on the same balance reading, a second request for Command Code's plan id, GLM team requests driven by two new optional balance settings, and new optional reading fields (`team`, `resets`).
+
+### 2. Signatures
+- `PLAN_VENDOR_URLS` gains `glm_cn_biz` (`https://bigmodel.cn/api/monitor/usage/quota/limit`), `commandcode`, `ollama` (moved here from the balance table; the balance reads them through the spread) and `commandcode_subscriptions`. The browser harness `e2e/support/daemon-upgrade-seal.mjs` seals `https://bigmodel.cn/` too.
+- `PlanSource.team: { urls: string[]; language: "zh" | "en" } | null` — BigModel `[glm_cn, glm_cn_biz]` + `zh`, Z.ai `[glm_z]` + `en`.
+- `balance-plan.ts`: `commandCodePlanIdOf(body)`, `commandCodeCreditsWindow({ body, planId })`, `commandCodeSubscriptionPlanId(body) → string | null` ("" = no plan), `zhipuTeamHeaders`, `zhipuTeamQuotaUrl(q) = q + "?type=2"`, `zhipuTeamResetsUrl(q)` (`…/api/biz/customer-package-reset/list?targetType=TEAM` on the same site), `readZhipuResets(body)`.
+- `ReadBalanceInput.commandCodePlans?: Map<string, { planId, at }>` — one per service, keyed by subscriptions URL + key.
+
+### 3. Contracts
+- Settings: `ApiEndpointBalanceSettings.teamOrgId?`, `teamProjectId?`; stored in `balance` trimmed, each only when non-empty, and `balance.url` is now optional on disk — `balance` exists when there is a URL or a team ID. They are in the last-reading fingerprint (via `balance`).
+- Reading: `team?: true`, `resets?: { count, until: string | null, byWindow?, fiveHour?, weekly?, each?: [{ until: string | null, window? }] }`, sorted soonest first, never-expiring last; kept by `LastBalanceReadings` and carried through the balance/plan merge.
+- Window ids added: `session` (Ollama legacy, no span), `credits` (Command Code month's credits, `unit: "USD"`, `used`/`limit`, no reset → no pace).
+- Command Code: windows only from `windowLimits` with `cap > 0`; none → no plan. Credits window when the plan id is known (reply's `planId`, else subscriptions, cached 10 min; a failed ask reuses the last id) and some credit number is given: pool = max(plan monthly, monthlyCredits) + purchased + free.
+- Ollama: allowance window `month` when the period is 27–32 days, else `allowance`, span = until − from; every Ollama window `aside` when purchased credits > 0.
+- GLM team: asked only when both IDs are set, the own read has no windows or failed for a reason other than `glm_key_refused`; first site whose `?type=2` reply has windows wins; resets asked at that site, failure → no `resets`. Headers: bare key, `accept`, `accept-language`, `user-agent`, `bigmodel-organization`, `bigmodel-project`, `set-language`.
+
+### 4. Validation & Error Matrix
+- One team ID only → daemon stores it but asks no team; the edit dialog (Zhipu address only) shows `teamBothNeeded`, marks the empty box `invalid` and disables Save (magpie's editor check).
+- Team quota ≥300 / non-JSON / no windows → next site, then the personal result stands.
+- Resets reply: non-2xx, `code` not in `"" | 0 | 200`, or zero available → no `resets`.
+
+### 5. Good/Base/Bad Cases
+- Good: GLM key, empty personal limits, both IDs → `team: true`, team 5h/7d, `resets.byWindow` counts.
+- Base: open.bigmodel.cn answers no team windows → bigmodel.cn asked; resets 404 there → windows without `resets`.
+- Bad: refused GLM key → only the personal request; no team request.
+
+### 6. Tests Required
+- `daemon-e2e/api-endpoint-balance.e2e.test.ts` › "API endpoint plan windows": team IDs kept / cleared; team windows + resets + headers + last reading on disk; bigmodel.cn fallback and Z.ai `en`; half IDs or refused key ask no team; own plan asks no team; Command Code windows + credits, subscription cached 10 min, pay-as-you-go; Ollama month aside and legacy session/weekly.
+- App: `internal/balance-settings-form.test.ts` (`balanceSettingsOf` with team IDs, `hasLoneTeamId`, `isZhipuAddress`), `balance-copy.test.ts` (`session`, `credits`, `resetsLine` en/zh); browser `Balance` › "a GLM team's IDs are asked for at Zhipu's address only…".
+
+### 7. Wrong vs Correct
+#### Wrong
+```ts
+// 余额与套餐都读到时只拼窗口：团队标记和重置次数丢了
+return { ...balance, windows: [...(balance.windows ?? []), ...(planned.windows ?? [])] };
+```
+#### Correct
+```ts
+return {
+  ...balance,
+  windows: [...(balance.windows ?? []), ...(planned.windows ?? [])],
+  ...(planned.team ? { team: true } : {}),
+  ...(planned.resets === undefined ? {} : { resets: planned.resets }),
+};
+```
+
+## Scenario: Plan windows read with a cloud access key (Volcengine Ark, Tencent Token Plan Enterprise)
+
+### 1. Scope / Trigger
+- Trigger: new secrets in `keys.json`, new save/endpoint/reveal fields, a new reading status, and signed requests to two vendors' open platforms (api-endpoint balance ticket 10, after magpie `volcengine_usage.go`, `tencent_usage.go`, `access_key_card.go`).
+
+### 2. Signatures
+- Protocol `balance-settings.ts`: `accessKeyVendorOf(addresses) → "volcengine" | "tencent" | null` (any `ark.*.volces.com` host; `tokenhub(-intl).tencentmaas.com` under `/plan/`), `TENCENT_TOKEN_PLAN_REGIONS` (host → `ap-guangzhou` / `ap-singapore`). The app and daemon both use it.
+- Server `balance-access-key.ts` (pure): `volcSign`, `tc3Sign`, `accessKeyPlanOf(baseUrls) → { vendor: "volcengine", action: "GetCodingPlanUsage" | "GetAFPUsage", region } | { vendor: "tencent", region } | null` (`/api/v3` pay-as-you-go → null), `volcRequest`, `tencentRequest`, `openApiErrorOf`, `readVolcPlan → { windows, tier }`, `readTencentPlanList`, `withTencentDetail`, `tencentPlanWindow`, `tencentStopped`, `tencentTeamOf`.
+- `PLAN_VENDOR_URLS.volcengine_open` (`https://open.volcengineapi.com/`), `.tencent_open` (`https://tokenhub.tencentcloudapi.com/`); tests inject both; the browser seal covers both origins. Signing uses the host actually sent to (`new URL(openUrl).host`), so a local fake verifies the real signature.
+- Store: `keys.json` `accessKeys?: { [endpointId]: { id?, secret? } }`; `getAccessKey(id) → { id: string | null, secret: string | null }`, `setAccessKey(id, { id, secret })` (both null drops the entry); `removeSecrets` drops it too.
+- Service: `revealSecret(endpointId, secret: ApiEndpointSecret)` replaces `revealBalanceToken`; `ReadBalanceInput.accessKey?`; `BalanceSettings.accessKey` (in the last-reading fingerprint only when set).
+
+### 3. Contracts
+- Save: `accessKeyId?`, `secretAccessKey?` — each non-empty (trimmed) replaces, `""` clears, omitted keeps; both omitted on a copy takes the source's pair.
+- Endpoint: `accessKeyIdMask?`, `secretAccessKeyMask?` (`maskApiKey`). Reveal: `secret` `access_key_id` / `secret_access_key`.
+- Reading: status `needs_access_key` (either half missing; nothing sent; `readAt` and `failure` null); hint `access_key_refused`; optional `planTier` (Agent Plan `Tier`), `stoppedPlans: [{ team: string | null, status, reason: string | null }]` (Tencent `Status` ≠ `enable`; `NORMAL`/`none` reasons → null; `team` only with several plans), `unreadTeams: string[]` (several plans, some with no quota). All carried through the merge and kept by `LastBalanceReadings`.
+- Requests: Volcengine `POST <open>/?Action=…&Version=2024-01-01`, body `{}`, headers `content-type`, `x-date`, `x-content-sha256`, `authorization`, `accept`, `user-agent`. Tencent `POST <open>/` with `x-tc-action`, `x-tc-version: 2026-03-22`, `x-tc-region`, `x-tc-timestamp`, TC3 `authorization`, `user-agent` (no `Accept`, as magpie); `DescribeTokenPlanList {"Offset":0,"Limit":100}` then `DescribeTokenPlan {"TeamId"}` per team. Never the plan key or endpoint headers.
+- Windows: `5h`, `7d`, `month` (30-day span for pace); Tencent `month` with `used`/`limit`, `unit` `credits` or `tokens`, span = cycle end − start; several teams → id `<team>:month`, label `<team> · Month`.
+
+### 4. Validation & Error Matrix
+- Error code about the key (Volc: accesskey/signature/accessdenied/unauthorized/forbidden/credential/authfailure; Tencent: `AuthFailure*`/unauthorized) or HTTP 401/403 → `token_rejected` + `access_key_refused`, detail `Code Message` masked.
+- Code containing limitexceeded/internalerror/unavailable/timeout → `temporary` (last reading stands in). Other code → by HTTP status, `no_value` on 200.
+- Non-JSON 2xx → `wrong_url`; network → `temporary`.
+- No windows → `no_value` with magpie's sentence; Tencent no team plans → `no_value` naming the region.
+- Edit dialog: the two fields only when `accessKeyVendorOf` matches; an ID without a Secret shows `accessKeySecretNeeded` and disables Save (a Secret alone is allowed, as magpie).
+
+### 5. Good/Base/Bad Cases
+- Good: Ark Coding Plan with both keys → three windows, signature verified by the fake.
+- Base: Tencent with three teams, one stopped, one without quota → two windows, `stoppedPlans`, `unreadTeams`.
+- Bad: Ark endpoint with only an ID saved → `needs_access_key`, no request.
+
+### 6. Tests Required
+- `balance-access-key.test.ts`: SDK vectors for `volcSign` (from magpie `TestVolcSignMatchesSDK`; Volcengine's docs give no worked example), Tencent doc vector for `tc3Sign`, plan-of, readers, `tencentStopped`.
+- `daemon-e2e/api-endpoint-balance.e2e.test.ts` › "…read with a cloud access key": signature recomputed from the received request, URLs, bodies, `needs_access_key` without requests, refusals, temporary, masks/reveal/copy/clear, no secret in replies or logs.
+- App: `connection-form-model.test.ts` › "the cloud access key…"; browser `Balance` › Volcengine and Tencent cases.
+
+### 7. Wrong vs Correct
+#### Wrong
+```ts
+// 签名里写死真实主机：测试把地址换成本机后签名对不上
+volcSign({ ..., host: "open.volcengineapi.com" });
+```
+#### Correct
+```ts
+const open = new URL(input.openUrl);
+volcSign({ ..., host: open.host });
+```
+
+## Scenario: Codex resets on the plan usage card (endpoint-balance ticket 11, magpie `provider/codex_resets.go` `codexResets` / `codexResetCreditsWire`, `subscription_usage.go` `codexWindows`)
+
+### 1. Scope / Trigger
+- A plugin usage source's report gains a field that crosses plugin SDK → daemon registry → protocol → app, and the plugin context gains the daemon version.
+
+### 2. Signatures
+- Plugin SDK `@getpaseo/plugin/server/usage`: `UsageResets { count; until: string | null; byWindow?; fiveHour?; weekly?; each?: UsageReset[] }`, `UsageReset { until: string | null; window? }`; available `UsageReport.resets?`.
+- `PluginServerContext.appVersion: string` (`plugin-process.ts` passes the `initialize` message's `appVersion`). Name it in a plugin's own requests: `Osuna/${server.appVersion}`.
+- Codex: `fetchUsage(input, fetchApi, lookup, userAgent)`; `readResets({ count, headers, fetchApi }) → UsageResets | undefined` in `plugins/codex-usage-source/server/resets.ts`.
+
+### 3. Contracts
+- Count: `wham/usage` → `rate_limit_reset_credits.available_count` (magpie's JSON tag; the ticket's "available" is the Go field name). `<= 0` or absent → no `resets`, no second request.
+- List: `GET https://chatgpt.com/backend-api/wham/rate-limit-reset-credits`, same bearer + `ChatGPT-Account-Id` as `wham/usage`, `User-Agent` = Osuna's (the `wham/usage` request keeps upstream's browser UA; tracked in task `10-22-endpoint-requests-user-agent`), `AbortSignal.timeout(4000)`.
+- Cards: `status === "available"` and a non-empty `id`; `expires_at` counts only when RFC3339 (else never expires); soonest first, never-expiring last; `until` = first card's; `each` only when `cards.length === count`.
+- Protocol: `UsageReportSchema` available branch `resets: ApiEndpointBalanceResetsSchema.optional()` (same shape as an endpoint reading's). Old apps drop it; no capability gate for display.
+
+### 4. Validation & Error Matrix
+| List request | Result |
+| --- | --- |
+| 2xx, cards = count | `{ count, until, each }` |
+| 2xx, cards ≠ count | `{ count, until }` |
+| non-2xx, HTML / bad JSON (`SyntaxError`), wrong shape (`ZodError`), network (`TypeError`), timeout / abort (`DOMException`) | `{ count, until: null }` |
+| any other throw | rethrown → the report fails as before |
+
+### 5. Good/Base/Bad Cases
+- Good: 2 resets, list of 2 → line + expandable cards. Base: list times out → "2 resets left" alone. Bad: list of 1 for a count of 2 → that one is not shown as if it were both.
+
+### 6. Tests Required
+- `plugins/codex-usage-source/server/usage.test.ts`: count + list (order, UA, account header, a non-RFC3339 date counts as never), list failures keep the count, count mismatch drops `each`, no resets → one request, `auth.json` byte-identical.
+- `plugins/usage-sources/index.test.ts`: a report's `resets` passes the registry's `UsageReportSchema.parse`.
+- `e2e/browser/usage-modal.spec.ts` "Codex resets show on the plan usage card…": real Codex adapter through `installCodexWindowUsage(payload, resetCredits)`, modal + usage page, 1280/390 × light/dark.
+
+### 7. Wrong vs Correct
+#### Wrong
+```ts
+} catch {
+  return null; // 吞掉一切，连写错的代码也当成「清单读不到」
+}
+```
+#### Correct
+```ts
+} catch (error) {
+  if (isListFailure(error)) return null; // 超时、连不上、不是 JSON、不是清单的形状
+  throw error;
+}
+```
+
+## Scenario: Using a Codex reset from the plan usage card (endpoint-balance ticket 12, magpie `provider/codex_resets.go` `useCodexReset` / `consumeCodexReset` / `newRedeemID`)
+
+### 1. Scope / Trigger
+- First Osuna request that changes an account with a CLI's sign-in (the sign-in file itself is still only read). A new optional plugin SDK call crosses plugin process → daemon registry → protocol RPC → app.
+
+### 2. Signatures
+- Plugin SDK: `UsageSourceRegistration.consumeReset?(input): Promise<UsageResetOutcome>`, `UsageResetOutcome { code: string; windows: number }`.
+- Plugin process: request `{ type: "usage.consume_reset"; requestId; sourceId; input }`; ready metadata `usageSources[].consumesResets?: boolean` (set when the source has `consumeReset`). Runtime: `PluginRuntime.consumeUsageReset(pluginId, sourceId, input)`.
+- Registry: `UsageSourceRegistry.consumeReset(reportId): Promise<UsageResetResult>` (`{ outcome, entry }`); `PluginManager.consumeUsageReset(reportId)`.
+- RPC: `usage.reset.consume.request { requestId, reportId }` → `usage.reset.consume.response { requestId, outcome: { code, windows, message? } | null, report: UsageReportEntry | null, error: string | null }`. Permission `daemon.manage` (it changes the account). Client: `DaemonClient.consumeUsageReset(reportId)`.
+- Capability: `server_info.features.planUsageResets`, declared only when the daemon has a plugin runtime. Report entries carry `consumesResets?: true` when their source can.
+- Codex: `consumeReset(input, fetchApi, lookup, userAgent)` in `server/usage.ts`, `consumeSoonestReset({ headers, fetchApi })` in `server/resets.ts`.
+
+### 3. Contracts
+- Codex reads the list again (`readCards`, same 4 s timeout), picks the first available card (soonest, never-expiring last, stable order), then `POST …/wham/rate-limit-reset-credits/consume` with the list's headers + `Content-Type: application/json`, body `{ credit_id, redeem_request_id: randomUUID() }` — a fresh v4 per call; it is the vendor's idempotency key.
+- The registry calls the source with the login whose report the card last showed (`answeredBy`, set in `fetchWithFallback` when a login answers `available`; falls back to the first login), then deletes the account's cache **and pending** entries (a read started before the reset would otherwise answer the forced read with old windows) and returns `fetchId(id, known, true)`.
+- `message` is magpie's `ResetOutcome.Text` in English (`resetOutcomeText`); the app translates `reset` / `nothing_to_reset` / `no_credit` / `already_redeemed` / `already_used` itself and shows `message` (else `code`) for anything else.
+
+### 4. Validation & Error Matrix
+| Condition | Result |
+| --- | --- |
+| list unreadable (non-2xx, HTML, wrong shape, network, timeout) | throws "Couldn't read which reset runs out first, so none was used"; no POST |
+| list has no available card | `{ code: "no_credit", windows: 0 }`; no POST |
+| consume non-2xx | throws `Codex refused the reset (HTTP <status>)` |
+| consume 2xx without `code` | throws "Codex's answer to the reset said nothing" |
+| unknown report id / source without `consumeReset` | response `error`, `outcome: null`, `report: null` |
+| failure of any kind | cache untouched |
+
+### 5. Good/Base/Bad Cases
+- Good: 2 windows used, confirm → `reset`/2, card re-read shows 0% and one reset fewer. Base: no window used → `nothing_to_reset`, reset kept. Bad: list times out → nothing spent, the error stays in the confirmation sheet.
+
+### 6. Tests Required
+- `plugins/codex-usage-source/server/usage.test.ts`: picks the soonest, UUID v4 that differs per call, UA/account/Content-Type headers, four outcome codes passed through, none left → no POST, unreadable list → no POST, 403 / empty answer throw, `auth.json` byte-identical.
+- `usage-sources/index.test.ts`: uses the answering login, re-reads past the cache, words per code (unknown passed through), sources without it refuse and don't set `consumesResets`, a failure leaves the cache.
+- `session/usage/usage-session.test.ts`: success and error payloads.
+- `e2e/browser/usage-modal.spec.ts` "using a reset asks first…": a fake plugin (`installResetUsage`) at 1280/390 — confirmation text, cancel sends nothing, failure in the sheet, in-progress button disabled, success line + updated card, Dismiss.
+
+### 7. Wrong vs Correct
+#### Wrong
+```ts
+// 让厂商自己挑：可能用掉更久的那张
+await fetch(`${RESETS_URL}/consume`, { method: "POST", body: "{}" });
+```
+#### Correct
+```ts
+const soonest = cards[0]; // 自己点名最早过期的那张；清单读不到就一张都不用
+body: JSON.stringify({ credit_id: soonest.id, redeem_request_id: randomUUID() }),
+```

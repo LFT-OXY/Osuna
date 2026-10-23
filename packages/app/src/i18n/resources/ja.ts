@@ -2761,6 +2761,62 @@ export const ja: TranslationResources = {
         apiKeyOptionalLabel: "API キー（任意）",
         apiKeyLocalPlaceholder: "ローカルサーバーでは任意",
         keyRejected: "上流がこのキーを拒否しました（401 / 403）",
+        balance: {
+          url: "残高照会 URL",
+          urlInfo:
+            "ベンダーがキーの残りを返すアドレス。GET、または本文なしの POST で照会します。チャットのリクエストと同じくキー（Bearer）とこのエンドポイントのヘッダーを付け、アドレスやヘッダーの {key} はキーに置き換わります。設定すると、Osuna が知っているベンダーの照会先ではなくこのアドレスに照会します。エンドポイントのページを開いている間だけ、1 分に 1 回まで照会します。",
+          field: "取得式",
+          fieldInfo:
+            "返答の中で残高がある場所。例：data.balance。+ - * / と括弧で計算できます（例：data.total / 500000）。前に「$」「¥」で記号を付け、後ろに「%」でパーセントとバーを表示します。複数は「;」で区切り、それぞれにラベルを付けられます（例：5h: a.used / a.cap %; $credits.left）。リストの各項目は a.*.used、条件に合うものは a[status=active].used と書き、sum()、max()、min()、count() に入れます。空欄なら new-api、sub2api、credit grants のアドレスはプレースホルダーの式で読みます。",
+          check: "残高を照会",
+          detect: "URL を自動識別",
+          detectFound: "{{kind}} と識別し、残高照会 URL を入力しました",
+          detectMissed:
+            "new-api と sub2api のどちらの残高照会 URL からも残高を取得できませんでした",
+          detectAttempt: "{{path}}：{{reason}}",
+          nothingToAsk: "残高照会 URL がなく、このベンダーの照会方法もわかりません",
+          token: "アカウントトークン",
+          tokenInfo:
+            "残高照会 URL がアカウント自身のトークンを求めるとき、キーの代わりに使います：new-api 中継のシステムアクセストークン、または sub2api パネルのログイントークン（JWT、Bearer として送信）。AiHubMix ではシステムアクセストークンを入れると、残高照会 URL なしでアカウント全体の残高が表示されます。このホストにだけ保存され、ほかには使いません。",
+          tokenPlaceholder: "任意 · アカウントのシステムアクセストークンまたはログイントークン",
+          tokenSavedPlaceholder: "保存済み：{{mask}}",
+          tokenRemove: "削除",
+          userId: "ユーザー ID",
+          userIdInfo:
+            "new-api 中継でのユーザー ID（サイトの個人設定に表示）。残高を照会するときだけ New-Api-User として送り、チャットのリクエストには付けません。このエンドポイントのヘッダーにある New-Api-User も使えます。両方あるときはこの欄が優先です。",
+          userIdPlaceholder: "任意 · new-api のみ",
+          teamOrgId: "チームの組織 ID",
+          teamOrgIdInfo:
+            "GLM Coding Plan チームの組織 ID（BigModel または Z.ai のコンソールに表示）。プロジェクト ID も入れると、このキーに自分のプランがないときチームのウィンドウを読みます。",
+          teamOrgIdPlaceholder: "任意 · GLM チームプランのみ",
+          teamProjectId: "チームのプロジェクト ID",
+          teamProjectIdInfo: "同じコンソールにあるチームのプロジェクト ID。両方の ID が必要です。",
+          teamProjectIdPlaceholder: "任意 · GLM チームプランのみ",
+          teamBothNeeded: "チームプラン：組織 ID とプロジェクト ID の両方を入力してください",
+          volcAccessKeyId: "AccessKey ID",
+          volcSecretAccessKey: "Secret Access Key",
+          tencentSecretId: "SecretId",
+          tencentSecretKey: "SecretKey",
+          accessKeyVendor: {
+            volcengine: "Volcengine Ark",
+            tencent: "Tencent Cloud Token Plan Enterprise",
+          },
+          accessKeyInfo:
+            "{{vendor}} はプランの使用量ウィンドウをアカウントのクラウドアクセスキー（クラウドコンソールのアクセス管理で作成）にだけ返し、プラン自身のキーでは取得できません。両方を入力すると、ベンダーのオープンプラットフォームからウィンドウを読み取ります。このホストにのみ保存され、ほかの用途には使いません。",
+          secretAccessKeyInfo:
+            "ID と対になるシークレットです。送るのはそれで作った署名だけで、シークレット自体は送りません。",
+          accessKeySecretNeeded: "{{secret}} も入力してください",
+          accessKeyRemove: "削除",
+          fixNewApiKeyQuery:
+            "…/api/usage/token が受け付けるのは API キーで、このトークンではありません。アカウントの残高は、new-api なら /api/user/self、sub2api なら /api/v1/user/profile です。",
+          fixSub2apiKeyQuery:
+            "…/v1/usage が受け付けるのは API キーで、このトークンではありません。アカウントの残高は、sub2api パネルなら /api/v1/user/profile です。",
+          fixNoUrl:
+            "トークンには残高照会 URL が必要です：new-api 中継は /api/user/self、sub2api パネルは /api/v1/user/profile です。",
+          fixUserId:
+            "new-api 中継ではユーザー ID も必要です（サイトの個人設定に表示）：下の「ユーザー ID」に入力してください。",
+          useUrl: "{{url}} を使う",
+        },
         extras: {
           advanced: "詳細",
           advancedShow: "詳細を表示",
@@ -2968,6 +3024,140 @@ export const ja: TranslationResources = {
           removed: "{{name}} のモデルは、すべてのエージェントの選択可能なモデルから外れます。",
           defaultChanged: "{{agent}} のデフォルトモデルは {{from}} から {{to}} に変わります。",
           confirm: "削除",
+        },
+      },
+      balance: {
+        title: "残高とプラン使用量",
+        info: "このエンドポイントのベンダーが報告するキーの残高です。表示のみで、フェイルオーバーには使われません。",
+        balance: "残高",
+        refresh: "更新",
+        loading: "残高を読み込み中…",
+        readJustNow: "たった今取得",
+        readAgo: "{{time}}に取得",
+        failedJustNow: "たった今取得に失敗",
+        failedAgo: "{{time}}に取得失敗",
+        staleTemporary: "今は取得できません · {{time}}の値",
+        staleNotAsked: "未更新 · {{time}}の値",
+        staleMomentAgo: "少し前",
+        unsupported: "このベンダーの残高の取得方法がわかりません",
+        fillUrl: "残高照会 URL を入力",
+        noKey: "このエンドポイントにはキーがないため、残高を取得できません",
+        rowUnavailable: "残高を取得できません",
+        rowNeedsAccessKey: "AccessKey が必要",
+        needsAccessKeyVolcengine:
+          "Volcengine Ark はこのプランのウィンドウをアカウントの AccessKey ID と Secret Access Key にだけ返します。このエンドポイントの設定の「詳細」で入力してください。",
+        needsAccessKeyTencent:
+          "Tencent Cloud は Token Plan Enterprise の使用量をアカウントの SecretId と SecretKey にだけ返します。このエンドポイントの設定の「詳細」で入力してください。",
+        fillAccessKey: "AccessKey を入力",
+        planTier: "プラン：{{tier}}",
+        planStopped: "プランは停止中：{{status}}",
+        teamPlanStopped: "チーム {{team}} のプランは停止中：{{status}}",
+        unreadTeams: "使用量を読み取れなかったチーム：{{teams}}",
+        rowAmount: "残高 {{amount}}",
+        rowWindowUsed: "{{window}} {{percent}} 使用",
+        rowWindowLeft: "{{window}} 残り {{percent}}",
+        readFailed: "残高を読み込めませんでした",
+        withStatus: "{{text}}（HTTP {{status}}）",
+        failure: {
+          wrongUrl: "アドレスが違います：ベンダーが残高を返しませんでした",
+          tokenRejected: "トークンが拒否されました：ベンダーがキーを受け付けません",
+          notOffered: "このベンダーは残高の照会を提供していません",
+          noValue: "値を取得できません：応答に残高がありません",
+          temporary: "一時的に取得できません：後でもう一度お試しください",
+        },
+        noItems: "このサービスには今表示できる個別の残高がありません",
+        openConsole: "コンソールを開く ↗",
+        openConsoleLabel: "{{url}} をブラウザで開く",
+        part: {
+          granted: "付与",
+          toppedUp: "チャージ",
+        },
+        hint: {
+          accessKeyRefused:
+            "AccessKey（AK/SK）と権限を確認してください：オープンプラットフォームがアクセスキーを拒否したか、このプランの使用量を読む権限がありません。",
+          glmKeyRefused:
+            "このキーは期限切れ、削除済み、または貼り間違いです。コンソールから有効なキーをコピーし、このエンドポイントの設定に貼り付けてください。",
+          opencodeGoNoSubscription:
+            "このキーには OpenCode Go がありません。Go は購読したメンバーの、購読したワークスペースに属します。そのメンバーがそのワークスペースで作ったキーを使ってください（opencode.ai のワークスペースの API Keys）。",
+          opencodeKeyRefused: "OpenCode がこのキーを受け付けません。削除されたか、貼り間違いです。",
+          opencodeNoBalance:
+            "OpenCode は API キーに残高を教えません。Zen の従量課金クレジットは OpenCode コンソールの Overview → Credits にのみ表示されます（ワークスペースのオーナーと管理者のみ）。",
+          siliconflowRetired:
+            "SiliconFlow は残高照会 API を廃止し、代わりの API はまだありません。残高とクーポンはコンソールで確認してください（中国版サイトでは「余额充值 → 代金券」）。",
+          aihubmixNoLimit:
+            "このキーには上限がなく、AiHubMix はキー自身の残りしか教えません。アカウントの残高を見るには、このエンドポイントの設定にアカウントのアクセストークン（AiHubMix → 設定 → システムアクセストークンを生成）を入力するか、AiHubMix コンソールでキーに上限を設定してください。",
+          notAsked: "まだ読み取っていません：自動更新がオフです。「更新」を押すと読み取ります。",
+          tokenOnKeyUrl:
+            "この残高照会 URL が受け付けるのは API キーで、アカウントトークンではありません。アカウントの残高なら {{url}} に変更し、キー自身の残高ならトークンを削除してください。",
+          newApiUserMissing:
+            "中継がユーザー ID を求めています：このエンドポイントの設定で「ユーザー ID」を入力してください（サイトの個人設定に表示）。",
+        },
+        window: {
+          hoursOne: "{{count}} 時間",
+          hoursMany: "{{count}} 時間",
+          daysOne: "{{count}} 日",
+          daysMany: "{{count}} 日",
+          minutesOne: "{{count}} 分",
+          minutesMany: "{{count}} 分",
+          month: "月",
+          allowance: "プラン使用量",
+          mcpMonth: "MCP · 月",
+          session: "セッション",
+          credits: "クレジット",
+          bucket: "{{bucket}} · {{window}}",
+          bucketVideo: "動画",
+          bucketImage: "画像",
+          unitCredits: "クレジット",
+          unitTokens: "トークン",
+          unitVideos: "本の動画",
+        },
+        pace: "ペース {{pace}}",
+        asideTitle: "使い切ってもモデルは止まりません",
+        teamPlan: "チームプラン",
+        resets: {
+          left: "残り {{resets}}",
+          countOne: "リセット {{count}} 回",
+          countMany: "リセット {{count}} 回",
+          fiveHourOne: "5 時間リセット {{count}} 回",
+          fiveHourMany: "5 時間リセット {{count}} 回",
+          weeklyOne: "週リセット {{count}} 回",
+          weeklyMany: "週リセット {{count}} 回",
+          soonest: "最短の期限 {{when}}",
+          info: "リセットはベンダーのページで使います。Osuna は表示するだけです。",
+          eachExpires: "リセット {{n}}：{{when}} に期限切れ",
+          eachNever: "リセット {{n}}：期限なし",
+          eachFiveHourExpires: "5 時間リセット：{{when}} に期限切れ",
+          eachFiveHourNever: "5 時間リセット：期限なし",
+          eachWeeklyExpires: "週リセット：{{when}} に期限切れ",
+          eachWeeklyNever: "週リセット：期限なし",
+          showEach: "各リセットの期限を表示",
+          hideEach: "各リセットの期限を隠す",
+          use: {
+            action: "リセットを1回使う",
+            confirmTitle: "{{source}} のリセットを使いますか？",
+            confirmOne:
+              "{{who}} にはリセットが 1 回あります。使うと各ウィンドウがすぐに最初からになり、使っていない状態に戻ります。元に戻せません。",
+            confirmMany:
+              "{{who}} にはリセットが {{count}} 回あります。1 回使うと各ウィンドウがすぐに最初からになり、使っていない状態に戻ります。元に戻せません。",
+            confirmSoonest: "使うのは最も早く期限が切れるものです（{{when}} に期限切れ）。",
+            confirmIdle: "まだどのウィンドウも使われていないため、最初からにするものがありません。",
+            hintSoonest:
+              "最も早く期限が切れるリセット（{{when}}）を使い、長く残るものは先に使いません。このアカウントのウィンドウはすぐに最初からになり、使っていない状態に戻ります。使う前に確認します。",
+            hintNoExpiry:
+              "リセットを 1 回使います（どれも期限なし）。このアカウントのウィンドウはすぐに最初からになり、使っていない状態に戻ります。使う前に確認します。",
+            outcomeResetOne: "1 つのウィンドウが最初からになりました",
+            outcomeResetMany: "{{count}} 個のウィンドウが最初からになりました",
+            outcomeNothingToReset:
+              "使われたウィンドウがないため何もしていません。リセットは残っています",
+            outcomeNoCredit: "このアカウントにはリセットが残っていません",
+            outcomeAlreadyRedeemed: "そのリセットはすでに使われています",
+            failed: "リセットを使えませんでした：{{error}}",
+          },
+        },
+        autoRefresh: {
+          label: "残高とプラン使用量を自動更新",
+          hint: "エンドポイント一覧または各エンドポイントのページを開いている間、1 分ごとに読み取ります。オフ：これらのページを開いたとき、またはエンドポイントのページで「更新」を押したときだけ。",
+          saveFailed: "自動更新を変更できませんでした：{{message}}",
         },
       },
       models: {

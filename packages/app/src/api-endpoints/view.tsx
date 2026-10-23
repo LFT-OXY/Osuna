@@ -16,6 +16,7 @@ import { useRouter } from "expo-router";
 import type {
   ApiEndpoint,
   ApiEndpointAgentSettings,
+  ApiEndpointBalanceReading,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { ScreenTitle } from "@/components/headers/screen-title";
 import { PrimaryTextAlert } from "./primary-text-alert";
@@ -35,10 +36,13 @@ import { ApiEndpointDetailHeader } from "./detail-header";
 import { ApiEndpointsListSection, NoticeCard, type ListManagement } from "./host-list-section";
 import { endpointVendorNotices } from "./internal/vendor-status";
 import { useVendorStatus } from "./use-vendor-status";
+import { ApiEndpointBalanceAutoRefreshSection } from "./balance-auto-refresh-section";
+import { useEndpointBalances } from "./use-endpoint-balances";
+import { ApiEndpointBalanceSection } from "./balance-section";
 import { AgentApiEndpointsFrame, AgentApiEndpointsSection } from "./agent-section";
 import { selectAgentApiEndpointsView, type AgentIssueAction } from "./internal/agent-settings";
 import type { ConnectionFormSeed, ConnectionSaveResult } from "./internal/connection-form-model";
-import { findHostEndpoint } from "./internal/host-list";
+import { balanceAutoRefreshOf, findHostEndpoint } from "./internal/host-list";
 import { ApiEndpointDisabledModelsSection } from "./disabled-models-section";
 import {
   ApiEndpointNameDisplayRow,
@@ -49,6 +53,7 @@ import { ApiEndpointMappingSection } from "./mapping-section";
 import { ApiEndpointModelDefaultsSection } from "./model-defaults-section";
 import { ApiEndpointModelScopeSection } from "./model-scope-section";
 import { ApiEndpointModelSettingsSheet } from "./model-settings-sheet";
+import { accessKeyVendorOf } from "@getpaseo/protocol/api-endpoint/balance-settings";
 import { resolveModelFacts } from "@getpaseo/protocol/api-endpoint/model-settings";
 import { ApiEndpointModelsSection, type ModelTestsControl } from "./models-section";
 import { useEndpointDetail } from "./use-endpoint-detail";
@@ -309,6 +314,7 @@ function AgentApiEndpoints({
 
 // 冷却倒计时按分钟显示；列表数据没变时 React Query 不会重渲染，自己每半分钟取一次时间。
 const CLOCK_TICK_MS = 30_000;
+const NO_BALANCES: ReadonlyMap<string, ApiEndpointBalanceReading> = new Map();
 
 function useClock(): Date {
   const [now, setNow] = useState(() => new Date());
@@ -374,6 +380,10 @@ function ConnectionSheet({
     | "fetchSiteIcon"
     | "fetchModels"
     | "testConnection"
+    | "checkBalance"
+    | "detectBalanceUrl"
+    | "revealBalanceToken"
+    | "revealAccessKey"
   >;
   setSheet: Dispatch<SetStateAction<ConnectionSheetState>>;
   onSaved: (result: Extract<ConnectionSaveResult, { status: "saved" }>) => void;
@@ -383,6 +393,8 @@ function ConnectionSheet({
   // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机新建时要求 key，也读不回 key，没有模板，
   // 也不认请求头、附加请求体与 key 放哪个头。
   const hasManagement = useHostFeature(serverId, "apiEndpointManagement");
+  // COMPAT(apiEndpointBalance): added in v0.17.0, remove gate after 2027-04-22. 老主机不认 balance 与 check_balance。
+  const hasBalance = useHostFeature(serverId, "apiEndpointBalance");
   const templates = useEndpointTemplates({ serverId, enabled: hasManagement });
   const handlePick = useCallback(
     (templateId: string | null) =>
@@ -431,6 +443,7 @@ function ConnectionSheet({
       canCheckBeforeSave={hasManagement}
       followsListWhenNew={hasManagement}
       canSetRequestExtras={hasManagement}
+      canSetBalance={hasManagement && hasBalance}
       templates={templates.status === "ready" ? templates.templates : []}
       onBack={sheet.backToPicker ? handleBack : null}
       onSave={endpoints.save}
@@ -440,6 +453,10 @@ function ConnectionSheet({
       onFetchSiteIcon={endpoints.fetchSiteIcon}
       onFetchModels={endpoints.fetchModels}
       onTestConnection={endpoints.testConnection}
+      onCheckBalance={endpoints.checkBalance}
+      onDetectBalanceUrl={endpoints.detectBalanceUrl}
+      onRevealBalanceToken={endpoints.revealBalanceToken}
+      onRevealAccessKey={endpoints.revealAccessKey}
       onSaved={onSaved}
       onClose={closeForm}
     />
@@ -469,6 +486,14 @@ export function ApiEndpointsPage({ serverId }: { serverId: string }) {
   );
 }
 
+/** 开着的接口；列表还没读到时为 null。 */
+function enabledEndpointIds(state: UseHostEndpointsResult["state"]): string[] | null {
+  if (state.status !== "ready") return null;
+  return state.endpoints
+    .filter((endpoint) => endpoint.enabled !== false)
+    .map((endpoint) => endpoint.id);
+}
+
 function ApiEndpointsListPage({ serverId }: { serverId: string }) {
   const { t } = useTranslation();
   const router = useRouter();
@@ -493,12 +518,21 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
   // 这一页开着时每 5 分钟问一次厂商官方状态页；问不到只是不出提示。
   const vendorStatus = useVendorStatus({ serverId });
   const vendorNotices = useMemo(() => endpointVendorNotices(vendorStatus), [vendorStatus]);
+  // 打开这一页时读开着的接口的余额，开关开着时每分钟再读；关着的接口只在它自己的详情页读。
+  const enabledIds = useMemo(() => enabledEndpointIds(endpoints.state), [endpoints.state]);
+  const balances = useEndpointBalances({
+    serverId,
+    endpointIds: enabledIds,
+    autoRefresh: balanceAutoRefreshOf(endpoints.state),
+  });
+  const balanceReadings = balances.status === "ready" ? balances.readings : NO_BALANCES;
   // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机不发 key 打码与默认模型落在哪家。
   const management = useMemo<ListManagement | undefined>(
     () =>
       hasManagement
         ? {
             vendorNotices,
+            balances: balanceReadings,
             providerLabel: (provider) => resolveProviderLabel(provider, providerEntries),
             onOpenProvider: (provider) =>
               router.push(buildProviderSettingsRoute(serverId, provider)),
@@ -507,7 +541,7 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
             onImport: () => setImportOpen({ offered: null }),
           }
         : undefined,
-    [hasManagement, providerEntries, router, serverId, t, vendorNotices],
+    [hasManagement, providerEntries, router, serverId, t, vendorNotices, balanceReadings],
   );
 
   // 主机声明了 apiEndpointManagement 时「+」先出模板列表，否则直接打开「自定义」表单。
@@ -588,6 +622,13 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
           allEndpoints={endpoints.state.endpoints}
           disabledModels={endpoints.state.disabledModels}
           testID="api-endpoints-endpoint-names"
+        />
+      ) : null}
+      {/* 主机没声明 apiEndpointBalance 时余额为 off，也就没有自动刷新开关。 */}
+      {balances.status !== "off" && endpoints.state.status === "ready" ? (
+        <ApiEndpointBalanceAutoRefreshSection
+          value={endpoints.state.balanceAutoRefresh}
+          onSave={endpoints.setBalanceAutoRefresh}
         />
       ) : null}
       <ConnectionSheet
@@ -690,6 +731,24 @@ function ApiEndpointDetailContent({
       setSheet({ kind: "form", seed: duplicateSeed(endpoint, t), backToPicker: false });
     }
   }, [endpoint, t]);
+  // 余额分区的「填写余额查询地址」：打开编辑窗口，定位到「高级」里的余额栏。
+  const handleFillBalanceUrl = useCallback(() => {
+    if (!endpoint) return;
+    setSheet({
+      kind: "form",
+      seed: { mode: "edit", endpoint, focus: "balance" },
+      backToPicker: false,
+    });
+  }, [endpoint]);
+  // 余额分区的「填写 AccessKey」：打开编辑窗口，定位到「高级」里的 AccessKey 两栏。
+  const handleFillAccessKey = useCallback(() => {
+    if (!endpoint) return;
+    setSheet({
+      kind: "form",
+      seed: { mode: "edit", endpoint, focus: "access_key" },
+      backToPicker: false,
+    });
+  }, [endpoint]);
   // 「再加一家」：用这家的模板开新表单；模板清单里没有它（「自定义」加的、主机已不认识的模板）就没有这一项。
   const templateId = endpoint?.templateId ?? null;
   const hasKnownTemplate =
@@ -735,6 +794,8 @@ function ApiEndpointDetailContent({
         onEdit={handleEdit}
         onDuplicate={canDuplicate ? handleDuplicate : null}
         onAddAnother={hasKnownTemplate ? handleAddAnother : null}
+        onFillBalanceUrl={canDuplicate ? handleFillBalanceUrl : null}
+        onFillAccessKey={canDuplicate ? handleFillAccessKey : null}
       />
       <ConnectionSheet
         serverId={serverId}
@@ -757,6 +818,8 @@ function ApiEndpointDetailSections({
   onEdit,
   onDuplicate,
   onAddAnother,
+  onFillBalanceUrl,
+  onFillAccessKey,
 }: {
   serverId: string;
   endpoint: ApiEndpoint;
@@ -768,6 +831,9 @@ function ApiEndpointDetailSections({
   onDuplicate: (() => void) | null;
   // 从主机认得的模板加的才有「再加一家」。
   onAddAnother: (() => void) | null;
+  // 编辑窗口有「高级」时才有（主机声明了 apiEndpointManagement）；余额分区本身只在声明了 apiEndpointBalance 时出现。
+  onFillBalanceUrl: (() => void) | null;
+  onFillAccessKey: (() => void) | null;
 }) {
   const { t } = useTranslation();
   const now = useClock();
@@ -782,6 +848,13 @@ function ApiEndpointDetailSections({
     hasManagement,
   });
   const { entries: providerEntries } = useProvidersSnapshot(serverId);
+  // 打开详情页时读这家的余额（关着的接口也读），开关开着时每分钟再读。
+  const balanceIds = useMemo(() => [endpoint.id], [endpoint.id]);
+  const balances = useEndpointBalances({
+    serverId,
+    endpointIds: balanceIds,
+    autoRefresh: balanceAutoRefreshOf(hostEndpoints.state),
+  });
   // 「接口名显示方式」的预览：这家第一个模型在选单里叫什么（magpie 的 Agents’ lists show）。
   const hostState = hostEndpoints.state;
   const nameDisplayRow = useMemo(() => {
@@ -892,6 +965,19 @@ function ApiEndpointDetailSections({
         testResults={detail.testResults}
         onEdit={onEdit}
       />
+      {balances.status === "off" ? null : (
+        <ApiEndpointBalanceSection
+          endpointId={endpoint.id}
+          hasApiKey={endpoint.hasApiKey}
+          balances={balances}
+          now={now}
+          onFillBalanceUrl={onFillBalanceUrl}
+          accessKeyVendor={accessKeyVendorOf(
+            (endpoint.baseUrls ?? [{ url: endpoint.baseUrl }]).map((entry) => entry.url),
+          )}
+          onFillAccessKey={onFillAccessKey}
+        />
+      )}
       {hasCliWiring && canSearchWeb ? (
         <ApiEndpointWebSearchSection
           value={detail.searchesWeb}

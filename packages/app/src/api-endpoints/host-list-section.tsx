@@ -14,7 +14,10 @@ import {
   Plus,
   ShieldAlert,
 } from "lucide-react-native";
-import type { ApiEndpoint } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type {
+  ApiEndpoint,
+  ApiEndpointBalanceReading,
+} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { isNative } from "@/constants/platform";
@@ -31,7 +34,9 @@ import { Shortcut } from "@/components/ui/shortcut";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Switch } from "@/components/ui/switch";
 import { Text as UiText } from "@/components/ui/text";
+import { useAppSettings } from "@/hooks/use-settings";
 import type { ProviderStatusDisplay } from "@/provider-detail/status";
+import { formatPct } from "@/usage/format";
 import { ProviderStatusLine } from "@/screens/settings/provider-status-line";
 import { settingsStyles } from "@/styles/settings";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
@@ -47,7 +52,9 @@ import {
   type EndpointRowStatus,
   type HostEndpointsLoadState,
 } from "./internal/host-list";
+import { windowLabel } from "./balance-copy";
 import { EndpointIcon } from "./endpoint-icon";
+import { tightestWindow } from "./internal/balance-windows";
 import { SortableEndpointRows } from "./sortable-endpoint-rows";
 import type { VendorNotice } from "./internal/vendor-status";
 import { VendorNoticeLine } from "./vendor-notice";
@@ -94,6 +101,8 @@ export interface ListManagement {
   onDuplicate: (endpoint: ApiEndpoint) => void;
   // 接口对上的厂商的官方状态页提示；没有提示的接口不在里面。
   vendorNotices: ReadonlyMap<string, VendorNotice>;
+  // 各接口的余额读数；主机没声明 apiEndpointBalance、还没读到或认不出查法的接口不在里面。
+  balances: ReadonlyMap<string, ApiEndpointBalanceReading>;
   // 「导入」：打开从别的软件导入的窗口。
   onImport: () => void;
 }
@@ -841,6 +850,15 @@ function EndpointFacts({
       node: <DefaultModelOf providers={providers} management={management} />,
     });
   }
+  const balance = management.balances.get(endpoint.id);
+  // 读到了却没有单独余额、也没有窗口的（如 Ollama Cloud 没买过 credits）行上不出这一段。
+  const hasNothingToShow =
+    balance?.status === "ok" &&
+    balance.items.length === 0 &&
+    tightestWindow(balance.windows ?? []) === null;
+  if (balance && balance.status !== "unsupported" && !hasNothingToShow) {
+    facts.push({ key: "balance", node: <BalanceFact reading={balance} /> });
+  }
   return (
     <View style={styles.facts} testID="api-endpoint-row-facts">
       {/* 每条连同它前面的 · 是一块，换行时整块挪到下一行，行尾不挂分隔点。 */}
@@ -851,6 +869,54 @@ function EndpointFacts({
         </View>
       ))}
     </View>
+  );
+}
+
+/**
+ * 行上的一小段余额：有套餐窗口时写剩得最少的那个（同时有余额也是它，最紧的限制先看到），否则写金额；
+ * 查不到只写「余额查不到」，原因留给详情页。
+ */
+function BalanceFact({ reading }: { reading: ApiEndpointBalanceReading }) {
+  const { t } = useTranslation();
+  const { settings } = useAppSettings();
+  const tightest = reading.status === "ok" ? tightestWindow(reading.windows ?? []) : null;
+  if (tightest !== null) {
+    const displayAs = settings.usage.displayAs;
+    const usedPct = tightest.usedPct ?? 0;
+    const shownPct = displayAs === "remaining" ? 100 - usedPct : usedPct;
+    return (
+      <Text style={styles.fact} numberOfLines={1} testID="api-endpoint-row-balance">
+        {t(
+          displayAs === "remaining"
+            ? "settings.apiEndpoints.balance.rowWindowLeft"
+            : "settings.apiEndpoints.balance.rowWindowUsed",
+          {
+            window: windowLabel({ t, window: tightest }),
+            percent: formatPct(shownPct),
+          },
+        )}
+      </Text>
+    );
+  }
+  const first = reading.status === "ok" ? reading.items[0] : undefined;
+  if (reading.status === "needs_access_key") {
+    return (
+      <Text style={[styles.fact, styles.balanceFailed]} testID="api-endpoint-row-balance">
+        {t("settings.apiEndpoints.balance.rowNeedsAccessKey")}
+      </Text>
+    );
+  }
+  if (!first) {
+    return (
+      <Text style={[styles.fact, styles.balanceFailed]} testID="api-endpoint-row-balance">
+        {t("settings.apiEndpoints.balance.rowUnavailable")}
+      </Text>
+    );
+  }
+  return (
+    <Text style={styles.fact} testID="api-endpoint-row-balance">
+      {t("settings.apiEndpoints.balance.rowAmount", { amount: first.text })}
+    </Text>
   );
 }
 
@@ -1025,6 +1091,9 @@ const styles = StyleSheet.create((theme) => ({
   fact: {
     color: theme.colors.foregroundMuted,
     ...theme.typeScale.caption,
+  },
+  balanceFailed: {
+    color: theme.colors.statusWarning,
   },
   defaultModelOf: {
     flexDirection: "row",

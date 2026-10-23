@@ -144,7 +144,8 @@ export function vendorOfBaseUrls(urls: readonly string[]): VendorId | null {
   return null;
 }
 
-function hostOf(url: string): string {
+/** 地址的主机名（小写、去掉端口），照 magpie hostOf。 */
+export function hostOf(url: string): string {
   let rest = url.trim();
   const scheme = rest.indexOf("://");
   if (scheme >= 0) rest = rest.slice(scheme + 3);
