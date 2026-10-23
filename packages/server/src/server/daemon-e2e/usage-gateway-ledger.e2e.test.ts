@@ -220,7 +220,13 @@ async function startUpstreamOf(replies: Record<UpstreamName, Respond>, name: Ups
  * （Codex 先问 B，B 失败换 D）；Claude Code 与 Codex 都走中转站，ChatGPT 自带模型转给假 ChatGPT 后端。
  */
 async function start(
-  options: { messageId?: string; pricing?: UsagePricingOptions } = {},
+  options: {
+    messageId?: string;
+    pricing?: UsagePricingOptions;
+    /** 用量的时钟与逐条记录的大小上限（修剪的测试用）。 */
+    now?: () => number;
+    requestsMaxBytes?: number;
+  } = {},
 ): Promise<Harness> {
   const root = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-ledger-"));
   tempRoots.push(root);
@@ -320,6 +326,8 @@ async function start(
         roots: { claude: [claudeRoot], codex: [codexRoot], pi: [], omp: [] },
         scanIntervalMs: SCAN_INTERVAL_MS,
         pricing: options.pricing ?? UNPRICED,
+        ...(options.now ? { now: options.now } : {}),
+        ...(options.requestsMaxBytes ? { requests: { maxBytes: options.requestsMaxBytes } } : {}),
       },
     });
     daemons.push(daemon);
@@ -1457,5 +1465,365 @@ describe("an endpoint's price multiplier", () => {
     expect((await setMultiplier(harness, 1000)).error).toBeNull();
     const listed = await harness.client.apiEndpointList("claude");
     expect(listed.endpoints.find((endpoint) => endpoint.id === "ep_a")?.priceMultiplier).toBe(1000);
+  });
+});
+
+type RequestsListRequest = Parameters<DaemonClient["usageRequestsList"]>[0];
+type RequestsListPage = Awaited<ReturnType<DaemonClient["usageRequestsList"]>>;
+
+/** 请求列表：全部时段，每页 100 条，筛选另给。 */
+function requestsOf(overrides: Partial<RequestsListRequest> = {}): RequestsListRequest {
+  return { ...ALL_TIME, offset: 0, limit: 100, ...overrides };
+}
+
+async function waitForRequests(
+  harness: Harness,
+  accept: (page: RequestsListPage) => boolean,
+  request: RequestsListRequest = requestsOf(),
+): Promise<RequestsListPage> {
+  const deadline = Date.now() + 15_000;
+  let last: RequestsListPage | null = null;
+  while (Date.now() < deadline) {
+    last = await harness.client.usageRequestsList(request);
+    if (accept(last)) return last;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`The Requests list never matched: ${JSON.stringify(last)}`);
+}
+
+/** 各页的回复编号，没有编号的行写它的状态。 */
+function replyIdsOf(page: RequestsListPage): string[] {
+  return page.requests.map((row) => row.replyId ?? row.status);
+}
+
+/**
+ * 四次请求，从旧到新：Claude Code 经接口 A（会话记录里也有，合成一条）、同一轮里一次只在会话记录里的直连、
+ * Codex 先问 B 失败再由 D 回答（换过一家）、Codex 再问时先问刚答过的 D 也失败，再问 B 仍失败。
+ */
+async function fourRequests(harness: Harness): Promise<void> {
+  await askClaude(harness);
+  await waitForLedgerRow(harness.usageDir, "msg_gw_1");
+  await appendTurn(harness, {
+    promptId: "p1",
+    calls: [
+      gatewayCall(),
+      { messageId: "msg_direct_1", model: "claude-opus-4-1", lines: [OLD_TOTALS] },
+    ],
+  });
+  await waitForRequests(harness, (page) => page.total === 2 && page.requests[1]?.project !== null);
+  harness.replies.b = (res) => {
+    res.writeHead(503, { "content-type": "application/json" });
+    res.end(JSON.stringify({ error: { message: "upstream overloaded" } }));
+  };
+  expect(await codexReplyId(await askCodex(harness))).toBe("resp_gw_d");
+  await waitForRequests(harness, (page) => page.total === 3);
+  harness.replies.d = (res) => {
+    res.writeHead(402, { "content-type": "application/json" });
+    res.end(JSON.stringify({ error: { message: "insufficient balance" } }));
+  };
+  await (await askCodex(harness)).text();
+  await waitForRequests(harness, (page) => page.total === 4);
+}
+
+describe("the Requests list", () => {
+  test("lists every request newest first: the merged call with the log's project, the direct call with no timing, and the failed ones", async () => {
+    const harness = await start();
+    await fourRequests(harness);
+
+    const page = await harness.client.usageRequestsList(requestsOf());
+    expect(page.total).toBe(4);
+    expect(replyIdsOf(page)).toEqual(["failed", "resp_gw_d", "msg_direct_1", "msg_gw_1"]);
+    const [failed, switched, direct, merged] = page.requests;
+    expect(merged).toMatchObject({
+      cli: "claude",
+      model: "kimi-k2",
+      through: "gateway",
+      endpointId: "ep_a",
+      endpointName: "Relay A",
+      endpointDeleted: false,
+      totals: LEDGER_TOTALS,
+      status: "ok",
+      error: null,
+      sessionId: SESSION_ID,
+      project: { rootPath: "/work/demo", displayName: "demo" },
+    });
+    expect(merged?.durationMs).toEqual(expect.any(Number));
+    expect(merged?.ttftMs).toEqual(expect.any(Number));
+    expect(merged?.attempts).toEqual([
+      expect.objectContaining({ endpointId: "ep_a", endpointName: "Relay A", result: "answered" }),
+    ]);
+    expect(direct).toMatchObject({
+      cli: "claude",
+      model: "claude-opus-4-1",
+      through: "direct",
+      endpointId: null,
+      endpointName: null,
+      totals: OLD_TOTALS,
+      durationMs: null,
+      ttftMs: null,
+      outputSpeed: null,
+      status: "ok",
+      attempts: [],
+      sessionId: SESSION_ID,
+      project: { rootPath: "/work/demo" },
+    });
+    expect(switched).toMatchObject({
+      cli: "codex",
+      through: "gateway",
+      endpointId: "ep_d",
+      endpointName: "Relay D",
+      totals: CODEX_LEDGER_TOTALS,
+      status: "ok",
+      replyId: "resp_gw_d",
+      project: null,
+    });
+    // 展开一行看每次尝试：哪家、结果、失败分类与原因、冷却到何时。
+    expect(switched?.attempts).toEqual([
+      expect.objectContaining({
+        endpointId: "ep_b",
+        endpointName: "Relay B",
+        model: "gpt-5.5",
+        result: "failed",
+        failure: "other",
+        reason: expect.stringContaining("upstream overloaded"),
+        cooldownUntil: expect.any(String),
+      }),
+      expect.objectContaining({ endpointId: "ep_d", result: "answered", failure: null }),
+    ]);
+    // 没人回答的请求按它最后试的那家算接口，error 是交给 Agent 的说法。
+    expect(failed).toMatchObject({
+      cli: "codex",
+      through: "gateway",
+      endpointId: "ep_b",
+      endpointName: "Relay B",
+      status: "failed",
+      error: "Relay B: upstream overloaded",
+      totals: emptyTotals(),
+      project: null,
+      replyId: null,
+    });
+    expect(failed?.attempts.map((attempt) => [attempt.endpointId, attempt.failure])).toEqual([
+      ["ep_d", "credit"],
+      ["ep_b", "other"],
+    ]);
+    expect(page.facets).toEqual({
+      clis: ["claude", "codex"],
+      endpoints: [
+        { endpointId: null, name: null, deleted: false },
+        { endpointId: "ep_a", name: "Relay A", deleted: false },
+        { endpointId: "ep_b", name: "Relay B", deleted: false },
+        { endpointId: "ep_d", name: "Relay D", deleted: false },
+      ],
+      models: ["claude-opus-4-1", "gpt-5.5", "kimi-k2"],
+    });
+  });
+
+  test("filters by status, through the gateway or direct, agent, endpoint, model and search, and the facets stay whole", async () => {
+    const harness = await start();
+    await fourRequests(harness);
+    const list = async (filters: RequestsListRequest["filters"]) => {
+      const page = await harness.client.usageRequestsList(requestsOf({ filters }));
+      expect(page.total).toBe(page.requests.length);
+      expect(page.facets.models).toEqual(["claude-opus-4-1", "gpt-5.5", "kimi-k2"]);
+      return replyIdsOf(page);
+    };
+
+    expect(await list({ status: "failed" })).toEqual(["failed"]);
+    expect(await list({ status: "switched" })).toEqual(["resp_gw_d"]);
+    expect(await list({ status: "all" })).toHaveLength(4);
+    expect(await list({ through: "direct" })).toEqual(["msg_direct_1"]);
+    expect(await list({ through: "gateway" })).toEqual(["failed", "resp_gw_d", "msg_gw_1"]);
+    expect(await list({ clis: ["claude"] })).toEqual(["msg_direct_1", "msg_gw_1"]);
+    expect(await list({ endpoints: [null] })).toEqual(["msg_direct_1"]);
+    expect(await list({ endpoints: ["ep_d"] })).toEqual(["resp_gw_d"]);
+    expect(await list({ endpoints: ["ep_b"] })).toEqual(["failed"]);
+    expect(await list({ endpoints: ["ep_a", null] })).toEqual(["msg_direct_1", "msg_gw_1"]);
+    expect(await list({ models: ["kimi-k2"] })).toEqual(["msg_gw_1"]);
+    // 搜索不分大小写，看模型、接口名、会话、项目与失败原因。
+    expect(await list({ search: "relay d" })).toEqual(["failed", "resp_gw_d"]);
+    expect(await list({ search: "OPUS" })).toEqual(["msg_direct_1"]);
+    expect(await list({ search: SESSION_ID })).toEqual(["msg_direct_1", "msg_gw_1"]);
+    expect(await list({ search: "/work/demo" })).toEqual(["msg_direct_1", "msg_gw_1"]);
+    expect(await list({ search: "insufficient" })).toEqual(["failed"]);
+    expect(await list({ clis: ["codex"], status: "failed", search: "nothing like it" })).toEqual(
+      [],
+    );
+  });
+
+  test("pages a hundred at a time by offset, with the total of every page together; a period with nothing lists nothing", async () => {
+    const harness = await start();
+    await fourRequests(harness);
+
+    const first = await harness.client.usageRequestsList(requestsOf({ offset: 0, limit: 3 }));
+    expect(first.total).toBe(4);
+    expect(replyIdsOf(first)).toEqual(["failed", "resp_gw_d", "msg_direct_1"]);
+    const second = await harness.client.usageRequestsList(requestsOf({ offset: 3, limit: 3 }));
+    expect(second.total).toBe(4);
+    expect(replyIdsOf(second)).toEqual(["msg_gw_1"]);
+    const past = await harness.client.usageRequestsList(requestsOf({ offset: 8, limit: 3 }));
+    expect(past).toMatchObject({ total: 4, requests: [] });
+
+    const longAgo = await harness.client.usageRequestsList(
+      requestsOf({ from: "2020-01-01", to: "2020-01-31" }),
+    );
+    expect(longAgo).toMatchObject({
+      total: 0,
+      requests: [],
+      facets: { clis: [], endpoints: [], models: [] },
+    });
+  });
+
+  test("the list is the same after a restart", async () => {
+    const harness = await start();
+    await fourRequests(harness);
+    const before = await harness.client.usageRequestsList(requestsOf());
+    await harness.restart();
+    await waitForReport(harness, () => true);
+    const after = await harness.client.usageRequestsList(requestsOf());
+    expect(after.requests).toEqual(before.requests);
+  });
+});
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** 一个可以拨动的用量时钟：从真实的此刻起，加上测试拨过的时间。 */
+function movableClock(): { now: () => number; advance: (ms: number) => void } {
+  const base = Date.now();
+  let offset = 0;
+  return {
+    now: () => base + offset,
+    advance: (ms) => {
+      offset += ms;
+    },
+  };
+}
+
+/** 盘上某天的逐条记录文件放一行没人回答的请求；error 填长一点就占地方。 */
+async function seedFailedRequest(usageDir: string, at: number, errorLength = 0): Promise<string> {
+  const dir = path.join(usageDir, "requests");
+  await mkdir(dir, { recursive: true });
+  const iso = new Date(at).toISOString();
+  const row = {
+    kind: "gateway",
+    at: iso,
+    agent: "codex",
+    sessionId: null,
+    model: "gpt-5.5",
+    endpointId: null,
+    endpointName: null,
+    upstreamModel: null,
+    input: 0,
+    cachedInput: 0,
+    cacheWrite: 0,
+    cacheWrite1h: 0,
+    output: 0,
+    reasoning: 0,
+    durationMs: 5,
+    ttftMs: null,
+    firstTextMs: null,
+    replyId: null,
+    stop: null,
+    status: "failed",
+    error: `seeded ${"x".repeat(errorLength)}`,
+    attempts: [],
+  };
+  const file = path.join(dir, `${iso.slice(0, 10)}.jsonl`);
+  await writeFile(file, `${JSON.stringify(row)}\n`, { flag: "a" });
+  return file;
+}
+
+async function exists(file: string): Promise<boolean> {
+  return stat(file).then(
+    () => true,
+    () => false,
+  );
+}
+
+async function waitForGone(file: string): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    if (!(await exists(file))) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`${file} was never pruned`);
+}
+
+describe("the Requests list keeps 30 days and 200 MB", () => {
+  test("a day past 30 days goes whole, the summary keeps its calls, and a restart neither brings it back nor counts it twice", async () => {
+    const clock = movableClock();
+    const harness = await start({ now: clock.now });
+    await askClaude(harness);
+    await appendTurn(harness, { promptId: "p1", calls: [gatewayCall()] });
+    await waitForRequests(
+      harness,
+      (page) => page.total === 1 && page.requests[0]?.project !== null,
+    );
+    await waitForReport(harness, (report) => report.projects[0]?.rootPath === "/work/demo");
+    await expectCountedOnce(harness);
+
+    // 31 天后，下一次写入时修剪：今天这一天整天删掉（连刚记下的那行）。
+    clock.advance(31 * DAY_MS);
+    await codexReplyId(await askCodex(harness));
+    await waitForRequests(harness, (page) => page.total === 0);
+    const all = sum(LEDGER_TOTALS, CODEX_LEDGER_TOTALS);
+    const report = await waitForReport(harness, (candidate) =>
+      sameTotals(candidate.summary.totals, all),
+    );
+    expect(report.endpoints).toEqual([
+      endpointGroup("ep_b", "Relay B", CODEX_LEDGER_TOTALS, expect.any(Number) as number),
+      endpointGroup("ep_a", "Relay A", LEDGER_TOTALS, expect.any(Number) as number),
+    ]);
+    expect(await readdir(path.join(harness.usageDir, "requests"))).toEqual([]);
+
+    await harness.restart();
+    const restarted = await waitForReport(harness, (candidate) =>
+      sameTotals(candidate.summary.totals, all),
+    );
+    expect(restarted.endpoints).toEqual(report.endpoints);
+    expect(restarted.projects.map((project) => [project.rootPath, project.totals])).toEqual(
+      report.projects.map((project) => [project.rootPath, project.totals]),
+    );
+    expect(await turnUsage(harness.usageDir)).toEqual([
+      { turnKey: "p1", endpointId: "ep_a", totals: LEDGER_TOTALS },
+    ]);
+    expect(await harness.client.usageRequestsList(requestsOf())).toMatchObject({ total: 0 });
+  });
+
+  test("over the size cap the oldest day goes first, at most once an hour, and today stays", async () => {
+    const clock = movableClock();
+    const root = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-seed-"));
+    tempRoots.push(root);
+    const oldest = await seedFailedRequest(root, clock.now() - 3 * DAY_MS, 20_000);
+    const older = await seedFailedRequest(root, clock.now() - 2 * DAY_MS);
+    const cap = (await stat(oldest)).size + (await stat(older)).size + 100;
+
+    const harness = await start({ now: clock.now, requestsMaxBytes: cap });
+    // 种下的文件搬进这次 daemon 的用量目录再重启，让它读到。
+    await mkdir(path.join(harness.usageDir, "requests"), { recursive: true });
+    for (const file of [oldest, older]) {
+      await writeFile(
+        path.join(harness.usageDir, "requests", path.basename(file)),
+        await readFile(file),
+      );
+    }
+    await harness.restart();
+    await waitForRequests(harness, (page) => page.total === 2);
+
+    await codexReplyId(await askCodex(harness));
+    const requestsDir = path.join(harness.usageDir, "requests");
+    await waitForGone(path.join(requestsDir, path.basename(oldest)));
+    const page = await waitForRequests(harness, (candidate) => candidate.total === 2);
+    expect(page.requests.map((row) => row.replyId ?? row.error)).toEqual(["resp_gw_1", "seeded "]);
+    expect(await exists(path.join(requestsDir, path.basename(older)))).toBe(true);
+
+    // 一小时内不再修剪：又塞进一个更旧的大文件，下一次写入后它还在；过了一小时才删。
+    const stale = await seedFailedRequest(harness.usageDir, clock.now() - 5 * DAY_MS, 20_000);
+    await codexReplyId(await askCodex(harness));
+    await waitForLedgerRows(harness.usageDir, (rows) => rows.length >= 4);
+    expect(await exists(stale)).toBe(true);
+    clock.advance(61 * 60 * 1000);
+    await codexReplyId(await askCodex(harness));
+    await waitForGone(stale);
+    expect(await exists(path.join(requestsDir, path.basename(older)))).toBe(true);
   });
 });

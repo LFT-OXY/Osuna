@@ -24,6 +24,15 @@ export interface UsageMergeOutput {
   records: UsageRequestRecord[];
 }
 
+/**
+ * One request as the Requests list shows it: what the log counted, what the
+ * gateway carried, or both for a call they share. At least one is set.
+ */
+export interface UsageListedCall {
+  cli: UsageCliCall | null;
+  ledger: GatewayLedgerRow | null;
+}
+
 /** One call as far as the two sides have told it, and whether its move to the endpoint is done. */
 interface MergedCall {
   cli: UsageCliCall | null;
@@ -50,12 +59,17 @@ export class UsageCallMerge {
   private readonly calls = new Map<string, MergedCall>();
   /** Calls with a ledger row that are not settled yet; settled once the log has them too. */
   private readonly awaiting = new Set<string>();
+  /** Ledger rows with no reply id (no one answered, or the reply named none): listed, never merged. */
+  private unreplied: GatewayLedgerRow[] = [];
 
   /** Rebuild from the stored records: the last record of a log reply, the first ledger row. */
   load(records: readonly UsageRequestRecord[]): void {
     for (const record of records) {
       if (record.kind === "gateway") {
-        if (record.replyId === null) continue;
+        if (record.replyId === null) {
+          this.unreplied.push(record);
+          continue;
+        }
         const call = this.callOf(record.agent, record.replyId);
         call.ledger ??= record;
         continue;
@@ -102,7 +116,8 @@ export class UsageCallMerge {
   addLedgerRow(row: GatewayLedgerRow): UsageMergeOutput {
     const output = emptyOutput();
     output.records.push(row);
-    if (row.replyId !== null) {
+    if (row.replyId === null) this.unreplied.push(row);
+    else {
       const call = this.callOf(row.agent, row.replyId);
       if (call.ledger) return output;
       call.ledger = row;
@@ -155,6 +170,41 @@ export class UsageCallMerge {
     return output;
   }
 
+  /**
+   * Every request the stored records still hold: each call once, at the first
+   * ledger row of its reply, and each ledger row that names no reply.
+   */
+  listCalls(): UsageListedCall[] {
+    const listed: UsageListedCall[] = [];
+    for (const { cli, ledger } of this.calls.values()) {
+      if (cli || ledger) listed.push({ cli, ledger });
+    }
+    for (const ledger of this.unreplied) listed.push({ cli: null, ledger });
+    return listed;
+  }
+
+  /**
+   * Forget what the pruned day files held, so memory ends where a restart
+   * would load it from. A `merged` marker lies in the file of its ledger row
+   * (both stamped with the request's time), so the two go together: a call
+   * whose ledger row is gone is no longer settled, and none is left waiting.
+   * A log reply's records all lie in its own first day.
+   */
+  prune(days: ReadonlySet<string>): void {
+    if (days.size === 0) return;
+    const pruned = (at: string) => days.has(dayOf(at));
+    for (const [key, call] of this.calls) {
+      if (call.cli && pruned(call.cli.at)) call.cli = null;
+      if (call.ledger && pruned(call.ledger.at)) {
+        call.ledger = null;
+        call.settled = false;
+        this.awaiting.delete(key);
+      }
+      if (!call.cli && !call.ledger) this.calls.delete(key);
+    }
+    this.unreplied = this.unreplied.filter((row) => !pruned(row.at));
+  }
+
   /** The newest name the ledger recorded for each endpoint. */
   endpointNames(): Map<string, string> {
     const latest = new Map<string, { name: string; at: string }>();
@@ -176,6 +226,11 @@ export class UsageCallMerge {
     }
     return call;
   }
+}
+
+/** The UTC day a record is filed under (`usage/requests/YYYY-MM-DD.jsonl`). */
+export function dayOf(at: string): string {
+  return at.slice(0, 10);
 }
 
 function callKey(cli: UsageCli, replyId: string): string {

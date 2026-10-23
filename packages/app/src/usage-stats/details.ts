@@ -15,8 +15,11 @@ export interface UsageHostsView {
   timezone: string;
 }
 
-/** The three tabs of the data details card, in the order they are shown. */
-export const USAGE_DETAILS_TABS = ["daily", "monthly", "projects"] as const;
+/**
+ * The tabs of the data details card, in the order they are shown. Requests is
+ * there only while a counted host keeps the gateway ledger.
+ */
+export const USAGE_DETAILS_TABS = ["daily", "monthly", "projects", "requests"] as const;
 export type UsageDetailsTab = (typeof USAGE_DETAILS_TABS)[number];
 
 export const USAGE_PROJECT_LIMITS = [3, 6, 10] as const;

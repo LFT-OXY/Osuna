@@ -242,7 +242,8 @@ export type UsageBucketKey = Pick<
  * What one log line contributed to one reply, keyed by the reply's id, which is
  * how the gateway ledger finds the same call. `amounts` is the delta the line
  * added to the bucket row at this key, so the deltas of one reply sum to the
- * deduplicated reply. Only a source the ledger merges with emits these.
+ * deduplicated reply. Claude, Codex, Pi and OMP emit these: the ledger merges
+ * with them, and the Requests list shows the ones it does not as direct calls.
  */
 export interface UsageCallDelta {
   replyId: string;

@@ -319,3 +319,85 @@ export const UsageAgentSummarySchema = z.object({
   complete: z.boolean(),
 });
 export type UsageAgentSummary = z.infer<typeof UsageAgentSummarySchema>;
+
+/** One try inside a gateway request: which endpoint (`null` is Official), how it ended, and the cooldown it caused. */
+export const UsageRequestAttemptSchema = z.object({
+  endpointId: z.string().nullable(),
+  endpointName: z.string().nullable(),
+  model: z.string(),
+  startedAt: z.string(),
+  durationMs: z.number().int().nonnegative(),
+  result: z.enum(["answered", "failed", "refused"]),
+  failure: z.string().nullable(),
+  reason: z.string().nullable(),
+  cooldownUntil: z.string().nullable(),
+  reasked: z.boolean(),
+});
+export type UsageRequestAttempt = z.infer<typeof UsageRequestAttemptSchema>;
+
+/**
+ * One request in the Requests list. `through: "gateway"` is a request the gateway
+ * carried (its ledger row, merged with the log's reply when there is one);
+ * `"direct"` is a reply only the CLI log has, with no timing and no tries.
+ * `endpointId` null is Official, or, for a request no one answered, the endpoint
+ * it last tried is named instead. `outputSpeed` is tokens a second, null when the
+ * reply tells none.
+ */
+export const UsageRequestRowSchema = z.object({
+  id: z.string(),
+  at: z.string(),
+  cli: UsageCliSchema,
+  model: z.string(),
+  through: z.enum(["gateway", "direct"]),
+  endpointId: z.string().nullable(),
+  endpointName: z.string().nullable(),
+  endpointDeleted: z.boolean(),
+  totals: UsageTokenTotalsSchema,
+  estimatedCost: z.number(),
+  priced: z.boolean(),
+  durationMs: z.number().int().nonnegative().nullable(),
+  ttftMs: z.number().int().nonnegative().nullable(),
+  outputSpeed: z.number().nonnegative().nullable(),
+  status: z.enum(["ok", "failed", "cancelled"]),
+  error: z.string().nullable(),
+  attempts: z.array(UsageRequestAttemptSchema),
+  replyId: z.string().nullable(),
+  sessionId: z.string().nullable(),
+  project: UsageProjectRefSchema.nullable(),
+});
+export type UsageRequestRow = z.infer<typeof UsageRequestRowSchema>;
+
+/**
+ * `failed` is a request the agent got an error for (failed or cancelled);
+ * `switched` one answered after the gateway moved on from another endpoint.
+ */
+export const UsageRequestStatusFilterSchema = z.enum(["all", "failed", "switched"]);
+export type UsageRequestStatusFilter = z.infer<typeof UsageRequestStatusFilterSchema>;
+
+export const UsageRequestThroughFilterSchema = z.enum(["all", "gateway", "direct"]);
+export type UsageRequestThroughFilter = z.infer<typeof UsageRequestThroughFilterSchema>;
+
+/** Every list is "any of"; an absent list keeps all. `endpoints` takes `null` for Official. */
+export const UsageRequestFiltersSchema = z.object({
+  status: UsageRequestStatusFilterSchema.optional(),
+  through: UsageRequestThroughFilterSchema.optional(),
+  clis: z.array(UsageCliSchema).optional(),
+  endpoints: z.array(z.string().nullable()).optional(),
+  models: z.array(z.string()).optional(),
+  search: z.string().optional(),
+});
+export type UsageRequestFilters = z.infer<typeof UsageRequestFiltersSchema>;
+
+/** What the period holds, whatever the filters keep: what the filter menus offer. */
+export const UsageRequestFacetsSchema = z.object({
+  clis: z.array(UsageCliSchema),
+  endpoints: z.array(
+    z.object({
+      endpointId: z.string().nullable(),
+      name: z.string().nullable(),
+      deleted: z.boolean(),
+    }),
+  ),
+  models: z.array(z.string()),
+});
+export type UsageRequestFacets = z.infer<typeof UsageRequestFacetsSchema>;

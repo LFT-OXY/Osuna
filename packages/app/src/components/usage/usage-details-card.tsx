@@ -14,6 +14,7 @@ import { StyleSheet } from "react-native-unistyles";
 import { ScrollView } from "@/components/ui/scroll-view";
 import { UsageCard } from "@/components/usage/usage-card";
 import { UsageSegmentedControl } from "@/components/usage/usage-segmented-control";
+import { UsageRequestsTable } from "@/components/usage/usage-requests-table";
 import { UsageSessionList } from "@/components/usage/usage-session-list";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import {
@@ -30,7 +31,9 @@ import {
   formatUsageCost,
   formatUsageTokensCompact,
 } from "@/usage-stats/format";
+import type { UsageHostInput } from "@/usage-stats/aggregated-usage";
 import type { MergedUsageProject, MergedUsageReport } from "@/usage-stats/merge";
+import type { UsageRange } from "@/usage-stats/period";
 import { formatUsageDay, formatUsageMonth } from "@/usage-stats/range-label";
 import { usageSourceColor, usageSourceLabel } from "@/usage-stats/sources";
 import { totalUsageTokens } from "@/usage-stats/totals";
@@ -141,12 +144,20 @@ function useTableLayout(kind: UsageTableKind, locale: string) {
   return { layout, onLayout };
 }
 
+/** What the Requests tab lists: the hosts that keep the gateway ledger, over the page's range. */
+export interface UsageDetailsRequests {
+  hosts: readonly UsageHostInput[];
+  range: UsageRange;
+}
+
 interface UsageDetailsCardProps {
   report: MergedUsageReport;
   hosts: UsageHostsView;
+  /** Null hides the Requests tab: no counted host keeps the gateway ledger. */
+  requests: UsageDetailsRequests | null;
 }
 
-export function UsageDetailsCard({ report, hosts }: UsageDetailsCardProps) {
+export function UsageDetailsCard({ report, hosts, requests }: UsageDetailsCardProps) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
   const isCompact = useIsCompactFormFactor();
@@ -160,7 +171,9 @@ export function UsageDetailsCard({ report, hosts }: UsageDetailsCardProps) {
     }),
     [viewportHeight],
   );
-  const [tab, setTab] = useState<UsageDetailsTab>("daily");
+  const [chosenTab, setTab] = useState<UsageDetailsTab>("daily");
+  // 主机换成没有账本的那几台时，请求标签不在了，回到每日。
+  const tab = chosenTab === "requests" && !requests ? "daily" : chosenTab;
   const [projectLimit, setProjectLimit] = useState<UsageProjectLimit>(10);
   const [openDays, setOpenDays] = useState<ReadonlySet<string>>(EMPTY_KEYS);
   const [openProjects, setOpenProjects] = useState<ReadonlySet<string>>(EMPTY_KEYS);
@@ -173,12 +186,14 @@ export function UsageDetailsCard({ report, hosts }: UsageDetailsCardProps) {
 
   const tabOptions = useMemo(
     () =>
-      USAGE_DETAILS_TABS.map((value) => ({
-        value,
-        label: t(`usage.details.tabs.${value}`),
-        testID: `usage-details-tab-${value}`,
-      })),
-    [t],
+      USAGE_DETAILS_TABS.filter((value) => value !== "requests" || requests !== null).map(
+        (value) => ({
+          value,
+          label: t(`usage.details.tabs.${value}`),
+          testID: `usage-details-tab-${value}`,
+        }),
+      ),
+    [requests, t],
   );
   const limitOptions = useMemo(
     () =>
@@ -231,6 +246,15 @@ export function UsageDetailsCard({ report, hosts }: UsageDetailsCardProps) {
     );
   } else if (tab === "monthly") {
     body = <UsageMonthlyTable report={report} locale={locale} />;
+  } else if (tab === "requests" && requests) {
+    body = (
+      <UsageRequestsTable
+        hosts={requests.hosts}
+        range={requests.range}
+        timezone={hosts.timezone}
+        hostLabels={hosts.isMultiHost ? hosts.labels : null}
+      />
+    );
   } else {
     body = (
       <UsageProjectsList

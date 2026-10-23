@@ -7,7 +7,7 @@ import { MenuHeader } from "@/components/headers/menu-header";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { ScrollView } from "@/components/ui/scroll-view";
-import { UsageDetailsCard } from "@/components/usage/usage-details-card";
+import { UsageDetailsCard, type UsageDetailsRequests } from "@/components/usage/usage-details-card";
 import { UsageHeatmapCard } from "@/components/usage/usage-heatmap-card";
 import {
   UsageOverviewCard,
@@ -80,6 +80,10 @@ function UsageScreenContent(): ReactElement {
     [hostSelection.hosts, ledgerSupport],
   );
   const activeEndpoint = ledgerHosts.length > 0 ? selectedEndpoint : null;
+  const detailsRequests = useMemo<UsageDetailsRequests | null>(
+    () => (ledgerHosts.length > 0 ? { hosts: ledgerHosts, range } : null),
+    [ledgerHosts, range],
+  );
   const endpointFilter = useMemo(() => activeEndpoint?.endpointIds, [activeEndpoint]);
   const filtered = useUsageReport({
     hosts: ledgerHosts,
@@ -175,7 +179,7 @@ function UsageScreenContent(): ReactElement {
     const mainColumn = (
       <View style={styles.mainColumn}>
         {overview}
-        <UsageDetailsCard report={report} hosts={detailsHosts} />
+        <UsageDetailsCard report={report} hosts={detailsHosts} requests={detailsRequests} />
       </View>
     );
 

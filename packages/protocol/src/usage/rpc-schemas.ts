@@ -9,6 +9,9 @@ import {
   UsagePricingTableInfoSchema,
   UsageReportFiltersSchema,
   UsageReportSchema,
+  UsageRequestFacetsSchema,
+  UsageRequestFiltersSchema,
+  UsageRequestRowSchema,
   UsageSessionRowSchema,
   UsageTrendGranularitySchema,
   UsageTrendStackBySchema,
@@ -65,6 +68,33 @@ export const UsageSessionsListResponseSchema = z.object({
   }),
 });
 export type UsageSessionsListResponse = z.infer<typeof UsageSessionsListResponseSchema>;
+
+/**
+ * The Requests list: the same window as the report, newest first, a page at a
+ * time. `total` is how many requests the filters keep, every page together.
+ */
+export const UsageRequestsListRequestSchema = z.object({
+  type: z.literal("usage.requests.list.request"),
+  requestId: z.string(),
+  from: z.string().nullable(),
+  to: z.string().nullable(),
+  timezone: z.string().min(1),
+  filters: UsageRequestFiltersSchema.optional(),
+  offset: z.number().int().nonnegative(),
+  limit: z.number().int().positive(),
+});
+export type UsageRequestsListRequest = z.infer<typeof UsageRequestsListRequestSchema>;
+
+export const UsageRequestsListResponseSchema = z.object({
+  type: z.literal("usage.requests.list.response"),
+  payload: z.object({
+    requestId: z.string(),
+    requests: z.array(UsageRequestRowSchema),
+    total: z.number().int().nonnegative(),
+    facets: UsageRequestFacetsSchema,
+  }),
+});
+export type UsageRequestsListResponse = z.infer<typeof UsageRequestsListResponseSchema>;
 
 export const UsageBackfillProgressMessageSchema = z.object({
   type: z.literal("usage.backfill.progress"),

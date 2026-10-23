@@ -167,3 +167,62 @@ describe("merging the ledger with the log, batch by batch", () => {
     expect(counted(disk)).toEqual({ ep_a: LEDGER });
   });
 });
+
+describe("pruning a day of records", () => {
+  // 请求在午夜前开始（账本行与合并标记记在 22 日），会话记录里的回复写在午夜后（记在 23 日）。
+  const lateLedger = { ...LEDGER_ROW, at: "2026-10-22T23:59:58.000Z" };
+  const earlyDelta = {
+    ...DELTA,
+    at: "2026-10-23T00:00:03.000Z",
+    bucket: "2026-10-23T00:00:00.000Z",
+  };
+
+  function mergedAcrossMidnight(): { merge: UsageCallMerge; disk: Disk } {
+    const disk: Disk = { buckets: [], records: [] };
+    const merge = new UsageCallMerge();
+    const row = merge.addLedgerRow(lateLedger);
+    disk.buckets.push(...row.buckets);
+    disk.records.push(...row.records);
+    flush(merge, disk, scan(merge, earlyDelta));
+    return { merge, disk };
+  }
+
+  /** What a restart loads once the day's file is gone. */
+  function withoutDay(disk: Disk, day: string): Disk {
+    return {
+      buckets: disk.buckets,
+      records: disk.records.filter((record) => !record.at.startsWith(day)),
+    };
+  }
+
+  for (const day of ["2026-10-22", "2026-10-23"]) {
+    test(`pruning ${day} leaves memory where a restart would, and neither moves the call again`, () => {
+      const { merge, disk } = mergedAcrossMidnight();
+      expect(counted(disk)).toEqual({ ep_a: LEDGER });
+      merge.prune(new Set([day]));
+      const pruned = withoutDay(disk, day);
+      const restarted = restart(pruned);
+
+      expect(merge.listCalls()).toEqual(restarted.listCalls());
+      expect(merge.hasUnsettled()).toBe(false);
+      expect(restarted.hasUnsettled()).toBe(false);
+      flush(merge, disk, { buckets: [], records: [] });
+      flush(restarted, pruned, { buckets: [], records: [] });
+      expect(counted(disk)).toEqual({ ep_a: LEDGER });
+      expect(counted(pruned)).toEqual({ ep_a: LEDGER });
+    });
+  }
+
+  test("a ledger row still waiting for its reply is let go with its day, and a row with no reply id is dropped from the list", () => {
+    const merge = new UsageCallMerge();
+    merge.addLedgerRow(lateLedger);
+    merge.addLedgerRow({ ...lateLedger, replyId: null, status: "failed" });
+    expect(merge.listCalls()).toHaveLength(2);
+
+    merge.prune(new Set(["2026-10-22"]));
+
+    expect(merge.listCalls()).toEqual([]);
+    scan(merge, earlyDelta);
+    expect(merge.hasUnsettled()).toBe(false);
+  });
+});

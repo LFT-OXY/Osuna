@@ -119,6 +119,44 @@ matched by its reply id merges as above; one that matches no ledger row and
 whose provider is the gateway Osuna writes into their config is skipped, and
 only the ledger counts it, as magpie's `calls_pi.go` does.
 
+### Two layers: summaries and per-request records
+
+Usage is kept twice. The 15-minute bucket and turn rows are the summaries: every
+total, split and cost on the page reads them, and they are kept forever. The
+per-request records under `usage/requests/` are the ledger rows, the CLI log
+replies (Claude Code, Codex, Pi and OMP; Pi and OMP name a reply by session and
+entry id) and the `merged` markers. They back the Requests tab, and they are what
+a restart reloads to carry on merging.
+
+The records keep 30 days and 200 MB, as magpie keeps its routing history. After
+a write, at most once an hour, the daemon deletes the day files older than 30
+days (today counts as one), then the oldest days until the rest fit 200 MB; a
+day goes whole and today always stays. Memory forgets the same days, so the list
+and the merge end where a restart would load them. A `merged` marker sits in the
+file of its ledger row (both stamped with the request's start), so the two go
+together and a pruned day never moves a call twice. What pruning gives up: a log
+line that corrects a reply after its ledger row is gone counts at Official, and
+so does a reply first scanned after its ledger row was pruned. Summaries never
+change. Unlike magpie, finished days are not gzipped: the files stay plain
+append-only JSONL.
+
+### The Requests tab
+
+`usage.requests.list` lists the records newest first, a page of 100 at a time
+(magpie's request page), with the total the filters keep and the choices the
+period offers whatever the filters keep. A call both sides have is one row with
+the log's model, session and project and the ledger's tokens, timing and tries;
+a reply only the log has is a direct row at Official with no timing and no
+tries. Status follows magpie: failed is a request the agent got an error for
+(failed or cancelled), named after its last try's failure class; switched is one
+answered after more than one try. A request no one answered is listed at the
+endpoint it last tried. The search looks in the model, the endpoint names, the
+session, the project, the error and the tries' reasons, ignoring case. Output
+speed is magpie's `DecodeOf` without the held-reply check, which needs a
+streaming time the ledger does not keep yet. The client asks each counted host
+for its newest `offset + limit` rows and merges them, so a page across hosts is
+exact.
+
 ### Endpoint cards
 
 Usage counts an endpoint by its id, so a rename shows the new name over all of

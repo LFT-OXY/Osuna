@@ -74,6 +74,8 @@ import {
   UsageReportGetResponseSchema,
   UsageSessionsListRequestSchema,
   UsageSessionsListResponseSchema,
+  UsageRequestsListRequestSchema,
+  UsageRequestsListResponseSchema,
   UsageBackfillProgressMessageSchema,
   UsageUpdatedMessageSchema,
   UsagePricingListRequestSchema,
@@ -3782,6 +3784,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   LoopStopRequestSchema,
   UsageReportGetRequestSchema,
   UsageSessionsListRequestSchema,
+  UsageRequestsListRequestSchema,
   UsagePricingListRequestSchema,
   UsagePricingRefreshRequestSchema,
   UsageAgentGetRequestSchema,
@@ -4214,7 +4217,7 @@ export const ServerInfoStatusPayloadSchema = z
         planUsageResets: z.boolean().optional(),
         // COMPAT(gatewayLedger): added in v0.17.0, remove gate after 2027-04-23.
         // 任务 10-16-gateway-ledger-usage：中转站记账并与 CLI 会话记录合并；usage.report.get 的 filters.endpoints
-        // 与报告的 endpoints（按接口分，含「官方」）。
+        // 与报告的 endpoints（按接口分，含「官方」）；usage.requests.list（请求列表）。
         gatewayLedger: z.boolean().optional(),
         // COMPAT(providerVersions): added in v0.14.0, remove gate after 2027-04-01.
         // 快照带内置提供方的已装版本 version；daemon 支持 provider.version.check.* 与 provider.upgrade.*。
@@ -7642,6 +7645,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   DaemonUpdateResponseSchema,
   UsageReportGetResponseSchema,
   UsageSessionsListResponseSchema,
+  UsageRequestsListResponseSchema,
   UsageBackfillProgressMessageSchema,
   UsageUpdatedMessageSchema,
   UsagePricingListResponseSchema,

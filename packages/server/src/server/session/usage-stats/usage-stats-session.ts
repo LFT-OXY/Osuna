@@ -76,6 +76,25 @@ export class UsageStatsSession {
     }));
   }
 
+  async handleUsageRequestsListRequest(
+    request: Extract<SessionInboundMessage, { type: "usage.requests.list.request" }>,
+  ): Promise<void> {
+    await this.respond(request, async () => ({
+      type: "usage.requests.list.response",
+      payload: {
+        requestId: request.requestId,
+        ...(await this.usageService.listRequests({
+          from: request.from,
+          to: request.to,
+          timezone: request.timezone,
+          filters: request.filters,
+          offset: request.offset,
+          limit: request.limit,
+        })),
+      },
+    }));
+  }
+
   async handleUsagePricingListRequest(
     request: Extract<SessionInboundMessage, { type: "usage.pricing.list.request" }>,
   ): Promise<void> {

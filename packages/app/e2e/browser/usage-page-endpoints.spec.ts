@@ -336,7 +336,7 @@ test.describe("Usage page by endpoint", () => {
     });
   });
 
-  test("a daemon without the gateway ledger shows no Endpoints split and no price multiplier", async ({
+  test("a daemon without the gateway ledger shows no Endpoints split, no Requests tab and no price multiplier", async ({
     page,
   }) => {
     const endpointId = await seedApiEndpoint(client, {
@@ -348,6 +348,8 @@ test.describe("Usage page by endpoint", () => {
     await openUsagePage(page);
     await expect(page.getByTestId("usage-source-card-claude")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId("usage-breakdown")).toHaveCount(0);
+    await expect(page.getByTestId("usage-details-tab-daily")).toBeVisible();
+    await expect(page.getByTestId("usage-details-tab-requests")).toHaveCount(0);
 
     await openApiEndpointsPage(page);
     await page.getByTestId(`api-endpoint-row-${endpointId}`).filter({ visible: true }).click();

@@ -1285,6 +1285,22 @@ and priceRateOfDraft in internal/gui/assets/app.js:
   packages/server/src/server/api-endpoints/service.ts
   packages/app/src/api-endpoints/internal/price-multiplier-form.ts
 
+The per-request usage records' retention (30 days and 200 MB in all, checked on
+a write at most once an hour, whole days going oldest first and today staying)
+follows historyDays, historyBytes, saveRoute and pruneHistory in magpie's
+internal/gateway/history.go; the Requests list (newest first, 100 to a page,
+failed as LostRequest and switched as RetriedRequest, a search over several
+fields ignoring case, filter choices from the whole period) follows QueryPage in
+internal/usage/request_page.go, Filter.keepsRecord and SourceOf in
+internal/usage/ledger.go, and LostRequest and RetriedRequest in
+internal/usage/usage.go; a reply's output speed follows DecodeWindow and
+DecodeOf in internal/usage/usage.go:
+
+  packages/server/src/server/usage/store.ts
+  packages/server/src/server/usage/requests.ts
+  packages/server/src/server/usage/speed.ts
+  packages/app/src/usage-stats/requests.ts
+
 MIT License
 
 Copyright (c) 2026 yetone

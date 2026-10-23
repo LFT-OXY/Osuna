@@ -638,6 +638,10 @@ type UsageSessionsListPayload = Extract<
   SessionOutboundMessage,
   { type: "usage.sessions.list.response" }
 >["payload"];
+type UsageRequestsListPayload = Extract<
+  SessionOutboundMessage,
+  { type: "usage.requests.list.response" }
+>["payload"];
 type UsagePricingListPayload = Extract<
   SessionOutboundMessage,
   { type: "usage.pricing.list.response" }
@@ -900,6 +904,17 @@ export interface UsageSessionsListOptions {
   to: string | null;
   timezone: string;
   filters?: Extract<SessionInboundMessage, { type: "usage.sessions.list.request" }>["filters"];
+  requestId?: string;
+}
+
+export interface UsageRequestsListOptions {
+  /** Client-local `YYYY-MM-DD` bounds; `from: null` asks for all time. */
+  from: string | null;
+  to: string | null;
+  timezone: string;
+  filters?: Extract<SessionInboundMessage, { type: "usage.requests.list.request" }>["filters"];
+  offset: number;
+  limit: number;
   requestId?: string;
 }
 
@@ -6503,6 +6518,22 @@ export class DaemonClient {
         ...(options.filters ? { filters: options.filters } : {}),
       },
       responseType: "usage.sessions.list.response",
+    });
+  }
+
+  async usageRequestsList(options: UsageRequestsListOptions): Promise<UsageRequestsListPayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId: options.requestId,
+      message: {
+        type: "usage.requests.list.request",
+        from: options.from,
+        to: options.to,
+        timezone: options.timezone,
+        ...(options.filters ? { filters: options.filters } : {}),
+        offset: options.offset,
+        limit: options.limit,
+      },
+      responseType: "usage.requests.list.response",
     });
   }
 

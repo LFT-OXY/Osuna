@@ -1,3 +1,6 @@
+// 逐条记录的修剪（30 天、合计 200 MB、写入后最多每小时一次、从最旧的一天整天删、今天不删）照 magpie
+// （https://github.com/yetone/magpie，internal/gateway/history.go 的 pruneHistory）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import type { Logger } from "pino";
@@ -21,9 +24,13 @@ import {
 } from "./types.js";
 
 const FILE_SUFFIX = ".jsonl";
+const DAY_MS = 24 * 60 * 60 * 1000;
 const SCAN_STATE_FILE = "scan-state.json";
 const PRICING_CACHE_FILE = "pricing-table.json";
 const REQUESTS_DIR = "requests";
+/** Per-request records are kept this many days and this many bytes in all (magpie's history.go). */
+export const REQUEST_RETENTION_DAYS = 30;
+export const REQUEST_RETENTION_BYTES = 200 * 1024 * 1024;
 // 账本与逐条记录和接口目录一样只给本人读写。
 const REQUEST_FILE_MODE = 0o600;
 const REQUEST_DIR_MODE = 0o700;
@@ -161,6 +168,46 @@ export class UsageStore {
       path: path.join(this.requestsDir(), `${day}${FILE_SUFFIX}`),
       body: `${lines.join("\n")}\n`,
     }));
+  }
+
+  /**
+   * Drop the day files older than `days` (today counting as one), then the
+   * oldest until what is left fits `maxBytes`. A day goes whole, and today
+   * always stays. Summaries live in the bucket rows, which are never pruned.
+   * Returns the days removed, so the caller can forget them too.
+   */
+  async pruneRequests(input: {
+    now: number;
+    days: number;
+    maxBytes: number;
+  }): Promise<Set<string>> {
+    const removed = new Set<string>();
+    await this.enqueue(async () => {
+      let names: string[];
+      try {
+        names = await fs.readdir(this.requestsDir());
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+        throw error;
+      }
+      const today = new Date(input.now).toISOString().slice(0, 10);
+      const oldest = new Date(input.now - (input.days - 1) * DAY_MS).toISOString().slice(0, 10);
+      const files: { day: string; path: string; size: number }[] = [];
+      for (const name of names.filter((entry) => entry.endsWith(FILE_SUFFIX)).sort()) {
+        const filePath = path.join(this.requestsDir(), name);
+        const stats = await fs.stat(filePath);
+        files.push({ day: name.slice(0, -FILE_SUFFIX.length), path: filePath, size: stats.size });
+      }
+      let total = files.reduce((sum, file) => sum + file.size, 0);
+      for (const file of files) {
+        if (file.day === today) continue;
+        if (file.day >= oldest && total <= input.maxBytes) continue;
+        await fs.rm(file.path, { force: true });
+        total -= file.size;
+        removed.add(file.day);
+      }
+    });
+    return removed;
   }
 
   private requestsDir(): string {

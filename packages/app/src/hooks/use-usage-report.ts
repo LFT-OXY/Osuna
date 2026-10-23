@@ -9,6 +9,7 @@ import {
   type UsageHostError,
   type UsageHostInput,
 } from "@/usage-stats/aggregated-usage";
+import { usageRequestsQueryBaseKey } from "@/usage-stats/aggregated-requests";
 import { usageSessionsQueryBaseKey } from "@/usage-stats/aggregated-sessions";
 import {
   EMPTY_USAGE_REPORT,
@@ -100,9 +101,10 @@ export function useUsageReport(input: UseUsageReportInput): UseUsageReportResult
   const queryClient = useQueryClient();
   const refetch = useCallback(() => {
     void query.refetch();
-    // An expanded day lists the same rows the report just recounted, so it goes
-    // stale with it; the card refetches whichever days are open.
+    // An expanded day and the Requests tab list the rows the report just recounted, so they go
+    // stale with it; the card refetches whatever it shows.
     void queryClient.invalidateQueries({ queryKey: usageSessionsQueryBaseKey });
+    void queryClient.invalidateQueries({ queryKey: usageRequestsQueryBaseKey });
   }, [query, queryClient]);
 
   const liveBackfill = useUsageLiveEvents({

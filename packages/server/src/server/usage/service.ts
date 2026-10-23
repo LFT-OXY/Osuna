@@ -29,6 +29,11 @@ import { buildAgentSummary, buildAgentTurns, type AgentReportInput } from "./age
 import { UsageCallMerge } from "./call-merge.js";
 import type { GatewayLedgerRow } from "./ledger.js";
 import { buildUsageReport, type UsageReportPricing, type UsageReportRequest } from "./report.js";
+import {
+  buildUsageRequests,
+  type UsageRequestsRequest,
+  type UsageRequestsResult,
+} from "./requests.js";
 import { buildUsageSessionChains } from "./session-chains.js";
 import {
   buildUsageSessions,
@@ -37,7 +42,13 @@ import {
 } from "./sessions.js";
 import { locateSessionFile } from "./session-files.js";
 import { USAGE_SOURCE_ADAPTERS, sessionCursorKey, type UsageSourceAdapter } from "./sources.js";
-import { UsageStore, emptyRowSet, type UsageRowSet } from "./store.js";
+import {
+  REQUEST_RETENTION_BYTES,
+  REQUEST_RETENTION_DAYS,
+  UsageStore,
+  emptyRowSet,
+  type UsageRowSet,
+} from "./store.js";
 import { UsageTurnIndex, resolveTurnRows } from "./turn-rows.js";
 import {
   emptyScanState,
@@ -74,6 +85,8 @@ const FLUSH_EVERY_FILES = 20;
 const FLUSH_EVERY_MS = 500;
 const PROGRESS_INTERVAL_MS = 1000;
 const READ_CHUNK_BYTES = 1024 * 1024;
+/** Per-request records are pruned at most this often, on a write (magpie's saveRoute). */
+const REQUEST_PRUNE_EVERY_MS = 60 * 60 * 1000;
 
 export interface UsageServiceOptions {
   paseoHome: string;
@@ -149,6 +162,7 @@ export class UsageService {
     startedAt: null,
   };
   private lastError: string | null = null;
+  private lastRequestPruneAt = Number.NEGATIVE_INFINITY;
   private compressedLogged = false;
   private timer: NodeJS.Timeout | null = null;
   private round: Promise<void> | null = null;
@@ -264,6 +278,7 @@ export class UsageService {
       turns: merged.turns,
       requests: merged.records,
     });
+    await this.pruneRequests();
     // 已读过这次回复时，挪到接口那边的修正由扫描的下一次落盘带上。
     if (this.merge.hasUnsettled()) this.startRound({ backfill: false, discover: false });
     // 回填期间不发 usage.updated，与扫描的节奏一致：回填完成时页面整页重读。
@@ -319,6 +334,21 @@ export class UsageService {
       chains: buildUsageSessionChains(this.scanState),
       handleOf: (cli, sessionId) => this.sessionHandle(cli, sessionId),
       owners: await this.agents.listSessionOwners(),
+    });
+  }
+
+  /** One page of the Requests list: the ledger rows and the log's replies, merged (ADR 0014). */
+  async listRequests(request: UsageRequestsRequest): Promise<UsageRequestsResult> {
+    const calls = this.merge.listCalls();
+    const cwds = new Set<string>();
+    for (const call of calls) if (call.cli) cwds.add(call.cli.cwd);
+    const endpointIdentities = this.currentEndpointIdentities();
+    return buildUsageRequests({
+      calls,
+      request,
+      projects: await this.projects.resolveAll(cwds),
+      endpointIdentities,
+      pricing: this.reportPricing(endpointIdentities),
     });
   }
 
@@ -469,8 +499,10 @@ export class UsageService {
       ) {
         // Rows before the cursor: a crash between the two recounts at most one
         // batch, where the other order would lose it for good.
+        const wroteRequests = pendingRows.requests.length > 0;
         await this.store.appendRows(pendingRows);
         pendingRows = emptyRowSet();
+        if (wroteRequests) await this.pruneRequests();
       }
       await this.store.saveScanState(this.scanState);
       cursorDirty = false;
@@ -840,6 +872,25 @@ export class UsageService {
     );
     this.turns.addAll(resolved.rows);
     return resolved.rows;
+  }
+
+  /**
+   * Per-request records keep 30 days and 200 MB, the oldest day going first;
+   * checked after a write, at most once an hour. Memory forgets the same days,
+   * so the list and the merge end where a restart would load them from.
+   */
+  private async pruneRequests(): Promise<void> {
+    const now = this.now();
+    if (now - this.lastRequestPruneAt <= REQUEST_PRUNE_EVERY_MS) return;
+    this.lastRequestPruneAt = now;
+    const removed = await this.store.pruneRequests({
+      now,
+      days: REQUEST_RETENTION_DAYS,
+      maxBytes: this.config?.requests?.maxBytes ?? REQUEST_RETENTION_BYTES,
+    });
+    if (removed.size === 0) return;
+    this.merge.prune(removed);
+    this.logger.info({ days: Array.from(removed) }, "Pruned per-request usage records");
   }
 
   private applyRows(rows: UsageBucketRow[]): void {

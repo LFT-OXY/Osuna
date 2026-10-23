@@ -96,7 +96,7 @@ $PASEO_HOME/
 ├── usage/
 │   ├── buckets-YYYY-MM.jsonl             # Token increments per (source, model, session, cwd, UTC 15-min bucket)
 │   ├── turns-YYYY-MM.jsonl               # Token increments per (source, session, turn, model)
-│   ├── requests/YYYY-MM-DD.jsonl         # Gateway ledger rows and the CLI log replies they merge with (mode 0600)
+│   ├── requests/YYYY-MM-DD.jsonl         # Per-request records: ledger rows, CLI log replies, merge markers (mode 0600; 30 days, 200 MB)
 │   ├── scan-state.json                   # One cursor per scanned CLI log file
 │   └── pricing-table.json                # Last price table fetched from LiteLLM
 └── push-tokens.json                     # Expo push notification tokens
@@ -682,6 +682,9 @@ migrates them. A ledger merge adds rows of both kinds that move a call's tokens 
 ### Request records (`usage/requests/YYYY-MM-DD.jsonl`)
 
 Append-only, one file per UTC day of the record's own time, directory `0700` and files `0600`.
+Kept 30 days and 200 MB in all: after a write, at most once an hour, whole days go oldest first
+and today stays (`UsageStore.pruneRequests`; [usage.md](usage.md#two-layers-summaries-and-per-request-records)).
+The bucket and turn rows hold every total, so nothing a summary shows is lost with a day.
 A torn line is dropped on load. Three kinds, discriminated on `kind`
 (`USAGE_REQUEST_RECORD_SCHEMA` in `packages/server/src/server/usage/ledger.ts`):
 
@@ -697,7 +700,9 @@ A torn line is dropped on load. Three kinds, discriminated on `kind`
   masked and cut to 200 characters, cooldown end, whether it was asked again without a refused
   field). No conversation content.
 - `cli` — one CLI log reply as deduplicated so far, with the session, cwd, bucket, model and
-  turn its tokens went to when first seen. Written whole again each time a later line corrects
+  turn its tokens went to when first seen. Claude Code and Codex name it by the reply id; Pi and
+  OMP by `<sessionId>/<entry id>`, since their entry ids repeat across sessions. A `cli` record
+  no ledger row meets is a direct call in the Requests tab. Written whole again each time a later line corrects
   it; the last line of a `replyId` wins on load.
 - `merged` — `{ agent, replyId, at }`, written in the scan batch that moved the reply's tokens
   from Official and the unknown project to its endpoint, together with that reply's `cli`
