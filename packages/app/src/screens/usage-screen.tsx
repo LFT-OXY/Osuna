@@ -28,22 +28,28 @@ import {
   type UsageCustomRange,
   type UsagePeriod,
 } from "@/usage-stats/period";
+import type { UsageRequestsEndpointIntent } from "@/usage-stats/requests";
 import { useUsageHosts } from "@/usage-stats/use-usage-hosts";
 import { getDeviceTimeZone } from "@/utils/device-timezone";
 
 const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
-export function UsageScreen(): ReactElement {
+interface UsageScreenProps {
+  /** Opens the Requests tab filtered to one endpoint (from the endpoint page's Recent problems). */
+  requestsIntent: UsageRequestsEndpointIntent | null;
+}
+
+export function UsageScreen({ requestsIntent }: UsageScreenProps): ReactElement {
   const isFocused = useIsFocused();
 
   if (!isFocused) {
     return <View style={styles.container} />;
   }
 
-  return <UsageScreenContent />;
+  return <UsageScreenContent requestsIntent={requestsIntent} />;
 }
 
-function UsageScreenContent(): ReactElement {
+function UsageScreenContent({ requestsIntent }: UsageScreenProps): ReactElement {
   const { t } = useTranslation();
   const isCompact = useIsCompactFormFactor();
   const timezone = useMemo(() => getDeviceTimeZone(), []);
@@ -179,7 +185,12 @@ function UsageScreenContent(): ReactElement {
     const mainColumn = (
       <View style={styles.mainColumn}>
         {overview}
-        <UsageDetailsCard report={report} hosts={detailsHosts} requests={detailsRequests} />
+        <UsageDetailsCard
+          report={report}
+          hosts={detailsHosts}
+          requests={detailsRequests}
+          requestsIntent={requestsIntent}
+        />
       </View>
     );
 

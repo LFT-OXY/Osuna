@@ -4,6 +4,7 @@ import {
   INITIAL_USAGE_REQUESTS_FILTERS,
   mergeUsageRequestPages,
   toUsageRequestFilters,
+  usageRequestsFiltersFor,
   usageRequestStatus,
   type UsageRequestsPage,
 } from "./requests";
@@ -122,7 +123,12 @@ describe("toUsageRequestFilters", () => {
         status: "failed",
         through: "gateway",
         cli: "codex",
-        endpoint: { key: "name:Relay", endpointIds: ["ep_1", "ep_2"] },
+        endpoint: {
+          key: "name:Relay",
+          endpointIds: ["ep_1", "ep_2"],
+          name: "Relay",
+          deleted: false,
+        },
         model: "gpt-5.5",
         search: "  quota ",
       }),
@@ -134,6 +140,14 @@ describe("toUsageRequestFilters", () => {
       models: ["gpt-5.5"],
       search: "quota",
     });
+  });
+});
+
+describe("usageRequestsFiltersFor", () => {
+  it("chooses the endpoint's name in the menu but asks only for its own id, every other filter at all", () => {
+    const filters = usageRequestsFiltersFor({ endpointId: "ep_1", endpointName: "Relay" });
+    expect(filters.endpoint?.key).toBe("name:Relay");
+    expect(toUsageRequestFilters(filters)).toEqual({ endpoints: ["ep_1"] });
   });
 });
 

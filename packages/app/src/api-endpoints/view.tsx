@@ -39,6 +39,8 @@ import { useVendorStatus } from "./use-vendor-status";
 import { ApiEndpointBalanceAutoRefreshSection } from "./balance-auto-refresh-section";
 import { useEndpointBalances } from "./use-endpoint-balances";
 import { ApiEndpointBalanceSection } from "./balance-section";
+import { ApiEndpointRecentProblemsSection } from "./recent-problems-section";
+import { useEndpointRecentProblems } from "./use-endpoint-recent-problems";
 import { AgentApiEndpointsFrame, AgentApiEndpointsSection } from "./agent-section";
 import { selectAgentApiEndpointsView, type AgentIssueAction } from "./internal/agent-settings";
 import type { ConnectionFormSeed, ConnectionSaveResult } from "./internal/connection-form-model";
@@ -858,6 +860,8 @@ function ApiEndpointDetailSections({
     endpointIds: balanceIds,
     autoRefresh: balanceAutoRefreshOf(hostEndpoints.state),
   });
+  // 「最近异常」：主机有中转站账本时读，开着时随 usage.updated 重读。
+  const recentProblems = useEndpointRecentProblems({ serverId, endpointId: endpoint.id });
   // 「接口名显示方式」的预览：这家第一个模型在选单里叫什么（magpie 的 Agents’ lists show）。
   const hostState = hostEndpoints.state;
   const nameDisplayRow = useMemo(() => {
@@ -979,6 +983,13 @@ function ApiEndpointDetailSections({
             (endpoint.baseUrls ?? [{ url: endpoint.baseUrl }]).map((entry) => entry.url),
           )}
           onFillAccessKey={onFillAccessKey}
+        />
+      )}
+      {recentProblems.status === "off" ? null : (
+        <ApiEndpointRecentProblemsSection
+          endpointId={endpoint.id}
+          endpointName={endpoint.name}
+          problems={recentProblems}
         />
       )}
       {hasCliWiring && canSearchWeb ? (

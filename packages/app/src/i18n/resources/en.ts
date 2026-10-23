@@ -3197,6 +3197,17 @@ export const en = {
           saveFailed: "Couldn't change auto-refresh: {{message}}",
         },
       },
+      recentProblems: {
+        title: "Recent problems",
+        info: "The latest 20 requests this endpoint failed, was switched away from, or went into a cooldown on.",
+        loading: "Loading…",
+        empty: "No recent problems",
+        loadFailed: "Couldn't load recent problems",
+        switchedTo: "switched to {{name}}",
+        agentGotError: "the agent got an error",
+        failed: "failed",
+        viewAll: "View all in the Requests list",
+      },
       models: {
         title: "Models",
         count: "{{selected}} selected / {{total}} total",

@@ -3178,6 +3178,17 @@ export const ptBR: TranslationResources = {
           saveFailed: "Não foi possível alterar a atualização automática: {{message}}",
         },
       },
+      recentProblems: {
+        title: "Problemas recentes",
+        info: "As últimas 20 requisições em que este endpoint falhou, foi trocado por outro ou entrou em pausa.",
+        loading: "Carregando…",
+        empty: "Nenhum problema recente",
+        loadFailed: "Não foi possível carregar os problemas recentes",
+        switchedTo: "trocado para {{name}}",
+        agentGotError: "o agente recebeu um erro",
+        failed: "falhou",
+        viewAll: "Ver tudo na lista de requisições",
+      },
       models: {
         title: "Modelos",
         count: "{{selected}} selecionados / {{total}} no total",

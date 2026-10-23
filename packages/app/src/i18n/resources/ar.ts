@@ -3121,6 +3121,17 @@ export const ar: TranslationResources = {
           saveFailed: "تعذّر تغيير التحديث التلقائي: {{message}}",
         },
       },
+      recentProblems: {
+        title: "المشكلات الأخيرة",
+        info: "آخر 20 طلبًا فشلت فيها نقطة النهاية هذه أو تم التحويل منها إلى غيرها أو دخلت فترة تهدئة.",
+        loading: "جارٍ التحميل…",
+        empty: "لا توجد مشكلات حديثة",
+        loadFailed: "تعذر تحميل المشكلات الأخيرة",
+        switchedTo: "تم التحويل إلى {{name}}",
+        agentGotError: "تلقى الوكيل خطأ",
+        failed: "فشل",
+        viewAll: "عرض الكل في قائمة الطلبات",
+      },
       models: {
         title: "النماذج",
         count: "المحدد {{selected}} / الإجمالي {{total}}",

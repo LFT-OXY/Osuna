@@ -3173,6 +3173,17 @@ export const ru: TranslationResources = {
           saveFailed: "Не удалось изменить автообновление: {{message}}",
         },
       },
+      recentProblems: {
+        title: "Недавние проблемы",
+        info: "Последние 20 запросов, на которых этот эндпоинт дал сбой, был заменён другим или ушёл на паузу.",
+        loading: "Загрузка…",
+        empty: "Недавних проблем нет",
+        loadFailed: "Не удалось загрузить недавние проблемы",
+        switchedTo: "переключено на {{name}}",
+        agentGotError: "агент получил ошибку",
+        failed: "сбой",
+        viewAll: "Показать все в списке запросов",
+      },
       models: {
         title: "Модели",
         count: "Выбрано {{selected}} из {{total}}",

@@ -3142,6 +3142,17 @@ export const zhCN: TranslationResources = {
           saveFailed: "改不了自动刷新：{{message}}",
         },
       },
+      recentProblems: {
+        title: "最近异常",
+        info: "这家最近 20 次失败、被换走或进入冷却的请求。",
+        loading: "正在读取…",
+        empty: "最近没有异常",
+        loadFailed: "读不到最近异常",
+        switchedTo: "换到了 {{name}}",
+        agentGotError: "Agent 收到了报错",
+        failed: "失败",
+        viewAll: "在请求列表里看全部",
+      },
       models: {
         title: "模型",
         count: "已选 {{selected}} / 共 {{total}}",

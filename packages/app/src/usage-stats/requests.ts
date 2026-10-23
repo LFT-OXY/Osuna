@@ -110,8 +110,11 @@ export interface UsageRequestsFilterState {
   status: UsageRequestStatusFilter;
   through: UsageRequestThroughFilter;
   cli: UsageCli | null;
-  /** The endpoint option chosen, with the ids it stood for when it was chosen. */
-  endpoint: Pick<UsageRequestEndpointOption, "key" | "endpointIds"> | null;
+  /**
+   * The endpoint option chosen, with the ids it stood for and its name when it
+   * was chosen: the name labels the menu while the period lists none of it.
+   */
+  endpoint: Pick<UsageRequestEndpointOption, "key" | "endpointIds" | "name" | "deleted"> | null;
   model: string | null;
   search: string;
 }
@@ -124,6 +127,31 @@ export const INITIAL_USAGE_REQUESTS_FILTERS: UsageRequestsFilterState = {
   model: null,
   search: "",
 };
+
+/** What the filter bar starts with when a page sends the user to one endpoint's requests. */
+export interface UsageRequestsEndpointIntent {
+  endpointId: string;
+  endpointName: string;
+}
+
+/**
+ * The filters with that endpoint chosen, as the menu option of its name would
+ * be chosen (same-named endpoints on other hosts are one option); only this
+ * endpoint's id is asked for.
+ */
+export function usageRequestsFiltersFor(
+  intent: UsageRequestsEndpointIntent,
+): UsageRequestsFilterState {
+  return {
+    ...INITIAL_USAGE_REQUESTS_FILTERS,
+    endpoint: {
+      key: `name:${intent.endpointName}`,
+      endpointIds: [intent.endpointId],
+      name: intent.endpointName,
+      deleted: false,
+    },
+  };
+}
 
 /** The filters as the daemon reads them: only what is chosen. */
 export function toUsageRequestFilters(state: UsageRequestsFilterState): UsageRequestFilters {

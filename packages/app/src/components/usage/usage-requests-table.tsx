@@ -38,8 +38,10 @@ import {
   toUsageRequestFilters,
   USAGE_REQUESTS_PAGE_SIZE,
   usageRequestStatus,
+  usageRequestsFiltersFor,
   type MergedUsageRequestRow,
   type MergedUsageRequests,
+  type UsageRequestsEndpointIntent,
   type UsageRequestsFilterState,
 } from "@/usage-stats/requests";
 import { usageSourceLabel } from "@/usage-stats/sources";
@@ -131,6 +133,8 @@ interface UsageRequestsTableProps {
   timezone: string;
   /** Host names by id, worn by rows while more than one host is counted. */
   hostLabels: ReadonlyMap<string, string> | null;
+  /** Starts with this endpoint chosen; null starts with every filter at all. */
+  endpointIntent: UsageRequestsEndpointIntent | null;
 }
 
 /** The Requests tab: a filter bar, one page of requests, and the pager. */
@@ -139,9 +143,12 @@ export function UsageRequestsTable({
   range,
   timezone,
   hostLabels,
+  endpointIntent,
 }: UsageRequestsTableProps) {
   const { t } = useTranslation();
-  const [filters, setFilters] = useState<UsageRequestsFilterState>(INITIAL_USAGE_REQUESTS_FILTERS);
+  const [filters, setFilters] = useState<UsageRequestsFilterState>(() =>
+    endpointIntent ? usageRequestsFiltersFor(endpointIntent) : INITIAL_USAGE_REQUESTS_FILTERS,
+  );
   const [searchDraft, setSearchDraft] = useState("");
   const wireFilters = useMemo(() => toUsageRequestFilters(filters), [filters]);
   // 换了筛选或时段就回到第一页。
@@ -317,7 +324,7 @@ function UsageRequestsFilterBar({
   const handleEndpoint = useCallback(
     (key: string | null) => {
       const option = endpoints?.find((candidate) => candidate.key === key);
-      onChange({ endpoint: option ? { key: option.key, endpointIds: option.endpointIds } : null });
+      onChange({ endpoint: option ?? null });
     },
     [endpoints, onChange],
   );
@@ -367,6 +374,7 @@ function UsageRequestsFilterBar({
           allLabel={t("usage.requests.filters.all")}
           choices={endpointChoices}
           selected={filters.endpoint?.key ?? null}
+          selectedFallbackLabel={filters.endpoint ? endpointLabel(filters.endpoint, t) : null}
           onSelect={handleEndpoint}
           testID="usage-requests-filter-endpoint"
         />
@@ -407,6 +415,7 @@ function UsageRequestsFilterMenu({
   allLabel,
   choices,
   selected,
+  selectedFallbackLabel = null,
   onSelect,
   testID,
 }: {
@@ -414,11 +423,14 @@ function UsageRequestsFilterMenu({
   allLabel: string;
   choices: readonly FilterChoice[];
   selected: string | null;
+  /** What the trigger says for a choice the period no longer offers; null says All. */
+  selectedFallbackLabel?: string | null;
   onSelect: (key: string | null) => void;
   testID: string;
 }) {
   const handleAll = useCallback(() => onSelect(null), [onSelect]);
-  const selectedLabel = choices.find((choice) => choice.key === selected)?.label ?? allLabel;
+  const selectedLabel =
+    choices.find((choice) => choice.key === selected)?.label ?? selectedFallbackLabel ?? allLabel;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger

@@ -3149,6 +3149,17 @@ export const ko: TranslationResources = {
           saveFailed: "자동 새로고침을 변경하지 못했습니다: {{message}}",
         },
       },
+      recentProblems: {
+        title: "최근 문제",
+        info: "이 엔드포인트에서 최근 실패했거나, 다른 엔드포인트로 넘어갔거나, 쿨다운에 들어간 요청(최대 20개).",
+        loading: "불러오는 중…",
+        empty: "최근 문제 없음",
+        loadFailed: "최근 문제를 불러오지 못했습니다",
+        switchedTo: "{{name}}(으)로 전환",
+        agentGotError: "에이전트가 오류를 받음",
+        failed: "실패",
+        viewAll: "요청 목록에서 모두 보기",
+      },
       models: {
         title: "모델",
         count: "{{selected}}개 선택 / 전체 {{total}}개",

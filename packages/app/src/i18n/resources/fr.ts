@@ -3204,6 +3204,17 @@ export const fr: TranslationResources = {
           saveFailed: "Impossible de modifier l'actualisation automatique : {{message}}",
         },
       },
+      recentProblems: {
+        title: "Problèmes récents",
+        info: "Les 20 dernières requêtes où cet endpoint a échoué, a été remplacé par un autre ou s’est mis en pause.",
+        loading: "Chargement…",
+        empty: "Aucun problème récent",
+        loadFailed: "Impossible de charger les problèmes récents",
+        switchedTo: "basculé vers {{name}}",
+        agentGotError: "l’agent a reçu une erreur",
+        failed: "échec",
+        viewAll: "Tout voir dans la liste des requêtes",
+      },
       models: {
         title: "Modèles",
         count: "{{selected}} sélectionnés / {{total}} au total",

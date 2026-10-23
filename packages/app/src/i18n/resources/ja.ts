@@ -3165,6 +3165,17 @@ export const ja: TranslationResources = {
           saveFailed: "自動更新を変更できませんでした：{{message}}",
         },
       },
+      recentProblems: {
+        title: "最近の問題",
+        info: "このエンドポイントで直近に失敗した、別のエンドポイントに切り替えられた、またはクールダウンに入ったリクエスト（最大 20 件）。",
+        loading: "読み込み中…",
+        empty: "最近の問題はありません",
+        loadFailed: "最近の問題を読み込めませんでした",
+        switchedTo: "{{name}} に切り替え",
+        agentGotError: "エージェントにエラーが返されました",
+        failed: "失敗",
+        viewAll: "リクエスト一覧ですべて表示",
+      },
       models: {
         title: "モデル",
         count: "選択 {{selected}} / 全 {{total}}",

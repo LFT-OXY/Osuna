@@ -432,6 +432,16 @@ export function buildUsageRoute() {
   return "/usage" as const;
 }
 
+/** 用量页的「请求」标签，按这家接口筛好（接口页「最近异常」的「在请求列表里看全部」）。 */
+export function buildUsageRequestsRoute(endpoint: { endpointId: string; endpointName: string }) {
+  const params = new URLSearchParams({
+    tab: "requests",
+    endpoint: endpoint.endpointId,
+    endpointName: endpoint.endpointName,
+  });
+  return `/usage?${params.toString()}` as const;
+}
+
 export function buildOpenProjectRoute() {
   return "/open-project" as const;
 }

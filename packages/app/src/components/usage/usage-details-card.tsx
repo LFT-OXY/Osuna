@@ -35,6 +35,7 @@ import type { UsageHostInput } from "@/usage-stats/aggregated-usage";
 import type { MergedUsageProject, MergedUsageReport } from "@/usage-stats/merge";
 import type { UsageRange } from "@/usage-stats/period";
 import { formatUsageDay, formatUsageMonth } from "@/usage-stats/range-label";
+import type { UsageRequestsEndpointIntent } from "@/usage-stats/requests";
 import { usageSourceColor, usageSourceLabel } from "@/usage-stats/sources";
 import { totalUsageTokens } from "@/usage-stats/totals";
 
@@ -155,9 +156,16 @@ interface UsageDetailsCardProps {
   hosts: UsageHostsView;
   /** Null hides the Requests tab: no counted host keeps the gateway ledger. */
   requests: UsageDetailsRequests | null;
+  /** Opens on the Requests tab with this endpoint chosen; null opens on Daily. */
+  requestsIntent: UsageRequestsEndpointIntent | null;
 }
 
-export function UsageDetailsCard({ report, hosts, requests }: UsageDetailsCardProps) {
+export function UsageDetailsCard({
+  report,
+  hosts,
+  requests,
+  requestsIntent,
+}: UsageDetailsCardProps) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
   const isCompact = useIsCompactFormFactor();
@@ -171,7 +179,7 @@ export function UsageDetailsCard({ report, hosts, requests }: UsageDetailsCardPr
     }),
     [viewportHeight],
   );
-  const [chosenTab, setTab] = useState<UsageDetailsTab>("daily");
+  const [chosenTab, setTab] = useState<UsageDetailsTab>(requestsIntent ? "requests" : "daily");
   // 主机换成没有账本的那几台时，请求标签不在了，回到每日。
   const tab = chosenTab === "requests" && !requests ? "daily" : chosenTab;
   const [projectLimit, setProjectLimit] = useState<UsageProjectLimit>(10);
@@ -253,6 +261,7 @@ export function UsageDetailsCard({ report, hosts, requests }: UsageDetailsCardPr
         range={requests.range}
         timezone={hosts.timezone}
         hostLabels={hosts.isMultiHost ? hosts.labels : null}
+        endpointIntent={requestsIntent}
       />
     );
   } else {
