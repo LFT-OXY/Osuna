@@ -285,7 +285,11 @@ function createAgentMcpBaseUrl(listenTarget: ListenTarget | null): string | null
 /** 中转站冷却的失败接口；测试可注入时钟。 */
 function createCooldowns(input: { config: PaseoDaemonConfig; logger: Logger }): EndpointCooldowns {
   const overrides = input.config.apiEndpoints ?? {};
-  return new EndpointCooldowns({ logger: input.logger, now: overrides.cooldownsNow });
+  return new EndpointCooldowns({
+    filePath: path.join(input.config.paseoHome, "api-endpoints", "cooldowns.json"),
+    logger: input.logger,
+    now: overrides.cooldownsNow,
+  });
 }
 
 /** 已下线模型的记录；测试可注入时钟与到期定时器。 */

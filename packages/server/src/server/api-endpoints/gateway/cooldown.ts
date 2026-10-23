@@ -4,11 +4,14 @@
 
 import type { IncomingHttpHeaders } from "node:http";
 import type pino from "pino";
+import { z } from "zod";
 import {
   API_ENDPOINT_COOLDOWN_MAX_MINUTES,
   nextResetAt,
 } from "@getpaseo/protocol/api-endpoint/cooldown-settings";
 import type { ApiEndpointCooldownSettings } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import { writePrivateFileAtomicSync } from "../../private-files.js";
+import { readOptionalFile } from "../config-file.js";
 import { hostOf } from "../model-facts.js";
 import { isRecord, parseJson } from "../upstream-http.js";
 import {
@@ -22,7 +25,8 @@ import {
 } from "./failure.js";
 
 /*
- * 冷却：一家接口失败后多久不被自动选中。只记在内存里，daemon 重启清零。
+ * 冷却：一家接口失败后多久不被自动选中。存在 api-endpoints/cooldowns.json（magpie 只记在内存里，这是多做，ADR 0014），
+ * daemon 重启后读回、接着冷却，过期的丢掉；文件读不懂当作没有冷却。连续失败次数只在内存里，重启清零。
  * 冷却按整家接口记；只因模型被拒（这把 key 不提供它）、厂商说只是这个模型的额度、或这个模型自己接连失败时，
  * 只冷却这家的这个模型。
  * 冷却结束的时刻也会记一行日志，所以每条冷却挂一个定时器。
@@ -68,7 +72,8 @@ export interface EndpointRest {
   endpointName: string;
   // 只冷却这个模型时有值。
   model: string | null;
-  why: FailureClass;
+  // 代理没连上不冷却。
+  why: Exclude<FailureClass, "proxy">;
   status: number;
   by: RestBy;
   // 连续失败次数，翻倍用。
@@ -78,6 +83,21 @@ export interface EndpointRest {
   // 上游原文（key 已打码）：全在冷却时原样交给 Agent。
   said: string;
 }
+
+const StoredRestSchema = z.object({
+  endpointId: z.string(),
+  endpointName: z.string(),
+  model: z.string().nullable(),
+  why: z.enum(["credit", "quota", "rate", "other", "auth"]),
+  status: z.number().int(),
+  by: z.enum(["credit", "retry-after", "resets", "quota", "cooldown", "backoff", "auth"]),
+  failures: z.number().int(),
+  until: z.string().datetime().nullable(),
+  said: z.string(),
+});
+type StoredRest = z.infer<typeof StoredRestSchema>;
+
+const CooldownsFileSchema = z.object({ rests: z.array(StoredRestSchema) });
 
 /** 一次失败交给冷却记录的样子：哪家（带它的冷却设置）、哪个模型、问的哪个地址、上游怎么答的。 */
 export interface FailureReport {
@@ -416,10 +436,15 @@ export class EndpointCooldowns {
   // 连续的其他失败次数，按冷却键记，模型自己的另记一份（「<endpointId>/<model>」）；答复成功清零。
   private readonly failures = new Map<string, number>();
   private readonly endTimers = new Map<string, NodeJS.Timeout>();
+  private readonly filePath: string;
+  // 上次写进文件的内容；没变就不再写。
+  private written: string | null = null;
 
-  constructor(options: { logger: pino.Logger; now?: () => number }) {
+  constructor(options: { filePath: string; logger: pino.Logger; now?: () => number }) {
     this.logger = options.logger.child({ module: "api-endpoint-cooldowns" });
     this.now = options.now ?? Date.now;
+    this.filePath = options.filePath;
+    this.restore();
   }
 
   /** 这家接口（或它的这个模型）正在冷却中；先看整家，再看模型。 */
@@ -496,6 +521,7 @@ export class EndpointCooldowns {
       "API endpoint is cooling down",
     );
     this.scheduleEnd(key, rest);
+    this.save();
     return rest;
   }
 
@@ -587,6 +613,7 @@ export class EndpointCooldowns {
     const timer = setTimeout(() => {
       this.endTimers.delete(key);
       this.logEnded(rest);
+      this.save();
     }, rest.until - this.now());
     timer.unref();
     this.endTimers.set(key, timer);
@@ -596,8 +623,50 @@ export class EndpointCooldowns {
     const rest = this.active(key);
     clearTimeout(this.endTimers.get(key));
     this.endTimers.delete(key);
-    this.rests.delete(key);
+    if (!this.rests.delete(key)) return;
     if (rest) this.logEnded(rest);
+    this.save();
+  }
+
+  /** 正在冷却的记录写回文件；写不进只记日志，内存里的照用，下次变动再写。 */
+  private save(): void {
+    const rests: StoredRest[] = [];
+    for (const key of this.rests.keys()) {
+      const rest = this.active(key);
+      if (rest) rests.push(toStored(rest));
+    }
+    const text = `${JSON.stringify(CooldownsFileSchema.parse({ rests }), null, 2)}\n`;
+    if (text === this.written) return;
+    try {
+      writePrivateFileAtomicSync(this.filePath, text);
+      this.written = text;
+    } catch (error) {
+      this.logger.warn(
+        { err: error, filePath: this.filePath },
+        "Failed to write API endpoint cooldowns",
+      );
+    }
+  }
+
+  /** 启动时读回还没到点的冷却并重新定时；文件读不懂（坏了或格式不对）当作没有冷却。 */
+  private restore(): void {
+    const bytes = readOptionalFile(this.filePath);
+    if (bytes === null) return;
+    const parsed = CooldownsFileSchema.safeParse(parseJson(bytes.toString("utf8")));
+    if (!parsed.success) {
+      this.logger.warn(
+        { filePath: this.filePath },
+        "Ignoring an unreadable API endpoint cooldowns file",
+      );
+      return;
+    }
+    for (const stored of parsed.data.rests) {
+      const rest = fromStored(stored);
+      if (rest.until !== null && rest.until <= this.now()) continue;
+      const key = rest.model === null ? rest.endpointId : `${rest.endpointId}/${rest.model}`;
+      this.rests.set(key, rest);
+      this.scheduleEnd(key, rest);
+    }
   }
 
   private logEnded(rest: EndpointRest): void {
@@ -610,4 +679,12 @@ export class EndpointCooldowns {
       "API endpoint cooldown ended",
     );
   }
+}
+
+function toStored(rest: EndpointRest): StoredRest {
+  return { ...rest, until: rest.until === null ? null : new Date(rest.until).toISOString() };
+}
+
+function fromStored(stored: StoredRest): EndpointRest {
+  return { ...stored, until: stored.until === null ? null : Date.parse(stored.until) };
 }

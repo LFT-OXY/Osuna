@@ -1,6 +1,9 @@
 // 用例取自 magpie（https://github.com/yetone/magpie，internal/gateway/routing.go、fallback.go 的冷却常量，internal/provider/concurrency.go 的 QuotaRest、RestCap，zhipu_resets_test.go）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
+import { mkdtempSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import pino from "pino";
 import type { ApiEndpointCooldownSettings } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { describe, expect, test, vi } from "vitest";
@@ -22,11 +25,15 @@ import {
 const MINUTE = 60_000;
 const START = Date.parse("2026-10-14T12:00:00Z");
 
-function cooldowns() {
+function cooldownsFile(): string {
+  return path.join(mkdtempSync(path.join(os.tmpdir(), "paseo-cooldowns-")), "cooldowns.json");
+}
+
+function cooldowns(filePath = cooldownsFile()) {
   const clock = { now: START };
   const lines: string[] = [];
   const logger = pino({ level: "info" }, { write: (line: string) => lines.push(line) });
-  const store = new EndpointCooldowns({ logger, now: () => clock.now });
+  const store = new EndpointCooldowns({ filePath, logger, now: () => clock.now });
   return { store, clock, lines };
 }
 
@@ -284,7 +291,7 @@ describe("how long an endpoint sits out", () => {
     vi.useFakeTimers({ now: START });
     const lines: string[] = [];
     const logger = pino({ level: "info" }, { write: (line: string) => lines.push(line) });
-    const store = new EndpointCooldowns({ logger });
+    const store = new EndpointCooldowns({ filePath: cooldownsFile(), logger });
     try {
       fail(store, { status: 402 });
       vi.advanceTimersByTime(31 * MINUTE);
@@ -641,5 +648,64 @@ describe("not asking at all while every endpoint is out of quota", () => {
     const c = fail(store, { status: 503, body: "busy" });
     expect(quotaHeld([c, b])).toBeNull();
     expect(quotaHeld([])).toBeNull();
+  });
+});
+
+describe("surviving a daemon restart", () => {
+  test("a store on the same file picks up the rests still running, a model's own included", () => {
+    const filePath = cooldownsFile();
+    const before = cooldowns(filePath);
+    const modelRest = fail(before.store, { status: 404, body: "model_not_found" });
+    const creditRest = fail(before.store, { status: 402, endpoint: B });
+
+    const clock = { now: START + 30_000 };
+    const restarted = new EndpointCooldowns({
+      filePath,
+      logger: pino({ level: "silent" }),
+      now: () => clock.now,
+    });
+
+    expect(modelRest).toMatchObject({ model: "kimi-k2", until: START + MINUTE });
+    expect(restarted.restOf("ep_a", "kimi-k2")).toEqual(modelRest);
+    expect(restarted.restOf("ep_a", "glm-4.6")).toBeNull();
+    expect(restarted.endpointRest("ep_a")).toBeNull();
+    expect(restarted.endpointRest("ep_b")).toEqual(creditRest);
+    clock.now = START + 2 * MINUTE;
+    expect(restarted.restOf("ep_a", "kimi-k2")).toBeNull();
+    clock.now = START + 31 * MINUTE;
+    expect(restarted.endpointRest("ep_b")).toBeNull();
+  });
+
+  test("a rest already over by the time the daemon starts is dropped", () => {
+    const filePath = cooldownsFile();
+    fail(cooldowns(filePath).store, { status: 402 });
+    const later = { now: START + 31 * MINUTE };
+    const restarted = new EndpointCooldowns({
+      filePath,
+      logger: pino({ level: "silent" }),
+      now: () => later.now,
+    });
+
+    later.now = START;
+    expect(restarted.endpointRest("ep_a")).toBeNull();
+  });
+
+  test("clearing by hand removes the saved rest too", () => {
+    const filePath = cooldownsFile();
+    const before = cooldowns(filePath);
+    fail(before.store, { status: 402 });
+    before.store.clear("ep_a");
+
+    expect(cooldowns(filePath).store.endpointRest("ep_a")).toBeNull();
+  });
+
+  test("needing a check is kept until the endpoint is edited", () => {
+    const filePath = cooldownsFile();
+    fail(cooldowns(filePath).store, { status: 401 });
+
+    const restarted = cooldowns(filePath).store;
+    expect(restarted.endpointRest("ep_a")).toMatchObject({ why: "auth", until: null });
+    restarted.clearNeedsCheck("ep_a");
+    expect(cooldowns(filePath).store.endpointRest("ep_a")).toBeNull();
   });
 });
