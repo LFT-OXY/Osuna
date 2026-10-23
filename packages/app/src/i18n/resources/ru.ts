@@ -4926,7 +4926,7 @@ export const ru: TranslationResources = {
         ok: "Успешно",
         failed: "Ошибка",
         failedWith: "Ошибка ({{reason}})",
-        switched: "Переключений: {{count}}",
+        switched: "Смена ×{{count}}",
       },
       failures: {
         credit: "нет средств",

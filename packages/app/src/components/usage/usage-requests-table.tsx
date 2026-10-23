@@ -65,7 +65,8 @@ type ColumnId =
  * Which columns the row shows; the rest open under it. The card's own width
  * decides, so a narrow window never slides sideways: below a 960-wide card the
  * row keeps time, model, endpoint, status and cost (at phone width the time
- * without its day and the status as one word); from 960 all thirteen.
+ * without its day); from 960 all thirteen. Every cell is one line, cut with an
+ * ellipsis; the expanded row holds the full time and status.
  */
 type TableTier = "narrow" | "medium" | "wide";
 
@@ -88,15 +89,6 @@ const TIER_COLUMNS: Record<TableTier, readonly ColumnId[]> = {
     "status",
   ],
 };
-/**
- * Every cell holds one line and cuts what does not fit. Only the status may
- * wrap, at the widths that spell its reason out; narrow, it is one word and
- * the reason opens under the row.
- */
-function linesOf(column: ColumnId, tier: TableTier): number {
-  return column === "status" && tier !== "narrow" ? 2 : 1;
-}
-
 /** The fixed columns, so the names and the status take what is left. */
 const FIXED_COLUMN_WIDTH: Partial<Record<ColumnId, number>> = {
   agent: 84,
@@ -584,7 +576,7 @@ function UsageRequestRow({
   const accessibilityState = useMemo(() => ({ expanded: isOpen }), [isOpen]);
   const cells = useRequestCells(row, timezone, tier);
   const hidden = TIER_COLUMNS.wide.filter((column) => !columns.includes(column));
-  // 窄时行上只有时刻与一个词的状态：日期与失败原因在展开行里。
+  // 窄时行上只有时刻、状态可能被截断：日期与完整状态在展开行里。
   const isNarrow = tier === "narrow";
 
   return (
@@ -686,29 +678,24 @@ function useRequestCells(
   const status = usageRequestStatus(row);
   let statusColor: RequestCellValue["color"];
   let fullStatus: string;
-  let shortStatus: string;
   if (status.kind === "failed") {
     const reason = status.failure ? failureLabel(status.failure, t) : null;
     statusColor = "statusDanger";
     fullStatus = reason
       ? t("usage.requests.statusCell.failedWith", { reason })
       : t("usage.requests.statusCell.failed");
-    shortStatus = t("usage.requests.statusCell.failed");
   } else if (status.kind === "switched") {
     statusColor = "statusWarning";
     fullStatus = t("usage.requests.statusCell.switched", { count: status.count });
-    shortStatus = t("usage.requests.status.switched");
   } else {
     statusColor = "foregroundMuted";
     fullStatus = t("usage.requests.statusCell.ok");
-    shortStatus = fullStatus;
   }
   const endpointName = row.endpointId === null ? null : (row.endpointName ?? row.endpointId);
   const endpoint = endpointLabel({ name: endpointName, deleted: row.endpointDeleted }, t);
   const endpointColor = row.endpointId === null ? "foregroundMuted" : "foreground";
   const fullTime = formatRequestTime(row.at, locale, timezone);
   const shownTime = isNarrow ? formatRequestClock(row.at, locale, timezone) : fullTime;
-  const shownStatus = isNarrow ? shortStatus : fullStatus;
   const count = (value: number): RequestCellValue => ({
     text: formatGroupedNumber(value, locale),
     color: "foreground",
@@ -732,7 +719,7 @@ function useRequestCells(
       duration: muted(formatRequestMs(row.durationMs)),
       ttft: muted(formatRequestMs(row.ttftMs)),
       speed: muted(formatOutputSpeed(row.outputSpeed)),
-      status: { text: shownStatus, color: statusColor },
+      status: { text: fullStatus, color: statusColor },
     },
   };
 }
@@ -755,7 +742,7 @@ function RequestCell({
       <Text
         variant="caption"
         color={cell.color}
-        numberOfLines={linesOf(column, tier)}
+        numberOfLines={1}
         style={NUMBER_COLUMNS.has(column) && styles.numberCell}
       >
         {cell.text}
@@ -986,14 +973,16 @@ const styles = StyleSheet.create((theme) => {
       flexBasis: 0,
     },
     endpointColumn: {
-      flexGrow: 1.4,
+      flexGrow: 1.8,
       flexShrink: 1,
       flexBasis: 0,
     },
     statusColumn: {
-      flexGrow: 1.8,
+      flexGrow: 1.6,
       flexShrink: 1,
       flexBasis: 0,
+      // 「换过 N 家」里的次数不被截掉；失败原因放不下就省略。
+      minWidth: 92,
     },
     details: {
       gap: theme.spacing[2],
