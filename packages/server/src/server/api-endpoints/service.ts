@@ -1213,8 +1213,12 @@ export class ApiEndpointService {
     });
   }
 
-  /** 每家接口最后的名字、倍率与是否已删除，按接口编号；用量页用它显示接口名。 */
+  /**
+   * 每家接口最后的名字、倍率与是否已删除，按接口编号；用量页用它显示接口名。
+   * 先对一遍现在的接口，快照文件读不懂被当成空时，在的接口也不会被当成已删除。
+   */
   endpointSnapshots(): Record<string, EndpointSnapshot> {
+    this.syncEndpointSnapshots();
     return this.store.readEndpointSnapshots();
   }
 

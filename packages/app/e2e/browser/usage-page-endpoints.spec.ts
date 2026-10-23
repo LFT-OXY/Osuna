@@ -8,6 +8,7 @@ import {
   connectApiEndpointClient,
   GOOD_REPLY_TOKENS,
   GOOD_RESPONSES_TOKENS,
+  RELAY_KEY,
   resetApiEndpoints,
   seedApiEndpoint,
   sendCodexThroughGateway,
@@ -236,7 +237,7 @@ test.describe("Usage page by endpoint", () => {
     expect(await sendThroughGateway("claude-shared-1")).toBe(200);
 
     const secondaryServerId = `srv_usage_ep_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
-    const secondary = await seedSecondaryHost();
+    const secondary = await seedSecondaryHost(relay.origin);
     const secondaryDaemon = await startIsolatedHostDaemon(secondaryServerId, {
       paseoHome: secondary.paseoHome,
       environment: secondary.environment,
@@ -261,6 +262,14 @@ test.describe("Usage page by endpoint", () => {
         );
         await shared.click();
         await waitForUsageTotal(page, SHARED_TOTAL_TOKENS);
+      });
+
+      await test.step("the card's balance comes from the host that can read one", async () => {
+        // 本机这家没设余额查询，另一台的那家设了：卡片上写另一台读到的。
+        await expect(
+          page.getByTestId(`usage-endpoint-balance-${SECONDARY_ENDPOINT_ID}`),
+        ).toHaveText("Balance $7.50");
+        await expect(page.getByTestId(`usage-endpoint-balance-${primaryId}`)).toHaveCount(0);
       });
 
       await test.step("picking the other host shows its own endpoint alone", async () => {
@@ -294,11 +303,12 @@ const SHARED_TOTAL_TOKENS = "1,000";
 const SHARED_CARD_TOKENS = "1.0K";
 
 /**
- * A second host's home: an endpoint named like the primary's, and the usage its
+ * A second host's home: an endpoint named like the primary's, with a balance
+ * query on the fake relay, and the usage its
  * gateway booked there as the daemon stores it (one 15-minute row), so no CLI or
  * relay has to run on it. Its CLI log roots are empty temp dirs.
  */
-async function seedSecondaryHost(): Promise<{
+async function seedSecondaryHost(relayOrigin: string): Promise<{
   paseoHome: string;
   environment: Record<string, string>;
 }> {
@@ -314,8 +324,9 @@ async function seedSecondaryHost(): Promise<{
           id: SECONDARY_ENDPOINT_ID,
           slug: "relay-shared",
           name: "Relay Shared",
-          baseUrls: [{ format: "anthropic_messages", url: "http://127.0.0.1:9" }],
+          baseUrls: [{ format: "anthropic_messages", url: `${relayOrigin}/good` }],
           models: [{ id: "claude-shared-1" }],
+          balance: { url: `${relayOrigin}/balance/usage`, field: "$data.left" },
           enabled: false,
           createdAt: "2026-10-01T00:00:00.000Z",
           updatedAt: "2026-10-01T00:00:00.000Z",
@@ -323,6 +334,11 @@ async function seedSecondaryHost(): Promise<{
       ],
       agents: {},
     }),
+    { mode: 0o600 },
+  );
+  await writeFile(
+    path.join(paseoHome, "api-endpoints", "keys.json"),
+    JSON.stringify({ keys: { [SECONDARY_ENDPOINT_ID]: RELAY_KEY } }),
     { mode: 0o600 },
   );
   const at = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);

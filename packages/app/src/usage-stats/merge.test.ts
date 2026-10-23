@@ -397,18 +397,18 @@ describe("mergeUsageReports endpoints", () => {
         estimatedCost: 0.7,
         share: 0.7,
         members: [
-          { serverId: "a", endpointId: null },
-          { serverId: "b", endpointId: null },
+          { serverId: "a", endpointId: null, deleted: false },
+          { serverId: "b", endpointId: null, deleted: false },
         ],
       },
       {
-        key: "live:Relay A:0",
+        key: "Relay A:0",
         name: "Relay A",
         deleted: false,
         totals: totals(30, 0),
         estimatedCost: 0.3,
         share: 0.3,
-        members: [{ serverId: "a", endpointId: "ep_a" }],
+        members: [{ serverId: "a", endpointId: "ep_a", deleted: false }],
       },
     ]);
   });
@@ -421,21 +421,36 @@ describe("mergeUsageReports endpoints", () => {
 
     expect(merged.endpoints).toEqual([
       {
-        key: "live:Relay:0",
+        key: "Relay:0",
         name: "Relay",
         deleted: false,
         totals: totals(40, 0),
         estimatedCost: 0.4,
         share: 1,
         members: [
-          { serverId: "a", endpointId: "ep_a" },
-          { serverId: "b", endpointId: "ep_b" },
+          { serverId: "a", endpointId: "ep_a", deleted: false },
+          { serverId: "b", endpointId: "ep_b", deleted: false },
         ],
       },
     ]);
   });
 
-  it("keeps two endpoints of one name on the same host apart, and a deleted one apart from a live one", () => {
+  it("puts a deleted endpoint on one host with a live one of its name on another, as live", () => {
+    const merged = mergeUsageReports([
+      { serverId: "a", report: report({ endpoints: [group("ep_a", "Relay", 30, true)] }) },
+      { serverId: "b", report: report({ endpoints: [group("ep_b", "Relay", 10)] }) },
+    ]);
+
+    expect(
+      merged.endpoints?.map((endpoint) => [
+        endpoint.key,
+        endpoint.deleted,
+        endpoint.members.map(memberId),
+      ]),
+    ).toEqual([["Relay:0", false, ["ep_a", "ep_b"]]]);
+  });
+
+  it("keeps endpoints of one name on the same host apart, a deleted one included", () => {
     const merged = mergeUsageReports([
       {
         serverId: "a",
@@ -457,9 +472,9 @@ describe("mergeUsageReports endpoints", () => {
         endpoint.members.map(memberId),
       ]),
     ).toEqual([
-      ["live:Relay:0", false, ["ep_1", "ep_4"]],
-      ["live:Relay:1", false, ["ep_2"]],
-      ["deleted:Relay:0", true, ["ep_3"]],
+      ["Relay:0", false, ["ep_1", "ep_4"]],
+      ["Relay:1", false, ["ep_2"]],
+      ["Relay:2", true, ["ep_3"]],
     ]);
   });
 

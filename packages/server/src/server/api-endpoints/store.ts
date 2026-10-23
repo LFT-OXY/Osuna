@@ -465,7 +465,7 @@ export class ApiEndpointStore {
   }
 
   /**
-   * 照现在的接口更新名字快照：在的写上现在的名字，快照里有、现在没有的标成已删除、名字留着。
+   * 照现在的接口更新名字快照：在的写上现在的名字，快照里有、现在没有的标成已删除、名字留着；别的字段不动。
    * 这份只供用量页显示，写不进去只记警告，不让保存接口失败；下次写入或重启时补上。
    */
   recordEndpointSnapshots(endpoints: readonly StoredApiEndpoint[]): void {
@@ -476,7 +476,11 @@ export class ApiEndpointStore {
       for (const [id, snapshot] of Object.entries(previous)) {
         if (!live.has(id)) next[id] = { ...snapshot, deleted: true };
       }
-      for (const endpoint of endpoints) next[endpoint.id] = { name: endpoint.name };
+      // 这里只管名字与是否已删除；别的字段（价格倍率）由各自的写入方更新，原样留着。
+      for (const endpoint of endpoints) {
+        const { deleted: _deleted, ...kept } = previous[endpoint.id] ?? { name: endpoint.name };
+        next[endpoint.id] = { ...kept, name: endpoint.name };
+      }
       if (isDeepStrictEqual(next, previous)) return;
       this.writeJson(
         ENDPOINT_SNAPSHOTS_FILE,

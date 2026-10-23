@@ -23,6 +23,7 @@ export interface MergedUsageProject extends UsageProjectBreakdown {
 export interface UsageEndpointMember {
   serverId: string;
   endpointId: string | null;
+  deleted: boolean;
 }
 
 /**
@@ -149,17 +150,18 @@ function combineHeatmapDays(a: UsageHeatmapDay, b: UsageHeatmapDay): UsageHeatma
 
 /**
  * The card one host's endpoint joins: Official, or the nth endpoint of that name
- * and deleted state on its host. Two endpoints of one name on one host (a copy
- * renamed back, a deleted one beside a new one) stay two cards.
+ * on its host. Across hosts one name is one card (decisions Q17); on one host an
+ * endpoint is its id (Q16), so two of one name there, a deleted one included,
+ * stay two cards.
  */
 function endpointKeysOf(endpoints: readonly UsageEndpointBreakdown[]): (string | null)[] {
   const seen = new Map<string, number>();
   return endpoints.map((endpoint) => {
     if (endpoint.endpointId === null) return null;
-    const base = `${endpoint.deleted ? "deleted" : "live"}:${endpoint.name ?? endpoint.endpointId}`;
-    const nth = seen.get(base) ?? 0;
-    seen.set(base, nth + 1);
-    return `${base}:${nth}`;
+    const name = endpoint.name ?? endpoint.endpointId;
+    const nth = seen.get(name) ?? 0;
+    seen.set(name, nth + 1);
+    return `${name}:${nth}`;
   });
 }
 
@@ -171,14 +173,16 @@ function foldEndpoints(
   const keys = endpointKeysOf(endpoints);
   for (const [index, { endpointId, ...endpoint }] of endpoints.entries()) {
     const key = keys[index] ?? null;
-    const member = { serverId, endpointId };
+    const member = { serverId, endpointId, deleted: endpoint.deleted };
     const existing = target.get(key);
     if (!existing) {
       target.set(key, { ...endpoint, key, members: [member] });
       continue;
     }
+    // 有一台上还在就不算删了：这家接口还在用。
     target.set(key, {
       ...existing,
+      deleted: existing.deleted && endpoint.deleted,
       totals: addUsageTotals(existing.totals, endpoint.totals),
       estimatedCost: existing.estimatedCost + endpoint.estimatedCost,
       members: [...existing.members, member],

@@ -293,13 +293,14 @@ export class UsageService {
   }
 
   /**
-   * The endpoint store's names, and for an id it never knew (its snapshot file was
-   * lost) the newest name the ledger recorded, not marked deleted.
+   * The endpoint store's names. An id the store doesn't know is in no endpoint
+   * and in no snapshot (deleted before snapshots existed, or the file was lost):
+   * it is deleted, under the newest name the ledger recorded.
    */
   private currentEndpointIdentities(): Map<string, UsageEndpointIdentity> {
     const identities = new Map<string, UsageEndpointIdentity>();
     for (const [id, name] of this.merge.endpointNames())
-      identities.set(id, { name, deleted: false });
+      identities.set(id, { name, deleted: true });
     for (const [id, identity] of this.endpointIdentities()) identities.set(id, identity);
     return identities;
   }

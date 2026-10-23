@@ -850,6 +850,30 @@ describe("usage knows an endpoint by its id", () => {
     );
     expect(restarted.endpoints).toEqual(expected);
   });
+
+  test("an endpoint only the ledger still names, gone from the endpoints and the snapshots, is deleted under the name the ledger recorded", async () => {
+    const harness = await start();
+    await askClaude(harness);
+    await waitForLedgerRow(harness.usageDir, "msg_gw_1");
+    // 升级前就删掉的接口、或快照文件丢了：接口文件里没有它，快照里也没有。
+    const endpointsDir = path.join(harness.usageDir, "..", "api-endpoints");
+    const endpointsPath = path.join(endpointsDir, "endpoints.json");
+    const file = JSON.parse(await readFile(endpointsPath, "utf8")) as {
+      endpoints: { id: string }[];
+    };
+    file.endpoints = file.endpoints.filter((endpoint) => endpoint.id !== "ep_a");
+    await writeFile(endpointsPath, JSON.stringify(file));
+    await rm(path.join(endpointsDir, "endpoint-snapshots.json"), { force: true });
+
+    await harness.restart();
+
+    const report = await waitForReport(harness, (candidate) =>
+      sameTotals(candidate.summary.totals, LEDGER_TOTALS),
+    );
+    expect(report.endpoints).toEqual([
+      { ...endpointGroup("ep_a", "Relay A", LEDGER_TOTALS, 1), deleted: true },
+    ]);
+  });
 });
 
 /** 账本里的各行（不含会话记录的回复与合并标记）。 */

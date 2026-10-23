@@ -125,11 +125,16 @@ Usage counts an endpoint by its id, so a rename shows the new name over all of
 its calls and a duplicate is a card of its own. The name comes from
 `endpoint-snapshots.json` ([data-model.md](data-model.md#9-api-endpoints)), which
 also keeps a deleted endpoint's last name: its usage stays, marked "(deleted)",
-and no balance is read for it. Across hosts the client puts endpoints of one name
-on one card and adds Official up, since the same relay set up on two machines
-has two ids. Two endpoints of one name on the same host, or a deleted one beside
-a live one, stay apart. Picking a host splits them again. A merged card shows the
-balance of its first host's endpoint, read when the page opens.
+and no balance is read for it. An id the ledger names that is in neither
+`endpoints.json` nor the snapshots (deleted before snapshots existed, or the file
+was lost) is deleted too, under the name its last ledger row recorded.
+
+Across hosts the client puts endpoints of one name on one card and adds Official
+up, since the same relay set up on two machines has two ids; the card is deleted
+only when it is deleted on every host. On one host an endpoint is its id, so two
+of one name there, a deleted one included, stay two cards. Picking a host splits
+them again. The balance line is the first host's reading that has something to
+show.
 
 ## What each log makes hard
 
@@ -436,10 +441,10 @@ replace that user agent. When both are sent depends on the "Auto-refresh balance
 and plan usage" switch at the bottom of the API endpoints page (on by default,
 for the whole host):
 
-| Switch | The API endpoints page (endpoints that are on)    | An endpoint's page (on or off)                    | The Usage page (endpoint cards not deleted) |
-| ------ | ------------------------------------------------- | ------------------------------------------------- | ------------------------------------------- |
-| On     | When you open it, then every minute it stays open | When you open it, then every minute it stays open | When you open it                            |
-| Off    | When you open it                                  | When you open it                                  | When you open it                            |
+| Switch | The API endpoints page (endpoints that are on)    | An endpoint's page (on or off)                    | The Usage page (endpoint cards not deleted)       |
+| ------ | ------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------- |
+| On     | When you open it, then every minute it stays open | When you open it, then every minute it stays open | When you open it, then every minute it stays open |
+| Off    | When you open it                                  | When you open it                                  | When you open it                                  |
 
 Bringing the app back to the front counts as opening the page, and a page you
 can't see sends nothing. Refresh in the "Balance and plan usage" section always

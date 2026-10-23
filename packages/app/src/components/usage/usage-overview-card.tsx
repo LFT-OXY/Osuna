@@ -4,13 +4,14 @@ import type {
   UsageSourceBreakdown,
 } from "@getpaseo/protocol/usage/types";
 import { ChevronLeft, ChevronRight, Info, Layers, RefreshCw } from "lucide-react-native";
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Pressable, Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { balanceSummaryText } from "@/api-endpoints/balance-copy";
 import { useEndpointBalances } from "@/api-endpoints/use-endpoint-balances";
 import { FormTextInput } from "@/components/ui/form-field";
+import { Text as UiText } from "@/components/ui/text";
 import { UsageCard } from "@/components/usage/usage-card";
 import { UsageHostFilter } from "@/components/usage/usage-host-filter";
 import { UsageSegmentedControl } from "@/components/usage/usage-segmented-control";
@@ -22,7 +23,11 @@ import {
   formatGroupedNumber,
 } from "@/usage-stats/format";
 import type { UsageHostOption, UsageHostSelection } from "@/usage-stats/host-options";
-import type { MergedUsageEndpoint, MergedUsageReport } from "@/usage-stats/merge";
+import type {
+  MergedUsageEndpoint,
+  MergedUsageReport,
+  UsageEndpointMember,
+} from "@/usage-stats/merge";
 import {
   canShiftUsageRangeForward,
   resolveUsageRange,
@@ -645,7 +650,7 @@ function UsageEndpointCard({
 }) {
   const { t, i18n } = useTranslation();
   const label = endpoint.name ?? t("usage.overview.official");
-  // 已删除写在名字外面：名字太长时只截名字，「（已删除）」一直看得见。
+  // 「（已删除）」写在余额那一行（删掉的接口不读余额）：名字整行都留给名字。
   const deletedMark = endpoint.deleted ? t("usage.overview.deletedEndpoint") : null;
   const share = formatUsageShare(endpoint.share, i18n.language);
   const handlePress = useCallback(
@@ -660,7 +665,7 @@ function UsageEndpointCard({
       ),
     [endpoint.key, endpoint.members, isSelected, onSelect],
   );
-  const balanceFrom = balanceMemberOf(endpoint);
+
   const accessibilityState = useMemo(() => ({ selected: isSelected }), [isSelected]);
 
   return (
@@ -680,53 +685,93 @@ function UsageEndpointCard({
         <Text style={styles.sourceCardLabel} numberOfLines={1}>
           {label}
         </Text>
-        {deletedMark ? <Text style={styles.endpointDeletedMark}>{deletedMark}</Text> : null}
       </View>
       <Text style={styles.sourceCardShare}>{share}</Text>
       <Text style={styles.endpointCardAmount} numberOfLines={1}>
         {`${formatUsageTokensCompact(totalUsageTokens(endpoint.totals))} · ${formatUsageCost(endpoint.estimatedCost)}`}
       </Text>
-      {balanceFrom ? (
-        <UsageEndpointBalance serverId={balanceFrom.serverId} endpointId={balanceFrom.endpointId} />
-      ) : null}
+      {deletedMark ? (
+        <UiText variant="caption" color="foregroundMuted" numberOfLines={1}>
+          {deletedMark}
+        </UiText>
+      ) : (
+        <UsageEndpointBalance members={endpoint.members} />
+      )}
     </Pressable>
   );
 }
 
 /**
- * Whose balance the card shows: a live endpoint's first host. Official has none
- * and a deleted endpoint can't be read; one name on two hosts is the same relay,
- * so one reading stands for both.
+ * The card's balance line: the first of its hosts' live endpoints that has a
+ * reading to show. One name on two hosts is the same relay, so one reading
+ * stands for all; a deleted endpoint can't be read. Each host is read when the
+ * page opens and then once a minute, like magpie's Usage page timer; the daemon
+ * answers that timed read from what it kept while "Auto-refresh balance and plan
+ * usage" is off.
  */
-function balanceMemberOf(
-  endpoint: MergedUsageEndpoint,
-): { serverId: string; endpointId: string } | null {
-  if (endpoint.deleted) return null;
-  const member = endpoint.members[0];
-  if (!member || member.endpointId === null) return null;
-  return { serverId: member.serverId, endpointId: member.endpointId };
+function UsageEndpointBalance({ members }: { members: readonly UsageEndpointMember[] }) {
+  const readable = members.filter(
+    (member): member is UsageEndpointMember & { endpointId: string } =>
+      !member.deleted && member.endpointId !== null,
+  );
+  const [texts, setTexts] = useState<ReadonlyMap<string, string | null>>(new Map());
+  const handleText = useCallback((memberKey: string, text: string | null) => {
+    setTexts((current) => {
+      if (current.get(memberKey) === text) return current;
+      return new Map(current).set(memberKey, text);
+    });
+  }, []);
+  const shown = readable.find((member) => texts.get(balanceMemberKey(member)));
+  return (
+    <>
+      {readable.map((member) => (
+        <UsageEndpointBalanceReader
+          key={balanceMemberKey(member)}
+          serverId={member.serverId}
+          endpointId={member.endpointId}
+          onText={handleText}
+        />
+      ))}
+      {shown ? (
+        <UiText
+          variant="caption"
+          color="foregroundMuted"
+          numberOfLines={1}
+          testID={`usage-endpoint-balance-${shown.endpointId}`}
+        >
+          {texts.get(balanceMemberKey(shown))}
+        </UiText>
+      ) : null}
+    </>
+  );
 }
 
-/** The balance line, read when the page opens; nothing while it loads or when there is nothing to show. */
-function UsageEndpointBalance({ serverId, endpointId }: { serverId: string; endpointId: string }) {
+function balanceMemberKey(member: { serverId: string; endpointId: string }): string {
+  return `${member.serverId}:${member.endpointId}`;
+}
+
+/** Reads one host's endpoint balance and hands up the line it makes; renders nothing. */
+function UsageEndpointBalanceReader({
+  serverId,
+  endpointId,
+  onText,
+}: {
+  serverId: string;
+  endpointId: string;
+  onText: (memberKey: string, text: string | null) => void;
+}) {
   const { t } = useTranslation();
   const { settings } = useAppSettings();
   const endpointIds = useMemo(() => [endpointId], [endpointId]);
-  const balances = useEndpointBalances({ serverId, endpointIds, autoRefresh: false });
+  const balances = useEndpointBalances({ serverId, endpointIds, autoRefresh: true });
   const reading = balances.status === "ready" ? balances.readings.get(endpointId) : undefined;
   const text = reading
     ? balanceSummaryText({ t, reading, displayAs: settings.usage.displayAs })
     : null;
-  if (text === null) return null;
-  return (
-    <Text
-      style={styles.endpointCardAmount}
-      numberOfLines={1}
-      testID={`usage-endpoint-balance-${endpointId}`}
-    >
-      {text}
-    </Text>
-  );
+  useEffect(() => {
+    onText(balanceMemberKey({ serverId, endpointId }), text);
+  }, [endpointId, onText, serverId, text]);
+  return null;
 }
 
 /** The selected card's own name, so an empty breakdown still says whose it is. */
@@ -991,12 +1036,6 @@ const styles = StyleSheet.create((theme) => {
       flexGrow: 0,
       minWidth: 0,
       flexBasis: { xs: "47%", md: "31%" },
-    },
-    endpointDeletedMark: {
-      flexShrink: 0,
-      marginLeft: -theme.spacing[1],
-      fontSize: 12,
-      color: palette.inkFaint,
     },
     endpointCardAmount: {
       marginTop: 2,
