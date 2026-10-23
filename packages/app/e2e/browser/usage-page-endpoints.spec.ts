@@ -123,7 +123,7 @@ test.describe("Usage page by endpoint", () => {
   }) => {
     const endpointId = await seedApiEndpoint(client, {
       name: "Relay Beta",
-      baseUrls: [{ format: "openai_responses", url: `${relay.origin}/good/v1` }],
+      baseUrls: [{ format: "openai_responses", url: `${relay.origin}/codex/v1` }],
       models: ["gpt-5.5"],
     });
     await client.apiEndpointSetAgentSettings({ provider: "codex", enabled: true });

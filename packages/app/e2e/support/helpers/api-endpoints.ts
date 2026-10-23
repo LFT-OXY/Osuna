@@ -37,7 +37,7 @@ export const RELAY_KEY = "sk-e2e-relay";
 /** /good 上一次 Anthropic 对话回的用量：输入 120、输出 30。 */
 export const GOOD_REPLY_TOKENS = 150;
 
-/** /good 上一次 Responses 对话回的用量：输入 200、输出 40。 */
+/** /codex 上一次 Responses 对话回的用量：输入 200、输出 40。 */
 export const GOOD_RESPONSES_TOKENS = 240;
 
 export interface FakeRelay {
@@ -81,6 +81,7 @@ function send(response: ServerResponse, status: number, body: unknown) {
  * - /broke：Anthropic 对话回 402 欠费（中转站让它冷却 30 分钟）。
  * - /reject：Anthropic 对话回 401（中转站把它标成需要检查）。
  * - /free：像不要 key 的本机服务，谁来都答，其余同 /good。
+ * - /codex：Responses 对话回带用量的整份回复（Codex 经中转站的用量用），其余路径 404。
  * - /paced：Anthropic 对话流式回，文字分 11 段、每段隔 40ms 写完，输出 PACED_OUTPUT_TOKENS 个 token（速度卡片用）。
  * - /balance/usage：余额查询地址，回 {"data":{"left":7.5}}（key 不对时照样 401）。
  * - /api/user/self：new-api 的账户余额，只认 RELAY_ACCOUNT_TOKEN（原样作 Authorization）；没有 New-Api-User 时照 new-api
@@ -216,7 +217,7 @@ export async function startFakeRelay(): Promise<FakeRelay> {
 }
 
 /**
- * 经中转站问 /good 的一轮对话：Claude Code 的 Messages 与 Codex 的 Responses 都回带编号与用量的整份回复（/paced 流式回），
+ * 经中转站问的一轮对话：/good 的 Messages 与 /codex 的 Responses 回带编号与用量的整份回复（/paced 流式回），
  * 这一条会记进账，用量页按接口分时看得到它（GOOD_REPLY_TOKENS、GOOD_RESPONSES_TOKENS）。返回 true 即已回。
  */
 function answersGoodTurn(input: {
@@ -239,7 +240,8 @@ function answersGoodTurn(input: {
     });
     return true;
   }
-  if (url !== "/good/v1/responses") return false;
+  // /good 的 Responses 照旧 404（检测用例靠它判“没有”），Codex 的用量走 /codex。
+  if (url !== "/codex/v1/responses") return false;
   send(response, 200, {
     id: `resp_relay_${count}`,
     object: "response",
