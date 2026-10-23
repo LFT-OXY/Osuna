@@ -4,7 +4,7 @@
 
 **Blocked by:** 05
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** doing
 
 - [ ] 新 RPC `usage.requests.export.request` / `.response`：同一组筛选，回 CSV 文字；端到端测试检查列名、行数等于筛选总数、金额为美元、逗号与换行正确转义。
 - [ ] 导出进行中按钮转圈并禁用；失败时按钮旁留原因与「重试」，直到重试或关掉；成功不弹窗。
