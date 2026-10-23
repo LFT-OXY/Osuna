@@ -4740,6 +4740,12 @@ export const ru: TranslationResources = {
       rangeAll: "За всё время",
       refresh: "Обновить",
       allSources: "Все",
+      official: "Официальный",
+      breakdown: {
+        label: "Разбивка",
+        sources: "Источники",
+        endpoints: "Эндпоинты",
+      },
       unpriced: "Нет данных о цене",
       unpricedSummaryOne: "У 1 модели нет данных о цене",
       unpricedSummaryMany: "Моделей без данных о цене: {{count}}",
@@ -4760,6 +4766,8 @@ export const ru: TranslationResources = {
       accessibility: {
         sourceCard: "{{source}}, {{share}} токенов",
         distribution: "Доля токенов по источникам",
+        endpointCard: "{{endpoint}}, {{share}} токенов",
+        endpointDistribution: "Доля токенов по эндпоинтам",
       },
     },
     backfill: {

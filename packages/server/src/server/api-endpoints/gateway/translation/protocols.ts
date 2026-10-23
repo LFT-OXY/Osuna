@@ -39,6 +39,8 @@ export interface StreamEncoder {
   event(event: StreamEvent): void;
   finish(): void;
   usage(): Usage;
+  // 写给 Agent 的回复编号（还没开头时为空）：中转站账本按它对上 CLI 会话记录里的同一次调用。
+  replyId(): string;
 }
 
 interface Protocol {

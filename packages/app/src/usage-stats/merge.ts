@@ -2,6 +2,7 @@ import type {
   UsageAmount,
   UsageBackfill,
   UsageDayBreakdown,
+  UsageEndpointBreakdown,
   UsageHeatmapDay,
   UsageModelBreakdown,
   UsageMonthBreakdown,
@@ -129,6 +130,30 @@ function combineHeatmapDays(a: UsageHeatmapDay, b: UsageHeatmapDay): UsageHeatma
   return { day: a.day, totals: addUsageTotals(a.totals, b.totals) };
 }
 
+function combineEndpoints(
+  a: UsageEndpointBreakdown,
+  b: UsageEndpointBreakdown,
+): UsageEndpointBreakdown {
+  return {
+    ...a,
+    totals: addUsageTotals(a.totals, b.totals),
+    estimatedCost: a.estimatedCost + b.estimatedCost,
+  };
+}
+
+/** Official adds up across hosts; an endpoint by its id. The share is taken again over the sum. */
+function resolveEndpoints(
+  endpoints: Map<string, UsageEndpointBreakdown> | null,
+): UsageEndpointBreakdown[] | undefined {
+  if (endpoints === null) return undefined;
+  const all = [...endpoints.values()];
+  const grandTotal = all.reduce((sum, entry) => sum + totalUsageTokens(entry.totals), 0);
+  for (const entry of all) {
+    entry.share = grandTotal === 0 ? 0 : totalUsageTokens(entry.totals) / grandTotal;
+  }
+  return all.sort(byTokensDesc);
+}
+
 /** `modelCount` is the count of distinct merged models, never a sum of per-host counts. */
 function resolveSources(
   sources: Map<string, UsageSourceBreakdown>,
@@ -174,6 +199,8 @@ export function mergeUsageReports(inputs: readonly UsageHostReport[]): MergedUsa
   const months = new Map<string, UsageMonthBreakdown>();
   const heatmapDays = new Map<string, UsageHeatmapDay>();
   const projects: MergedUsageProject[] = [];
+  // 只有带中转站账本的 daemon 回 endpoints；一台都没有时整个字段不给。
+  let endpoints: Map<string, UsageEndpointBreakdown> | null = null;
   let error: string | null = null;
 
   for (const { serverId, report } of inputs) {
@@ -185,6 +212,10 @@ export function mergeUsageReports(inputs: readonly UsageHostReport[]): MergedUsa
     foldRows(heatmapDays, report.heatmapDays, (row) => row.day, combineHeatmapDays);
     for (const project of report.projects) {
       projects.push({ ...project, serverId });
+    }
+    if (report.endpoints) {
+      endpoints ??= new Map();
+      foldRows(endpoints, report.endpoints, (row) => row.endpointId ?? "", combineEndpoints);
     }
     error ??= report.error;
   }
@@ -199,6 +230,7 @@ export function mergeUsageReports(inputs: readonly UsageHostReport[]): MergedUsa
     months: [...months.values()].sort((a, b) => byKeyAsc(a.month, b.month)),
     heatmapDays: [...heatmapDays.values()].sort((a, b) => byKeyAsc(a.day, b.day)),
     projects: projects.sort(byTokensDesc),
+    endpoints: resolveEndpoints(endpoints),
     backfill: mergeUsageBackfill(inputs.map(({ report }) => report.backfill)),
     error,
   };

@@ -19,6 +19,7 @@ function row(input: {
   sessionId?: string;
   output?: number;
   turns?: number;
+  endpointId?: string;
 }): UsageBucketRow {
   return {
     ...emptyBucketRow({
@@ -28,6 +29,7 @@ function row(input: {
       sessionId: input.sessionId ?? "sess-1",
       cwd: input.cwd ?? "/work/demo",
       bucket: input.bucket,
+      endpointId: input.endpointId,
     }),
     output: input.output ?? 100,
     turns: input.turns ?? 0,
@@ -55,6 +57,7 @@ function build(
     rows,
     request,
     projects: PROJECTS,
+    endpointNames: new Map([["ep_a", "Relay A"]]),
     pricing,
     canonicalSessionId,
     backfill: { state: "done", filesTotal: 0, filesDone: 0, startedAt: null },
@@ -274,5 +277,78 @@ describe("estimated cost", () => {
         ],
       },
     ]);
+  });
+});
+
+describe("by endpoint", () => {
+  const range = { from: TODAY, to: TODAY, timezone: "UTC" };
+  const rows = [
+    // 走接口 A 的一次调用：会话记录里的轮次留在官方那行，token 在接口那行。
+    row({ bucket: "2026-09-19T09:00:00.000Z", output: 0, turns: 1 }),
+    row({ bucket: "2026-09-19T09:00:00.000Z", output: 30, endpointId: "ep_a" }),
+    // 只在账本里的一次调用：没有会话、没有项目。
+    row({
+      bucket: "2026-09-19T09:00:00.000Z",
+      output: 50,
+      endpointId: "ep_a",
+      sessionId: "",
+      cwd: "",
+    }),
+    // 一家不知道名字的接口，和一次直连。
+    row({ bucket: "2026-09-19T10:00:00.000Z", output: 15, endpointId: "ep_gone" }),
+    row({ bucket: "2026-09-19T10:00:00.000Z", model: "claude-haiku-4-5", output: 5 }),
+  ];
+
+  test("one group per endpoint and one for Official, priced, with its share, largest first", () => {
+    const report = build(rows, range, PRICING);
+    const tokens = (output: number) => ({
+      input: 0,
+      cachedInput: 0,
+      cacheWrite: 0,
+      output,
+      reasoning: 0,
+    });
+
+    expect(report.endpoints).toEqual([
+      {
+        endpointId: "ep_a",
+        name: "Relay A",
+        deleted: false,
+        totals: tokens(80),
+        estimatedCost: 80,
+        share: 0.8,
+      },
+      {
+        endpointId: "ep_gone",
+        name: "ep_gone",
+        deleted: false,
+        totals: tokens(15),
+        estimatedCost: 15,
+        share: 0.15,
+      },
+      {
+        endpointId: null,
+        name: null,
+        deleted: false,
+        totals: tokens(5),
+        estimatedCost: 0,
+        share: 0.05,
+      },
+    ]);
+    // 只在账本里的调用不算会话，也不归任何项目。
+    expect(report.summary.sessionCount).toBe(1);
+    expect(report.projects.map((project) => outputs(project.totals))).toEqual([50]);
+  });
+
+  test("the endpoint filter keeps one endpoint, or Official alone", () => {
+    const onlyA = build(rows, { ...range, filters: { endpoints: ["ep_a"] } });
+    expect(outputs(onlyA.summary.totals)).toBe(80);
+    expect(onlyA.endpoints?.map((group) => group.endpointId)).toEqual(["ep_a"]);
+
+    const official = build(rows, { ...range, filters: { endpoints: [null] } });
+    expect(outputs(official.summary.totals)).toBe(5);
+    // 调用都挪去接口后只剩轮次的那个模型不成一行。
+    expect(official.models.map((entry) => entry.model)).toEqual(["claude-haiku-4-5"]);
+    expect(official.days.map((day) => day.turns)).toEqual([1]);
   });
 });

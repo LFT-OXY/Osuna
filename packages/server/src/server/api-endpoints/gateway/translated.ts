@@ -93,6 +93,7 @@ import {
   failedBySelf,
   upstreamUrl,
   type AnswerEnd,
+  type DeliveredReply,
   type AttemptOutcome,
   type FailedAttempt,
   type OpenedUpstream,
@@ -594,7 +595,14 @@ async function streamReply(input: {
     write: (text) => res.write(text),
     request: input.request,
   });
-  const fence = fenceFilter({ request: input.request, emit: (event) => encoder.event(event) });
+  const delivery = new DeliveryClock();
+  const fence = fenceFilter({
+    request: input.request,
+    emit: (event) => {
+      delivery.saw(event);
+      encoder.event(event);
+    },
+  });
   const numbers = wholeNumbersFilter({
     requestedModel: input.requestedModel,
     upstreamModel: input.upstreamModel,
@@ -616,9 +624,15 @@ async function streamReply(input: {
       encoder.finish();
       res.end();
       const { stop } = tried.read.finish();
+      const delivered: DeliveredReply = {
+        id: encoder.replyId(),
+        usage: encoder.usage(),
+        stop,
+        ...delivery.times(),
+      };
       const refused = refusedAfterOpening({ stop, error: tried.read.error });
-      if (refused) return { kind: "refused" };
-      return { kind: "complete", usage: encoder.usage() };
+      if (refused) return { kind: "refused", reply: delivered };
+      return { kind: "complete", usage: delivered.usage, reply: delivered };
     }
     const resumed = await input.goOn(soFar);
     if (resumed.kind === "gone") return resumed;
@@ -737,7 +751,7 @@ async function wholeReply(input: {
     if (refusedAfterThinking) {
       const message = `${endpoint.name}: ${failure.message}`;
       sendRefusal({ res, wire: input.wire, message, headers });
-      return { kind: "refused" };
+      return { kind: "refused", reply: null };
     }
     sendAgentError({
       res,
@@ -748,15 +762,45 @@ async function wholeReply(input: {
     return { kind: "broken", message: failure.message };
   }
   const reply = unfencedReply({ reply: collector.finish(), request: input.request });
-  res
-    .status(200)
-    .set(headers)
-    .json(
-      protocolOf(input.from).render(reply, { model: input.requestedModel, request: input.request }),
-    );
+  const rendered = protocolOf(input.from).render(reply, {
+    model: input.requestedModel,
+    request: input.request,
+  });
+  res.status(200).set(headers).json(rendered);
+  // 整份回复一次交出，不记首字（magpie 对不流式的回复也不记）。
+  const delivered: DeliveredReply = {
+    id: typeof rendered.id === "string" ? rendered.id : "",
+    usage: reply.usage,
+    stop: reply.stop,
+    firstContentAt: null,
+    firstTextAt: null,
+  };
   const refused = refusedAfterOpening({ stop: reply.stop, error: collector.error });
-  if (refused) return { kind: "refused" };
-  return { kind: "complete", usage: reply.usage };
+  if (refused) return { kind: "refused", reply: delivered };
+  return { kind: "complete", usage: reply.usage, reply: delivered };
+}
+
+/** 第一个内容（文字、思考、工具调用、联网搜索）与第一段文字交给编码器、写给 Agent 的时刻。 */
+class DeliveryClock {
+  private firstContentAt: number | null = null;
+  private firstTextAt: number | null = null;
+
+  saw(event: StreamEvent): void {
+    const text = event.kind === "text" && event.text !== "";
+    const content =
+      text ||
+      (event.kind === "think" && event.text !== "") ||
+      event.kind === "tool_start" ||
+      event.kind === "search";
+    if (!content) return;
+    const now = Date.now();
+    this.firstContentAt ??= now;
+    if (text) this.firstTextAt ??= now;
+  }
+
+  times(): Pick<DeliveredReply, "firstContentAt" | "firstTextAt"> {
+    return { firstContentAt: this.firstContentAt, firstTextAt: this.firstTextAt };
+  }
 }
 
 /** 开口后上游断了的原因：连接中断，或流读完了却没说完；说完了为 null。 */

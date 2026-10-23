@@ -52,7 +52,7 @@ import {
 } from "./refused-fields.js";
 import { isGrokReply, WholeArgsTidy } from "./grok-integral.js";
 import { chainedTidy, ReplyModelName, type ReplyTidy } from "./reply-tidy.js";
-import type { ReplyTap } from "./reply-tap.js";
+import type { ReplyTap, TappedReply } from "./reply-tap.js";
 import { refusedAfterOpening } from "./safety-filter.js";
 import { withFixedEffort, type FixedEffort } from "./fixed-effort.js";
 import { withoutAnyReasoning } from "./no-thinking.js";
@@ -80,6 +80,7 @@ import {
   failedBySelf,
   upstreamUrl,
   type AnswerEnd,
+  type DeliveredReply,
   type AttemptOutcome,
   type FailedAttempt,
   type OpenedUpstream,
@@ -355,7 +356,8 @@ async function wholeAsStream(input: {
   input.keepAlive?.stop();
   for (const event of events) res.write(sseEvent(event.name, event.data));
   res.end();
-  return { kind: "answered", finished: Promise.resolve(endOf(input.opened.tap)) };
+  // 上游没流式：一次交出，不记首字（magpie 对不流式的回复也不记）。
+  return { kind: "answered", finished: Promise.resolve(endOf(input.opened.tap, null)) };
 }
 
 /** 开口之后边收边发，同时按协议读一遍回复（粘性要用其中的缓存读写 token 数）。 */
@@ -372,6 +374,8 @@ function relay(input: {
   const streamed = isEventStream(response, held);
   const wire = wireOf(format);
   let atLine = endsLine({ chunk: held, before: true });
+  // 开口前扣下的帧在这一刻才交给 Agent：读到得更早的内容按这一刻算首字；整份回复不记首字。
+  const deliveredAt = streamed ? Date.now() : null;
   const tailed = (reason: string): AnswerEnd => {
     const { endpointName } = input;
     sink.end(brokenTail({ wire, endpointName, reason, atLine }));
@@ -381,7 +385,7 @@ function relay(input: {
   const completed = (): AnswerEnd => {
     if (tappedShort({ tap, format, streamed })) return tailed(ENDED_SHORT);
     sink.end();
-    return endOf(tap);
+    return endOf(tap, deliveredAt);
   };
   // 开口后连接断了：事件流在流尾补错误；整份回复补不了，断开 Agent 的连接，由 CLI 自己报错。
   const cut = (reason: string): AnswerEnd => {
@@ -453,10 +457,30 @@ function tappedShort(input: {
 }
 
 /** 回复收完了：开口后才拒答的照常转给了 Agent，不算答成功；别的带上这次的用量。 */
-function endOf(tap: ReplyTap | null): AnswerEnd {
+function endOf(tap: ReplyTap | null, deliveredAt: number | null): AnswerEnd {
   const reply = tap?.end();
-  if (reply && refusedAfterOpening(reply)) return { kind: "refused" };
-  return { kind: "complete", usage: reply?.usage ?? emptyUsage() };
+  const delivered = deliveredReply(reply, deliveredAt);
+  if (reply && refusedAfterOpening(reply)) return { kind: "refused", reply: delivered };
+  return { kind: "complete", usage: delivered.usage, reply: delivered };
+}
+
+/**
+ * 直通原样转出回复，回复编号就是上游的；首个内容早于交出的时刻（扣下的帧里）时按交出的时刻算，
+ * 没流式交出（deliveredAt 为 null）时不记。
+ */
+function deliveredReply(
+  reply: TappedReply | undefined,
+  deliveredAt: number | null,
+): DeliveredReply {
+  const delivered = (at: number | null) =>
+    at === null || deliveredAt === null ? null : Math.max(at, deliveredAt);
+  return {
+    id: reply?.id ?? "",
+    usage: reply?.usage ?? emptyUsage(),
+    stop: reply?.stop ?? null,
+    firstContentAt: delivered(reply?.firstContentAt ?? null),
+    firstTextAt: delivered(reply?.firstTextAt ?? null),
+  };
 }
 
 /** 直通请求体要的：格式、路径后缀（count_tokens）、这家的地址、原请求体、两个模型名、这家接口与它不收的写法。 */

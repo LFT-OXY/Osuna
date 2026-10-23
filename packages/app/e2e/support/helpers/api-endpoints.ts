@@ -34,6 +34,9 @@ import { openSettingsHost, openSettingsHostSection } from "./settings";
 
 export const RELAY_KEY = "sk-e2e-relay";
 
+/** /good 上一次 Anthropic 对话回的用量：输入 120、输出 30。 */
+export const GOOD_REPLY_TOKENS = 150;
+
 export interface FakeRelay {
   origin: string;
   // 收到的请求，按到达顺序；只记路径、认证头与请求体里的模型名。
@@ -180,7 +183,13 @@ export async function startFakeRelay(): Promise<FakeRelay> {
         return;
       }
       if (url === "/good/v1/messages") {
-        send(response, 200, { type: "message", content: [{ type: "text", text: "hi" }] });
+        // 带回复编号与用量：经中转站发来的这一条会记进账，用量页按接口分时看得到它（GOOD_REPLY_TOKENS）。
+        send(response, 200, {
+          id: `msg_relay_${relay.requests.length}`,
+          type: "message",
+          content: [{ type: "text", text: "hi" }],
+          usage: { input_tokens: 120, output_tokens: 30 },
+        });
         return;
       }
       if (url === "/good/v1/chat/completions") {

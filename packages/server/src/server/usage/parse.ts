@@ -1,9 +1,11 @@
 import type { UsageCli } from "@getpaseo/protocol/usage/types";
 import { mergeTurnDrafts } from "./turn-rows.js";
 import {
+  carriesNothing,
   emptyBucketRow,
   mergeBucketRow,
   type UsageBucketRow,
+  type UsageCallDelta,
   type UsageOpenTurn,
   type UsageParseResult,
   type UsageParserState,
@@ -35,6 +37,7 @@ export type UsageTokenColumns = Pick<
 export interface UsageParseSink {
   rows: UsageBucketRow[];
   turnRows: UsageTurnRowDraft[];
+  calls: UsageCallDelta[];
   span: TimestampSpan;
 }
 
@@ -94,6 +97,7 @@ export function idleParseResult<S extends UsageParserState>(
   return {
     rows: sink.rows,
     turnRows: sink.turnRows,
+    calls: sink.calls,
     state,
     consumedBytes: 0,
     firstAt: null,
@@ -116,6 +120,7 @@ export function parseChunk<S extends UsageParserState, E>(input: {
     return {
       rows: [],
       turnRows: [],
+      calls: [],
       state: input.state,
       consumedBytes: 0,
       firstAt: null,
@@ -133,6 +138,7 @@ export function parseChunk<S extends UsageParserState, E>(input: {
   return {
     rows: mergeRows(sink.rows),
     turnRows: mergeTurnDrafts(sink.turnRows),
+    calls: sink.calls,
     state: input.state,
     consumedBytes,
     firstAt: sink.span.firstAt,
@@ -141,7 +147,7 @@ export function parseChunk<S extends UsageParserState, E>(input: {
 }
 
 export function emptySink(): UsageParseSink {
-  return { rows: [], turnRows: [], span: { firstAt: null, lastAt: null } };
+  return { rows: [], turnRows: [], calls: [], span: { firstAt: null, lastAt: null } };
 }
 
 /**
@@ -199,16 +205,7 @@ export function asTimestamp(value: unknown): number | null {
 export function mergeRows(rows: UsageBucketRow[]): UsageBucketRow[] {
   const merged = new Map<string, UsageBucketRow>();
   for (const row of rows) mergeBucketRow(merged, row);
-  return Array.from(merged.values()).filter(
-    (row) =>
-      row.input !== 0 ||
-      row.cachedInput !== 0 ||
-      row.cacheWrite !== 0 ||
-      row.output !== 0 ||
-      row.reasoning !== 0 ||
-      row.turns !== 0 ||
-      row.durationMs !== 0,
-  );
+  return Array.from(merged.values()).filter((row) => !carriesNothing(row));
 }
 
 /**

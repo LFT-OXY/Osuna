@@ -4792,6 +4792,12 @@ export const en = {
       rangeAll: "All time",
       refresh: "Refresh",
       allSources: "All",
+      official: "Official",
+      breakdown: {
+        label: "Split by",
+        sources: "Sources",
+        endpoints: "Endpoints",
+      },
       unpriced: "No price data",
       unpricedSummaryOne: "1 model has no price data",
       unpricedSummaryMany: "{{count}} models have no price data",
@@ -4812,6 +4818,8 @@ export const en = {
       accessibility: {
         sourceCard: "{{source}}, {{share}} of tokens",
         distribution: "Token share by source",
+        endpointCard: "{{endpoint}}, {{share}} of tokens",
+        endpointDistribution: "Token share by endpoint",
       },
     },
     backfill: {

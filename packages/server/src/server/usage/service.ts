@@ -26,6 +26,8 @@ import {
 } from "./pricing/service.js";
 import { UsageProjectResolver } from "./project-attribution.js";
 import { buildAgentSummary, buildAgentTurns, type AgentReportInput } from "./agent-report.js";
+import { UsageCallMerge } from "./call-merge.js";
+import type { GatewayLedgerRow } from "./ledger.js";
 import { buildUsageReport, type UsageReportPricing, type UsageReportRequest } from "./report.js";
 import { buildUsageSessionChains } from "./session-chains.js";
 import {
@@ -35,7 +37,7 @@ import {
 } from "./sessions.js";
 import { locateSessionFile } from "./session-files.js";
 import { USAGE_SOURCE_ADAPTERS, sessionCursorKey, type UsageSourceAdapter } from "./sources.js";
-import { UsageStore, type UsageRowSet } from "./store.js";
+import { UsageStore, emptyRowSet, type UsageRowSet } from "./store.js";
 import { UsageTurnIndex, resolveTurnRows } from "./turn-rows.js";
 import {
   emptyScanState,
@@ -43,6 +45,7 @@ import {
   mergeBucketRow,
   modelRowKey,
   type UsageBucketRow,
+  type UsageCallDelta,
   type UsageParserState,
   type UsageScanCursor,
   type UsageScanState,
@@ -70,6 +73,11 @@ const FLUSH_EVERY_FILES = 20;
 const FLUSH_EVERY_MS = 500;
 const PROGRESS_INTERVAL_MS = 1000;
 const READ_CHUNK_BYTES = 1024 * 1024;
+/**
+ * How far back a log reply is kept for the ledger to merge with. The ledger is
+ * written as a request ends, so nothing older can still find its row.
+ */
+const REQUEST_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 export interface UsageServiceOptions {
   paseoHome: string;
@@ -126,6 +134,13 @@ export class UsageService {
   private roots: UsageLogRoots = { claude: [], codex: [], pi: [], omp: [] };
   private rows = new Map<string, UsageBucketRow>();
   private readonly turns = new UsageTurnIndex();
+  /** The gateway ledger and the log replies it merges with (ADR 0014). */
+  private readonly merge = new UsageCallMerge();
+  /** Settles once `start` has loaded what is on disk; ledger rows wait for it. */
+  private readonly loaded: Promise<void>;
+  private markLoaded: () => void = () => undefined;
+  /** Ledger rows are merged and written one at a time, in the order they ended. */
+  private ledgerWrites: Promise<void> = Promise.resolve();
   /** Subagent rows whose parent turn had not grown far enough to cover them. */
   private pendingTurnDrafts: UsageTurnRowDraft[] = [];
   private scanState: UsageScanState = emptyScanState();
@@ -170,6 +185,9 @@ export class UsageService {
     this.getPricingConfig = options.getPricingConfig;
     this.agents = options.agents;
     this.onUsageUpdated = options.onUsageUpdated;
+    this.loaded = new Promise((resolve) => {
+      this.markLoaded = resolve;
+    });
     const pricingConfig = options.getPricingConfig();
     this.pricing = new UsagePricingService({
       store: this.store,
@@ -190,7 +208,9 @@ export class UsageService {
     const stored = await this.store.loadRows();
     this.applyRows(stored.buckets);
     this.turns.addAll(stored.turns);
+    this.merge.load(stored.requests);
     this.scanState = await this.store.loadScanState();
+    this.markLoaded();
     await this.pricing.start();
     this.unsubscribeTurns = this.agents.subscribeTurnEnd((event) => {
       void this.onAgentTurnEnded(event);
@@ -217,6 +237,38 @@ export class UsageService {
     await this.round?.catch(() => undefined);
   }
 
+  /**
+   * A request the gateway carried, merged with the log reply it answered
+   * whichever of the two arrives first. It waits for `start` to load the
+   * stored records, so a row written while the daemon is starting is not lost.
+   */
+  recordGatewayCall(row: GatewayLedgerRow): void {
+    const write = this.ledgerWrites.then(() => this.mergeGatewayCall(row));
+    this.ledgerWrites = write.catch((error: unknown) => {
+      this.logger.error({ err: error }, "Failed to record a gateway request");
+    });
+  }
+
+  private async mergeGatewayCall(row: GatewayLedgerRow): Promise<void> {
+    await this.loaded;
+    if (this.disposed) return;
+    const merged = this.merge.addLedgerRow(row);
+    this.applyRows(merged.buckets);
+    this.turns.addAll(merged.turns);
+    await this.store.appendRows({
+      buckets: merged.buckets,
+      turns: merged.turns,
+      requests: merged.records,
+    });
+    // 回填期间不发 usage.updated，与扫描的节奏一致：回填完成时页面整页重读。
+    if (this.backfill.state === "running") return;
+    const sessionId = row.sessionId ?? "";
+    const agentId = sessionId
+      ? await this.agents.findAgentIdForSession(row.agent, sessionId)
+      : null;
+    this.onUsageUpdated({ cli: row.agent, sessionId, ...(agentId ? { agentId } : {}) });
+  }
+
   async getReport(request: UsageReportRequest): Promise<UsageReport> {
     const rows = Array.from(this.rows.values());
     const attributions = await this.projects.resolveAll(new Set(rows.map((row) => row.cwd)));
@@ -225,6 +277,7 @@ export class UsageService {
       rows,
       request,
       projects: attributions,
+      endpointNames: this.merge.endpointNames(),
       pricing: this.reportPricing(),
       canonicalSessionId: (cli, sessionId) => chains.canonical(cli, sessionId),
       backfill: this.backfill,
@@ -359,7 +412,7 @@ export class UsageService {
       this.onBackfillProgress(this.backfill);
     }
 
-    let pendingRows: UsageRowSet = { buckets: [], turns: [] };
+    let pendingRows: UsageRowSet = emptyRowSet();
     let filesSinceFlush = 0;
     let lastFlushAt = this.now();
     let lastProgressAt = 0;
@@ -367,11 +420,15 @@ export class UsageService {
 
     const flush = async (): Promise<void> => {
       if (!cursorDirty) return;
-      if (pendingRows.buckets.length > 0 || pendingRows.turns.length > 0) {
+      if (
+        pendingRows.buckets.length > 0 ||
+        pendingRows.turns.length > 0 ||
+        pendingRows.requests.length > 0
+      ) {
         // Rows before the cursor: a crash between the two recounts at most one
         // batch, where the other order would lose it for good.
         await this.store.appendRows(pendingRows);
-        pendingRows = { buckets: [], turns: [] };
+        pendingRows = emptyRowSet();
       }
       await this.store.saveScanState(this.scanState);
       cursorDirty = false;
@@ -478,11 +535,12 @@ export class UsageService {
       handle = await fs.open(file.filePath, "r");
     } catch (error) {
       // The CLI can delete or roll a transcript between readdir and open.
-      if (isMissingPathError(error)) return { buckets: [], turns: [] };
+      if (isMissingPathError(error)) return emptyRowSet();
       throw error;
     }
 
-    const rows: UsageRowSet = { buckets: [], turns: [] };
+    const rows: UsageRowSet = emptyRowSet();
+    const calls: UsageCallDelta[] = [];
     let state = cursor.parser;
     let position = cursor.offset;
     let firstAt = cursor.firstAt;
@@ -501,6 +559,7 @@ export class UsageService {
             : Buffer.from(buffer.subarray(0, bytesRead));
         const result = file.adapter.parse(chunk, state);
         rows.buckets.push(...result.rows);
+        calls.push(...result.calls);
         // Main-thread files are read first, so a subagent draft usually finds
         // its turn right here; one whose parent turn is still short waits.
         const resolved = resolveTurnRows(result.turnRows, this.turns);
@@ -516,6 +575,13 @@ export class UsageService {
     } finally {
       await handle.close();
     }
+    const merged = this.merge.addCliDeltas(
+      calls,
+      new Date(this.now() - REQUEST_RETENTION_MS).toISOString(),
+    );
+    rows.buckets.push(...merged.buckets);
+    rows.turns.push(...merged.turns);
+    rows.requests.push(...merged.records);
 
     this.scanState = {
       ...this.scanState,
@@ -693,7 +759,7 @@ export class UsageService {
   private settleIdleTurns(discovered: DiscoveredFile[]): UsageRowSet {
     const cutoff = this.now() - IDLE_TURN_SETTLE_MS;
     const byKey = new Map(discovered.map((file) => [file.cursorKey, file]));
-    const rows: UsageRowSet = { buckets: [], turns: [] };
+    const rows: UsageRowSet = emptyRowSet();
     for (const [cursorKey, cursor] of Object.entries(this.scanState.cursors)) {
       const file = byKey.get(cursorKey);
       if (!file || file.mtimeMs > cutoff) continue;
@@ -757,6 +823,7 @@ function takeUnconsumed(
 function appendRowSet(target: UsageRowSet, source: UsageRowSet): void {
   target.buckets.push(...source.buckets);
   target.turns.push(...source.turns);
+  target.requests.push(...source.requests);
 }
 
 /**

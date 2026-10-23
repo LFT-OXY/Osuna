@@ -25,7 +25,7 @@ import { notApiDetail, notApiReply, saysNothingYet, type NotApiReply } from "./n
 import { zhipuRefusal } from "./zhipu-envelope.js";
 import { ReplyTap, type TappedReply } from "./reply-tap.js";
 import { REFUSED_STATUS, errorRefusal, replyRefusal } from "./safety-filter.js";
-import type { Usage } from "./translation/ir.js";
+import type { StopReason, Usage } from "./translation/ir.js";
 
 /*
  * 向一家接口发出请求、等它开口：直通与翻译共用。开口是回复里出现第一段真内容（文字、思考或工具调用），
@@ -103,10 +103,23 @@ export type HandBack = () => Promise<AttemptOutcome>;
  * 不算这家答成功，也不怪它）、上游断流、Agent 先走了。
  */
 export type AnswerEnd =
-  | { kind: "complete"; usage: Usage }
-  | { kind: "refused" }
+  | { kind: "complete"; usage: Usage; reply: DeliveredReply }
+  // 以报错形式交给 Agent 的拒答没有回复可记，为 null。
+  | { kind: "refused"; reply: DeliveredReply | null }
   | { kind: "broken"; message: string }
   | { kind: "gone" };
+
+/**
+ * 交给 Agent 的回复里中转站账本要记的：写给 Agent 的回复编号、用量、上游说的结束原因，以及第一个内容
+ * （文字、思考或工具调用）与第一段文字发给 Agent 的时刻。不含任何内容本身。
+ */
+export interface DeliveredReply {
+  id: string;
+  usage: Usage;
+  stop: StopReason | null;
+  firstContentAt: number | null;
+  firstTextAt: number | null;
+}
 
 export type AttemptOutcome =
   | { kind: "answered"; finished: Promise<AnswerEnd> }

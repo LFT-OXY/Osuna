@@ -158,6 +158,69 @@ describe("usage.backfill.progress", () => {
   });
 });
 
+describe("usage by endpoint (gateway ledger)", () => {
+  it("parses an endpoint filter, null being Official", () => {
+    const message = {
+      type: "usage.report.get.request" as const,
+      requestId: "req-4",
+      from: null,
+      to: null,
+      timezone: "UTC",
+      filters: { endpoints: ["ep_a", null] },
+    };
+    expect(SessionInboundMessageSchema.parse(message)).toEqual(message);
+  });
+
+  it("parses a report with endpoint groups, and one without them from an older daemon", () => {
+    const withEndpoints = {
+      type: "usage.report.get.response" as const,
+      payload: {
+        requestId: "req-4",
+        ...EMPTY_REPORT,
+        endpoints: [
+          {
+            endpointId: "ep_a",
+            name: "Relay A",
+            deleted: false,
+            totals: EMPTY_TOTALS,
+            estimatedCost: 0,
+            share: 0.5,
+          },
+          {
+            endpointId: null,
+            name: null,
+            deleted: false,
+            totals: EMPTY_TOTALS,
+            estimatedCost: 0,
+            share: 0.5,
+          },
+        ],
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(withEndpoints)).toEqual(withEndpoints);
+    const parsed = SessionOutboundMessageSchema.parse({
+      type: "usage.report.get.response",
+      payload: { requestId: "req-5", ...EMPTY_REPORT },
+    });
+    expect(parsed.type === "usage.report.get.response" && parsed.payload.endpoints).toBe(undefined);
+  });
+
+  it("parses the gatewayLedger flag, and its absence on an older daemon", () => {
+    const advertised = ServerInfoStatusPayloadSchema.parse({
+      status: "server_info",
+      serverId: "srv-1",
+      features: { gatewayLedger: true },
+    });
+    expect(advertised.features?.gatewayLedger).toBe(true);
+    const old = ServerInfoStatusPayloadSchema.parse({
+      status: "server_info",
+      serverId: "srv-1",
+      features: { usage: true },
+    });
+    expect(old.features?.gatewayLedger).toBeUndefined();
+  });
+});
+
 describe("server_info usage feature", () => {
   it("parses server_info without the flag (old daemon)", () => {
     const parsed = ServerInfoStatusPayloadSchema.parse({

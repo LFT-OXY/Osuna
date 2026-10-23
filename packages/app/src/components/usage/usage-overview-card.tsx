@@ -1,5 +1,6 @@
 import type {
   UsageBackfill,
+  UsageEndpointBreakdown,
   UsageModelBreakdown,
   UsageSourceBreakdown,
 } from "@getpaseo/protocol/usage/types";
@@ -11,6 +12,7 @@ import { StyleSheet } from "react-native-unistyles";
 import { FormTextInput } from "@/components/ui/form-field";
 import { UsageCard } from "@/components/usage/usage-card";
 import { UsageHostFilter } from "@/components/usage/usage-host-filter";
+import { UsageSegmentedControl } from "@/components/usage/usage-segmented-control";
 import {
   formatUsageCost,
   formatUsageShare,
@@ -28,11 +30,18 @@ import {
   type UsagePeriod,
 } from "@/usage-stats/period";
 import { describeUsageCustomTab, describeUsageRange } from "@/usage-stats/range-label";
-import { usageSourceColor, usageSourceLabel } from "@/usage-stats/sources";
+import { usageEndpointColor, usageSourceColor, usageSourceLabel } from "@/usage-stats/sources";
 import { totalUsageTokens, usageSourceKey } from "@/usage-stats/totals";
 
 /** `all` is the first source card, not a source, so it needs a key of its own. */
 export const ALL_USAGE_SOURCES = "all";
+
+/** Which API endpoint the page is narrowed to; `endpointId: null` is Official. */
+export interface UsageEndpointSelection {
+  endpointId: string | null;
+}
+
+export type UsageBreakdown = "sources" | "endpoints";
 
 interface UsageOverviewCardProps {
   report: MergedUsageReport;
@@ -42,6 +51,15 @@ interface UsageOverviewCardProps {
   custom: UsageCustomRange;
   today: string;
   selectedSourceKey: string | null;
+  /**
+   * Every endpoint's group for the range, unfiltered, so the cards stay put
+   * while one of them narrows the page. Absent when no host keeps a gateway
+   * ledger, and then there is no "Endpoints" split.
+   */
+  endpoints: readonly UsageEndpointBreakdown[] | undefined;
+  selectedEndpoint: UsageEndpointSelection | null;
+  /** Which split the cards show; kept by the screen so a layout change keeps it. */
+  breakdown: UsageBreakdown;
   isRefreshing: boolean;
   hostOptions: readonly UsageHostOption[];
   hostSelection: UsageHostSelection;
@@ -49,6 +67,8 @@ interface UsageOverviewCardProps {
   onShift: (delta: -1 | 1) => void;
   onCustomChange: (custom: UsageCustomRange) => void;
   onSelectSource: (key: string | null) => void;
+  onSelectEndpoint: (endpoint: UsageEndpointSelection | null) => void;
+  onBreakdownChange: (breakdown: UsageBreakdown) => void;
   onSelectHost: (serverId: string | null) => void;
   onRefresh: () => void;
 }
@@ -64,6 +84,16 @@ export function UsageOverviewCard(props: UsageOverviewCardProps) {
   const rangeDescription = describeUsageRange(range, locale);
   const totalTokens = totalUsageTokens(props.report.summary.totals);
   const unpricedModels = props.report.models.filter((model) => !model.priced).length;
+  const breakdown: UsageBreakdown = props.endpoints ? props.breakdown : "sources";
+  const { onSelectEndpoint, onBreakdownChange } = props;
+  const handleBreakdown = useCallback(
+    (next: UsageBreakdown) => {
+      onBreakdownChange(next);
+      // 回到「来源」时不再按接口筛选：来源卡片说的是全部的数。
+      if (next === "sources") onSelectEndpoint(null);
+    },
+    [onBreakdownChange, onSelectEndpoint],
+  );
 
   return (
     <UsageCard testID="usage-overview">
@@ -100,13 +130,29 @@ export function UsageOverviewCard(props: UsageOverviewCardProps) {
         </Text>
         <Text style={styles.heroNote}>{t("usage.overview.estimatedCostNote")}</Text>
       </View>
-      <UsageDistributionBar sources={props.report.sources} total={totalTokens} />
-      <UsageSourceCards
-        sources={props.report.sources}
-        modelCount={new Set(props.report.models.map((model) => model.model)).size}
-        selectedKey={props.selectedSourceKey}
-        onSelect={props.onSelectSource}
-      />
+      {props.endpoints ? (
+        <UsageBreakdownSwitch value={breakdown} onChange={handleBreakdown} />
+      ) : null}
+      {breakdown === "endpoints" && props.endpoints ? (
+        <>
+          <UsageEndpointDistributionBar endpoints={props.endpoints} />
+          <UsageEndpointCards
+            endpoints={props.endpoints}
+            selected={props.selectedEndpoint}
+            onSelect={onSelectEndpoint}
+          />
+        </>
+      ) : (
+        <>
+          <UsageDistributionBar sources={props.report.sources} total={totalTokens} />
+          <UsageSourceCards
+            sources={props.report.sources}
+            modelCount={new Set(props.report.models.map((model) => model.model)).size}
+            selectedKey={props.selectedSourceKey}
+            onSelect={props.onSelectSource}
+          />
+        </>
+      )}
       {unpricedModels > 0 ? (
         <Text style={styles.unpricedSummary} testID="usage-unpriced-summary">
           {unpricedModels === 1
@@ -114,7 +160,7 @@ export function UsageOverviewCard(props: UsageOverviewCardProps) {
             : t("usage.overview.unpricedSummaryMany", { count: unpricedModels })}
         </Text>
       ) : null}
-      {props.selectedSourceKey ? (
+      {breakdown === "sources" && props.selectedSourceKey ? (
         <UsageModelList
           models={props.report.models}
           selectedKey={props.selectedSourceKey}
@@ -478,6 +524,140 @@ function UsageSourceCard({
   );
 }
 
+function UsageBreakdownSwitch({
+  value,
+  onChange,
+}: {
+  value: UsageBreakdown;
+  onChange: (value: UsageBreakdown) => void;
+}) {
+  const { t } = useTranslation();
+  const options = useMemo(
+    () => [
+      {
+        value: "sources" as const,
+        label: t("usage.overview.breakdown.sources"),
+        testID: "usage-breakdown-sources",
+      },
+      {
+        value: "endpoints" as const,
+        label: t("usage.overview.breakdown.endpoints"),
+        testID: "usage-breakdown-endpoints",
+      },
+    ],
+    [t],
+  );
+  return (
+    <View style={styles.breakdownRow}>
+      <UsageSegmentedControl
+        options={options}
+        value={value}
+        onChange={onChange}
+        accessibilityLabel={t("usage.overview.breakdown.label")}
+        testID="usage-breakdown"
+      />
+    </View>
+  );
+}
+
+function UsageEndpointDistributionBar({
+  endpoints,
+}: {
+  endpoints: readonly UsageEndpointBreakdown[];
+}) {
+  const { t } = useTranslation();
+  if (endpoints.length === 0) return <View style={styles.distribution} />;
+  return (
+    <View
+      style={styles.distribution}
+      accessibilityLabel={t("usage.overview.accessibility.endpointDistribution")}
+    >
+      {endpoints.map((endpoint) => (
+        <View
+          key={endpoint.endpointId ?? ""}
+          style={[
+            styles.distributionSegment,
+            {
+              flexGrow: totalUsageTokens(endpoint.totals),
+              backgroundColor: usageEndpointColor(endpoint.endpointId),
+            },
+          ]}
+        />
+      ))}
+    </View>
+  );
+}
+
+function UsageEndpointCards({
+  endpoints,
+  selected,
+  onSelect,
+}: {
+  endpoints: readonly UsageEndpointBreakdown[];
+  selected: UsageEndpointSelection | null;
+  onSelect: (endpoint: UsageEndpointSelection | null) => void;
+}) {
+  return (
+    <View style={styles.sourceGrid} testID="usage-endpoint-cards">
+      {endpoints.map((endpoint) => (
+        <UsageEndpointCard
+          key={endpoint.endpointId ?? ""}
+          endpoint={endpoint}
+          isSelected={selected !== null && selected.endpointId === endpoint.endpointId}
+          onSelect={onSelect}
+        />
+      ))}
+    </View>
+  );
+}
+
+/** One endpoint, or Official: its name, its share, then its tokens and estimated cost. */
+function UsageEndpointCard({
+  endpoint,
+  isSelected,
+  onSelect,
+}: {
+  endpoint: UsageEndpointBreakdown;
+  isSelected: boolean;
+  onSelect: (endpoint: UsageEndpointSelection | null) => void;
+}) {
+  const { t, i18n } = useTranslation();
+  const label = endpoint.name ?? t("usage.overview.official");
+  const share = formatUsageShare(endpoint.share, i18n.language);
+  const handlePress = useCallback(
+    () => onSelect(isSelected ? null : { endpointId: endpoint.endpointId }),
+    [endpoint.endpointId, isSelected, onSelect],
+  );
+  const accessibilityState = useMemo(() => ({ selected: isSelected }), [isSelected]);
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={t("usage.overview.accessibility.endpointCard", {
+        endpoint: label,
+        share,
+      })}
+      accessibilityState={accessibilityState}
+      onPress={handlePress}
+      style={[styles.sourceCard, isSelected && styles.sourceCardSelected]}
+      testID={`usage-endpoint-card-${endpoint.endpointId ?? "official"}`}
+    >
+      <View style={styles.sourceCardHead}>
+        <View
+          style={[styles.sourceDot, { backgroundColor: usageEndpointColor(endpoint.endpointId) }]}
+        />
+        <Text style={styles.sourceCardLabel} numberOfLines={1}>
+          {label}
+        </Text>
+      </View>
+      <Text style={styles.sourceCardShare}>{share}</Text>
+      <Text style={styles.endpointCardAmount} numberOfLines={1}>
+        {`${formatUsageTokensCompact(totalUsageTokens(endpoint.totals))} · ${formatUsageCost(endpoint.estimatedCost)}`}
+      </Text>
+    </Pressable>
+  );
+}
+
 /** The selected card's own name, so an empty breakdown still says whose it is. */
 function sourceLabelForKey(sources: readonly UsageSourceBreakdown[], key: string): string {
   const source = sources.find((candidate) => usageSourceKey(candidate) === key);
@@ -734,6 +914,16 @@ const styles = StyleSheet.create((theme) => {
       marginTop: 2,
       fontSize: 11,
       color: palette.inkFaint,
+    },
+    endpointCardAmount: {
+      marginTop: 2,
+      fontSize: 11,
+      color: palette.inkFaint,
+      fontVariant: ["tabular-nums"],
+    },
+    breakdownRow: {
+      flexDirection: "row",
+      marginBottom: theme.spacing[3],
     },
     unpricedSummary: {
       marginTop: theme.spacing[3],

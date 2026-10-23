@@ -4632,6 +4632,12 @@ export const zhCN: TranslationResources = {
       rangeAll: "全部时间",
       refresh: "刷新",
       allSources: "全部",
+      official: "官方",
+      breakdown: {
+        label: "分法",
+        sources: "来源",
+        endpoints: "接口",
+      },
       unpriced: "无价格数据",
       unpricedSummaryOne: "1 个模型无价格数据",
       unpricedSummaryMany: "{{count}} 个模型无价格数据",
@@ -4652,6 +4658,8 @@ export const zhCN: TranslationResources = {
       accessibility: {
         sourceCard: "{{source}}，占 {{share}}",
         distribution: "各来源 Token 占比",
+        endpointCard: "{{endpoint}}，占 {{share}}",
+        endpointDistribution: "各接口 Token 占比",
       },
     },
     backfill: {

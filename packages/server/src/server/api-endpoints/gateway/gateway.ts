@@ -32,7 +32,7 @@ import {
 } from "../disabled-models.js";
 import { isRecord, parseJson } from "../upstream-http.js";
 import { sendAgentError, sendRefusal, type AgentWire } from "./agent-errors.js";
-import { ConversationSticks, conversationId, turnOf } from "./affinity.js";
+import { ConversationSticks, conversationId, sessionHeaderOf, turnOf } from "./affinity.js";
 import { extraBodySession } from "../request-extras.js";
 import { judgeCaller } from "./callers.js";
 import { CliHeaderSamples, isFromClaudeCode, isFromCodex } from "../cli-header-samples.js";
@@ -107,10 +107,13 @@ import { decodeAgentBody, readAgentBody, readRawBody } from "./request-body.js";
 import { joinToolRuns, orphanedToolOutputs, pairToolItems } from "./translation/responses.js";
 import {
   ANSWERED_BY_HEADER,
+  type AnswerEnd,
   type AttemptOutcome,
   type FailedAttempt,
   type HandBack,
 } from "./upstream-call.js";
+import type { GatewayLedger } from "../../usage/ledger.js";
+import { LedgerCall, type LedgerAttemptEnd } from "./ledger-call.js";
 import {
   asksAnthropicWebSearch,
   asksWebSearch,
@@ -194,6 +197,8 @@ export function createApiEndpointGateway(options: {
   sightings: GatewaySightings;
   // 记下经中转站来过的 Codex 的版本（magpie codexSeen），没有 Codex 样本时「按 Codex 的样子测」用。
   noteCliVersion: (headers: IncomingHttpHeaders) => void;
+  // 中转站账本：每个 CLI 请求结束时记一行，用量服务把它与 CLI 会话记录合并（ADR 0014）。
+  ledger: GatewayLedger;
   overrides?: ApiEndpointGatewayOverrides;
 }): RequestHandler {
   const logger = options.logger.child({ module: "api-endpoint-gateway" });
@@ -213,6 +218,7 @@ export function createApiEndpointGateway(options: {
     bodyLimitBytes: options.overrides?.gatewayBodyLimitBytes ?? MAX_REQUEST_BODY_BYTES,
     ownUserAgent: `Osuna/${options.daemonVersion}`,
     cliSamples: new CliHeaderSamples({ store, logger }),
+    ledger: options.ledger,
   };
   const chatgpt: ChatGptBackend = {
     bases: {
@@ -610,6 +616,7 @@ interface Failover {
   ownUserAgent: string;
   // 「按 Claude Code / Codex 的样子测」用的 CLI 请求头样本（ADR 0013）。
   cliSamples: CliHeaderSamples;
+  ledger: GatewayLedger;
 }
 
 /** 读出 Agent 的请求体与模型名，按模型名找到候选；读不了或找不到时已按 Agent 协议回了错误，返回 null。 */
@@ -1087,6 +1094,13 @@ async function handleAgentRequest(input: {
     everyMs: input.failover.keepAliveMs,
     quietMostMs: input.failover.keepAliveQuietMs,
   });
+  const call = new LedgerCall({
+    ledger: input.failover.ledger,
+    agent: input.agent,
+    sessionId: sessionHeaderOf(input.forwardedHeaders ?? req.headers),
+    model,
+    since,
+  });
   try {
     await askInTurn({
       ...input,
@@ -1099,9 +1113,11 @@ async function handleAgentRequest(input: {
       tokens,
       windowOf,
       keepAlive,
+      call,
     });
   } finally {
     keepAlive.stop();
+    call.finish();
   }
 }
 
@@ -1302,8 +1318,9 @@ async function askInTurn(input: {
   windowOf: WindowOf;
   keepAlive: AgentKeepAlive;
   forwardedHeaders?: IncomingHttpHeaders;
+  call: LedgerCall;
 }): Promise<void> {
-  const { res, wire, logger, tokens, windowOf } = input;
+  const { res, wire, logger, tokens, windowOf, call } = input;
   const { cooldowns, sticks, retired } = input.failover;
   const restOf = (candidate: GatewayCandidate) =>
     cooldowns.restOf(candidate.endpoint.id, candidate.upstreamModel);
@@ -1313,10 +1330,22 @@ async function askInTurn(input: {
   let handBack: HandBack | null = null;
   for (let candidate = remaining.shift(); candidate; candidate = remaining.shift()) {
     const next = spentAfter(remaining.map(restOf)) ? undefined : remaining[0];
-    const outcome = await askUntilSettled({ ...input, candidate, last: next === undefined });
+    const startedAt = Date.now();
+    let reasked = false;
+    const outcome = await askUntilSettled({
+      ...input,
+      candidate,
+      last: next === undefined,
+      noteReasked: () => {
+        reasked = true;
+      },
+    });
+    const noteAttempt = (end: LedgerAttemptEnd) =>
+      call.attempt({ candidate, startedAt, reasked, end });
     if (outcome.kind === "gone") return;
     if (outcome.kind === "answered") {
       const end = await outcome.finished;
+      noteAnswered({ call, candidate, end, noteAttempt });
       if (end.kind === "complete") {
         cooldowns.served(candidate.endpoint.id, candidate.upstreamModel);
         retired.restore({ endpoint: candidate.endpoint, model: candidate.upstreamModel });
@@ -1339,15 +1368,27 @@ async function askInTurn(input: {
       { endpoint: candidate.endpoint.slug, status: failed.status, detail: failed.detail },
       "API endpoint returned an error",
     );
+    const noteFailed = (failure: string, rest: EndpointRest | null) =>
+      noteAttempt({
+        result: failed.cause === "refused" ? "refused" : "failed",
+        failure,
+        reason: failed.detail,
+        cooldownUntil: rest?.until ?? null,
+      });
     // 拒答不怪这家：不冷却、不标「需要检查」，问遍剩下的；都拒答时交出排第一那家的（magpie #248）。
     if (failed.cause === "refused") {
+      noteFailed("refused", null);
       refused ??= { candidate, failed };
       handBack ??= failed.handBack;
       if (next) {
         logSwitch({ logger, from: candidate, to: next, failure: "refused", failed, rest: null });
         continue;
       }
-      await sendAllRefused({ res, wire, refused, handBack });
+      noteHandedBack({
+        call,
+        refused,
+        end: await sendAllRefused({ res, wire, refused, handBack }),
+      });
       return;
     }
     // 厂商自己的清单可能还列着它（OpenCode Zen 的 exo-free）：这家的这一项一周内不进列表。
@@ -1363,6 +1404,7 @@ async function askInTurn(input: {
       endpointName: candidate.endpoint.name,
     });
     if (overflow) {
+      noteFailed("too_long", null);
       const larger = largerWindows({ left: remaining, window, tokens, windowOf });
       const to = larger[0];
       if (to) {
@@ -1392,6 +1434,7 @@ async function askInTurn(input: {
       return;
     }
     if (!retryable(failed.status, failed.text)) {
+      noteFailed(endpointFailure(failed.status, failed.text), null);
       sendFailedAttempt({
         res,
         wire,
@@ -1405,6 +1448,7 @@ async function askInTurn(input: {
     // 空回复怪不到这家，不冷却。
     let rest: EndpointRest | null = null;
     if (failed.cause !== "empty") rest = markFailed({ cooldowns, candidate, failed });
+    noteFailed(switchedFailure(failed, rest), rest);
     if (next) {
       const failure = switchedFailure(failed, rest);
       logSwitch({ logger, from: candidate, to: next, failure, failed, rest });
@@ -1420,6 +1464,33 @@ async function askInTurn(input: {
     });
     return;
   }
+}
+
+/** 这家开了口、把回复交给了 Agent：记这次尝试，交出了回复（不是报错形式的拒答）的也记进账。 */
+function noteAnswered(input: {
+  call: LedgerCall;
+  candidate: AskableCandidate;
+  end: AnswerEnd;
+  noteAttempt: (end: LedgerAttemptEnd) => void;
+}): void {
+  const { end } = input;
+  const result = end.kind === "refused" ? "refused" : "answered";
+  const failure = end.kind === "broken" ? "broken" : null;
+  const reason = end.kind === "broken" ? end.message : null;
+  input.noteAttempt({ result, failure, reason, cooldownUntil: null });
+  if ((end.kind === "complete" || end.kind === "refused") && end.reply) {
+    input.call.answered(input.candidate, end.reply);
+  }
+}
+
+/** 都拒答时交还给 Claude Code 的那份拒答回复也记进账，算在排第一那家。 */
+function noteHandedBack(input: {
+  call: LedgerCall;
+  refused: Refused;
+  end: AnswerEnd | null;
+}): void {
+  const { end } = input;
+  if (end?.kind === "refused" && end.reply) input.call.answered(input.refused.candidate, end.reply);
 }
 
 /** 一次拒答：哪家、它的失败（说法是安全过滤的原因）。 */
@@ -1461,16 +1532,13 @@ async function sendAllRefused(input: {
   wire: AgentWire;
   refused: Refused;
   handBack: HandBack | null;
-}): Promise<void> {
+}): Promise<AnswerEnd | null> {
   const { res, wire, handBack } = input;
   const handsBackToClaude = wire === "anthropic" && handBack !== null;
   if (handsBackToClaude) {
     const outcome = await handBack();
-    if (outcome.kind === "gone") return;
-    if (outcome.kind === "answered") {
-      await outcome.finished;
-      return;
-    }
+    if (outcome.kind === "gone") return null;
+    if (outcome.kind === "answered") return outcome.finished;
   }
   const { candidate, failed } = input.refused;
   const { endpoint } = candidate;
@@ -1480,6 +1548,7 @@ async function sendAllRefused(input: {
     message: `${endpoint.name}: ${candidate.upstreamModel} refused this request (${failed.detail})`,
     headers: { [ANSWERED_BY_HEADER]: endpoint.slug },
   });
+  return null;
 }
 
 type SettledAttempt =
@@ -1504,6 +1573,7 @@ async function askUntilSettled(input: {
   failover: Failover;
   keepAlive: AgentKeepAlive;
   forwardedHeaders?: IncomingHttpHeaders;
+  noteReasked?: () => void;
 }): Promise<SettledAttempt> {
   const { res } = input;
   let askedEmptyAgain = false;
@@ -1551,6 +1621,8 @@ interface EndpointAsk {
   keepAlive: AgentKeepAlive;
   // 转给上游的 Agent 请求头；缺省是全部（attemptEndpoint）。
   forwardedHeaders?: IncomingHttpHeaders;
+  // 这家不收某个写法、去掉它重问时告诉账本（拒收重问）。
+  noteReasked?: () => void;
 }
 
 /**
@@ -1621,6 +1693,7 @@ function shapeRefusals(input: EndpointAsk): ShapeRefusals {
       const refusal = { endpointId, model, format, shape };
       if (refusals.has(refusal)) return;
       refusals.add(refusal);
+      input.noteReasked?.();
       input.logger.info(
         { endpoint: candidate.endpoint.name, model, refused: shape },
         refusalNote(shape),

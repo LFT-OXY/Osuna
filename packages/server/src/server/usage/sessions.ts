@@ -12,7 +12,13 @@ import type { UsageProjectAttribution } from "./project-attribution.js";
 import { matchesUsageFilters, type UsageReportPricing } from "./report.js";
 import type { UsageSessionChains } from "./session-chains.js";
 import { spanOf, type UsageTurnIndex } from "./turn-rows.js";
-import { addTotals, emptyTotals, KEY_SEPARATOR, type UsageBucketRow } from "./types.js";
+import {
+  addTotals,
+  carriesNothing,
+  emptyTotals,
+  KEY_SEPARATOR,
+  type UsageBucketRow,
+} from "./types.js";
 
 /**
  * How many sessions one day answers with. A developer runs tens of sessions a
@@ -87,6 +93,8 @@ export function buildUsageSessions(input: BuildUsageSessionsInput): UsageSession
   const accumulators = new Map<string, SessionAccumulator>();
 
   for (const row of input.rows) {
+    // 只在账本里的调用没有会话，不成一行。
+    if (row.sessionId === "" || carriesNothing(row)) continue;
     if (!matchesUsageFilters(row, input.request.filters, input.projects)) continue;
     const day = local.day(Date.parse(row.bucket));
     if (input.request.from && day < input.request.from) continue;

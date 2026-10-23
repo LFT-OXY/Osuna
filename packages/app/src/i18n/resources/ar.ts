@@ -4646,6 +4646,12 @@ export const ar: TranslationResources = {
       rangeAll: "كل الفترات",
       refresh: "تحديث",
       allSources: "الكل",
+      official: "الرسمي",
+      breakdown: {
+        label: "التقسيم حسب",
+        sources: "المصادر",
+        endpoints: "نقاط النهاية",
+      },
       unpriced: "لا توجد بيانات سعر",
       unpricedSummaryOne: "نموذج واحد بلا بيانات سعر",
       unpricedSummaryMany: "{{count}} نماذج بلا بيانات سعر",
@@ -4666,6 +4672,8 @@ export const ar: TranslationResources = {
       accessibility: {
         sourceCard: "{{source}}، {{share}} من الرموز",
         distribution: "توزيع الرموز حسب المصدر",
+        endpointCard: "{{endpoint}}، {{share}} من الرموز",
+        endpointDistribution: "توزيع الرموز حسب نقطة النهاية",
       },
     },
     backfill: {

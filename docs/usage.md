@@ -1,8 +1,10 @@
 # Usage
 
 The daemon reads the session logs the local CLIs already write, turns them into
-token counts, and prices them. Nothing is sent anywhere; the one exception is
-the price table, below.
+token counts, and prices them. Requests that went through the **Gateway** are
+also in its own ledger, which says which API endpoint answered; the two are
+merged so a call counts once ([The gateway ledger](#the-gateway-ledger)).
+Nothing is sent anywhere; the one exception is the price table, below.
 
 Subscription limits are a different thing, **Plan usage**. Its data comes from
 [usage sources](plugins.md#usage-sources). Read
@@ -50,6 +52,45 @@ the session that spawned it, and recent days are what people look at.
 
 [data-model.md](data-model.md#7-usage) holds the row formats, the cursor fields,
 and what a rewritten file costs.
+
+## The gateway ledger
+
+The gateway writes one row per Claude Code request it carried, when the request
+ends ([ADR 0014](adr/0014-gateway-ledger-merges-with-cli-logs.md)): the
+endpoint and model that answered, the six token columns, the duration, the time
+to first content, the stop reason, every try with its outcome, and the id of the
+reply the CLI got back. No prompt, reply text, tool arguments or body is
+written. On the translated path the id is the one the gateway wrote back to the
+CLI, so it is the one the CLI logs. Writing the row changes no byte sent to the
+endpoint or to the CLI. Codex requests are not recorded yet.
+
+The ledger and the CLI log meet on that id (Claude `message.id`):
+
+- **Both have the call**: one row. Tokens and endpoint come from the ledger;
+  project, session and turn from the log, since the gateway cannot tell which
+  project or Osuna session a request belongs to. Claude Code's split lines of
+  one reply are deduplicated first, as before, and the merge pairs the
+  deduplicated reply.
+- **Only the ledger**: counted under no project and no session, at the time the
+  request started.
+- **Only the log**: a direct call, counted as **Official**. Every call from
+  before the ledger existed is in this group too, including ones that went
+  through the gateway: there is no way back to which endpoint answered them.
+
+The merge is the same whichever side reaches disk first and whether the daemon
+restarts in between. Rows are increments, so the side that arrives second adds
+the correction: a ledger row for a reply the scan already counted takes the
+log's tokens back from Official and adds its own at the endpoint; a reply the
+scan reads after its ledger row moves the ledger's tokens off the unknown
+project. The turn a call ran in stays counted on the log's row, which is why an
+Official group can be left holding turns and no tokens; the report leaves such a
+group and model out. Log replies older than 30 days are not kept for matching,
+since no ledger row can still arrive for them.
+
+Pi and OMP follow the same rule once they go through the gateway: a log entry
+matched by its reply id merges as above; one that matches no ledger row and
+whose provider is the gateway Osuna writes into their config is skipped, and
+only the ledger counts it, as magpie's `calls_pi.go` does.
 
 ## What each log makes hard
 

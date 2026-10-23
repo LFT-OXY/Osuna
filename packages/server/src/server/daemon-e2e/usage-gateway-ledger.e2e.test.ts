@@ -1,0 +1,578 @@
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { createServer, type Server, type ServerResponse } from "node:http";
+import type { AddressInfo } from "node:net";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, test } from "vitest";
+import type {
+  UsageEndpointBreakdown,
+  UsageReport,
+  UsageTokenTotals,
+} from "@getpaseo/protocol/usage/types";
+import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+import { DaemonClient } from "../test-utils/daemon-client.js";
+import { USAGE_TURN_ROW_SCHEMA, addTotals, emptyTotals } from "../usage/types.js";
+
+/*
+ * 中转站账本与 CLI 会话记录合并（任务 10-16-gateway-ledger-usage 工单 01）：真实 daemon + 本机假上游，
+ * fetch 扮演 Claude Code 打中转站；临时目录里放假的 Claude Code 会话记录，回复编号与假上游一致，再读用量 RPC。
+ * 同一次调用只算一次，与会话记录和账本哪边先到、中间是否重启无关。
+ */
+
+const CLAUDE_TOKEN = "gateway-token-claude-0123456789";
+const KEY_A = "sk-real-key-alpha-SECRET";
+const KEY_C = "sk-real-key-gamma-SECRET";
+const SESSION_ID = "sess-gw";
+const PROJECT_DIR = "-work-demo";
+const SCAN_INTERVAL_MS = 50;
+const PROMPT_TEXT = "SECRET-PROMPT-TEXT please list the files";
+const REPLY_TEXT = "SECRET-REPLY-TEXT here are the files";
+
+const UNPRICED = {
+  autoUpdate: false,
+  snapshot: {
+    _meta: { source: "test", fetchedAt: "2026-09-18T00:00:00.000Z", etag: null, license: "MIT" },
+    models: {},
+  },
+};
+
+function totals(
+  input: number,
+  cachedInput: number,
+  cacheWrite: number,
+  output: number,
+  reasoning = 0,
+): UsageTokenTotals {
+  return { input, cachedInput, cacheWrite, output, reasoning };
+}
+
+// 假上游 A 回的用量：账本记的就是它。
+const LEDGER_TOTALS = totals(40, 300, 50, 25);
+// 会话记录里同一个回复写成两行（先是开头的快照，再是最终的数），最终的数与账本不同：合并后取账本。
+const CLI_TOTALS = totals(40, 300, 50, 20);
+// 只在会话记录里的一次调用（升级前、或直连）：算「官方」。
+const OLD_TOTALS = totals(7, 70, 0, 9);
+// 翻译路径：假 Chat 上游报 prompt 120（缓存 100）、completion 30。
+const CHAT_TOTALS = totals(20, 100, 0, 30);
+
+const servers: Server[] = [];
+const tempRoots: string[] = [];
+const daemons: TestPaseoDaemon[] = [];
+const clients: DaemonClient[] = [];
+
+afterEach(async () => {
+  for (const client of clients.splice(0)) await client.close();
+  for (const daemon of daemons.splice(0)) await daemon.close();
+  for (const server of servers.splice(0)) {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+  await Promise.all(tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+});
+
+async function startUpstream(respond: (res: ServerResponse) => void): Promise<string> {
+  const server = createServer((req, res) => {
+    req.resume();
+    req.on("end", () => respond(res));
+  });
+  servers.push(server);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+}
+
+/** 假 Anthropic 上游的流式回复：编号 messageId，一段文字，用量即 LEDGER_TOTALS。 */
+function anthropicStream(messageId: string) {
+  return (res: ServerResponse) => {
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    for (const event of [
+      {
+        type: "message_start",
+        message: {
+          id: messageId,
+          type: "message",
+          role: "assistant",
+          model: "kimi-k2",
+          content: [],
+          usage: {
+            input_tokens: 40,
+            output_tokens: 0,
+            cache_read_input_tokens: 300,
+            cache_creation_input_tokens: 50,
+          },
+        },
+      },
+      { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+      { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: REPLY_TEXT } },
+      { type: "content_block_stop", index: 0 },
+      { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 25 } },
+      { type: "message_stop" },
+    ]) {
+      res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+    }
+    res.end();
+  };
+}
+
+function chatStream(res: ServerResponse): void {
+  res.writeHead(200, { "content-type": "text/event-stream" });
+  for (const chunk of [
+    {
+      id: "chatcmpl-77",
+      model: "deepseek-v3",
+      choices: [{ index: 0, delta: { role: "assistant", content: REPLY_TEXT } }],
+    },
+    { id: "chatcmpl-77", choices: [{ index: 0, delta: {}, finish_reason: "stop" }] },
+    {
+      id: "chatcmpl-77",
+      choices: [],
+      usage: {
+        prompt_tokens: 120,
+        completion_tokens: 30,
+        prompt_tokens_details: { cached_tokens: 100 },
+      },
+    },
+  ]) {
+    res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+  }
+  res.end("data: [DONE]\n\n");
+}
+
+interface Harness {
+  daemon: TestPaseoDaemon;
+  client: DaemonClient;
+  gateway: string;
+  claudeRoot: string;
+  usageDir: string;
+  restart: () => Promise<void>;
+}
+
+/** 两家接口：A 只有 Anthropic 地址（直通），C 只有 Chat 地址（翻译）；Claude Code 走中转站。 */
+async function start(options: { messageId?: string } = {}): Promise<Harness> {
+  const root = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-ledger-"));
+  tempRoots.push(root);
+  const endpointsDir = path.join(root, ".paseo", "api-endpoints");
+  await mkdir(endpointsDir, { recursive: true });
+  const claudeRoot = path.join(root, "claude-projects");
+  await mkdir(path.join(claudeRoot, PROJECT_DIR), { recursive: true });
+  const urlA = await startUpstream(anthropicStream(options.messageId ?? "msg_gw_1"));
+  const urlC = await startUpstream(chatStream);
+  const endpoint = (input: {
+    id: string;
+    slug: string;
+    name: string;
+    baseUrls: { format: string; url: string }[];
+    models: string[];
+  }) => ({
+    ...input,
+    models: input.models.map((id) => ({ id })),
+    enabled: true,
+    createdAt: "2026-10-01T00:00:00.000Z",
+    updatedAt: "2026-10-01T00:00:00.000Z",
+  });
+  const files = {
+    "endpoints.json": {
+      endpoints: [
+        endpoint({
+          id: "ep_a",
+          slug: "relay-a",
+          name: "Relay A",
+          baseUrls: [{ format: "anthropic_messages", url: urlA }],
+          models: ["kimi-k2"],
+        }),
+        endpoint({
+          id: "ep_c",
+          slug: "relay-c",
+          name: "Relay C",
+          baseUrls: [{ format: "openai_chat", url: `${urlC}/v1` }],
+          models: ["deepseek-v3"],
+        }),
+      ],
+      agents: {
+        claude: { enabled: true, defaultModelId: "kimi-k2" },
+        codex: { enabled: false, defaultModelId: null },
+      },
+    },
+    "keys.json": { keys: { ep_a: KEY_A, ep_c: KEY_C } },
+    "gateway-tokens.json": { tokens: { claude: CLAUDE_TOKEN, codex: "gateway-token-codex-x" } },
+  };
+  for (const [name, value] of Object.entries(files)) {
+    await writeFile(path.join(endpointsDir, name), JSON.stringify(value, null, 2));
+  }
+
+  const launch = async () => {
+    const daemon = await createTestPaseoDaemon({
+      paseoHomeRoot: root,
+      cleanup: false,
+      apiEndpoints: {
+        env: { CLAUDE_CONFIG_DIR: path.join(root, "claude"), CODEX_HOME: path.join(root, "codex") },
+        homeDir: root,
+      },
+      usage: {
+        roots: { claude: [claudeRoot], codex: [], pi: [], omp: [] },
+        scanIntervalMs: SCAN_INTERVAL_MS,
+        pricing: UNPRICED,
+      },
+    });
+    daemons.push(daemon);
+    const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
+    await client.connect();
+    await client.fetchAgents({ subscribe: {} });
+    clients.push(client);
+    return {
+      daemon,
+      client,
+      gateway: `http://127.0.0.1:${daemon.port}/api-endpoint-gateway`,
+    };
+  };
+  const harness: Harness = {
+    ...(await launch()),
+    claudeRoot,
+    usageDir: path.join(root, ".paseo", "usage"),
+    restart: async () => {
+      await harness.client.close();
+      await harness.daemon.close();
+      Object.assign(harness, await launch());
+    },
+  };
+  return harness;
+}
+
+/** Claude Code 打中转站的一轮：流式，读完整个回复；返回写给 CLI 的回复编号。 */
+async function askClaude(harness: Harness, model = "kimi-k2"): Promise<string> {
+  const response = await fetch(`${harness.gateway}/v1/messages`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${CLAUDE_TOKEN}`,
+      "content-type": "application/json",
+      "anthropic-version": "2023-06-01",
+      "x-claude-code-session-id": SESSION_ID,
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 64,
+      stream: true,
+      messages: [{ role: "user", content: PROMPT_TEXT }],
+    }),
+  });
+  expect(response.status).toBe(200);
+  const text = await response.text();
+  expect(text).toContain(REPLY_TEXT);
+  const opening = text
+    .split("\n")
+    .filter((line) => line.startsWith("data: "))
+    .map((line) => JSON.parse(line.slice("data: ".length)) as Record<string, unknown>)
+    .find((event) => event.type === "message_start") as { message: { id: string } };
+  return opening.message.id;
+}
+
+interface TranscriptCall {
+  messageId: string;
+  model: string;
+  // 同一个回复的每一行的用量（Claude Code 一个内容块写一行，每行重复用量）。
+  lines: UsageTokenTotals[];
+}
+
+/** 照 Claude Code 的样子追加一轮：用户一行，再是每次调用的各行。 */
+async function appendTurn(
+  harness: Harness,
+  input: { promptId: string; calls: TranscriptCall[] },
+): Promise<void> {
+  const at = Date.now();
+  const stamp = (offset: number) => new Date(at + offset).toISOString();
+  const lines: unknown[] = [
+    {
+      type: "user",
+      promptId: input.promptId,
+      uuid: `u-${input.promptId}`,
+      timestamp: stamp(0),
+      cwd: "/work/demo",
+      sessionId: SESSION_ID,
+      message: { role: "user", content: "<prompt text>" },
+    },
+  ];
+  let offset = 1;
+  for (const [callIndex, call] of input.calls.entries()) {
+    for (const [lineIndex, usage] of call.lines.entries()) {
+      const last = callIndex === input.calls.length - 1 && lineIndex === call.lines.length - 1;
+      lines.push({
+        type: "assistant",
+        uuid: `a-${input.promptId}-${offset}`,
+        timestamp: stamp(offset++),
+        cwd: "/work/demo",
+        sessionId: SESSION_ID,
+        message: {
+          id: call.messageId,
+          model: call.model,
+          role: "assistant",
+          content: [{ type: "text", text: "<redacted>" }],
+          stop_reason: last ? "end_turn" : "tool_use",
+          usage: {
+            input_tokens: usage.input,
+            cache_read_input_tokens: usage.cachedInput,
+            cache_creation_input_tokens: usage.cacheWrite,
+            output_tokens: usage.output,
+          },
+        },
+      });
+    }
+  }
+  const transcript = path.join(harness.claudeRoot, PROJECT_DIR, `${SESSION_ID}.jsonl`);
+  await writeFile(transcript, `${lines.map((line) => JSON.stringify(line)).join("\n")}\n`, {
+    flag: "a",
+  });
+}
+
+/** 接口 A 那次调用在会话记录里：两行，开头的快照与最终的数。 */
+function gatewayCall(messageId = "msg_gw_1"): TranscriptCall {
+  return { messageId, model: "kimi-k2", lines: [totals(40, 300, 50, 5), CLI_TOTALS] };
+}
+
+const ALL_TIME = { from: null, to: null, timezone: "UTC" };
+
+async function waitForReport(
+  harness: Harness,
+  accept: (report: UsageReport) => boolean,
+  request: Parameters<DaemonClient["usageReportGet"]>[0] = ALL_TIME,
+): Promise<UsageReport> {
+  const deadline = Date.now() + 15_000;
+  let last: UsageReport | null = null;
+  while (Date.now() < deadline) {
+    const { requestId: _requestId, ...report } = await harness.client.usageReportGet(request);
+    last = report;
+    if (report.backfill.state === "done" && accept(report)) return report;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`Usage report never matched: ${JSON.stringify(last)}`);
+}
+
+function endpointGroup(
+  endpointId: string | null,
+  name: string | null,
+  groupTotals: UsageTokenTotals,
+  share: number,
+): UsageEndpointBreakdown {
+  return { endpointId, name, deleted: false, totals: groupTotals, estimatedCost: 0, share };
+}
+
+function sameTotals(a: UsageTokenTotals, b: UsageTokenTotals): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+function sum(...all: UsageTokenTotals[]): UsageTokenTotals {
+  const target = emptyTotals();
+  for (const one of all) addTotals(target, one);
+  return target;
+}
+
+/**
+ * 每轮用量：盘上的轮次行照 daemon 读回的规则加起来，按轮次与接口分开，去掉加起来是零的。
+ */
+async function turnUsage(
+  usageDir: string,
+): Promise<{ turnKey: string; endpointId: string | null; totals: UsageTokenTotals }[]> {
+  const byKey = new Map<
+    string,
+    { turnKey: string; endpointId: string | null; totals: UsageTokenTotals }
+  >();
+  for (const name of await readdir(usageDir)) {
+    if (!name.startsWith("turns-")) continue;
+    for (const line of (await readFile(path.join(usageDir, name), "utf8")).split("\n")) {
+      if (line.length === 0) continue;
+      const row = USAGE_TURN_ROW_SCHEMA.parse(JSON.parse(line));
+      const endpointId = row.endpointId ?? null;
+      const key = `${row.turnKey} ${endpointId ?? ""}`;
+      const entry = byKey.get(key) ?? { turnKey: row.turnKey, endpointId, totals: emptyTotals() };
+      addTotals(entry.totals, row);
+      byKey.set(key, entry);
+    }
+  }
+  return Array.from(byKey.values())
+    .filter((entry) => !sameTotals(entry.totals, emptyTotals()))
+    .sort((a, b) => `${a.turnKey}${a.endpointId}`.localeCompare(`${b.turnKey}${b.endpointId}`));
+}
+
+/** 一次调用只算一次、带上接口：汇总、按接口、按项目、按会话、每轮用量都一样。 */
+async function expectCountedOnce(harness: Harness): Promise<void> {
+  const report = await waitForReport(harness, (candidate) =>
+    sameTotals(candidate.summary.totals, LEDGER_TOTALS),
+  );
+  expect(report.summary.totals).toEqual(LEDGER_TOTALS);
+  expect(report.summary.sessionCount).toBe(1);
+  expect(report.endpoints).toEqual([endpointGroup("ep_a", "Relay A", LEDGER_TOTALS, 1)]);
+  expect(report.projects.map((project) => [project.rootPath, project.totals])).toEqual([
+    ["/work/demo", LEDGER_TOTALS],
+  ]);
+  const { sessions } = await harness.client.usageSessionsList(ALL_TIME);
+  expect(sessions.map((session) => [session.sessionId, session.totals])).toEqual([
+    [SESSION_ID, LEDGER_TOTALS],
+  ]);
+  expect(await turnUsage(harness.usageDir)).toEqual([
+    { turnKey: "p1", endpointId: "ep_a", totals: LEDGER_TOTALS },
+  ]);
+}
+
+async function readLedger(usageDir: string): Promise<{ text: string; modes: number[] }> {
+  const dir = path.join(usageDir, "requests");
+  let text = "";
+  const modes: number[] = [];
+  for (const name of await readdir(dir)) {
+    const file = path.join(dir, name);
+    text += await readFile(file, "utf8");
+    modes.push((await stat(file)).mode & 0o777);
+  }
+  return { text, modes };
+}
+
+async function waitForLedgerRow(usageDir: string, replyId: string): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const ledger = await readLedger(usageDir).catch(() => ({ text: "" }));
+    if (ledger.text.includes(`"replyId":"${replyId}"`)) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`The ledger never recorded ${replyId}`);
+}
+
+describe("the gateway ledger merged with Claude Code's logs", () => {
+  test("advertises the gateway ledger", async () => {
+    const harness = await start();
+    expect(harness.client.getLastServerInfoMessage()?.features?.gatewayLedger).toBe(true);
+  });
+
+  test("a call the ledger records before the log is scanned counts once, with its endpoint", async () => {
+    const harness = await start();
+    expect(await askClaude(harness)).toBe("msg_gw_1");
+    // 账本先到：会话记录还没写，这次调用算在未知项目，没有会话。
+    const ledgerOnly = await waitForReport(harness, (report) =>
+      sameTotals(report.summary.totals, LEDGER_TOTALS),
+    );
+    expect(ledgerOnly.endpoints).toEqual([endpointGroup("ep_a", "Relay A", LEDGER_TOTALS, 1)]);
+    expect(ledgerOnly.projects).toEqual([]);
+    expect(ledgerOnly.summary.sessionCount).toBe(0);
+
+    await appendTurn(harness, { promptId: "p1", calls: [gatewayCall()] });
+
+    await waitForReport(harness, (report) => report.projects.length === 1);
+    await expectCountedOnce(harness);
+  });
+
+  test("a call the log shows before the ledger records it counts once, with its endpoint", async () => {
+    const harness = await start();
+    await appendTurn(harness, { promptId: "p1", calls: [gatewayCall()] });
+    // 会话记录先被扫描：还没有账本行，先算「官方」。
+    const official = await waitForReport(harness, (report) =>
+      sameTotals(report.summary.totals, CLI_TOTALS),
+    );
+    expect(official.endpoints).toEqual([endpointGroup(null, null, CLI_TOTALS, 1)]);
+
+    await askClaude(harness);
+
+    await expectCountedOnce(harness);
+  });
+
+  test("the order still does not matter across a daemon restart", async () => {
+    const ledgerFirst = await start();
+    await askClaude(ledgerFirst);
+    await waitForLedgerRow(ledgerFirst.usageDir, "msg_gw_1");
+    await ledgerFirst.restart();
+    await appendTurn(ledgerFirst, { promptId: "p1", calls: [gatewayCall()] });
+    await waitForReport(ledgerFirst, (report) => report.projects.length === 1);
+    await expectCountedOnce(ledgerFirst);
+    // 再起一次：读回的数一样。
+    await ledgerFirst.restart();
+    await expectCountedOnce(ledgerFirst);
+
+    const logFirst = await start();
+    await appendTurn(logFirst, { promptId: "p1", calls: [gatewayCall()] });
+    await waitForReport(logFirst, (report) => sameTotals(report.summary.totals, CLI_TOTALS));
+    await logFirst.restart();
+    await waitForReport(logFirst, (report) => sameTotals(report.summary.totals, CLI_TOTALS));
+    await askClaude(logFirst);
+    await expectCountedOnce(logFirst);
+  });
+
+  test("a call only the log has is Official, beside the endpoint's calls, and the endpoint filter splits them", async () => {
+    const harness = await start();
+    await askClaude(harness);
+    await appendTurn(harness, {
+      promptId: "p1",
+      calls: [gatewayCall(), { messageId: "msg_old", model: "claude-opus-5", lines: [OLD_TOTALS] }],
+    });
+    const all = sum(LEDGER_TOTALS, OLD_TOTALS);
+    const report = await waitForReport(harness, (candidate) =>
+      sameTotals(candidate.summary.totals, all),
+    );
+    const billable = (one: UsageTokenTotals) =>
+      one.input + one.cachedInput + one.cacheWrite + one.output;
+    expect(report.endpoints).toEqual([
+      endpointGroup("ep_a", "Relay A", LEDGER_TOTALS, billable(LEDGER_TOTALS) / billable(all)),
+      endpointGroup(null, null, OLD_TOTALS, billable(OLD_TOTALS) / billable(all)),
+    ]);
+
+    const onlyA = await harness.client.usageReportGet({
+      ...ALL_TIME,
+      filters: { endpoints: ["ep_a"] },
+    });
+    expect(onlyA.summary.totals).toEqual(LEDGER_TOTALS);
+    expect(onlyA.models.map((model) => model.model)).toEqual(["kimi-k2"]);
+    const onlyOfficial = await harness.client.usageReportGet({
+      ...ALL_TIME,
+      filters: { endpoints: [null] },
+    });
+    expect(onlyOfficial.summary.totals).toEqual(OLD_TOTALS);
+    expect(onlyOfficial.models.map((model) => model.model)).toEqual(["claude-opus-5"]);
+  });
+
+  test("a translated reply is matched by the id the gateway wrote back to Claude Code", async () => {
+    const harness = await start();
+    const replyId = await askClaude(harness, "deepseek-v3");
+    expect(replyId).toBe("msg_77");
+    await appendTurn(harness, {
+      promptId: "p1",
+      calls: [{ messageId: replyId, model: "deepseek-v3", lines: [totals(20, 100, 0, 30)] }],
+    });
+
+    const report = await waitForReport(
+      harness,
+      (candidate) =>
+        candidate.projects.length === 1 && sameTotals(candidate.summary.totals, CHAT_TOTALS),
+    );
+    expect(report.endpoints).toEqual([endpointGroup("ep_c", "Relay C", CHAT_TOTALS, 1)]);
+  });
+
+  test("the ledger keeps no conversation text, only the reply's id and timing, in owner-only files", async () => {
+    const harness = await start();
+    await askClaude(harness);
+    await waitForLedgerRow(harness.usageDir, "msg_gw_1");
+
+    const ledger = await readLedger(harness.usageDir);
+    expect(ledger.text).not.toContain("SECRET-PROMPT-TEXT");
+    expect(ledger.text).not.toContain("SECRET-REPLY-TEXT");
+    expect(ledger.text).not.toContain(KEY_A);
+    expect(ledger.modes.every((mode) => mode === 0o600)).toBe(true);
+    const row = ledger.text
+      .split("\n")
+      .filter((line) => line.length > 0)
+      .map((line) => JSON.parse(line) as Record<string, unknown>)
+      .find((entry) => entry.replyId === "msg_gw_1");
+    expect(row).toMatchObject({
+      kind: "gateway",
+      agent: "claude",
+      sessionId: SESSION_ID,
+      model: "kimi-k2",
+      endpointId: "ep_a",
+      endpointName: "Relay A",
+      upstreamModel: "kimi-k2",
+      input: 40,
+      cachedInput: 300,
+      cacheWrite: 50,
+      output: 25,
+      stop: "stop",
+      status: "ok",
+    });
+    expect(row?.ttftMs).toEqual(expect.any(Number));
+    expect(row?.attempts).toEqual([
+      expect.objectContaining({ endpointId: "ep_a", model: "kimi-k2", result: "answered" }),
+    ]);
+  });
+});

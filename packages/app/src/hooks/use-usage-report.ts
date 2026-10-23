@@ -19,6 +19,7 @@ import type { UsageRange } from "@/usage-stats/period";
 
 /** A burst of `usage.updated` after one turn should cost one refetch, not five. */
 const USAGE_UPDATED_DEBOUNCE_MS = 400;
+const NO_SERVERS: readonly string[] = [];
 
 export type UsageReportLoadState =
   | { status: "connecting" }
@@ -29,6 +30,10 @@ export interface UseUsageReportInput {
   hosts: readonly UsageHostInput[];
   range: UsageRange;
   timezone: string;
+  /** Only these API endpoints' usage (`null` is Official); see `fetchUsageReport`. */
+  endpoints?: readonly (string | null)[];
+  /** False keeps the query and its live events idle. */
+  enabled?: boolean;
 }
 
 export interface UseUsageReportResult {
@@ -46,6 +51,7 @@ export function usageReportQueryKey(input: {
   serverIds: readonly string[];
   range: UsageRange;
   timezone: string;
+  endpoints?: readonly (string | null)[];
 }) {
   return [
     ...usageQueryBaseKey,
@@ -53,12 +59,14 @@ export function usageReportQueryKey(input: {
     input.range.from ?? "all",
     input.range.to ?? "all",
     input.timezone,
+    input.endpoints ? input.endpoints.map((id) => id ?? "").join("|") : "any-endpoint",
   ] as const;
 }
 
 export function useUsageReport(input: UseUsageReportInput): UseUsageReportResult {
   const runtime = getHostRuntimeStore();
   const hosts = input.hosts;
+  const enabled = input.enabled ?? true;
   const serverIds = useMemo(() => hosts.map((host) => host.serverId), [hosts]);
   const connectionStatuses = useHostRuntimeConnectionStatuses(serverIds);
   const connectionStatusKey = useMemo(
@@ -72,6 +80,7 @@ export function useUsageReport(input: UseUsageReportInput): UseUsageReportResult
         serverIds,
         range: input.range,
         timezone: input.timezone,
+        endpoints: input.endpoints,
       }),
       connectionStatusKey,
     ],
@@ -81,7 +90,9 @@ export function useUsageReport(input: UseUsageReportInput): UseUsageReportResult
         runtime,
         range: input.range,
         timezone: input.timezone,
+        endpoints: input.endpoints,
       }),
+    enabled,
     dataShape: "list",
     staleTimeMs: 5_000,
   });
@@ -94,7 +105,10 @@ export function useUsageReport(input: UseUsageReportInput): UseUsageReportResult
     void queryClient.invalidateQueries({ queryKey: usageSessionsQueryBaseKey });
   }, [query, queryClient]);
 
-  const liveBackfill = useUsageLiveEvents({ serverIds, onUsageUpdated: refetch });
+  const liveBackfill = useUsageLiveEvents({
+    serverIds: enabled ? serverIds : NO_SERVERS,
+    onUsageUpdated: refetch,
+  });
 
   let loadState: UsageReportLoadState;
   if (query.data?.status === "connecting") {

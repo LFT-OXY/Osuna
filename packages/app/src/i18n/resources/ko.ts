@@ -4689,6 +4689,12 @@ export const ko: TranslationResources = {
       rangeAll: "전체 기간",
       refresh: "새로 고침",
       allSources: "전체",
+      official: "공식",
+      breakdown: {
+        label: "나누는 기준",
+        sources: "소스",
+        endpoints: "엔드포인트",
+      },
       unpriced: "요금 정보 없음",
       unpricedSummaryOne: "요금 정보가 없는 모델 1개",
       unpricedSummaryMany: "요금 정보가 없는 모델 {{count}}개",
@@ -4709,6 +4715,8 @@ export const ko: TranslationResources = {
       accessibility: {
         sourceCard: "{{source}}, 토큰의 {{share}}",
         distribution: "소스별 토큰 비중",
+        endpointCard: "{{endpoint}}, 토큰의 {{share}}",
+        endpointDistribution: "엔드포인트별 토큰 비중",
       },
     },
     backfill: {

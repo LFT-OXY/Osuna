@@ -9,11 +9,16 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { ScrollView } from "@/components/ui/scroll-view";
 import { UsageDetailsCard } from "@/components/usage/usage-details-card";
 import { UsageHeatmapCard } from "@/components/usage/usage-heatmap-card";
-import { UsageOverviewCard } from "@/components/usage/usage-overview-card";
+import {
+  UsageOverviewCard,
+  type UsageBreakdown,
+  type UsageEndpointSelection,
+} from "@/components/usage/usage-overview-card";
 import { UsagePlanCard } from "@/components/usage/usage-plan-card";
 import { UsageStatsCard } from "@/components/usage/usage-stats-card";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useUsageReport } from "@/hooks/use-usage-report";
+import { useHostFeatureAvailabilityMap } from "@/runtime/host-features";
 import type { UsageHostsView } from "@/usage-stats/details";
 import { EMPTY_USAGE_REPORT } from "@/usage-stats/merge";
 import {
@@ -50,6 +55,8 @@ function UsageScreenContent(): ReactElement {
   const [custom, setCustom] = useState<UsageCustomRange>({ from: today, to: today });
   const [selectedSourceKey, setSelectedSourceKey] = useState<string | null>(null);
   const [selectedServerId, setSelectedServerId] = useState<string | null>(null);
+  const [selectedEndpoint, setSelectedEndpoint] = useState<UsageEndpointSelection | null>(null);
+  const [breakdown, setBreakdown] = useState<UsageBreakdown>("sources");
 
   const { options: hostOptions, selection: hostSelection } = useUsageHosts(selectedServerId);
   const range = useMemo(
@@ -60,6 +67,29 @@ function UsageScreenContent(): ReactElement {
     hosts: hostSelection.hosts,
     range,
     timezone,
+  });
+  // COMPAT(gatewayLedger): added in v0.17.0, remove gate after 2027-04-23.
+  // 只问带中转站账本的主机按接口筛选：老 daemon 不认这个筛选，会把全部的数交回来。
+  const hostIds = useMemo(
+    () => hostSelection.hosts.map((host) => host.serverId),
+    [hostSelection.hosts],
+  );
+  const ledgerSupport = useHostFeatureAvailabilityMap(hostIds, "gatewayLedger");
+  const ledgerHosts = useMemo(
+    () => hostSelection.hosts.filter((host) => ledgerSupport.get(host.serverId) === true),
+    [hostSelection.hosts, ledgerSupport],
+  );
+  const activeEndpoint = ledgerHosts.length > 0 ? selectedEndpoint : null;
+  const endpointFilter = useMemo(
+    () => (activeEndpoint ? [activeEndpoint.endpointId] : undefined),
+    [activeEndpoint],
+  );
+  const filtered = useUsageReport({
+    hosts: ledgerHosts,
+    range,
+    timezone,
+    endpoints: endpointFilter,
+    enabled: endpointFilter !== undefined,
   });
 
   const handlePeriodChange = useCallback(
@@ -81,7 +111,11 @@ function UsageScreenContent(): ReactElement {
     setCustom(next);
   }, []);
 
-  const report = loadState.status === "loaded" ? loadState.data : EMPTY_USAGE_REPORT;
+  const allReport = loadState.status === "loaded" ? loadState.data : EMPTY_USAGE_REPORT;
+  // 选了一家接口时页面上的数都按它筛过；接口卡片自己仍用全部的数，好换到别家。
+  const report =
+    endpointFilter && filtered.loadState.status === "loaded" ? filtered.loadState.data : allReport;
+  const endpoints = ledgerHosts.length > 0 ? allReport.endpoints : undefined;
   const detailsHosts = useMemo<UsageHostsView>(
     () => ({
       hosts: hostSelection.hosts,
@@ -118,6 +152,10 @@ function UsageScreenContent(): ReactElement {
         custom={custom}
         today={today}
         selectedSourceKey={selectedSourceKey}
+        endpoints={endpoints}
+        selectedEndpoint={activeEndpoint}
+        breakdown={breakdown}
+        onBreakdownChange={setBreakdown}
         isRefreshing={isRefetching}
         hostOptions={hostOptions}
         hostSelection={hostSelection}
@@ -125,6 +163,7 @@ function UsageScreenContent(): ReactElement {
         onShift={handleShift}
         onCustomChange={handleCustomChange}
         onSelectSource={setSelectedSourceKey}
+        onSelectEndpoint={setSelectedEndpoint}
         onSelectHost={setSelectedServerId}
         onRefresh={refetch}
       />

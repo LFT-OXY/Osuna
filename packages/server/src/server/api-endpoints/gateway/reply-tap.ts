@@ -37,6 +37,11 @@ export interface TappedReply {
     raw: string;
   } | null;
   usage: Usage;
+  // 上游给的回复编号（Anthropic 的 message.id 等）；没给为空。
+  id: string;
+  // 读到第一个内容（文字、思考或工具调用）与第一段文字的时刻；没有为 null。
+  firstContentAt: number | null;
+  firstTextAt: number | null;
 }
 
 // 整份回复最多攒这么多来读（magpie sniff.go 的上限），再大的不读。
@@ -60,6 +65,9 @@ export class ReplyTap {
     ended: false,
     error: null,
     usage: emptyUsage(),
+    id: "",
+    firstContentAt: null,
+    firstTextAt: null,
   };
   private readonly decoder: StreamDecoder;
   private reading: Reading;
@@ -115,6 +123,9 @@ export class ReplyTap {
   private add(event: StreamEvent): void {
     switch (event.kind) {
       case "start":
+        if (event.id !== "") this.reply.id = event.id;
+        addUsage(this.reply.usage, event.usage);
+        return;
       case "usage":
         addUsage(this.reply.usage, event.usage);
         return;
@@ -149,6 +160,9 @@ export class ReplyTap {
   }
 
   private addContent(content: ReplyContent): void {
+    const now = Date.now();
+    this.reply.firstContentAt ??= now;
+    if (content === "text") this.reply.firstTextAt ??= now;
     if (!this.reply.content.includes(content)) this.reply.content.push(content);
   }
 }

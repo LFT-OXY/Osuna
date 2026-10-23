@@ -98,3 +98,12 @@ export function usageSourceColor(ref: UsageSourceRef): string {
   if (known) return known;
   return `hsl(${fallbackHue(ref.backend)}, 60%, 45%)`;
 }
+
+// 「官方」不是哪一家接口：用不抢眼的灰。
+const OFFICIAL_ENDPOINT_COLOR = "hsl(220, 8%, 55%)";
+
+/** An API endpoint keeps one colour by its id; Official (`null`) is grey. */
+export function usageEndpointColor(endpointId: string | null): string {
+  if (endpointId === null) return OFFICIAL_ENDPOINT_COLOR;
+  return `hsl(${fallbackHue(endpointId)}, 60%, 45%)`;
+}

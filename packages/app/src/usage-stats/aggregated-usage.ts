@@ -33,6 +33,12 @@ export interface FetchUsageReportInput {
   runtime: UsageRuntime;
   range: UsageRange;
   timezone: string;
+  /**
+   * Only the usage of these API endpoints (`null` is Official). Pass only hosts
+   * that advertise `features.gatewayLedger`: an older daemon drops the filter
+   * and would answer with everything.
+   */
+  endpoints?: readonly (string | null)[];
 }
 
 export type FetchUsageReportState =
@@ -72,6 +78,7 @@ export async function fetchUsageReport(
           from: input.range.from,
           to: input.range.to,
           timezone: input.timezone,
+          ...(input.endpoints ? { filters: { endpoints: [...input.endpoints] } } : {}),
         });
         reports.push({ serverId: host.serverId, report: payload });
       } catch (error) {

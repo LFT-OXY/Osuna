@@ -4784,6 +4784,12 @@ export const fr: TranslationResources = {
       rangeAll: "Depuis le début",
       refresh: "Actualiser",
       allSources: "Tout",
+      official: "Officiel",
+      breakdown: {
+        label: "Répartir par",
+        sources: "Sources",
+        endpoints: "Endpoints",
+      },
       unpriced: "Aucun tarif connu",
       unpricedSummaryOne: "1 modèle sans tarif connu",
       unpricedSummaryMany: "{{count}} modèles sans tarif connu",
@@ -4804,6 +4810,8 @@ export const fr: TranslationResources = {
       accessibility: {
         sourceCard: "{{source}}, {{share}} des tokens",
         distribution: "Répartition des tokens par source",
+        endpointCard: "{{endpoint}}, {{share}} des tokens",
+        endpointDistribution: "Répartition des tokens par endpoint",
       },
     },
     backfill: {

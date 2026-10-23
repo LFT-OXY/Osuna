@@ -3,6 +3,7 @@ import path from "node:path";
 import type { Logger } from "pino";
 import type { ZodType } from "zod";
 import { writeFileAtomic, writeJsonFileAtomic } from "../atomic-file.js";
+import { USAGE_REQUEST_RECORD_SCHEMA, type UsageRequestRecord } from "./ledger.js";
 import { PRICING_TABLE_SCHEMA, type PricingTable } from "./pricing/table.js";
 import {
   USAGE_BUCKET_ROW_SCHEMA,
@@ -22,11 +23,21 @@ import {
 const FILE_SUFFIX = ".jsonl";
 const SCAN_STATE_FILE = "scan-state.json";
 const PRICING_CACHE_FILE = "pricing-table.json";
+const REQUESTS_DIR = "requests";
+// 账本与逐条记录和接口目录一样只给本人读写。
+const REQUEST_FILE_MODE = 0o600;
+const REQUEST_DIR_MODE = 0o700;
 
-/** What one parse pass produced, in the two shapes the directory keeps. */
+/** What one parse pass produced, in the shapes the directory keeps. */
 export interface UsageRowSet {
   buckets: UsageBucketRow[];
   turns: UsageTurnRow[];
+  /** Ledger rows and the log replies they merge with, a file per UTC day. */
+  requests: UsageRequestRecord[];
+}
+
+export function emptyRowSet(): UsageRowSet {
+  return { buckets: [], turns: [], requests: [] };
 }
 
 /**
@@ -80,26 +91,80 @@ export class UsageStore {
     return {
       buckets: await this.loadKind(BUCKET_FILE),
       turns: await this.loadKind(TURN_FILE),
+      requests: await this.loadRequests(),
     };
   }
 
   /**
-   * Append both kinds in one pass. Turn rows go down with the bucket rows they
-   * were parsed from, so a crash cannot leave one kind ahead of the other.
+   * Append every kind in one pass. Turn rows go down with the bucket rows they
+   * were parsed from, and the records a merge step kept go down after the rows
+   * it added, so a crash cannot leave one kind ahead of the other.
    */
   async appendRows(rows: UsageRowSet): Promise<void> {
     const writes = [
       ...this.serialize(BUCKET_FILE, rows.buckets),
       ...this.serialize(TURN_FILE, rows.turns),
     ];
-    if (writes.length === 0) return;
+    const requestWrites = this.serializeRequests(rows.requests);
+    if (writes.length === 0 && requestWrites.length === 0) return;
 
     await this.enqueue(async () => {
       await fs.mkdir(this.dir, { recursive: true });
       // Row files are append-only, so a plain append is the write; only the
       // cursor and a compaction rewrite need the atomic temp-and-rename dance.
       for (const write of writes) await fs.appendFile(write.path, write.body, "utf8");
+      if (requestWrites.length === 0) return;
+      await fs.mkdir(this.requestsDir(), { recursive: true, mode: REQUEST_DIR_MODE });
+      for (const write of requestWrites) {
+        await fs.appendFile(write.path, write.body, { encoding: "utf8", mode: REQUEST_FILE_MODE });
+      }
     });
+  }
+
+  /** Every request record on disk, oldest day first; a torn line is dropped. */
+  private async loadRequests(): Promise<UsageRequestRecord[]> {
+    let names: string[];
+    try {
+      names = await fs.readdir(this.requestsDir());
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+      throw error;
+    }
+    const records: UsageRequestRecord[] = [];
+    for (const name of names.filter((entry) => entry.endsWith(FILE_SUFFIX)).sort()) {
+      const raw = await fs.readFile(path.join(this.requestsDir(), name), "utf8");
+      for (const line of raw.split("\n")) {
+        if (line.length === 0) continue;
+        const parsed = USAGE_REQUEST_RECORD_SCHEMA.safeParse(parseRow(line));
+        if (!parsed.success) {
+          this.logger.warn({ file: name, err: parsed.error }, "Dropped unreadable usage request");
+          continue;
+        }
+        records.push(parsed.data);
+      }
+    }
+    return records;
+  }
+
+  /** One append per UTC day of the record's own time. */
+  private serializeRequests(
+    records: readonly UsageRequestRecord[],
+  ): { path: string; body: string }[] {
+    const byDay = new Map<string, string[]>();
+    for (const record of records) {
+      const day = record.at.slice(0, 10);
+      const lines = byDay.get(day) ?? [];
+      lines.push(JSON.stringify(USAGE_REQUEST_RECORD_SCHEMA.parse(record)));
+      byDay.set(day, lines);
+    }
+    return Array.from(byDay, ([day, lines]) => ({
+      path: path.join(this.requestsDir(), `${day}${FILE_SUFFIX}`),
+      body: `${lines.join("\n")}\n`,
+    }));
+  }
+
+  private requestsDir(): string {
+    return path.join(this.dir, REQUESTS_DIR);
   }
 
   async loadScanState(): Promise<UsageScanState> {

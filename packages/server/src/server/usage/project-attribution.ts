@@ -25,7 +25,8 @@ export class UsageProjectResolver {
   }
 
   async resolveAll(cwds: Iterable<string>): Promise<Map<string, UsageProjectAttribution>> {
-    const pending = Array.from(cwds).filter((cwd) => !this.cache.has(cwd));
+    // 空 cwd 是只在账本里的调用：未知项目，不归任何目录（path.resolve("") 会落到 daemon 自己的目录）。
+    const pending = Array.from(cwds).filter((cwd) => cwd !== "" && !this.cache.has(cwd));
     const projects = pending.length > 0 ? await this.listProjects() : [];
     for (const cwd of pending) {
       this.cache.set(cwd, await this.resolve(cwd, projects));

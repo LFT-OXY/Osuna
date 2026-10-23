@@ -4722,6 +4722,12 @@ export const ja: TranslationResources = {
       rangeAll: "全期間",
       refresh: "更新",
       allSources: "すべて",
+      official: "公式",
+      breakdown: {
+        label: "分け方",
+        sources: "ソース",
+        endpoints: "エンドポイント",
+      },
       unpriced: "料金データなし",
       unpricedSummaryOne: "1つのモデルに料金データがありません",
       unpricedSummaryMany: "{{count}}つのモデルに料金データがありません",
@@ -4742,6 +4748,8 @@ export const ja: TranslationResources = {
       accessibility: {
         sourceCard: "{{source}}、トークンの {{share}}",
         distribution: "ソース別のトークン比率",
+        endpointCard: "{{endpoint}}、トークンの {{share}}",
+        endpointDistribution: "エンドポイント別のトークン比率",
       },
     },
     backfill: {

@@ -4760,6 +4760,12 @@ export const es: TranslationResources = {
       rangeAll: "Todo el tiempo",
       refresh: "Actualizar",
       allSources: "Todas",
+      official: "Oficial",
+      breakdown: {
+        label: "Dividir por",
+        sources: "Orígenes",
+        endpoints: "Endpoints",
+      },
       unpriced: "Sin datos de precio",
       unpricedSummaryOne: "1 modelo sin datos de precio",
       unpricedSummaryMany: "{{count}} modelos sin datos de precio",
@@ -4780,6 +4786,8 @@ export const es: TranslationResources = {
       accessibility: {
         sourceCard: "{{source}}, {{share}} de los tokens",
         distribution: "Reparto de tokens por origen",
+        endpointCard: "{{endpoint}}, {{share}} de los tokens",
+        endpointDistribution: "Reparto de tokens por endpoint",
       },
     },
     backfill: {

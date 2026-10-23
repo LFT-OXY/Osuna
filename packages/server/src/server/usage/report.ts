@@ -3,6 +3,7 @@ import type {
   UsageBackfill,
   UsageCli,
   UsageDayBreakdown,
+  UsageEndpointBreakdown,
   UsageHeatmapDay,
   UsageModelBreakdown,
   UsageMonthBreakdown,
@@ -23,7 +24,13 @@ import {
   type LocalTimeResolver,
 } from "./local-time.js";
 import type { UsageProjectAttribution } from "./project-attribution.js";
-import { addTotals, emptyTotals, modelRowKey, type UsageBucketRow } from "./types.js";
+import {
+  addTotals,
+  carriesNothing,
+  emptyTotals,
+  modelRowKey,
+  type UsageBucketRow,
+} from "./types.js";
 
 const HEATMAP_DAYS = 182;
 const PROJECT_LIMIT = 200;
@@ -49,6 +56,8 @@ export interface BuildUsageReportInput {
   rows: UsageBucketRow[];
   request: UsageReportRequest;
   projects: Map<string, UsageProjectAttribution>;
+  /** What each endpoint the rows name was last called, as the gateway ledger recorded it. */
+  endpointNames: Map<string, string>;
   pricing: UsageReportPricing;
   /**
    * The id a session is counted under. A Claude resume chain is one session in
@@ -73,6 +82,7 @@ export function buildUsageReport(input: BuildUsageReportInput): UsageReport {
   const today = local.day(input.now);
   const filtered: PricedRow[] = [];
   for (const row of input.rows) {
+    if (carriesNothing(row)) continue;
     if (!matchesUsageFilters(row, request.filters, input.projects)) continue;
     filtered.push({
       ...row,
@@ -101,6 +111,7 @@ export function buildUsageReport(input: BuildUsageReportInput): UsageReport {
     months: buildMonths(inRange, local),
     heatmapDays: buildHeatmap(filtered, local, today),
     projects: buildProjects(inRange, input.projects),
+    endpoints: buildEndpoints(inRange, input.endpointNames),
     backfill: input.backfill,
     error: input.error,
   };
@@ -116,7 +127,8 @@ function buildSummary(
   const sessions = new Set<string>();
   for (const row of inRange) {
     addRow(amount, row);
-    sessions.add(row.canonicalSessionId);
+    // 只在账本里的调用没有会话。
+    if (row.sessionId !== "") sessions.add(row.canonicalSessionId);
   }
   return {
     totals: amount.totals,
@@ -189,18 +201,22 @@ function buildModels(rows: PricedRow[], pricing: UsageReportPricing): UsageModel
     }
     addRow(entry.amount, row);
   }
-  return Array.from(byModel.values())
-    .map(
-      (entry): UsageModelBreakdown => ({
-        model: entry.model,
-        cli: entry.cli,
-        backend: entry.backend,
-        totals: entry.amount.totals,
-        estimatedCost: entry.amount.estimatedCost,
-        priced: pricing.isPriced(entry.model),
-      }),
-    )
-    .sort(byTokensDescending);
+  return (
+    Array.from(byModel.values())
+      .map(
+        (entry): UsageModelBreakdown => ({
+          model: entry.model,
+          cli: entry.cli,
+          backend: entry.backend,
+          totals: entry.amount.totals,
+          estimatedCost: entry.amount.estimatedCost,
+          priced: pricing.isPriced(entry.model),
+        }),
+      )
+      // 同上：调用都被账本挪到接口那边后，只剩轮次的模型不成一行。
+      .filter((entry) => hasTokens(entry.totals))
+      .sort(byTokensDescending)
+  );
 }
 
 function buildTrend(
@@ -279,7 +295,7 @@ function groupByPeriod(
       periods.set(key, bucket);
     }
     addRow(bucket.amount, row);
-    bucket.sessions.add(row.canonicalSessionId);
+    if (row.sessionId !== "") bucket.sessions.add(row.canonicalSessionId);
     bucket.turns += row.turns;
   }
   return Array.from(periods.entries()).sort(([a], [b]) => compareKeys(a, b));
@@ -371,6 +387,39 @@ function buildProjects(
     .slice(0, PROJECT_LIMIT);
 }
 
+/**
+ * One group per endpoint the range ran through, and Official for the calls that
+ * went through none. The turn a call ran in stays counted on the log's own row,
+ * so a group left with turns and no tokens — every call of it moved to an
+ * endpoint — is not one.
+ */
+function buildEndpoints(rows: PricedRow[], names: Map<string, string>): UsageEndpointBreakdown[] {
+  const byEndpoint = new Map<string | null, UsageAmount>();
+  for (const row of rows) {
+    const endpointId = row.endpointId ?? null;
+    let amount = byEndpoint.get(endpointId);
+    if (!amount) {
+      amount = emptyAmount();
+      byEndpoint.set(endpointId, amount);
+    }
+    addRow(amount, row);
+  }
+  const grandTotal = Array.from(byEndpoint.values()).reduce(
+    (total, amount) => total + billableTokens(amount.totals),
+    0,
+  );
+  return Array.from(byEndpoint, ([endpointId, amount]) => ({
+    endpointId,
+    name: endpointId === null ? null : (names.get(endpointId) ?? endpointId),
+    deleted: false,
+    totals: amount.totals,
+    estimatedCost: amount.estimatedCost,
+    share: grandTotal > 0 ? billableTokens(amount.totals) / grandTotal : 0,
+  }))
+    .filter((group) => hasTokens(group.totals))
+    .sort(byTokensDescending);
+}
+
 /** The same source / model / project narrowing the session listing applies. */
 export function matchesUsageFilters(
   row: UsageBucketRow,
@@ -385,6 +434,7 @@ export function matchesUsageFilters(
     return false;
   }
   if (filters.models && !filters.models.includes(row.model)) return false;
+  if (filters.endpoints && !filters.endpoints.includes(row.endpointId ?? null)) return false;
   if (filters.projects) {
     const attribution = attributions.get(row.cwd);
     if (!attribution || !filters.projects.includes(attribution.rootPath)) return false;
@@ -420,6 +470,10 @@ function compareKeys(a: string, b: string): number {
 
 function sourceKey(row: UsageBucketRow): string {
   return row.backend ? `${row.cli}:${row.backend}` : row.cli;
+}
+
+function hasTokens(totals: UsageTokenTotals): boolean {
+  return billableTokens(totals) !== 0 || totals.reasoning !== 0;
 }
 
 function billableTokens(totals: UsageTokenTotals): number {

@@ -355,3 +355,34 @@ describe("mergeUsageBackfill", () => {
     ).toEqual({ state: "idle", filesTotal: 0, filesDone: 0, startedAt: null });
   });
 });
+
+describe("mergeUsageReports endpoints", () => {
+  const group = (endpointId: string | null, name: string | null, input: number) => ({
+    endpointId,
+    name,
+    deleted: false,
+    totals: totals(input, 0),
+    estimatedCost: input / 100,
+    share: 1,
+  });
+
+  it("adds Official across hosts and keeps each endpoint, sharing over the sum", () => {
+    const merged = mergeUsageReports([
+      {
+        serverId: "a",
+        report: report({ endpoints: [group("ep_a", "Relay A", 30), group(null, null, 10)] }),
+      },
+      { serverId: "b", report: report({ endpoints: [group(null, null, 60)] }) },
+    ]);
+
+    expect(merged.endpoints).toEqual([
+      { ...group(null, null, 70), estimatedCost: 0.7, share: 0.7 },
+      { ...group("ep_a", "Relay A", 30), share: 0.3 },
+    ]);
+  });
+
+  it("has no endpoints when no host reports them", () => {
+    const merged = mergeUsageReports([{ serverId: "a", report: report({}) }]);
+    expect(merged.endpoints).toBeUndefined();
+  });
+});

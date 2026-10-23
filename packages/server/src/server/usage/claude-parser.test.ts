@@ -174,6 +174,35 @@ describe("parseClaudeChunk", () => {
     expect(aggregate([...first.rows, ...second.rows])).toEqual(SESSION_ROWS);
   });
 
+  test("every line's usage is told by its reply's id, and one reply's deltas add up to its final usage", () => {
+    const result = parseClaudeChunk(
+      fixture("claude-session.jsonl"),
+      createClaudeParserState({ subagent: false }),
+    );
+    const byReply = new Map<string, { output: number; turnKey: string | null; lines: number }>();
+    for (const call of result.calls) {
+      const entry = byReply.get(call.replyId) ?? { output: 0, turnKey: call.turnKey, lines: 0 };
+      entry.output += call.amounts.output;
+      entry.lines += 1;
+      byReply.set(call.replyId, entry);
+    }
+
+    // msg_a 写了两行：先加 408，再减回 408、加上最终的 410。报错占位行与续接时拷进来的行不算调用。
+    expect(Object.fromEntries(byReply)).toEqual({
+      msg_a: { output: 410, turnKey: "p1", lines: 3 },
+      msg_b: { output: 600, turnKey: "p1", lines: 1 },
+      msg_c: { output: 50, turnKey: "p2", lines: 1 },
+    });
+    expect(result.calls[0]).toMatchObject({
+      cli: "claude",
+      model: "claude-fable-5-1",
+      sessionId: "sess-1",
+      cwd: "/work/demo",
+      bucket: "2026-09-18T09:30:00.000Z",
+      at: "2026-09-18T09:44:45.432Z",
+    });
+  });
+
   test("a subagent transcript counts usage against the parent session and no turns", () => {
     const bytes = fixture("claude-subagent.jsonl");
     const result = parseClaudeChunk(bytes, createClaudeParserState({ subagent: true }));

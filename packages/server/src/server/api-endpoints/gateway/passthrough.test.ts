@@ -2,7 +2,7 @@
 // reasoning_passthrough_test.go、kimi_schema_test.go、deepseek_schema_test.go、grok_schema_test.go 等（各 describe 标了出处）。
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import {
   fitAnthropicBody,
@@ -623,14 +623,16 @@ function inside(text: string, piece: string, into: number): number {
   return Buffer.from(text).indexOf(piece) + into;
 }
 
+/** 读到的内容、结束与用量；回复编号与读到内容的时刻另有用例。 */
 function tapped(input: {
   format: ApiEndpointRequestFormat;
   stream: boolean;
   chunks: Buffer[];
-}): TappedReply {
+}): Omit<TappedReply, "id" | "firstContentAt" | "firstTextAt"> {
   const tap = new ReplyTap({ format: input.format, stream: input.stream });
   for (const chunk of input.chunks) tap.feed(chunk);
-  return tap.end();
+  const { id: _id, firstContentAt: _content, firstTextAt: _text, ...reply } = tap.end();
+  return reply;
 }
 
 const NO_USAGE = {
@@ -641,6 +643,55 @@ const NO_USAGE = {
   cacheWrite1h: 0,
   reasoning: 0,
 };
+
+describe("what the gateway ledger reads off a reply passed through", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test("the reply's id, and when its first content and its first text arrived", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
+    const tap = new ReplyTap({ format: "anthropic_messages", stream: true });
+    tap.feed(
+      Buffer.from(
+        sseEvent("message_start", { type: "message_start", message: { id: "msg_ledger" } }) +
+          sseEvent("content_block_start", {
+            type: "content_block_start",
+            index: 0,
+            content_block: { type: "thinking", thinking: "" },
+          }),
+      ),
+    );
+    vi.setSystemTime(1_200);
+    tap.feed(
+      Buffer.from(
+        sseEvent("content_block_delta", {
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "thinking_delta", thinking: "hmm" },
+        }),
+      ),
+    );
+    vi.setSystemTime(1_500);
+    tap.feed(
+      Buffer.from(
+        sseEvent("content_block_delta", {
+          type: "content_block_delta",
+          index: 1,
+          delta: { type: "text_delta", text: "hi" },
+        }),
+      ),
+    );
+    vi.setSystemTime(1_900);
+
+    expect(tap.end()).toMatchObject({
+      id: "msg_ledger",
+      firstContentAt: 1_200,
+      firstTextAt: 1_500,
+    });
+  });
+});
 
 describe("reading an Anthropic stream passed through", () => {
   test("thinking, text and a tool call, the stop reason, the end and the cache, read across cut chunks", () => {

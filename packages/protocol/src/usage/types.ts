@@ -55,6 +55,12 @@ export const UsageReportFiltersSchema = z.object({
   sources: z.array(UsageSourceRefSchema).optional(),
   models: z.array(z.string()).optional(),
   projects: z.array(z.string()).optional(),
+  /**
+   * API endpoint ids the gateway ledger attributed the usage to; `null` is
+   * Official, every call that went through no endpoint. A daemon without
+   * `features.gatewayLedger` ignores it.
+   */
+  endpoints: z.array(z.string().nullable()).optional(),
 });
 export type UsageReportFilters = z.infer<typeof UsageReportFiltersSchema>;
 
@@ -76,6 +82,21 @@ export const UsageSourceBreakdownSchema = z.object({
   share: z.number(),
 });
 export type UsageSourceBreakdown = z.infer<typeof UsageSourceBreakdownSchema>;
+
+/**
+ * One API endpoint's share of the range, or Official (`endpointId: null`, no
+ * name) for the calls that went through none. Endpoint usage comes from the
+ * gateway ledger merged with the CLI logs.
+ */
+export const UsageEndpointBreakdownSchema = z.object({
+  endpointId: z.string().nullable(),
+  name: z.string().nullable(),
+  deleted: z.boolean(),
+  totals: UsageTokenTotalsSchema,
+  estimatedCost: z.number(),
+  share: z.number(),
+});
+export type UsageEndpointBreakdown = z.infer<typeof UsageEndpointBreakdownSchema>;
 
 export const UsageModelBreakdownSchema = z.object({
   model: z.string(),
@@ -156,6 +177,8 @@ export const UsageReportSchema = z.object({
   months: z.array(UsageMonthBreakdownSchema),
   heatmapDays: z.array(UsageHeatmapDaySchema),
   projects: z.array(UsageProjectBreakdownSchema),
+  // COMPAT(gatewayLedger): added in v0.17.0; absent from a daemon without the gateway ledger.
+  endpoints: z.array(UsageEndpointBreakdownSchema).optional(),
   backfill: UsageBackfillSchema,
   error: z.string().nullable(),
 });

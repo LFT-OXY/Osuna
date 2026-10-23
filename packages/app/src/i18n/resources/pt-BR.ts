@@ -4733,6 +4733,12 @@ export const ptBR: TranslationResources = {
       rangeAll: "Todo o período",
       refresh: "Atualizar",
       allSources: "Tudo",
+      official: "Oficial",
+      breakdown: {
+        label: "Dividir por",
+        sources: "Origens",
+        endpoints: "Endpoints",
+      },
       unpriced: "Sem dados de preço",
       unpricedSummaryOne: "1 modelo sem dados de preço",
       unpricedSummaryMany: "{{count}} modelos sem dados de preço",
@@ -4753,6 +4759,8 @@ export const ptBR: TranslationResources = {
       accessibility: {
         sourceCard: "{{source}}, {{share}} dos tokens",
         distribution: "Distribuição de tokens por origem",
+        endpointCard: "{{endpoint}}, {{share}} dos tokens",
+        endpointDistribution: "Distribuição de tokens por endpoint",
       },
     },
     backfill: {

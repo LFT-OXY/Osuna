@@ -823,6 +823,8 @@ export async function createPaseoDaemon(
       sightings: apiEndpointSightings,
       // apiEndpointService 在下面创建；只在 daemon 启动后收到请求时才记。
       noteCliVersion: (headers) => apiEndpointService.noteCliVersion(headers),
+      // usageService 在下面创建；它在读完盘上的记录之前收到的账先排着。
+      ledger: { record: (row) => usageService.recordGatewayCall(row) },
       daemonVersion,
       overrides: config.apiEndpoints,
     }),

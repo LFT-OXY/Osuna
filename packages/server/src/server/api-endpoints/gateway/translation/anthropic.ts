@@ -974,6 +974,7 @@ type OpenBlock = "text" | "thinking" | "tool_use" | null;
 export class AnthropicEncoder {
   private readonly collector = new ReplyCollector();
   private started = false;
+  private sentId = "";
   private index = 0;
   private open: OpenBlock = null;
   // 开着的工具块收到过参数。
@@ -1089,13 +1090,18 @@ export class AnthropicEncoder {
     return this.collector.usage();
   }
 
+  replyId(): string {
+    return this.sentId;
+  }
+
   private start(id: string, usage?: Usage): void {
     if (this.started) return;
     this.started = true;
+    this.sentId = anthropicMessageId(id);
     this.send("message_start", {
       type: "message_start",
       message: {
-        id: anthropicMessageId(id),
+        id: this.sentId,
         type: "message",
         role: "assistant",
         model: this.input.model,

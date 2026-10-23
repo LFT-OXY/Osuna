@@ -154,21 +154,15 @@ function toAgentTurn(rows: UsageTurnRow[], pricing: UsageReportPricing): UsageAg
   const first = rows[0];
   if (!first) throw new Error("A turn with no rows cannot be reported");
   const span = spanOf(rows);
-  const byModel = rows.map((row) =>
-    toModelAmount(
-      row.model,
-      {
-        totals: {
-          input: row.input,
-          cachedInput: row.cachedInput,
-          cacheWrite: row.cacheWrite,
-          output: row.output,
-          reasoning: row.reasoning,
-        },
-        priced: pricing.isPriced(row.model),
-      },
-      pricing,
-    ),
+  // 一个模型在一轮里可以有官方与接口两行（账本合并后），按模型合成一条。
+  const totalsByModel = new Map<string, UsageTokenTotals>();
+  for (const row of rows) {
+    const totals = totalsByModel.get(row.model) ?? emptyTotals();
+    addTotals(totals, row);
+    totalsByModel.set(row.model, totals);
+  }
+  const byModel = Array.from(totalsByModel, ([model, totals]) =>
+    toModelAmount(model, { totals, priced: pricing.isPriced(model) }, pricing),
   );
   const userMessageIds = new Set<string>();
   for (const row of rows) for (const id of row.userMessageIds) userMessageIds.add(id);

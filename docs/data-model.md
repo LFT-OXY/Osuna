@@ -95,6 +95,7 @@ $PASEO_HOME/
 ├── usage/
 │   ├── buckets-YYYY-MM.jsonl             # Token increments per (source, model, session, cwd, UTC 15-min bucket)
 │   ├── turns-YYYY-MM.jsonl               # Token increments per (source, session, turn, model)
+│   ├── requests/YYYY-MM-DD.jsonl         # Gateway ledger rows and the CLI log replies they merge with (mode 0600)
 │   ├── scan-state.json                   # One cursor per scanned CLI log file
 │   └── pricing-table.json                # Last price table fetched from LiteLLM
 └── push-tokens.json                     # Expo push notification tokens
@@ -615,17 +616,18 @@ buckets, and the same pass into one row per turn.
 
 Append-only, one file per UTC month, one JSON object per line.
 
-| Field                                                           | Type                                   | Notes                                                                 |
-| --------------------------------------------------------------- | -------------------------------------- | --------------------------------------------------------------------- |
-| `cli`                                                           | `"claude" \| "codex" \| "pi" \| "omp"` | Part of the key                                                       |
-| `backend`                                                       | `string \| null`                       | Pi/OMP route to a backend; null for Claude and Codex. Part of the key |
-| `model`                                                         | `string`                               | As the log spells it. Part of the key                                 |
-| `sessionId`                                                     | `string`                               | The provider's own id. Part of the key                                |
-| `cwd`                                                           | `string`                               | First cwd seen in the file. Part of the key                           |
-| `bucket`                                                        | `string`                               | ISO start of a **UTC 15-minute** bucket. Part of the key              |
-| `input` / `cachedInput` / `cacheWrite` / `output` / `reasoning` | `number`                               | `input` is uncached input; `reasoning` is a subset of `output`        |
-| `turns`                                                         | `number`                               | Counted at the bucket the user message fell in                        |
-| `durationMs`                                                    | `number`                               | Wall clock, appended in segments as a turn settles                    |
+| Field                                                           | Type                                   | Notes                                                                              |
+| --------------------------------------------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------- |
+| `cli`                                                           | `"claude" \| "codex" \| "pi" \| "omp"` | Part of the key                                                                    |
+| `backend`                                                       | `string \| null`                       | Pi/OMP route to a backend; null for Claude and Codex. Part of the key              |
+| `model`                                                         | `string`                               | As the log spells it. Part of the key                                              |
+| `sessionId`                                                     | `string`                               | The provider's own id. Part of the key                                             |
+| `cwd`                                                           | `string`                               | First cwd seen in the file. Part of the key                                        |
+| `bucket`                                                        | `string`                               | ISO start of a **UTC 15-minute** bucket. Part of the key                           |
+| `input` / `cachedInput` / `cacheWrite` / `output` / `reasoning` | `number`                               | `input` is uncached input; `reasoning` is a subset of `output`                     |
+| `turns`                                                         | `number`                               | Counted at the bucket the user message fell in                                     |
+| `durationMs`                                                    | `number`                               | Wall clock, appended in segments as a turn settles                                 |
+| `endpointId`                                                    | `string?`                              | API endpoint the gateway ledger says answered. Absent is Official. Part of the key |
 
 A row is an **increment**, not a total: one parse pass writes what it just read for a
 key, and startup sums same-key rows. Token columns can be negative — a response is
@@ -652,6 +654,7 @@ The page groups sessions and days; this file answers "what did this one turn cos
 | `startedAt` / `lastAt`                                          | `string`                               | The turn's span. **No duration is stored** — `lastAt - startedAt` is it |
 | `userMessageIds`                                                | `string[]`                             | What a client matches its own timeline rows against; empty for Codex    |
 | `turnId`                                                        | `string?`                              | Paseo's own turn id, stamped by the parse a finished turn triggered     |
+| `endpointId`                                                    | `string?`                              | Same as a bucket row's. Part of the key                                 |
 
 `turnKey` is the CLI's: Claude's `promptId`, Codex's `turn_id`, the id of the Pi/OMP
 entry that opened the turn. A subagent's tokens join the turn that spawned it and start
@@ -669,6 +672,30 @@ Summing the turn spans of a session and summing the `durationMs` its bucket rows
 give the same number, by construction. The one exception is a subagent still writing
 after its parent's last message — in its own file or inline as a sidechain — which
 widens the turn past what the buckets counted.
+
+Rows written before the gateway ledger have no `endpointId` and read as Official; nothing
+migrates them. A ledger merge adds rows of both kinds that move a call's tokens between keys
+([usage.md](usage.md#the-gateway-ledger)), so a key can sum to zero tokens.
+
+### Request records (`usage/requests/YYYY-MM-DD.jsonl`)
+
+Append-only, one file per UTC day of the record's own time, directory `0700` and files `0600`.
+A torn line is dropped on load. Two kinds, discriminated on `kind`
+(`USAGE_REQUEST_RECORD_SCHEMA` in `packages/server/src/server/usage/ledger.ts`):
+
+- `gateway` — one ledger row per request the gateway carried: `at`, `agent`, the CLI's
+  `sessionId` header, the requested `model`, `endpointId` / `endpointName` / `upstreamModel`
+  of the endpoint that answered (null for Official), the token columns plus `cacheWrite1h`,
+  `durationMs`, `ttftMs` and `firstTextMs` (from the gateway taking the request; null for a
+  reply that was not streamed), `replyId`, `stop`, `status`, and `attempts` (endpoint, model,
+  start, duration, result, failure class, the vendor's words masked and cut to 200 characters,
+  cooldown end, whether it was asked again without a refused field). No conversation content.
+- `cli` — one CLI log reply as deduplicated so far, with the session, cwd, bucket, model and
+  turn its tokens went to when first seen. Written whole again each time a later line corrects
+  it; the last line of a `replyId` wins on load.
+
+Loading both is how a restart carries on merging: a ledger row's first record of a reply wins,
+a log reply's last.
 
 ### Scan cursor (`usage/scan-state.json`)
 
