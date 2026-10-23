@@ -4,7 +4,7 @@
 
 **Blocked by:** 01
 **Status:** ready-for-agent
-**Impl:** doing
+**Impl:** done
 
 - [ ] Codex 的合并同 01 的规则与顺序无关要求（端到端测试：两种到达顺序 + 中途重启）。
 - [ ] ChatGPT 自带模型的请求接口记为官方，不乘倍率，与 Codex 会话记录合并后在「官方」卡片里只算一次。
