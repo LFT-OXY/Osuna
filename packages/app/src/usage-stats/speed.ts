@@ -77,13 +77,6 @@ export function usageGroupWaitMs(
   return group.ttftCount > 0 ? group.ttftMs / group.ttftCount : null;
 }
 
-/** A wait in seconds: two decimals under a second, one above. */
-export function formatWaitSeconds(ms: number | null): string {
-  if (ms === null) return "—";
-  const seconds = ms / 1000;
-  return `${seconds < 1 ? seconds.toFixed(2) : seconds.toFixed(1)} s`;
-}
-
 function endpointKey(input: {
   endpoint: UsageSpeedEndpoint;
   serverId: string;

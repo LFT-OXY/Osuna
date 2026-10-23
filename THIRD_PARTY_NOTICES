@@ -1285,6 +1285,14 @@ and priceRateOfDraft in internal/gui/assets/app.js:
   packages/server/src/server/api-endpoints/service.ts
   packages/app/src/api-endpoints/internal/price-multiplier-form.ts
 
+The gateway's usage rows for Codex's ChatGPT models (only /responses recorded,
+the ask to ChatGPT as the one try, streamed or not told by the reply's
+Content-Type and else by the request, a failure kept with its status and words,
+a reply cut short booked as far as it came) follow codexUpstreamOn in magpie's
+internal/gateway/codex_backend.go:
+
+  packages/server/src/server/api-endpoints/gateway/chatgpt-ledger.ts
+
 The per-request usage records' retention (finished days gzipped, a later
 append joining as a gzip member of its own, a .gz cut short written anew from
 its whole lines, 30 days and 200 MB in all counted compressed, checked on a
@@ -1295,7 +1303,8 @@ failed as LostRequest and switched as RetriedRequest, a search over several
 fields ignoring case, filter choices from the whole period) follows QueryPage in
 internal/usage/request_page.go, Filter.keepsRecord and SourceOf in
 internal/usage/ledger.go, and LostRequest and RetriedRequest in
-internal/usage/usage.go:
+internal/usage/usage.go; a duration or a wait for the first token is written
+as ledTook in internal/gui/assets/app.js writes it:
 
   packages/server/src/server/usage/store.ts
   packages/server/src/server/usage/request-files.ts

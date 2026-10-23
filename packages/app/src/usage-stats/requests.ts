@@ -1,5 +1,6 @@
 // 请求列表的状态（失败取最后一次尝试的分类、答了且试过不止一次即换过家）与每页 100 条照 magpie
-// （https://github.com/yetone/magpie，internal/usage/usage.go 的 LostRequest、RetriedRequest，request_page.go 的 QueryPage）
+// （https://github.com/yetone/magpie，internal/usage/usage.go 的 LostRequest、RetriedRequest，request_page.go 的 QueryPage）；
+// 耗时与首字等待的写法照 internal/gui/assets/app.js 的 ledTook
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import type {
   UsageCli,
@@ -209,11 +210,12 @@ export function usageRequestFailureLabel(failure: string, t: (key: string) => st
   return isKnownUsageRequestFailure(failure) ? t(`usage.requests.failures.${failure}`) : failure;
 }
 
-/** `1.2 s` under a minute, `850 ms` under a second. */
+/** A duration or a wait: `850 ms` under a second, `1.2 s` under ten, `12 s` above. */
 export function formatRequestMs(ms: number | null): string {
   if (ms === null) return "—";
-  if (ms < 1000) return `${Math.round(ms)} ms`;
-  return `${(ms / 1000).toFixed(1)} s`;
+  const rounded = Math.round(ms);
+  if (rounded < 1000) return `${rounded} ms`;
+  return `${(rounded / 1000).toFixed(rounded < 10_000 ? 1 : 0)} s`;
 }
 
 /** Tokens a second, whole. */

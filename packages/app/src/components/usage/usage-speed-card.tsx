@@ -12,14 +12,9 @@ import {
 } from "@/components/usage/usage-segmented-control";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useUsageReport, type UseUsageReportInput } from "@/hooks/use-usage-report";
-import { formatOutputSpeed } from "@/usage-stats/requests";
+import { formatOutputSpeed, formatRequestMs } from "@/usage-stats/requests";
 import { usageSourceLabel } from "@/usage-stats/sources";
-import {
-  formatWaitSeconds,
-  usageGroupSpeed,
-  usageGroupWaitMs,
-  type MergedUsageSpeedGroup,
-} from "@/usage-stats/speed";
+import { usageGroupSpeed, usageGroupWaitMs, type MergedUsageSpeedGroup } from "@/usage-stats/speed";
 
 /** What the card asks: the hosts with the gateway ledger, and the page's range and endpoint filter. */
 export type UsageSpeedRequests = Pick<
@@ -197,7 +192,7 @@ function UsageSpeedRow({ group, divided }: { group: MergedUsageSpeedGroup; divid
         </Text>
       </View>
       <Text variant="label" style={[styles.waitColumn, styles.number]}>
-        {formatWaitSeconds(usageGroupWaitMs(group))}
+        {formatRequestMs(usageGroupWaitMs(group))}
       </Text>
     </View>
   );

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { UsageRequestRow } from "@getpaseo/protocol/usage/types";
 import {
+  formatRequestMs,
   INITIAL_USAGE_REQUESTS_FILTERS,
   mergeUsageRequestPages,
   toUsageRequestFilters,
@@ -179,5 +180,15 @@ describe("usageRequestStatus", () => {
     expect(
       usageRequestStatus(row("o", "t", { attempts: [attempt("ep_a", "answered", null)] })),
     ).toEqual({ kind: "ok" });
+  });
+});
+
+describe("formatRequestMs", () => {
+  it("writes ms under a second, one decimal under ten seconds and whole seconds above", () => {
+    expect(formatRequestMs(850)).toBe("850 ms");
+    expect(formatRequestMs(999.6)).toBe("1.0 s");
+    expect(formatRequestMs(1234)).toBe("1.2 s");
+    expect(formatRequestMs(12_345)).toBe("12 s");
+    expect(formatRequestMs(null)).toBe("—");
   });
 });

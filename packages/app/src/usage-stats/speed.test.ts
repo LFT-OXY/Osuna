@@ -1,6 +1,6 @@
 import type { UsageSpeedGroup } from "@getpaseo/protocol/usage/types";
 import { describe, expect, it } from "vitest";
-import { formatWaitSeconds, mergeUsageSpeed, usageGroupSpeed, usageGroupWaitMs } from "./speed";
+import { mergeUsageSpeed, usageGroupSpeed, usageGroupWaitMs } from "./speed";
 
 function group(overrides: Partial<UsageSpeedGroup>): UsageSpeedGroup {
   return {
@@ -115,11 +115,5 @@ describe("the Speed card across hosts", () => {
     expect(merged?.groups).toHaveLength(2);
     expect(merged?.groups[0] && usageGroupSpeed(merged.groups[0])).toBeNull();
     expect(mergeUsageSpeed([])).toBeUndefined();
-  });
-
-  it("writes a wait in seconds", () => {
-    expect(formatWaitSeconds(850)).toBe("0.85 s");
-    expect(formatWaitSeconds(1234)).toBe("1.2 s");
-    expect(formatWaitSeconds(null)).toBe("—");
   });
 });
