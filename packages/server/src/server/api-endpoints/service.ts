@@ -3,6 +3,7 @@
 // 后台小任务与 Subagent 模型照 internal/agent/claude.go 的 writeTiers、tierWith 与 subagent、subagent_effort 字段；
 // Codex 的默认 Subagent 模型、档位与记忆模型照 internal/agent/codex.go 的 subagents、subagent_effort、memories 字段与 settle、dropSubEffort
 // 「被绕过」只在设置本身没问题时看、改写时刻随「重新应用」更新，照 internal/agent/applied.go 的 Drift、record 与 Reapply
+// 价格倍率的保存（省略保留、null 清掉、越界拒收）照 internal/gui/providers.go 的 priceRateOf
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { randomBytes, randomUUID } from "node:crypto";

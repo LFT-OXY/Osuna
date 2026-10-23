@@ -2898,8 +2898,7 @@ export const es: TranslationResources = {
           },
           priceMultiplier: {
             label: "Multiplicador de precio",
-            placeholder: "1, el precio público",
-            hint: "Coste estimado = precio público × multiplicador. Un modelo con precio personalizado no se multiplica.",
+            hint: "Coste estimado = precio público × multiplicador; un precio personalizado no se multiplica.",
             problem: "Escribe un número de 0 a {{max}}, con tres decimales como máximo",
           },
         },
@@ -4349,6 +4348,8 @@ export const es: TranslationResources = {
         customizeAccessibility: "Definir un precio personalizado para {{model}}",
         litellmPrice: "Precio de LiteLLM",
         customGroup: {
+          multiplierNote:
+            "Un precio personalizado no se multiplica por el multiplicador de precio del endpoint.",
           title: "Precios personalizados",
           intro:
             "Aquí aparecen los modelos sin precio en LiteLLM. Rellena las cuatro columnas en $ por millón de tokens; 0 significa gratis.",

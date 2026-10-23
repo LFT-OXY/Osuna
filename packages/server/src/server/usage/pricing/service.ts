@@ -1,3 +1,5 @@
+// 端点价格倍率的找价顺序（自定义价格照用不乘倍率，价格表价乘倍率）移植自 magpie（https://github.com/yetone/magpie，internal/provider/models.go 的 priceOf）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import { promises as fs } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { Logger } from "pino";

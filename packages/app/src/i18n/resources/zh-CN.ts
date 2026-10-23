@@ -2859,7 +2859,6 @@ export const zhCN: TranslationResources = {
           },
           priceMultiplier: {
             label: "价格倍率",
-            placeholder: "1，即原价",
             hint: "估算成本 = 公开价 × 倍率；模型设了自定义价格时不乘倍率",
             problem: "填 0 到 {{max}} 的数，最多三位小数",
           },
@@ -4231,6 +4230,7 @@ export const zhCN: TranslationResources = {
         customizeAccessibility: "为 {{model}} 设置自定义价格",
         litellmPrice: "LiteLLM 价格",
         customGroup: {
+          multiplierNote: "自定义价格不乘接口的价格倍率。",
           title: "自定义价格",
           intro: "LiteLLM 查不到价格的模型列在这里。按每百万 token 美元填写四列，0 表示免费。",
           empty: "所有模型都有价格。",

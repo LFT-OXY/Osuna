@@ -30,7 +30,7 @@ const EXTRA_BODY_PLACEHOLDER = '{\n  "prompt_cache_key": "${sessionId}"\n}';
 /**
  * 添加 / 编辑窗口的「高级」（照 magpie 编辑窗口的 Advanced）：请求头、附加请求体、key 放在哪个头、余额设置、冷却设置，
  * 以及价格倍率。
- * 默认收起，设了任一项时一打开就展开。说明都在信息提示里，不在字段下面写段落。
+ * 默认收起，设了任一项时一打开就展开。说明都在信息提示里，不在字段下面写段落；价格倍率例外，它的算法一句按验收要求写在框下面。
  */
 export function RequestExtrasFields({
   state,

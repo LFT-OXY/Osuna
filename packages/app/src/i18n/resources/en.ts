@@ -2905,8 +2905,7 @@ export const en = {
           },
           priceMultiplier: {
             label: "Price multiplier",
-            placeholder: "1, the list price",
-            hint: "Estimated cost = list price × multiplier. A model with a custom price isn't multiplied.",
+            hint: "Estimated cost = list price × multiplier; a custom price isn't multiplied.",
             problem: "Enter a number from 0 to {{max}}, with at most three decimals",
           },
         },
@@ -4385,6 +4384,7 @@ export const en = {
         customizeAccessibility: "Set a custom price for {{model}}",
         litellmPrice: "LiteLLM price",
         customGroup: {
+          multiplierNote: "A custom price isn't multiplied by an endpoint's price multiplier.",
           title: "Custom prices",
           intro:
             "Models LiteLLM has no price for are listed here. Fill in all four columns in $ per million tokens; 0 means free.",

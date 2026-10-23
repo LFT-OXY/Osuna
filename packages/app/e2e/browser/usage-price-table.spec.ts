@@ -6,7 +6,7 @@ import { connectDaemonClient } from "../support/helpers/daemon-client-loader";
 import { getServerId } from "../support/helpers/server-id";
 import { openSettingsHostSection } from "../support/helpers/settings";
 import { createUsageFixtureRoots } from "../support/helpers/usage-fixtures";
-import { openUsagePage, waitForUsageTotal } from "../support/helpers/usage-page";
+import { hideGatewayLedger, openUsagePage, waitForUsageTotal } from "../support/helpers/usage-page";
 import {
   installDaemonConfigFailureFixture,
   installPricingRefreshFixture,
@@ -97,6 +97,14 @@ async function openUnpricedRowEditor(page: Page): Promise<string> {
   return model;
 }
 
+/** 从应用外壳打开本机的价格表。 */
+async function openPriceTable(page: Page): Promise<void> {
+  await gotoAppShell(page);
+  await openSettings(page);
+  await openSettingsHostSection(page, getServerId(), "usage");
+  await expect(page.getByTestId("host-page-price-table-card")).toBeVisible({ timeout: 30_000 });
+}
+
 function readTestIds(nodes: Element[]): string[] {
   return nodes.map((node) => node.getAttribute("data-testid") ?? "");
 }
@@ -115,6 +123,23 @@ async function firstLiteLLMRowModel(page: Page): Promise<string> {
 
 test.describe("Price table", () => {
   test.describe.configure({ timeout: 300_000 });
+
+  test("the custom group says its prices aren't multiplied by an endpoint's price multiplier, only where the host has the gateway ledger", async ({
+    page,
+  }) => {
+    await writeCustomPrices([]);
+    const note = page.getByTestId("price-table-custom-multiplier-note");
+    await openPriceTable(page);
+    await expect(page.getByTestId("price-table-custom-group")).toBeVisible({ timeout: 30_000 });
+    await expect(note).toHaveText(
+      "A custom price isn't multiplied by an endpoint's price multiplier.",
+    );
+
+    await hideGatewayLedger(page);
+    await openPriceTable(page);
+    await expect(page.getByTestId("price-table-custom-group")).toBeVisible({ timeout: 30_000 });
+    await expect(note).toHaveCount(0);
+  });
 
   test("prices the model the snapshot misses, and the usage page follows", async ({ page }) => {
     let costBefore = "";

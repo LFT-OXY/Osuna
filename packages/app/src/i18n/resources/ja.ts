@@ -2871,8 +2871,7 @@ export const ja: TranslationResources = {
           },
           priceMultiplier: {
             label: "価格倍率",
-            placeholder: "1（公開価格）",
-            hint: "推定コスト = 公開価格 × 倍率。カスタム価格を設定したモデルには倍率をかけません。",
+            hint: "推定コスト = 公開価格 × 倍率。カスタム価格には倍率をかけません。",
             problem: "0〜{{max}} の数値を、小数点以下 3 桁までで入力してください",
           },
         },
@@ -4315,6 +4314,7 @@ export const ja: TranslationResources = {
         customizeAccessibility: "{{model}} にカスタム価格を設定",
         litellmPrice: "LiteLLM 価格",
         customGroup: {
+          multiplierNote: "カスタム価格には、エンドポイントの価格倍率をかけません。",
           title: "カスタム価格",
           intro:
             "LiteLLM に価格がないモデルをここに表示します。4 列すべてを 100万トークンあたりのドルで入力してください。0 は無料です。",

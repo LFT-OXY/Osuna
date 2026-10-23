@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { ALL_HOSTS_OPTION_ID } from "@/components/hosts/host-picker-constants";
-import { expect, test, type Page } from "../support/fixtures";
+import { expect, test } from "../support/fixtures";
 import {
   connectApiEndpointClient,
   GOOD_REPLY_TOKENS,
@@ -17,11 +17,11 @@ import {
   startFakeRelay,
   type FakeRelay,
 } from "../support/helpers/api-endpoints";
-import { daemonWsRoutePattern } from "../support/helpers/daemon-port";
 import { addConnectedHostAndReload } from "../support/helpers/hosts";
 import { startIsolatedHostDaemon } from "../support/helpers/isolated-host-daemon";
 import { createUsageFixtureRoots } from "../support/helpers/usage-fixtures";
 import {
+  hideGatewayLedger,
   openUsageHostFilter,
   openUsagePage,
   openUsagePageFromShell,
@@ -71,28 +71,6 @@ test.afterAll(async () => {
 async function storedMultiplierOf(endpointId: string): Promise<number | undefined> {
   const listed = await client.apiEndpointList("claude");
   return listed.endpoints.find((endpoint) => endpoint.id === endpointId)?.priceMultiplier;
-}
-
-/** 从 server_info 去掉 gatewayLedger，模拟没有中转站账本的旧 daemon。 */
-async function hideGatewayLedger(page: Page): Promise<void> {
-  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
-    const server = ws.connectToServer();
-    ws.onMessage((message) => server.send(message));
-    server.onMessage((message) => {
-      if (typeof message !== "string" || !message.includes('"server_info"')) {
-        ws.send(message);
-        return;
-      }
-      const envelope = JSON.parse(message) as {
-        message?: { payload?: { status?: unknown; features?: Record<string, unknown> } };
-      };
-      const payload = envelope.message?.payload;
-      if (payload?.status === "server_info" && payload.features) {
-        delete payload.features.gatewayLedger;
-      }
-      ws.send(JSON.stringify(envelope));
-    });
-  });
 }
 
 test.describe("Usage page by endpoint", () => {
@@ -315,7 +293,9 @@ test.describe("Usage page by endpoint", () => {
     });
 
     const input = page.getByTestId("api-endpoint-connection-price-multiplier-input");
-    const problem = page.getByTestId("api-endpoint-connection-price-multiplier-problem");
+    const field = page.getByTestId("api-endpoint-connection-price-multiplier");
+    const hint = page.getByTestId("api-endpoint-connection-price-multiplier-hint");
+    const problem = page.getByTestId("api-endpoint-connection-price-multiplier-error");
     const save = page.getByTestId("api-endpoint-connection-save");
 
     await test.step("the edit window's Advanced has the multiplier, empty at the list price, with how it counts", async () => {
@@ -325,19 +305,22 @@ test.describe("Usage page by endpoint", () => {
       await expect(input).toHaveCount(0);
       await page.getByTestId("api-endpoint-connection-advanced-toggle").click();
       await expect(input).toHaveValue("");
-      await expect(input).toHaveAttribute("placeholder", "1, the list price");
-      await expect(page.getByTestId("api-endpoint-connection-price-multiplier")).toContainText(
-        "Estimated cost = list price × multiplier. A model with a custom price isn't multiplied.",
+      await expect(input).toHaveAttribute("placeholder", "1");
+      await expect(hint).toHaveText(
+        "Estimated cost = list price × multiplier; a custom price isn't multiplied.",
       );
     });
 
-    await test.step("out of range, or more than three decimals, is said under the field and holds the save", async () => {
+    await test.step("out of range, or more than three decimals, is said under the field in the hint's place and holds the save", async () => {
+      const heightWithHint = (await field.boundingBox())?.height;
       for (const typed of ["1000.5", "0.1234"]) {
         await input.fill(typed);
         await expect(problem).toHaveText(
           "Enter a number from 0 to 1000, with at most three decimals",
         );
         await expect(save).toBeDisabled();
+        await expect(hint).toHaveCount(0);
+        expect((await field.boundingBox())?.height).toBe(heightWithHint);
       }
     });
 

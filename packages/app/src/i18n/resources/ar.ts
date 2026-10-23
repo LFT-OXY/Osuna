@@ -2836,8 +2836,7 @@ export const ar: TranslationResources = {
           },
           priceMultiplier: {
             label: "مضاعف السعر",
-            placeholder: "1، السعر المعلن",
-            hint: "التكلفة التقديرية = السعر المعلن × المضاعف. لا يُضرب النموذج الذي له سعر مخصّص.",
+            hint: "التكلفة التقديرية = السعر المعلن × المضاعف؛ لا يُضرب السعر المخصّص.",
             problem: "أدخل رقمًا من 0 إلى {{max}}، بثلاث منازل عشرية على الأكثر",
           },
         },
@@ -4240,6 +4239,7 @@ export const ar: TranslationResources = {
         customizeAccessibility: "تعيين سعر مخصّص لـ {{model}}",
         litellmPrice: "سعر LiteLLM",
         customGroup: {
+          multiplierNote: "لا يُضرب السعر المخصّص في مضاعف السعر الخاص بنقطة النهاية.",
           title: "الأسعار المخصّصة",
           intro:
             "تظهر هنا النماذج التي لا يعرف LiteLLM سعرها. املأ الأعمدة الأربعة بالدولار لكل مليون رمز؛ 0 يعني مجانًا.",

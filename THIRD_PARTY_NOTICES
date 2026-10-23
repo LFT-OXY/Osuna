@@ -1281,6 +1281,8 @@ use in priceOf there, priceRateOf in internal/gui/providers.go, and decimalOf
 and priceRateOfDraft in internal/gui/assets/app.js:
 
   packages/protocol/src/api-endpoint/price-multiplier.ts
+  packages/server/src/server/usage/pricing/service.ts
+  packages/server/src/server/api-endpoints/service.ts
   packages/app/src/api-endpoints/internal/price-multiplier-form.ts
 
 MIT License

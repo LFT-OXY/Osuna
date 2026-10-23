@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
+import { useHostFeature } from "@/runtime/host-features";
 import { useHostRuntimeClient } from "@/runtime/host-runtime";
 import { settingsStyles } from "@/styles/settings";
 import { renderUsageText } from "@/usage-stats/text";
@@ -54,6 +55,9 @@ export function PriceTableSection({ serverId }: { serverId: string }) {
   const client = useHostRuntimeClient(serverId);
   const { view, refetch } = usePriceTable(serverId);
   const { config, patchConfig } = useDaemonConfig(serverId);
+  // 有中转站账本的主机才有价格倍率，才需要说自定义价格不乘它。
+  // COMPAT(gatewayLedger): added in v0.17.0, remove gate after 2027-04-23.
+  const hasPriceMultipliers = useHostFeature(serverId, "gatewayLedger");
 
   const [rows, dispatchRows] = useReducer(priceRowsReducer, INITIAL_PRICE_ROWS);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -221,6 +225,7 @@ export function PriceTableSection({ serverId }: { serverId: string }) {
             models={groups.custom}
             layout={layout}
             rows={rows}
+            showsMultiplierNote={hasPriceMultipliers}
             onEdit={handleEdit}
             onCancel={handleCancel}
             onChangeField={handleChangeField}

@@ -2856,8 +2856,7 @@ export const ko: TranslationResources = {
           },
           priceMultiplier: {
             label: "가격 배율",
-            placeholder: "1, 공개 가격",
-            hint: "추정 비용 = 공개 가격 × 배율. 맞춤 가격을 설정한 모델에는 배율을 곱하지 않습니다.",
+            hint: "추정 비용 = 공개 가격 × 배율. 맞춤 가격에는 배율을 곱하지 않습니다.",
             problem: "0~{{max}} 사이의 숫자를 소수점 셋째 자리까지 입력하세요",
           },
         },
@@ -4284,6 +4283,7 @@ export const ko: TranslationResources = {
         customizeAccessibility: "{{model}}에 맞춤 가격 설정",
         litellmPrice: "LiteLLM 가격",
         customGroup: {
+          multiplierNote: "맞춤 가격에는 엔드포인트의 가격 배율을 곱하지 않습니다.",
           title: "맞춤 가격",
           intro:
             "LiteLLM에 가격이 없는 모델이 여기에 표시됩니다. 네 열 모두 100만 토큰당 달러로 입력하세요. 0은 무료입니다.",
