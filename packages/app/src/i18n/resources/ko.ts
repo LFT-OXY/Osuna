@@ -4908,6 +4908,10 @@ export const ko: TranslationResources = {
         previous: "이전",
         next: "다음",
       },
+      export: {
+        button: "CSV 내보내기",
+        failed: "내보내기 실패: {{reason}}",
+      },
     },
     sessionRow: {
       open: "열기",

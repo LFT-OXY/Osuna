@@ -4958,6 +4958,10 @@ export const ru: TranslationResources = {
         previous: "Назад",
         next: "Далее",
       },
+      export: {
+        button: "Экспорт в CSV",
+        failed: "Не удалось экспортировать: {{reason}}",
+      },
     },
     sessionRow: {
       open: "Открыть",

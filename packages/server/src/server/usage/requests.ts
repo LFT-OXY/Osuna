@@ -17,11 +17,15 @@ import type { UsageReportPricing } from "./report.js";
 import { outputSpeedOf } from "./speed.js";
 import type { UsageEndpointIdentity } from "./types.js";
 
-export interface UsageRequestsRequest {
+/** The period and the filters, whatever page is asked for. */
+export interface UsageRequestsQuery {
   from: string | null;
   to: string | null;
   timezone: string;
   filters?: UsageRequestFilters;
+}
+
+export interface UsageRequestsRequest extends UsageRequestsQuery {
   offset: number;
   limit: number;
 }
@@ -32,12 +36,16 @@ export interface UsageRequestsResult {
   facets: UsageRequestFacets;
 }
 
-export interface BuildUsageRequestsInput {
+/** The merged calls and what a row is named and priced by. */
+export interface UsageRequestsSource {
   calls: readonly UsageListedCall[];
-  request: UsageRequestsRequest;
   projects: ReadonlyMap<string, UsageProjectAttribution>;
   endpointIdentities: ReadonlyMap<string, UsageEndpointIdentity>;
   pricing: UsageReportPricing;
+}
+
+export interface BuildUsageRequestsInput extends UsageRequestsSource {
+  request: UsageRequestsRequest;
 }
 
 /** One listed request before it is priced: the row and the words a search looks in. */
@@ -48,6 +56,27 @@ interface ListedRow {
 
 /** Newest first, the whole period counted, one page of rows priced and returned. */
 export function buildUsageRequests(input: BuildUsageRequestsInput): UsageRequestsResult {
+  const { request } = input;
+  const { inPeriod, kept } = listRequests(input);
+  // 只给这一页的行算价：行是这次现建的，直接填上。
+  const page = kept
+    .slice(request.offset, request.offset + request.limit)
+    .map(({ row }) => priceRow(row, input.pricing));
+  return { requests: page, total: kept.length, facets: facetsOf(inPeriod) };
+}
+
+/** Every request the filters keep, newest first, priced: what the CSV export writes. */
+export function buildAllUsageRequests(
+  input: UsageRequestsSource & { request: UsageRequestsQuery },
+): UsageRequestRow[] {
+  return listRequests(input).kept.map(({ row }) => priceRow(row, input.pricing));
+}
+
+/** The period's rows, and the ones the filters keep newest first. */
+function listRequests(input: UsageRequestsSource & { request: UsageRequestsQuery }): {
+  inPeriod: ListedRow[];
+  kept: ListedRow[];
+} {
   const { request } = input;
   const local = createLocalTimeResolver(request.timezone);
   const inPeriod: ListedRow[] = [];
@@ -63,25 +92,17 @@ export function buildUsageRequests(input: BuildUsageRequestsInput): UsageRequest
     .sort((a, b) =>
       a.row.at === b.row.at ? compare(b.row.id, a.row.id) : compare(b.row.at, a.row.at),
     );
-  // 只给这一页的行算价：行是这次现建的，直接填上。
-  const page: UsageRequestRow[] = [];
-  for (const { row } of kept.slice(request.offset, request.offset + request.limit)) {
-    row.estimatedCost = input.pricing.estimateCost(
-      row.totals,
-      row.model,
-      row.endpointId ?? undefined,
-    );
-    row.priced = input.pricing.isPriced(row.model);
-    page.push(row);
-  }
-  return { requests: page, total: kept.length, facets: facetsOf(inPeriod) };
+  return { inPeriod, kept };
 }
 
-function listedRowOf(
-  call: UsageListedCall,
-  index: number,
-  input: BuildUsageRequestsInput,
-): ListedRow {
+/** Fills in a freshly built row's cost. */
+function priceRow(row: UsageRequestRow, pricing: UsageReportPricing): UsageRequestRow {
+  row.estimatedCost = pricing.estimateCost(row.totals, row.model, row.endpointId ?? undefined);
+  row.priced = pricing.isPriced(row.model);
+  return row;
+}
+
+function listedRowOf(call: UsageListedCall, index: number, input: UsageRequestsSource): ListedRow {
   const { cli } = call;
   const ledger = call.kind === "gateway" ? call.ledger : null;
   const project = cli ? projectOf(cli.cwd, input.projects) : null;
@@ -127,7 +148,7 @@ function gatewayRow({
   project: UsageProjectRef | null;
   /** Tells apart two rows with no reply id that started in the same millisecond. */
   index: number;
-  input: BuildUsageRequestsInput;
+  input: UsageRequestsSource;
 }): UsageRequestRow {
   const answered = ledger.status === "ok";
   const callName = ledger.replyId ?? `${ledger.at}#${index}`;

@@ -3186,6 +3186,7 @@ export class Session {
       case "usage.report.get.request":
       case "usage.sessions.list.request":
       case "usage.requests.list.request":
+      case "usage.requests.export.request":
       case "usage.pricing.list.request":
       case "usage.pricing.refresh.request":
       case "usage.agent.get.request":
@@ -3217,6 +3218,7 @@ export class Session {
           | "usage.report.get.request"
           | "usage.sessions.list.request"
           | "usage.requests.list.request"
+          | "usage.requests.export.request"
           | "usage.pricing.list.request"
           | "usage.pricing.refresh.request"
           | "usage.agent.get.request"
@@ -3243,6 +3245,10 @@ export class Session {
     }
     if (msg.type === "usage.requests.list.request") {
       await usageStatsSession.handleUsageRequestsListRequest(msg);
+      return;
+    }
+    if (msg.type === "usage.requests.export.request") {
+      await usageStatsSession.handleUsageRequestsExportRequest(msg);
       return;
     }
     if (msg.type === "usage.pricing.list.request") {

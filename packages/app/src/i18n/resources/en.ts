@@ -5010,6 +5010,10 @@ export const en = {
         previous: "Previous",
         next: "Next",
       },
+      export: {
+        button: "Export CSV",
+        failed: "Export failed: {{reason}}",
+      },
     },
     sessionRow: {
       open: "Open",

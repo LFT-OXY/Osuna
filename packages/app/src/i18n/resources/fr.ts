@@ -5004,6 +5004,10 @@ export const fr: TranslationResources = {
         previous: "Précédent",
         next: "Suivant",
       },
+      export: {
+        button: "Exporter en CSV",
+        failed: "Échec de l’export : {{reason}}",
+      },
     },
     sessionRow: {
       open: "Ouvrir",

@@ -1304,6 +1304,15 @@ DecodeOf in internal/usage/usage.go:
   packages/server/src/server/usage/speed.ts
   packages/app/src/usage-stats/requests.ts
 
+The Requests CSV export (snake_case headers, RFC 3339 times with their offset,
+the cost in USD to six decimals and empty when unpriced, empty cells for a time
+or a count there is none of, encoding/csv quoting) follows CSVHeader and
+WriteCSV in magpie's internal/usage/ledger.go; the file's name follows csvStamp
+in internal/gui/usage.go:
+
+  packages/server/src/server/usage/requests-csv.ts
+  packages/app/src/usage-stats/requests-export.ts
+
 MIT License
 
 Copyright (c) 2026 yetone

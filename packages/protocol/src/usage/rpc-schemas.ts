@@ -96,6 +96,30 @@ export const UsageRequestsListResponseSchema = z.object({
 });
 export type UsageRequestsListResponse = z.infer<typeof UsageRequestsListResponseSchema>;
 
+/**
+ * Every request the Requests list's filters keep, all pages, as CSV text: the
+ * list's columns plus reasoning tokens, the failure, the tries, the reply id
+ * and the session. Costs are in USD whatever the client shows.
+ */
+export const UsageRequestsExportRequestSchema = z.object({
+  type: z.literal("usage.requests.export.request"),
+  requestId: z.string(),
+  from: z.string().nullable(),
+  to: z.string().nullable(),
+  timezone: z.string().min(1),
+  filters: UsageRequestFiltersSchema.optional(),
+});
+export type UsageRequestsExportRequest = z.infer<typeof UsageRequestsExportRequestSchema>;
+
+export const UsageRequestsExportResponseSchema = z.object({
+  type: z.literal("usage.requests.export.response"),
+  payload: z.object({
+    requestId: z.string(),
+    csv: z.string(),
+  }),
+});
+export type UsageRequestsExportResponse = z.infer<typeof UsageRequestsExportResponseSchema>;
+
 export const UsageBackfillProgressMessageSchema = z.object({
   type: z.literal("usage.backfill.progress"),
   payload: UsageBackfillSchema,

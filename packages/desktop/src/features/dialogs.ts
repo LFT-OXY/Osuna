@@ -1,3 +1,4 @@
+import { writeFile } from "node:fs/promises";
 import { dialog, ipcMain, BrowserWindow } from "electron";
 
 interface AskOptions {
@@ -19,6 +20,13 @@ interface OpenOptions {
   createDirectory?: boolean;
   multiple?: boolean;
   filters?: Array<{ name: string; extensions: string[] }>;
+}
+
+interface SaveTextOptions {
+  title?: string;
+  defaultPath: string;
+  filters?: Array<{ name: string; extensions: string[] }>;
+  contents: string;
 }
 
 function resolveDialogType(kind: AskOptions["kind"]): "warning" | "error" | "question" {
@@ -79,5 +87,18 @@ export function registerDialogHandlers(): void {
 
     if (result.canceled) return null;
     return options?.multiple ? result.filePaths : (result.filePaths[0] ?? null);
+  });
+
+  // 渲染进程在沙箱里写不了文件：选好位置后由主进程写入，取消则回 null。
+  ipcMain.handle("paseo:dialog:saveText", async (event, options: SaveTextOptions) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const result = await dialog.showSaveDialog(win ?? BrowserWindow.getFocusedWindow()!, {
+      title: options.title,
+      defaultPath: options.defaultPath,
+      filters: options.filters,
+    });
+    if (result.canceled || !result.filePath) return null;
+    await writeFile(result.filePath, options.contents, "utf8");
+    return result.filePath;
   });
 }

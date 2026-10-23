@@ -1,6 +1,6 @@
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import type { Page } from "@playwright/test";
+import type { Download, Page } from "@playwright/test";
 import { expect, test } from "../support/fixtures";
 import {
   connectApiEndpointClient,
@@ -136,6 +136,63 @@ async function holdRequestsList(page: Page): Promise<() => void> {
   return release;
 }
 
+/** 把前 `times` 次导出请求就地回成 daemon 的 rpc_error，之后的照常交给 daemon。 */
+async function failRequestsExport(page: Page, reason: string, times: number): Promise<void> {
+  let remaining = times;
+  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((message) => {
+      const raw = typeof message === "string" ? message : message.toString("utf8");
+      const envelope: unknown = JSON.parse(raw);
+      const sessionMessage =
+        envelope && typeof envelope === "object" && "message" in envelope ? envelope.message : null;
+      if (
+        remaining > 0 &&
+        sessionMessage &&
+        typeof sessionMessage === "object" &&
+        "type" in sessionMessage &&
+        sessionMessage.type === "usage.requests.export.request" &&
+        "requestId" in sessionMessage
+      ) {
+        remaining -= 1;
+        ws.send(
+          JSON.stringify({
+            type: "session",
+            message: {
+              type: "rpc_error",
+              payload: {
+                requestId: sessionMessage.requestId,
+                requestType: "usage.requests.export.request",
+                error: reason,
+                code: "usage_request_failed",
+              },
+            },
+          }),
+        );
+        return;
+      }
+      server.send(message);
+    });
+    server.onMessage((message) => ws.send(message));
+  });
+}
+
+/** 下载下来的 CSV：按行切开（夹具里没有带引号的字段）。 */
+function downloadedLines(download: Download, filePath: string): string[] {
+  expect(download.suggestedFilename()).toMatch(/^osuna-requests-.+\.csv$/);
+  const text = readFileSync(filePath, "utf8");
+  expect(text.endsWith("\n")).toBe(true);
+  return text.slice(0, -1).split("\n");
+}
+
+async function exportAndRead(page: Page, trigger: string): Promise<string[]> {
+  const downloading = page.waitForEvent("download");
+  await page.getByTestId(trigger).click();
+  const download = await downloading;
+  const filePath = await download.path();
+  return downloadedLines(download, filePath);
+}
+
 test.describe("Usage page Requests tab", () => {
   test("filters, pages a hundred at a time, and opens a request to its tries", async ({ page }) => {
     writePagingSession();
@@ -211,6 +268,73 @@ test.describe("Usage page Requests tab", () => {
       await page.getByTestId("usage-requests-search").fill("nothing like this");
       await expect(page.getByTestId("usage-requests-empty")).toHaveText("No requests match");
     });
+  });
+
+  test("Export CSV downloads every request the filters keep, every page, with the extra columns", async ({
+    page,
+  }) => {
+    writePagingSession();
+    await openRequestsTab(page);
+    await expect
+      .poll(() => rangeAfterPickingModel(page, PAGING_MODEL), { timeout: 30_000 })
+      .toBe(`1–100 of ${PAGING_CALLS}`);
+
+    const [header, ...rows] = await exportAndRead(page, "usage-requests-export");
+    expect(header?.split(",")).toEqual([
+      "time",
+      "agent",
+      "model",
+      "endpoint",
+      "input_tokens",
+      "output_tokens",
+      "cache_read_tokens",
+      "cache_write_tokens",
+      "reasoning_tokens",
+      "cost_usd",
+      "duration_ms",
+      "ttft_ms",
+      "output_tokens_per_second",
+      "status",
+      "error_type",
+      "error_message",
+      "tries",
+      "response_id",
+      "session",
+    ]);
+    expect(rows).toHaveLength(PAGING_CALLS);
+    const cells = rows.map((row) => row.split(","));
+    expect(new Set(cells.map((row) => row[2]))).toEqual(new Set([PAGING_MODEL]));
+    // 最新的在前：第 105 次调用，输出 105 个 token，直连写「Official」。
+    expect(cells[0]?.[3]).toBe("Official");
+    expect(cells[0]?.[5]).toBe(String(PAGING_CALLS));
+    expect(cells[0]?.[17]).toBe(`msg-paging-${PAGING_CALLS}`);
+    expect(cells[0]?.[18]).toBe("sess-requests-paging");
+    await expect(page.getByTestId("usage-requests-export-error")).toHaveCount(0);
+  });
+
+  test("a failed export keeps its reason and Retry beside the button until dismissed or retried", async ({
+    page,
+  }) => {
+    writePagingSession();
+    await failRequestsExport(page, "usage ledger is unreadable", 2);
+    await openRequestsTab(page);
+    await expect(page.getByTestId("usage-requests-table")).toBeVisible({ timeout: 30_000 });
+
+    await page.getByTestId("usage-requests-export").click();
+    const error = page.getByTestId("usage-requests-export-error");
+    await expect(error).toHaveText("Export failed: usage ledger is unreadable");
+    await expect(page.getByTestId("usage-requests-export-retry")).toBeVisible();
+    await expect(page.getByTestId("usage-requests-export")).toBeEnabled();
+    await page.getByTestId("usage-requests-export-dismiss").click();
+    await expect(error).toHaveCount(0);
+
+    await page.getByTestId("usage-requests-export").click();
+    await expect(error).toBeVisible();
+    const [header, ...rows] = await exportAndRead(page, "usage-requests-export-retry");
+    expect(header?.startsWith("time,agent,model,endpoint,")).toBe(true);
+    expect(rows.length).toBeGreaterThanOrEqual(PAGING_CALLS);
+    await expect(error).toHaveCount(0);
+    await expect(page.getByTestId("usage-requests-export-retry")).toHaveCount(0);
   });
 
   test("shows a skeleton while the first page loads", async ({ page }) => {

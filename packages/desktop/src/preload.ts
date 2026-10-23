@@ -89,6 +89,8 @@ contextBridge.exposeInMainWorld("paseoDesktop", {
     askWithCheckbox: (message: string, options: Record<string, unknown>) =>
       ipcRenderer.invoke("paseo:dialog:askWithCheckbox", message, options),
     open: (options?: Record<string, unknown>) => ipcRenderer.invoke("paseo:dialog:open", options),
+    saveText: (options: Record<string, unknown>) =>
+      ipcRenderer.invoke("paseo:dialog:saveText", options),
   },
   notification: {
     isSupported: () => ipcRenderer.invoke("paseo:notification:isSupported"),

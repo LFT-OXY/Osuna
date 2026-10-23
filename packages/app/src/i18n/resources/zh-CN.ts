@@ -4850,6 +4850,10 @@ export const zhCN: TranslationResources = {
         previous: "上一页",
         next: "下一页",
       },
+      export: {
+        button: "导出 CSV",
+        failed: "导出失败：{{reason}}",
+      },
     },
     sessionRow: {
       open: "打开",

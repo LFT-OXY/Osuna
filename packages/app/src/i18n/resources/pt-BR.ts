@@ -4952,6 +4952,10 @@ export const ptBR: TranslationResources = {
         previous: "Anterior",
         next: "Próxima",
       },
+      export: {
+        button: "Exportar CSV",
+        failed: "Falha ao exportar: {{reason}}",
+      },
     },
     sessionRow: {
       open: "Abrir",

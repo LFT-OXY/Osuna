@@ -4940,6 +4940,10 @@ export const ja: TranslationResources = {
         previous: "前へ",
         next: "次へ",
       },
+      export: {
+        button: "CSV をエクスポート",
+        failed: "エクスポートに失敗しました：{{reason}}",
+      },
     },
     sessionRow: {
       open: "開く",

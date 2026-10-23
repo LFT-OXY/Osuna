@@ -4864,6 +4864,10 @@ export const ar: TranslationResources = {
         previous: "السابق",
         next: "التالي",
       },
+      export: {
+        button: "تصدير CSV",
+        failed: "تعذّر التصدير: {{reason}}",
+      },
     },
     sessionRow: {
       open: "فتح",

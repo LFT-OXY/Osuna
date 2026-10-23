@@ -4979,6 +4979,10 @@ export const es: TranslationResources = {
         previous: "Anterior",
         next: "Siguiente",
       },
+      export: {
+        button: "Exportar CSV",
+        failed: "No se pudo exportar: {{reason}}",
+      },
     },
     sessionRow: {
       open: "Abrir",

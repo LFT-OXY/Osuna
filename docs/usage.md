@@ -159,6 +159,17 @@ streaming time the ledger does not keep yet. The client asks each counted host
 for its newest `offset + limit` rows and merges them, so a page across hosts is
 exact.
 
+Export CSV (`usage.requests.export`) writes every row the filters keep, all
+pages, in magpie's CSV shape: snake_case headers, RFC 3339 times with the
+client's offset, the cost in USD with six decimals whatever currency the page
+shows (empty for an unpriced model), and Go's `encoding/csv` quoting. The file
+has the list's columns plus reasoning tokens, the failure class and message, the
+tries, the reply id and the session; a direct row leaves timing and tries empty.
+Across hosts the client merges the files newest first, and one host failing
+fails the export, since a file missing a host would not add up against a bill.
+Desktop saves through a save dialog, the browser downloads, and native hands the
+file to the share sheet.
+
 ### Endpoint cards
 
 Usage counts an endpoint by its id, so a rename shows the new name over all of

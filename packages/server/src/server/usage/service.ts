@@ -30,10 +30,14 @@ import { UsageCallMerge } from "./call-merge.js";
 import type { GatewayLedgerRow } from "./ledger.js";
 import { buildUsageReport, type UsageReportPricing, type UsageReportRequest } from "./report.js";
 import {
+  buildAllUsageRequests,
   buildUsageRequests,
+  type UsageRequestsQuery,
   type UsageRequestsRequest,
   type UsageRequestsResult,
+  type UsageRequestsSource,
 } from "./requests.js";
+import { writeUsageRequestsCsv } from "./requests-csv.js";
 import { buildUsageSessionChains } from "./session-chains.js";
 import {
   buildUsageSessions,
@@ -339,17 +343,26 @@ export class UsageService {
 
   /** One page of the Requests list: the ledger rows and the log's replies, merged (ADR 0014). */
   async listRequests(request: UsageRequestsRequest): Promise<UsageRequestsResult> {
+    return buildUsageRequests({ ...(await this.requestsSource()), request });
+  }
+
+  /** Every request the list's filters keep, all pages, as CSV text with costs in USD. */
+  async exportRequests(request: UsageRequestsQuery): Promise<string> {
+    const rows = buildAllUsageRequests({ ...(await this.requestsSource()), request });
+    return writeUsageRequestsCsv(rows, request.timezone);
+  }
+
+  private async requestsSource(): Promise<UsageRequestsSource> {
     const calls = this.merge.listCalls();
     const cwds = new Set<string>();
     for (const call of calls) if (call.cli) cwds.add(call.cli.cwd);
     const endpointIdentities = this.currentEndpointIdentities();
-    return buildUsageRequests({
+    return {
       calls,
-      request,
       projects: await this.projects.resolveAll(cwds),
       endpointIdentities,
       pricing: this.reportPricing(endpointIdentities),
-    });
+    };
   }
 
   /**

@@ -642,6 +642,10 @@ type UsageRequestsListPayload = Extract<
   SessionOutboundMessage,
   { type: "usage.requests.list.response" }
 >["payload"];
+type UsageRequestsExportPayload = Extract<
+  SessionOutboundMessage,
+  { type: "usage.requests.export.response" }
+>["payload"];
 type UsagePricingListPayload = Extract<
   SessionOutboundMessage,
   { type: "usage.pricing.list.response" }
@@ -917,6 +921,8 @@ export interface UsageRequestsListOptions {
   limit: number;
   requestId?: string;
 }
+
+export type UsageRequestsExportOptions = Omit<UsageRequestsListOptions, "offset" | "limit">;
 
 type ScheduleCreatePayload = Extract<
   SessionOutboundMessage,
@@ -6534,6 +6540,22 @@ export class DaemonClient {
         limit: options.limit,
       },
       responseType: "usage.requests.list.response",
+    });
+  }
+
+  async usageRequestsExport(
+    options: UsageRequestsExportOptions,
+  ): Promise<UsageRequestsExportPayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId: options.requestId,
+      message: {
+        type: "usage.requests.export.request",
+        from: options.from,
+        to: options.to,
+        timezone: options.timezone,
+        ...(options.filters ? { filters: options.filters } : {}),
+      },
+      responseType: "usage.requests.export.response",
     });
   }
 

@@ -1504,7 +1504,7 @@ function replyIdsOf(page: RequestsListPage): string[] {
  * 四次请求，从旧到新：Claude Code 经接口 A（会话记录里也有，合成一条）、同一轮里一次只在会话记录里的直连、
  * Codex 先问 B 失败再由 D 回答（换过一家）、Codex 再问时先问刚答过的 D 也失败，再问 B 仍失败。
  */
-async function fourRequests(harness: Harness): Promise<void> {
+async function fourRequests(harness: Harness, overloaded = "upstream overloaded"): Promise<void> {
   await askClaude(harness);
   await waitForLedgerRow(harness.usageDir, "msg_gw_1");
   await appendTurn(harness, {
@@ -1517,7 +1517,7 @@ async function fourRequests(harness: Harness): Promise<void> {
   await waitForRequests(harness, (page) => page.total === 2 && page.requests[1]?.project !== null);
   harness.replies.b = (res) => {
     res.writeHead(503, { "content-type": "application/json" });
-    res.end(JSON.stringify({ error: { message: "upstream overloaded" } }));
+    res.end(JSON.stringify({ error: { message: overloaded } }));
   };
   expect(await codexReplyId(await askCodex(harness))).toBe("resp_gw_d");
   await waitForRequests(harness, (page) => page.total === 3);
@@ -1685,6 +1685,172 @@ describe("the Requests list", () => {
     await waitForReport(harness, () => true);
     const after = await harness.client.usageRequestsList(requestsOf());
     expect(after.requests).toEqual(before.requests);
+  });
+});
+
+/** 按 RFC 4180 读回 CSV：引号里的逗号、换行与成对的引号都是字段的一部分。 */
+function parseCsv(text: string): string[][] {
+  const records: string[][] = [];
+  let record: string[] = [];
+  let field = "";
+  let quoted = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (quoted) {
+      if (char === '"' && text[index + 1] === '"') {
+        field += '"';
+        index += 1;
+      } else if (char === '"') {
+        quoted = false;
+      } else {
+        field += char;
+      }
+    } else if (char === '"') {
+      quoted = true;
+    } else if (char === ",") {
+      record.push(field);
+      field = "";
+    } else if (char === "\n") {
+      record.push(field);
+      records.push(record);
+      record = [];
+      field = "";
+    } else {
+      field += char;
+    }
+  }
+  if (field !== "" || record.length > 0) throw new Error("CSV does not end with a newline");
+  return records;
+}
+
+const CSV_HEADER = [
+  "time",
+  "agent",
+  "model",
+  "endpoint",
+  "input_tokens",
+  "output_tokens",
+  "cache_read_tokens",
+  "cache_write_tokens",
+  "reasoning_tokens",
+  "cost_usd",
+  "duration_ms",
+  "ttft_ms",
+  "output_tokens_per_second",
+  "status",
+  "error_type",
+  "error_message",
+  "tries",
+  "response_id",
+  "session",
+];
+
+/** 每行按列名取值。 */
+function csvRows(text: string): Record<string, string>[] {
+  const [header, ...rows] = parseCsv(text);
+  expect(header).toEqual(CSV_HEADER);
+  return rows.map((cells) => {
+    expect(cells).toHaveLength(CSV_HEADER.length);
+    return Object.fromEntries(CSV_HEADER.map((name, index) => [name, cells[index] ?? ""]));
+  });
+}
+
+describe("the Requests CSV export", () => {
+  test("exports every request the filters keep, all pages, with the list's columns, reasoning, the failure, tries, reply id and session; costs in USD and commas, quotes and newlines escaped", async () => {
+    const harness = await start({ pricing: PRICED });
+    await fourRequests(harness, 'upstream overloaded, "busy"');
+    // 一次直连回复，编号里有逗号、引号和换行。
+    const oddReplyId = 'msg_odd, "quoted"\nnext line';
+    await appendTurn(harness, {
+      promptId: "p2",
+      calls: [{ messageId: oddReplyId, model: "claude-opus-4-1", lines: [OLD_TOTALS] }],
+    });
+    await waitForRequests(harness, (page) => page.total === 5);
+
+    const all = await harness.client.usageRequestsExport(ALL_TIME);
+    const rows = csvRows(all.csv);
+    const listed = await harness.client.usageRequestsList(requestsOf({ limit: 1 }));
+    expect(rows).toHaveLength(listed.total);
+    expect(rows.map((row) => row.response_id || row.status)).toEqual([
+      oddReplyId,
+      "failed",
+      "resp_gw_d",
+      "msg_direct_1",
+      "msg_gw_1",
+    ]);
+    expect(all.csv).toContain('"msg_odd, ""quoted""\nnext line"');
+    const [, failed, switched, direct, merged] = rows;
+    // kimi-k2 每个 token 一美元：按美元写成本，没有价的模型留空。
+    expect(merged).toMatchObject({
+      agent: "claude",
+      model: "kimi-k2",
+      endpoint: "Relay A",
+      input_tokens: "40",
+      output_tokens: "25",
+      cache_read_tokens: "300",
+      cache_write_tokens: "50",
+      reasoning_tokens: "0",
+      cost_usd: "415.000000",
+      status: "ok",
+      error_type: "",
+      error_message: "",
+      tries: "1",
+      response_id: "msg_gw_1",
+      session: SESSION_ID,
+    });
+    expect(merged?.time).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+    expect(Number(merged?.duration_ms)).toBeGreaterThanOrEqual(0);
+    expect(merged?.ttft_ms).toMatch(/^\d+$/);
+    expect(direct).toMatchObject({
+      model: "claude-opus-4-1",
+      endpoint: "Official",
+      cost_usd: "",
+      duration_ms: "",
+      ttft_ms: "",
+      output_tokens_per_second: "",
+      tries: "",
+      session: SESSION_ID,
+    });
+    expect(switched).toMatchObject({
+      agent: "codex",
+      endpoint: "Relay D",
+      reasoning_tokens: "10",
+      cost_usd: "",
+      status: "ok",
+      tries: "2",
+      response_id: "resp_gw_d",
+    });
+    expect(failed).toMatchObject({
+      agent: "codex",
+      endpoint: "Relay B",
+      status: "failed",
+      error_type: "other",
+      error_message: 'Relay B: upstream overloaded, "busy"',
+      tries: "2",
+      response_id: "",
+    });
+    expect(all.csv).toContain(',"Relay B: upstream overloaded, ""busy""",');
+
+    const codex = await harness.client.usageRequestsExport({
+      ...ALL_TIME,
+      filters: { clis: ["codex"] },
+    });
+    expect(csvRows(codex.csv).map((row) => row.response_id || row.status)).toEqual([
+      "failed",
+      "resp_gw_d",
+    ]);
+    const nothing = await harness.client.usageRequestsExport({
+      from: "2020-01-01",
+      to: "2020-01-31",
+      timezone: "Asia/Shanghai",
+    });
+    expect(nothing.csv).toBe(`${CSV_HEADER.join(",")}\n`);
+    // 时间按请求的时区写，带它的偏移。
+    const shanghai = csvRows(
+      (await harness.client.usageRequestsExport({ ...ALL_TIME, timezone: "Asia/Shanghai" })).csv,
+    );
+    expect(shanghai[4]?.time).toMatch(/\+08:00$/);
+    expect(Date.parse(shanghai[4]?.time ?? "")).toBe(Date.parse(merged?.time ?? ""));
   });
 });
 

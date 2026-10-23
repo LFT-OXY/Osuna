@@ -34,6 +34,16 @@ export interface DesktopDialogOpenOptions {
   }>;
 }
 
+export interface DesktopDialogSaveTextOptions {
+  title?: string;
+  defaultPath: string;
+  filters?: Array<{
+    name: string;
+    extensions: string[];
+  }>;
+  contents: string;
+}
+
 export interface DesktopDialogAskWithCheckboxOptions extends DesktopDialogAskOptions {
   checkboxLabel: string;
   checkboxChecked?: boolean;
@@ -51,6 +61,8 @@ export interface DesktopDialogBridge {
     options: DesktopDialogAskWithCheckboxOptions,
   ) => Promise<DesktopDialogAskWithCheckboxResult>;
   open?: (options?: DesktopDialogOpenOptions) => Promise<string | string[] | null>;
+  /** Asks where to save, then writes `contents` there; null when cancelled. */
+  saveText?: (options: DesktopDialogSaveTextOptions) => Promise<string | null>;
 }
 
 export interface DesktopNotificationBridge {
