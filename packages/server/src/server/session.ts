@@ -3187,6 +3187,7 @@ export class Session {
       case "usage.sessions.list.request":
       case "usage.requests.list.request":
       case "usage.requests.export.request":
+      case "provider.api_endpoint.recent_problems.request":
       case "usage.pricing.list.request":
       case "usage.pricing.refresh.request":
       case "usage.agent.get.request":
@@ -3219,6 +3220,7 @@ export class Session {
           | "usage.sessions.list.request"
           | "usage.requests.list.request"
           | "usage.requests.export.request"
+          | "provider.api_endpoint.recent_problems.request"
           | "usage.pricing.list.request"
           | "usage.pricing.refresh.request"
           | "usage.agent.get.request"
@@ -3249,6 +3251,10 @@ export class Session {
     }
     if (msg.type === "usage.requests.export.request") {
       await usageStatsSession.handleUsageRequestsExportRequest(msg);
+      return;
+    }
+    if (msg.type === "provider.api_endpoint.recent_problems.request") {
+      await usageStatsSession.handleRecentProblemsRequest(msg);
       return;
     }
     if (msg.type === "usage.pricing.list.request") {

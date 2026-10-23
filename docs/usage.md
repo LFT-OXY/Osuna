@@ -125,7 +125,8 @@ Usage is kept twice. The 15-minute bucket and turn rows are the summaries: every
 total, split and cost on the page reads them, and they are kept forever. The
 per-request records under `usage/requests/` are the ledger rows, the CLI log
 replies (Claude Code, Codex, Pi and OMP; Pi and OMP name a reply by session and
-entry id) and the `merged` markers. They back the Requests tab, and they are what
+entry id) and the `merged` markers. They back the Requests tab and an endpoint's
+Recent problems, and they are what
 a restart reloads to carry on merging.
 
 The records keep 30 days and 200 MB, as magpie keeps its routing history. After
@@ -174,6 +175,19 @@ beside the button names each one and why until it is dismissed or the next
 export starts; only when no host answers is nothing saved. Desktop saves through
 a save dialog (the main process parses the IPC payload before writing), the
 browser downloads, and native hands the file to the share sheet.
+
+### An endpoint's Recent problems
+
+`provider.api_endpoint.recent_problems` reads the same records: the endpoint's 20
+latest requests in which one of its tries did not answer (it failed, refused,
+the agent left while it was asked, or it was passed over while cooling down), or
+that ended failed on it, newest first. That is magpie's moved and bad routes,
+narrowed to one endpoint; magpie shows them on its Routing page, Osuna on the
+endpoint page. Each row takes the endpoint's last try that did not answer: its
+failure class, the vendor's words and the cooldown, plus the endpoint tried
+next, if any. The section follows the records' retention and survives a
+restart. It is served by the usage service, so a daemon without usage tracking
+answers with an error.
 
 ### Endpoint cards
 

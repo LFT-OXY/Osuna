@@ -1595,6 +1595,50 @@ export const ApiEndpointReadBalanceResponseSchema = z.object({
 export type ApiEndpointReadBalanceResponse = z.infer<typeof ApiEndpointReadBalanceResponseSchema>;
 
 /**
+ * 接口的「最近异常」里的一行：这家出过事的一次请求（中转站账本的逐条记录）。at 是请求开始的时刻；model 是问这家时
+ * 用的模型；failure、reason、cooldownUntil 取这次请求里这家最后一次没答成的尝试（失败分类、上游原话、冷却到何时），
+ * 这家没有没答成的尝试（答了一半请求仍失败）时都为 null。switchedTo 是这家之后换到的那一家（endpointId null 即官方），
+ * 没换为 null；status 是整次请求的结果。
+ */
+export const ApiEndpointRecentProblemSchema = z.object({
+  id: z.string(),
+  at: z.string(),
+  model: z.string(),
+  failure: z.string().nullable(),
+  reason: z.string().nullable(),
+  cooldownUntil: z.string().nullable(),
+  switchedTo: z
+    .object({ endpointId: z.string().nullable(), endpointName: z.string().nullable() })
+    .nullable(),
+  status: z.enum(["ok", "failed", "cancelled"]),
+});
+export type ApiEndpointRecentProblem = z.infer<typeof ApiEndpointRecentProblemSchema>;
+
+/**
+ * 这家接口最近 20 次失败、被换走或导致冷却的请求，新的在前；读逐条记录，重启后还在，记录保留多久就能看多久。
+ * 只有声明了 gatewayLedger 的 daemon 认它；读不了时回 rpc_error。
+ */
+export const ApiEndpointRecentProblemsRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.recent_problems.request"),
+  requestId: z.string(),
+  endpointId: z.string(),
+});
+export type ApiEndpointRecentProblemsRequest = z.infer<
+  typeof ApiEndpointRecentProblemsRequestSchema
+>;
+
+export const ApiEndpointRecentProblemsResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.recent_problems.response"),
+  payload: z.object({
+    requestId: z.string(),
+    problems: z.array(ApiEndpointRecentProblemSchema),
+  }),
+});
+export type ApiEndpointRecentProblemsResponse = z.infer<
+  typeof ApiEndpointRecentProblemsResponseSchema
+>;
+
+/**
  * 查询余额（编辑窗口的「查询余额」，照 magpie 编辑器的 Check balance）：用表单里还没保存的值当场查一次，只读，
  * 不进 1 分钟缓存，也不记作上次读数。key 的规则同 test_connection（apiKey 省略即用 endpointId 那家存的）；
  * baseUrls、templateId 与请求头等附加项是表单里的，不校验证书的主机按它们算（省略即用那家存的）。

@@ -1313,6 +1313,13 @@ in internal/gui/usage.go:
   packages/server/src/server/usage/requests-csv.ts
   packages/app/src/usage-stats/requests-export.ts
 
+An endpoint's Recent problems (a request counts when one of the endpoint's
+tries did not answer or the request ended failed on it, as magpie's moved and
+bad routes; newest first) follows outcome, failedRoute, tryOk and allListed in
+magpie's internal/gui/assets/plugins/routing/client.js:
+
+  packages/server/src/server/usage/recent-problems.ts
+
 MIT License
 
 Copyright (c) 2026 yetone

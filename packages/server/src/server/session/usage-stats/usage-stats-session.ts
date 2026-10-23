@@ -112,6 +112,21 @@ export class UsageStatsSession {
     }));
   }
 
+  async handleRecentProblemsRequest(
+    request: Extract<
+      SessionInboundMessage,
+      { type: "provider.api_endpoint.recent_problems.request" }
+    >,
+  ): Promise<void> {
+    await this.respond(request, async () => ({
+      type: "provider.api_endpoint.recent_problems.response",
+      payload: {
+        requestId: request.requestId,
+        problems: this.usageService.listRecentProblems(request.endpointId),
+      },
+    }));
+  }
+
   async handleUsagePricingListRequest(
     request: Extract<SessionInboundMessage, { type: "usage.pricing.list.request" }>,
   ): Promise<void> {

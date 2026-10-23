@@ -1,4 +1,5 @@
 import { promises as fs, type Dirent } from "node:fs";
+import type { ApiEndpointRecentProblem } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { FileHandle } from "node:fs/promises";
 import path from "node:path";
 import { setImmediate as yieldToEventLoop } from "node:timers/promises";
@@ -38,6 +39,7 @@ import {
   type UsageRequestsSource,
 } from "./requests.js";
 import { writeUsageRequestsCsv } from "./requests-csv.js";
+import { buildRecentProblems } from "./recent-problems.js";
 import { buildUsageSessionChains } from "./session-chains.js";
 import {
   buildUsageSessions,
@@ -350,6 +352,15 @@ export class UsageService {
   async exportRequests(request: UsageRequestsQuery): Promise<string> {
     const rows = buildAllUsageRequests({ ...(await this.requestsSource()), request });
     return writeUsageRequestsCsv(rows, request.timezone);
+  }
+
+  /** An endpoint's Recent problems: its latest failed, switched-away or cooled-down requests. */
+  listRecentProblems(endpointId: string): ApiEndpointRecentProblem[] {
+    return buildRecentProblems({
+      endpointId,
+      calls: this.merge.listCalls(),
+      endpointIdentities: this.currentEndpointIdentities(),
+    });
   }
 
   private async requestsSource(): Promise<UsageRequestsSource> {

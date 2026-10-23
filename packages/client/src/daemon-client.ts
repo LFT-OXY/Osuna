@@ -730,6 +730,10 @@ type ApiEndpointReadBalancePayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.read_balance.response" }
 >["payload"];
+type ApiEndpointRecentProblemsPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.recent_problems.response" }
+>["payload"];
 type ApiEndpointCheckBalancePayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.check_balance.response" }
@@ -6784,6 +6788,17 @@ export class DaemonClient {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId,
       message: { type: "provider.api_endpoint.read_balance.request", ...options },
+    });
+  }
+
+  /** 这家接口最近 20 次失败、被换走或导致冷却的请求，新的在前。只有声明了 gatewayLedger 的 daemon 认。 */
+  async apiEndpointRecentProblems(
+    endpointId: string,
+    requestId?: string,
+  ): Promise<ApiEndpointRecentProblemsPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.recent_problems.request", endpointId },
     });
   }
 

@@ -1688,6 +1688,112 @@ describe("the Requests list", () => {
   });
 });
 
+type RecentProblems = Awaited<ReturnType<DaemonClient["apiEndpointRecentProblems"]>>["problems"];
+
+/** 等这家接口的「最近异常」符合预期。 */
+async function waitForProblems(
+  harness: Harness,
+  endpointId: string,
+  accept: (problems: RecentProblems) => boolean,
+): Promise<RecentProblems> {
+  const deadline = Date.now() + 15_000;
+  let last: RecentProblems | null = null;
+  while (Date.now() < deadline) {
+    last = (await harness.client.apiEndpointRecentProblems(endpointId)).problems;
+    if (accept(last)) return last;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`The recent problems never matched: ${JSON.stringify(last)}`);
+}
+
+describe("an endpoint's recent problems", () => {
+  test("lists the endpoint's own failed, switched-away and cooled-down requests, newest first, with the class, the vendor's words, the cooldown and where it went next", async () => {
+    const harness = await start();
+    await fourRequests(harness);
+
+    // B：第四次请求最后问到它仍失败（Codex 收到报错）；第三次请求它失败、冷却，换到 D 答了。
+    const b = await waitForProblems(harness, "ep_b", (problems) => problems.length === 2);
+    expect(b).toEqual([
+      expect.objectContaining({
+        model: "gpt-5.5",
+        failure: "other",
+        reason: expect.stringContaining("upstream overloaded"),
+        switchedTo: null,
+        status: "failed",
+      }),
+      expect.objectContaining({
+        model: "gpt-5.5",
+        failure: "other",
+        reason: expect.stringContaining("upstream overloaded"),
+        cooldownUntil: expect.any(String),
+        switchedTo: { endpointId: "ep_d", endpointName: "Relay D" },
+        status: "ok",
+      }),
+    ]);
+    expect(Date.parse(b[0]?.at ?? "")).toBeGreaterThan(Date.parse(b[1]?.at ?? ""));
+    // D：第四次请求先问它，余额不足、冷却，换到了 B。
+    const d = await waitForProblems(harness, "ep_d", (problems) => problems.length === 1);
+    expect(d).toEqual([
+      expect.objectContaining({
+        model: "gpt-5.5",
+        failure: "credit",
+        reason: expect.stringContaining("insufficient balance"),
+        cooldownUntil: expect.any(String),
+        switchedTo: { endpointId: "ep_b", endpointName: "Relay B" },
+        status: "failed",
+      }),
+    ]);
+    // A 只答过，没有异常；别家的事不算在它头上。
+    expect((await harness.client.apiEndpointRecentProblems("ep_a")).problems).toEqual([]);
+    expect((await harness.client.apiEndpointRecentProblems("ep_missing")).problems).toEqual([]);
+  });
+
+  test("keeps the latest 20, the same ones the Requests list shows for the endpoint", async () => {
+    const harness = await start();
+    harness.replies.a = (res) => {
+      res.writeHead(500, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: { message: "upstream boom" } }));
+    };
+    for (let index = 0; index < 22; index += 1) {
+      const response = await fetch(`${harness.gateway}/v1/messages`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${CLAUDE_TOKEN}`,
+          "content-type": "application/json",
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: "kimi-k2",
+          max_tokens: 64,
+          messages: [{ role: "user", content: PROMPT_TEXT }],
+        }),
+      });
+      expect(response.status).toBeGreaterThanOrEqual(400);
+      await response.text();
+    }
+    const listed = await waitForRequests(
+      harness,
+      (page) => page.total === 22,
+      requestsOf({ filters: { endpoints: ["ep_a"] } }),
+    );
+    const problems = await waitForProblems(harness, "ep_a", (all) => all.length === 20);
+    expect(problems.map((problem) => problem.at)).toEqual(
+      listed.requests.slice(0, 20).map((row) => row.at),
+    );
+    expect(problems.every((problem) => problem.status === "failed")).toBe(true);
+    expect(problems.every((problem) => problem.failure !== null)).toBe(true);
+  });
+
+  test("are still there after a restart", async () => {
+    const harness = await start();
+    await fourRequests(harness);
+    const before = await waitForProblems(harness, "ep_b", (problems) => problems.length === 2);
+    await harness.restart();
+    await waitForReport(harness, () => true);
+    expect((await harness.client.apiEndpointRecentProblems("ep_b")).problems).toEqual(before);
+  });
+});
+
 /** 按 RFC 4180 读回 CSV：引号里的逗号、换行与成对的引号都是字段的一部分。 */
 function parseCsv(text: string): string[][] {
   const records: string[][] = [];
