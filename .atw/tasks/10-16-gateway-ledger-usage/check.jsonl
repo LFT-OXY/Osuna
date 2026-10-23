@@ -7,3 +7,4 @@
 {"file": ".atw/spec/server/backend/testing.md", "reason": "daemon 端到端测试、本机假上游与假汇率服务"}
 {"file": ".atw/spec/app/frontend/index.md", "reason": "用量页新卡片、请求标签、接口页最近异常、编辑窗口价格倍率的界面规范"}
 {"file": ".atw/spec/app/frontend/hooks-and-data.md", "reason": "用量页读数与货币偏好"}
+{"file": ".atw/tasks/10-16-gateway-ledger-usage/issues/03-endpoint-identity-balance.md", "reason": "ATW current ticket"}
