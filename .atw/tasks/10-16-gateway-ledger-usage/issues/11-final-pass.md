@@ -4,7 +4,7 @@
 
 **Blocked by:** 01, 02, 03, 04, 05, 06, 07, 08, 09, 10
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** doing
 
 - [ ] `docs/glossary.md`：新词条 **Gateway ledger**、**Price multiplier**、**Official**、**Requests**、**Output speed**、**Time to first token**、**Recent problems** 及货币与万 / 亿开关；改 **Usage**、**Usage source**、**Estimated cost**、**Failover**、**Endpoint status**；用词与界面一致。
 - [ ] `docs/usage.md`、`docs/data-model.md` 与实现一致，没有重复段落；ADR 0014、0007 的标注与实现一致。
