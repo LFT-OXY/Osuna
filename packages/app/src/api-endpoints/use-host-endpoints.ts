@@ -22,6 +22,7 @@ import { resolveProviderLabel } from "@/utils/provider-definitions";
 import { describeUnparsableFile } from "./config-unparsable-copy";
 import { localizedTestResult, requestExtrasErrorText } from "./request-extras-copy";
 import { cooldownSettingsErrorText } from "./cooldown-settings-copy";
+import { priceMultiplierErrorText } from "./price-multiplier-copy";
 import type {
   ConnectionDetectRequest,
   ConnectionDetectResult,
@@ -451,6 +452,7 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
           const message =
             requestExtrasErrorText(t, result.error) ??
             cooldownSettingsErrorText(t, result.error) ??
+            priceMultiplierErrorText(t, result.error) ??
             result.error.message;
           return { status: "failed", message };
         }

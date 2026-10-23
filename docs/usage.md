@@ -535,3 +535,23 @@ steps with a gateway prefix removed. A model that survives all of that unmatched
 costs zero and is reported as unpriced. The price table lists those models at
 the top of its "Custom prices" group, marked "No price data", with inputs open
 for the four columns; saving writes the override and the row stays in that group.
+
+### An endpoint's price multiplier
+
+A relay that bills a share of the public price gets a **Price multiplier** in
+its edit window, under Advanced: 0 to 1000, at most three decimals, empty for
+the list price, 0 for free. The price of a row is found in this order, as
+magpie's `priceOf` does:
+
+1. A custom price for the model, as entered. It is not multiplied.
+2. The table price, through the lookup above, times the multiplier of the
+   endpoint the row went through.
+3. An Official row is the table price as it is.
+
+Cost is still computed on read, so a new multiplier reprices that endpoint's
+whole history, and the daemon sends `usage.pricing.updated` so open pages
+re-read. A deleted endpoint stays at the multiplier it had when it was deleted,
+read from `endpoint-snapshots.json`. The Usage page, the session list and turn
+usage price the same way; a turn that went partly through an endpoint is priced
+row by row. Two places differ from magpie on purpose: magpie reads 0 as "no
+multiplier", and prices an endpoint it no longer knows at the list price.

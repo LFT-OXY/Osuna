@@ -2903,6 +2903,12 @@ export const en = {
             timeHint: "each day, e.g. {{example}}",
             timeProblem: "Enter a time like 08:00, or 00:00+08:00 on the vendor's clock",
           },
+          priceMultiplier: {
+            label: "Price multiplier",
+            placeholder: "1, the list price",
+            hint: "Estimated cost = list price × multiplier. A model with a custom price isn't multiplied.",
+            problem: "Enter a number from 0 to {{max}}, with at most three decimals",
+          },
         },
         insecureTls: {
           label: "Certificate",

@@ -282,6 +282,8 @@ export const ApiEndpointSchema = z.object({
   ...ApiEndpointRequestExtrasSchema.shape,
   // 冷却设置（cooldown 是正在冷却的状态，这是用户设的时长）；设了才发，老 daemon 不发。
   cooldownSettings: ApiEndpointCooldownSettingsSchema.optional(),
+  // 价格倍率（price-multiplier.ts）：估算成本按「公开价 × 倍率」算，0 即免费；设了才发，老 daemon 不发。
+  priceMultiplier: z.number().optional(),
   // 余额设置；设了余额查询地址才发，老 daemon 不发。
   balance: ApiEndpointBalanceSettingsSchema.optional(),
   // 账户令牌的打码（同 apiKeyMask）；原文只在 daemon，经 reveal_secret 读回。没有令牌时不发，老 daemon 不发。
@@ -469,6 +471,9 @@ export type ApiEndpointListResponse = z.infer<typeof ApiEndpointListResponseSche
  * （API_ENDPOINT_COOLDOWN_MAX_MINUTES）的整数、时刻读不懂的拒收（invalid_cooldown_settings，params.field 为 quotaRestMinutes /
  * restCapMinutes / quotaResetAt，params.max）。老 daemon 忽略它。
  *
+ * priceMultiplier：价格倍率，null 清掉（按原价），省略即保留（复制时是原来那家的），老客户端保存不会清掉它。
+ * 不是 0 到 1000、多于三位小数的拒收（invalid_price_multiplier，params.max）。老 daemon 忽略它。
+ *
  * balance：余额设置，整份替换（没有余额查询地址即清掉），省略即保留（复制时是原来那家的），老客户端保存不会清掉它。
  * 方法不是 GET、POST 的拒收（invalid_balance_settings，params.field 为 method）。老 daemon 忽略它。
  *
@@ -502,6 +507,7 @@ export const ApiEndpointSaveRequestSchema = z.object({
   autoPick: z.array(z.string()).optional(),
   modelSettings: ApiEndpointModelSettingsSchema.optional(),
   cooldownSettings: ApiEndpointCooldownSettingsSchema.optional(),
+  priceMultiplier: z.number().nullable().optional(),
   balance: ApiEndpointBalanceSettingsSchema.optional(),
   balanceToken: z.string().optional(),
   accessKeyId: z.string().optional(),

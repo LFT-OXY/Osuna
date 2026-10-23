@@ -9,6 +9,7 @@ import type {
   UsageReport,
   UsageTokenTotals,
 } from "@getpaseo/protocol/usage/types";
+import { createTestAgentClient, createTestAgentClients } from "../test-utils/fake-agent-client.js";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 import { USAGE_TURN_ROW_SCHEMA, addTotals, emptyTotals } from "../usage/types.js";
@@ -40,6 +41,19 @@ const UNPRICED = {
   snapshot: {
     _meta: { source: "test", fetchedAt: "2026-09-18T00:00:00.000Z", etag: null, license: "MIT" },
     models: {},
+  },
+};
+
+type UsagePricingOptions = NonNullable<
+  NonNullable<NonNullable<Parameters<typeof createTestPaseoDaemon>[0]>["usage"]>["pricing"]
+>;
+
+// kimi-k2 每个 token 一美元：成本即计费的 token 数，乘了倍率一看便知。
+const PRICED = {
+  autoUpdate: false,
+  snapshot: {
+    ...UNPRICED.snapshot,
+    models: { "kimi-k2": { input: 1, cachedInput: 1, cacheWrite: 1, output: 1 } },
   },
 };
 
@@ -182,6 +196,7 @@ interface Harness {
   daemon: TestPaseoDaemon;
   client: DaemonClient;
   gateway: string;
+  root: string;
   claudeRoot: string;
   codexRoot: string;
   usageDir: string;
@@ -204,7 +219,9 @@ async function startUpstreamOf(replies: Record<UpstreamName, Respond>, name: Ups
  * 四家接口：A 只有 Anthropic 地址（直通），C 只有 Chat 地址（翻译），B 与 D 都有 Responses 地址、都给 gpt-5.5
  * （Codex 先问 B，B 失败换 D）；Claude Code 与 Codex 都走中转站，ChatGPT 自带模型转给假 ChatGPT 后端。
  */
-async function start(options: { messageId?: string } = {}): Promise<Harness> {
+async function start(
+  options: { messageId?: string; pricing?: UsagePricingOptions } = {},
+): Promise<Harness> {
   const root = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-ledger-"));
   tempRoots.push(root);
   const endpointsDir = path.join(root, ".paseo", "api-endpoints");
@@ -294,10 +311,15 @@ async function start(options: { messageId?: string } = {}): Promise<Harness> {
         // 最后一家原地重试前不等。
         gatewayRetryPauseMs: 0,
       },
+      // 假 Claude Code Agent：会话编号即会话记录里的那个，每轮花费按它读。
+      agentClients: {
+        ...createTestAgentClients(),
+        claude: createTestAgentClient("claude", { nextSessionId: () => SESSION_ID }),
+      },
       usage: {
         roots: { claude: [claudeRoot], codex: [codexRoot], pi: [], omp: [] },
         scanIntervalMs: SCAN_INTERVAL_MS,
-        pricing: UNPRICED,
+        pricing: options.pricing ?? UNPRICED,
       },
     });
     daemons.push(daemon);
@@ -313,6 +335,7 @@ async function start(options: { messageId?: string } = {}): Promise<Harness> {
   };
   const harness: Harness = {
     ...(await launch()),
+    root,
     claudeRoot,
     codexRoot,
     usageDir: path.join(root, ".paseo", "usage"),
@@ -711,8 +734,6 @@ describe("the gateway ledger merged with Claude Code's logs", () => {
     const report = await waitForReport(harness, (candidate) =>
       sameTotals(candidate.summary.totals, all),
     );
-    const billable = (one: UsageTokenTotals) =>
-      one.input + one.cachedInput + one.cacheWrite + one.output;
     expect(report.endpoints).toEqual([
       endpointGroup("ep_a", "Relay A", LEDGER_TOTALS, billable(LEDGER_TOTALS) / billable(all)),
       endpointGroup(null, null, OLD_TOTALS, billable(OLD_TOTALS) / billable(all)),
@@ -1291,5 +1312,150 @@ describe("tries in the ledger tell failures, refusals and re-asks apart", () => 
     expect(row?.attempts).toEqual([
       expect.objectContaining({ endpointId: "ep_a", result: "answered", reasked: true }),
     ]);
+  });
+});
+
+/** 计费的 token 数：kimi-k2 在 PRICED 里每个一美元，即按公开价的成本。 */
+function billable(one: UsageTokenTotals): number {
+  return one.input + one.cachedInput + one.cacheWrite + one.output;
+}
+
+/** 用当前存着的地址与模型改存接口 A，只改价格倍率（null 清掉）。 */
+async function setMultiplier(harness: Harness, priceMultiplier: number | null) {
+  const listed = await harness.client.apiEndpointList("claude");
+  const a = listed.endpoints.find((endpoint) => endpoint.id === "ep_a");
+  if (!a?.baseUrls) throw new Error("Expected endpoint A with its addresses");
+  return harness.client.apiEndpointSave({
+    provider: "claude",
+    endpointId: "ep_a",
+    name: a.name,
+    baseUrls: a.baseUrls,
+    models: [{ id: "kimi-k2" }],
+    priceMultiplier,
+  });
+}
+
+function costOf(report: UsageReport, endpointId: string | null): number | undefined {
+  return report.endpoints?.find((group) => group.endpointId === endpointId)?.estimatedCost;
+}
+
+/** 接口 A 的一次调用，加一次只在会话记录里、算「官方」的同模型调用，同一轮。 */
+async function askAndLogWithOfficial(harness: Harness): Promise<void> {
+  await askClaude(harness);
+  await appendTurn(harness, {
+    promptId: "p1",
+    calls: [gatewayCall(), { messageId: "msg_old", model: "kimi-k2", lines: [OLD_TOTALS] }],
+  });
+}
+
+describe("an endpoint's price multiplier", () => {
+  test("an endpoint's calls cost the list price times its multiplier, Official ones do not, and the sessions and the agent's turn agree", async () => {
+    const harness = await start({ pricing: PRICED });
+    expect((await setMultiplier(harness, 0.5)).error).toBeNull();
+    const work = path.join(harness.root, "work");
+    await mkdir(work, { recursive: true });
+    const agent = await harness.client.createAgent({
+      provider: "claude",
+      cwd: work,
+      title: "Usage",
+    });
+
+    await askAndLogWithOfficial(harness);
+
+    const all = sum(LEDGER_TOTALS, OLD_TOTALS);
+    const expected = billable(LEDGER_TOTALS) * 0.5 + billable(OLD_TOTALS);
+    const report = await waitForReport(harness, (candidate) =>
+      sameTotals(candidate.summary.totals, all),
+    );
+    expect(costOf(report, "ep_a")).toBe(billable(LEDGER_TOTALS) * 0.5);
+    expect(costOf(report, null)).toBe(billable(OLD_TOTALS));
+    expect(report.summary.estimatedCost).toBe(expected);
+    expect(report.models.map((model) => [model.model, model.estimatedCost])).toEqual([
+      ["kimi-k2", expected],
+    ]);
+    const { sessions } = await harness.client.usageSessionsList(ALL_TIME);
+    expect(sessions.map((session) => session.estimatedCost)).toEqual([expected]);
+    const { turns } = await harness.client.usageAgentTurnsList(agent.id);
+    expect(turns.map((turn) => [turn.turnKey, turn.estimatedCost])).toEqual([["p1", expected]]);
+    expect((await harness.client.usageAgentGet(agent.id)).estimatedCost).toBe(expected);
+  });
+
+  test("changing the multiplier reprices the endpoint's history and tells clients; none is the list price and 0 is free", async () => {
+    const harness = await start({ pricing: PRICED });
+    await askClaude(harness);
+    await waitForReport(harness, (report) => costOf(report, "ep_a") === billable(LEDGER_TOTALS));
+
+    await harness.client.observeEvents(["usage.pricing.updated"]);
+    const repriced = new Promise<void>((resolve) => {
+      harness.client.on("usage.pricing.updated", () => resolve());
+    });
+    expect((await setMultiplier(harness, 2)).error).toBeNull();
+    await repriced;
+    await waitForReport(
+      harness,
+      (report) => costOf(report, "ep_a") === billable(LEDGER_TOTALS) * 2,
+    );
+
+    expect((await setMultiplier(harness, 0)).error).toBeNull();
+    const free = await waitForReport(harness, (report) => costOf(report, "ep_a") === 0);
+    expect(free.summary.estimatedCost).toBe(0);
+
+    expect((await setMultiplier(harness, null)).error).toBeNull();
+    await waitForReport(harness, (report) => costOf(report, "ep_a") === billable(LEDGER_TOTALS));
+    const listed = await harness.client.apiEndpointList("claude");
+    expect(listed.endpoints.find((endpoint) => endpoint.id === "ep_a")?.priceMultiplier).toBe(
+      undefined,
+    );
+  });
+
+  test("a price the user set for the model stands as set, not multiplied", async () => {
+    const harness = await start({
+      pricing: {
+        ...PRICED,
+        overrides: [
+          {
+            model: "kimi-k2",
+            pricePerMillion: { input: 2e6, cachedInput: 2e6, cacheWrite: 2e6, output: 2e6 },
+          },
+        ],
+      },
+    });
+    expect((await setMultiplier(harness, 0.5)).error).toBeNull();
+    await askClaude(harness);
+
+    const report = await waitForReport(harness, (candidate) =>
+      sameTotals(candidate.summary.totals, LEDGER_TOTALS),
+    );
+    expect(costOf(report, "ep_a")).toBe(billable(LEDGER_TOTALS) * 2);
+  });
+
+  test("a deleted endpoint is costed at the multiplier it had when it was deleted, across a restart", async () => {
+    const harness = await start({ pricing: PRICED });
+    expect((await setMultiplier(harness, 0.25)).error).toBeNull();
+    await askClaude(harness);
+    await waitForLedgerRow(harness.usageDir, "msg_gw_1");
+
+    expect((await harness.client.apiEndpointDelete("claude", "ep_a")).error).toBeNull();
+    const deleted = await waitForReport(harness, hasDeletedEndpoint);
+    expect(costOf(deleted, "ep_a")).toBe(billable(LEDGER_TOTALS) * 0.25);
+
+    await harness.restart();
+    const restarted = await waitForReport(harness, hasDeletedEndpoint);
+    expect(costOf(restarted, "ep_a")).toBe(billable(LEDGER_TOTALS) * 0.25);
+  });
+
+  test("a multiplier outside 0 to 1000 or with more than three decimals is refused and the stored one kept", async () => {
+    const harness = await start();
+    expect((await setMultiplier(harness, 0.125)).error).toBeNull();
+    for (const refused of [-0.5, 1000.5, 0.1234]) {
+      const saved = await setMultiplier(harness, refused);
+      expect(saved.error).toMatchObject({
+        code: "invalid_price_multiplier",
+        params: { max: "1000" },
+      });
+    }
+    expect((await setMultiplier(harness, 1000)).error).toBeNull();
+    const listed = await harness.client.apiEndpointList("claude");
+    expect(listed.endpoints.find((endpoint) => endpoint.id === "ep_a")?.priceMultiplier).toBe(1000);
   });
 });

@@ -430,8 +430,13 @@ export function mergeTurnRow(into: Map<string, UsageTurnRow>, row: UsageTurnRow)
   into.set(key, { ...row, userMessageIds: [...row.userMessageIds] });
 }
 
-/** What usage shows for an endpoint id: the last name it had, and whether it has been deleted. */
+/**
+ * What usage shows for an endpoint id: the last name it had, whether it has
+ * been deleted, and its price multiplier (absent is the list price). A deleted
+ * endpoint keeps the multiplier it had when it was deleted.
+ */
 export interface UsageEndpointIdentity {
   name: string;
   deleted: boolean;
+  priceMultiplier?: number;
 }

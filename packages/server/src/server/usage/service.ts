@@ -279,12 +279,13 @@ export class UsageService {
     const rows = Array.from(this.rows.values());
     const attributions = await this.projects.resolveAll(new Set(rows.map((row) => row.cwd)));
     const chains = buildUsageSessionChains(this.scanState);
+    const endpointIdentities = this.currentEndpointIdentities();
     return buildUsageReport({
       rows,
       request,
       projects: attributions,
-      endpointIdentities: this.currentEndpointIdentities(),
-      pricing: this.reportPricing(),
+      endpointIdentities,
+      pricing: this.reportPricing(endpointIdentities),
       canonicalSessionId: (cli, sessionId) => chains.canonical(cli, sessionId),
       backfill: this.backfill,
       error: this.lastError,
@@ -377,10 +378,19 @@ export class UsageService {
     };
   }
 
-  private reportPricing(): UsageReportPricing {
+  /** An endpoint's rows cost its multiplier times the list price, read now, so a change reprices history. */
+  private reportPricing(
+    endpointIdentities: ReadonlyMap<
+      string,
+      UsageEndpointIdentity
+    > = this.currentEndpointIdentities(),
+  ): UsageReportPricing {
     return {
-      estimateCost: (totals: UsageTokenTotals, model: string) =>
-        this.pricing.estimateCost(totals, model),
+      estimateCost: (totals: UsageTokenTotals, model: string, endpointId?: string) => {
+        const multiplier =
+          endpointId === undefined ? 1 : (endpointIdentities.get(endpointId)?.priceMultiplier ?? 1);
+        return this.pricing.estimateCost(totals, model, multiplier);
+      },
       isPriced: (model: string) => this.pricing.priceFor(model).priced,
     };
   }

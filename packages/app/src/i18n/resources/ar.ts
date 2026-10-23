@@ -2834,6 +2834,12 @@ export const ar: TranslationResources = {
             timeHint: "كل يوم، مثل {{example}}",
             timeProblem: "أدخل وقتًا مثل 08:00، أو 00:00+08:00 بتوقيت المزوّد",
           },
+          priceMultiplier: {
+            label: "مضاعف السعر",
+            placeholder: "1، السعر المعلن",
+            hint: "التكلفة التقديرية = السعر المعلن × المضاعف. لا يُضرب النموذج الذي له سعر مخصّص.",
+            problem: "أدخل رقمًا من 0 إلى {{max}}، بثلاث منازل عشرية على الأكثر",
+          },
         },
         insecureTls: {
           label: "الشهادة",

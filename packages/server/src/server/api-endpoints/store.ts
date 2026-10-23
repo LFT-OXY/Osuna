@@ -132,6 +132,9 @@ const StoredApiEndpointSchema = z.object({
   insecureTls: z.boolean().optional().catch(undefined),
   // 冷却设置（gateway/cooldown.ts）：分钟数，0 不存；手改成别的类型时当没设，不让整个文件读不懂，越界的用时按 0 到八天算。
   cooldownSettings: StoredCooldownSettingsSchema.optional().catch(undefined),
+  // 价格倍率（protocol 的 price-multiplier.ts）：估算成本按「公开价 × 倍率」算，0 即免费；没有即按原价。
+  // 手改成别的类型时当没设，不让整个文件读不懂。
+  priceMultiplier: z.number().optional().catch(undefined),
   // 余额设置（balance.ts）：余额查询地址，方法只存 POST（GET 是缺省），取值写法、new-api 的用户 ID、智谱团队组织 ID 与
   // 项目 ID 空着不存。地址和团队 ID 都没有即没有这项；手改成读不懂的当没设，不让整个文件读不懂。
   balance: z
@@ -317,7 +320,7 @@ const CliHeaderSamplesFileSchema = z.object({
 });
 type CliHeaderSamplesFile = z.infer<typeof CliHeaderSamplesFileSchema>;
 
-// 用量按接口编号认：每家最后的名字、价格倍率（工单 04 接上）与是否已删除；删掉的条目一直留着。
+// 用量按接口编号认：每家最后的名字、价格倍率与是否已删除；删掉的条目一直留着，按删除时的倍率算。
 const EndpointSnapshotSchema = z.object({
   name: z.string(),
   priceMultiplier: z.number().optional(),
@@ -465,8 +468,8 @@ export class ApiEndpointStore {
   }
 
   /**
-   * 照现在的接口更新名字快照：在的写上现在的名字，快照里有、现在没有的标成已删除、名字留着；别的字段不动。
-   * 这份只供用量页显示，写不进去只记警告，不让保存接口失败；下次写入或重启时补上。
+   * 照现在的接口更新快照：在的写上现在的名字与价格倍率，快照里有、现在没有的标成已删除、名字与倍率留着；别的字段不动。
+   * 这份只供用量页，写不进去只记警告，不让保存接口失败；下次写入或重启时补上。
    */
   recordEndpointSnapshots(endpoints: readonly StoredApiEndpoint[]): void {
     try {
@@ -476,10 +479,20 @@ export class ApiEndpointStore {
       for (const [id, snapshot] of Object.entries(previous)) {
         if (!live.has(id)) next[id] = { ...snapshot, deleted: true };
       }
-      // 这里只管名字与是否已删除；别的字段（价格倍率）由各自的写入方更新，原样留着。
+      // 这里只管名字、价格倍率与是否已删除；以后别的写入方加的字段原样留着。
       for (const endpoint of endpoints) {
-        const { deleted: _deleted, ...kept } = previous[endpoint.id] ?? { name: endpoint.name };
-        next[endpoint.id] = { ...kept, name: endpoint.name };
+        const {
+          deleted: _deleted,
+          priceMultiplier: _priceMultiplier,
+          ...kept
+        } = previous[endpoint.id] ?? { name: endpoint.name };
+        next[endpoint.id] = {
+          ...kept,
+          name: endpoint.name,
+          ...(endpoint.priceMultiplier === undefined
+            ? {}
+            : { priceMultiplier: endpoint.priceMultiplier }),
+        };
       }
       if (isDeepStrictEqual(next, previous)) return;
       this.writeJson(

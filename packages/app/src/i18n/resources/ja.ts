@@ -2869,6 +2869,12 @@ export const ja: TranslationResources = {
             timeProblem:
               "08:00 のような時刻、またはベンダーの時刻なら 00:00+08:00 と入力してください",
           },
+          priceMultiplier: {
+            label: "価格倍率",
+            placeholder: "1（公開価格）",
+            hint: "推定コスト = 公開価格 × 倍率。カスタム価格を設定したモデルには倍率をかけません。",
+            problem: "0〜{{max}} の数値を、小数点以下 3 桁までで入力してください",
+          },
         },
         insecureTls: {
           label: "証明書",

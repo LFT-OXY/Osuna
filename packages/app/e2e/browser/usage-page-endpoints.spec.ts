@@ -7,6 +7,7 @@ import { expect, test, type Page } from "../support/fixtures";
 import {
   connectApiEndpointClient,
   GOOD_REPLY_TOKENS,
+  openApiEndpointsPage,
   GOOD_RESPONSES_TOKENS,
   RELAY_KEY,
   resetApiEndpoints,
@@ -65,6 +66,12 @@ test.afterAll(async () => {
   await client.close();
   await relay.close();
 });
+
+/** 主机存的这家的价格倍率。 */
+async function storedMultiplierOf(endpointId: string): Promise<number | undefined> {
+  const listed = await client.apiEndpointList("claude");
+  return listed.endpoints.find((endpoint) => endpoint.id === endpointId)?.priceMultiplier;
+}
 
 /** 从 server_info 去掉 gatewayLedger，模拟没有中转站账本的旧 daemon。 */
 async function hideGatewayLedger(page: Page): Promise<void> {
@@ -288,11 +295,83 @@ test.describe("Usage page by endpoint", () => {
     }
   });
 
-  test("a daemon without the gateway ledger shows no Endpoints split", async ({ page }) => {
+  test("a price multiplier saved in the edit window reprices the endpoint's card; one out of range is said in the field and holds the save", async ({
+    page,
+  }) => {
+    // gpt-4o 按内置价格表：120 输入 + 30 输出是 $0.0006，乘 1000 倍是 $0.60。
+    const endpointId = await seedApiEndpoint(client, {
+      name: "Relay Priced",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["gpt-4o"],
+    });
+    await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: true });
+    expect(await sendThroughGateway("gpt-4o")).toBe(200);
+    const card = page.getByTestId(`usage-endpoint-card-${endpointId}`);
+
+    await test.step("at the list price the card's cost rounds to nothing", async () => {
+      await openUsagePage(page);
+      await page.getByTestId("usage-breakdown-endpoints").click();
+      await expect(card).toContainText(`${GOOD_REPLY_TOKENS} · $0.00`, { timeout: 30_000 });
+    });
+
+    const input = page.getByTestId("api-endpoint-connection-price-multiplier-input");
+    const problem = page.getByTestId("api-endpoint-connection-price-multiplier-problem");
+    const save = page.getByTestId("api-endpoint-connection-save");
+
+    await test.step("the edit window's Advanced has the multiplier, empty at the list price, with how it counts", async () => {
+      await openApiEndpointsPage(page);
+      await page.getByTestId(`api-endpoint-row-${endpointId}`).filter({ visible: true }).click();
+      await page.getByTestId("api-endpoint-edit-connection").filter({ visible: true }).click();
+      await expect(input).toHaveCount(0);
+      await page.getByTestId("api-endpoint-connection-advanced-toggle").click();
+      await expect(input).toHaveValue("");
+      await expect(input).toHaveAttribute("placeholder", "1, the list price");
+      await expect(page.getByTestId("api-endpoint-connection-price-multiplier")).toContainText(
+        "Estimated cost = list price × multiplier. A model with a custom price isn't multiplied.",
+      );
+    });
+
+    await test.step("out of range, or more than three decimals, is said under the field and holds the save", async () => {
+      for (const typed of ["1000.5", "0.1234"]) {
+        await input.fill(typed);
+        await expect(problem).toHaveText(
+          "Enter a number from 0 to 1000, with at most three decimals",
+        );
+        await expect(save).toBeDisabled();
+      }
+    });
+
+    await test.step("a saved multiplier reprices the card", async () => {
+      await input.fill("1000");
+      await expect(problem).toHaveCount(0);
+      await save.click();
+      await expect(page.getByTestId("api-endpoint-connection-form")).toHaveCount(0);
+      expect(await storedMultiplierOf(endpointId)).toBe(1000);
+      await openUsagePage(page);
+      await page.getByTestId("usage-breakdown-endpoints").click();
+      await expect(card).toContainText(`${GOOD_REPLY_TOKENS} · $0.60`, { timeout: 30_000 });
+    });
+  });
+
+  test("a daemon without the gateway ledger shows no Endpoints split and no price multiplier", async ({
+    page,
+  }) => {
+    const endpointId = await seedApiEndpoint(client, {
+      name: "Relay Older",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["claude-older-1"],
+    });
     await hideGatewayLedger(page);
     await openUsagePage(page);
     await expect(page.getByTestId("usage-source-card-claude")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId("usage-breakdown")).toHaveCount(0);
+
+    await openApiEndpointsPage(page);
+    await page.getByTestId(`api-endpoint-row-${endpointId}`).filter({ visible: true }).click();
+    await page.getByTestId("api-endpoint-edit-connection").filter({ visible: true }).click();
+    await page.getByTestId("api-endpoint-connection-advanced-toggle").click();
+    await expect(page.getByTestId("api-endpoint-connection-quota-rest-input")).toBeVisible();
+    await expect(page.getByTestId("api-endpoint-connection-price-multiplier")).toHaveCount(0);
   });
 });
 

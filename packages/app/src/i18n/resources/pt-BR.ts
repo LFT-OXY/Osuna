@@ -2879,6 +2879,12 @@ export const ptBR: TranslationResources = {
             timeHint: "todo dia, ex.: {{example}}",
             timeProblem: "Digite um horário como 08:00, ou 00:00+08:00 no relógio do fornecedor",
           },
+          priceMultiplier: {
+            label: "Multiplicador de preço",
+            placeholder: "1, o preço público",
+            hint: "Custo estimado = preço público × multiplicador. Um modelo com preço personalizado não é multiplicado.",
+            problem: "Digite um número de 0 a {{max}}, com no máximo três casas decimais",
+          },
         },
         insecureTls: {
           label: "Certificado",

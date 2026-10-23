@@ -38,7 +38,7 @@ const AGENTS = {
 };
 
 describe("endpoint snapshots", () => {
-  test("a rename and a delete keep what the snapshot holds beyond the name", async () => {
+  test("a rename keeps the endpoint's multiplier, a delete keeps the one it had, and a cleared one is gone", async () => {
     const { store, endpointsDir } = await storeIn();
     await writeFile(
       path.join(endpointsDir, "endpoint-snapshots.json"),
@@ -46,15 +46,24 @@ describe("endpoint snapshots", () => {
         endpoints: {
           ep_a: { name: "Relay A", priceMultiplier: 0.8 },
           ep_b: { name: "Relay B", priceMultiplier: 1.5 },
+          ep_c: { name: "Relay C", priceMultiplier: 2 },
         },
       }),
     );
 
-    store.writeState({ endpoints: [endpoint("ep_a", "Relay A renamed")], agents: AGENTS });
+    store.writeState({
+      endpoints: [
+        { ...endpoint("ep_a", "Relay A renamed"), priceMultiplier: 0.8 },
+        endpoint("ep_c", "Relay C"),
+      ],
+      agents: AGENTS,
+    });
 
     expect(store.readEndpointSnapshots()).toEqual({
       ep_a: { name: "Relay A renamed", priceMultiplier: 0.8 },
       ep_b: { name: "Relay B", priceMultiplier: 1.5, deleted: true },
+      // 倍率清掉了：按原价。
+      ep_c: { name: "Relay C" },
     });
   });
 });

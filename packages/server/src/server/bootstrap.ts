@@ -1040,6 +1040,10 @@ export async function createPaseoDaemon(
     retiredModels: apiEndpointRetiredModels,
     sightings: apiEndpointSightings,
     daemonVersion,
+    // 估算成本读时现算：倍率一改，用量页、会话列表与每轮花费都要重读（同改价格表）。
+    onPriceMultipliersChanged: () => {
+      wsServer?.broadcast(wrapSessionMessage({ type: "usage.pricing.updated" }));
+    },
     onActiveEndpointChanged: (provider) => {
       void providerSnapshotManager
         .refreshSettingsSnapshot({ providers: [provider] })
@@ -1553,7 +1557,13 @@ export async function createPaseoDaemon(
       new Map(
         Object.entries(apiEndpointService.endpointSnapshots()).map(([id, snapshot]) => [
           id,
-          { name: snapshot.name, deleted: snapshot.deleted === true },
+          {
+            name: snapshot.name,
+            deleted: snapshot.deleted === true,
+            ...(snapshot.priceMultiplier === undefined
+              ? {}
+              : { priceMultiplier: snapshot.priceMultiplier }),
+          },
         ]),
       ),
   });

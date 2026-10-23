@@ -2899,6 +2899,12 @@ export const fr: TranslationResources = {
             timeProblem:
               "Saisissez une heure comme 08:00, ou 00:00+08:00 selon l'horloge du fournisseur",
           },
+          priceMultiplier: {
+            label: "Multiplicateur de prix",
+            placeholder: "1, le prix public",
+            hint: "Coût estimé = prix public × multiplicateur. Un modèle avec un prix personnalisé n'est pas multiplié.",
+            problem: "Saisissez un nombre de 0 à {{max}}, avec trois décimales au plus",
+          },
         },
         insecureTls: {
           label: "Certificat",

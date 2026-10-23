@@ -2854,6 +2854,12 @@ export const ko: TranslationResources = {
             timeProblem:
               "08:00 같은 시각을 입력하거나, 공급업체 시간대로 00:00+08:00처럼 입력하세요",
           },
+          priceMultiplier: {
+            label: "가격 배율",
+            placeholder: "1, 공개 가격",
+            hint: "추정 비용 = 공개 가격 × 배율. 맞춤 가격을 설정한 모델에는 배율을 곱하지 않습니다.",
+            problem: "0~{{max}} 사이의 숫자를 소수점 셋째 자리까지 입력하세요",
+          },
         },
         insecureTls: {
           label: "인증서",

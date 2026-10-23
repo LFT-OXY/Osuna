@@ -413,6 +413,9 @@ export class ApiEndpointSession {
         ...(request.cooldownSettings !== undefined
           ? { cooldownSettings: request.cooldownSettings }
           : {}),
+        ...(request.priceMultiplier !== undefined
+          ? { priceMultiplier: request.priceMultiplier }
+          : {}),
         ...savedBalanceOf(request),
         ...requestExtrasOf(request),
       });

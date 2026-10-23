@@ -33,23 +33,16 @@ export function buildAgentSummary(input: AgentReportInput): UsageAgentSummary {
   const sessions = resolveSessions(input);
   if (!sessions) return emptyAgentSummary();
   const { cli, sessionIds, complete } = sessions;
-  const byModel = new Map<string, { totals: UsageTokenTotals; priced: boolean }>();
+  const byModel = new Map<string, UsageModelAmount>();
   let turns = 0;
   let durationMs = 0;
   for (const row of input.rows) {
     if (row.cli !== cli || !sessionIds.includes(row.sessionId)) continue;
-    const entry = byModel.get(row.model) ?? {
-      totals: emptyTotals(),
-      priced: input.pricing.isPriced(row.model),
-    };
-    addTotals(entry.totals, row);
-    byModel.set(row.model, entry);
+    addPricedRow(byModel, row, input.pricing);
     turns += row.turns;
     durationMs += row.durationMs;
   }
-  const models = Array.from(byModel, ([model, entry]) =>
-    toModelAmount(model, entry, input.pricing),
-  );
+  const models = Array.from(byModel.values());
   const span = activitySpanOf(input.scanState, cli, sessionIds);
   return {
     byModel: models,
@@ -154,16 +147,10 @@ function toAgentTurn(rows: UsageTurnRow[], pricing: UsageReportPricing): UsageAg
   const first = rows[0];
   if (!first) throw new Error("A turn with no rows cannot be reported");
   const span = spanOf(rows);
-  // 一个模型在一轮里可以有官方与接口两行（账本合并后），按模型合成一条。
-  const totalsByModel = new Map<string, UsageTokenTotals>();
-  for (const row of rows) {
-    const totals = totalsByModel.get(row.model) ?? emptyTotals();
-    addTotals(totals, row);
-    totalsByModel.set(row.model, totals);
-  }
-  const byModel = Array.from(totalsByModel, ([model, totals]) =>
-    toModelAmount(model, { totals, priced: pricing.isPriced(model) }, pricing),
-  );
+  // 一个模型在一轮里可以有官方与接口两行（账本合并后），按模型合成一条；成本逐行算，接口那行乘它的倍率。
+  const amounts = new Map<string, UsageModelAmount>();
+  for (const row of rows) addPricedRow(amounts, row, pricing);
+  const byModel = Array.from(amounts.values());
   const userMessageIds = new Set<string>();
   for (const row of rows) for (const id of row.userMessageIds) userMessageIds.add(id);
   return {
@@ -183,17 +170,21 @@ function toAgentTurn(rows: UsageTurnRow[], pricing: UsageReportPricing): UsageAg
   };
 }
 
-function toModelAmount(
-  model: string,
-  entry: { totals: UsageTokenTotals; priced: boolean },
+/** Adds one row to its model's amount, priced on its own: each endpoint has its own multiplier. */
+function addPricedRow(
+  byModel: Map<string, UsageModelAmount>,
+  row: UsageTokenTotals & { model: string; endpointId?: string },
   pricing: UsageReportPricing,
-): UsageModelAmount {
-  return {
-    model,
-    totals: entry.totals,
-    estimatedCost: pricing.estimateCost(entry.totals, model),
-    priced: entry.priced,
+): void {
+  const amount = byModel.get(row.model) ?? {
+    model: row.model,
+    totals: emptyTotals(),
+    estimatedCost: 0,
+    priced: pricing.isPriced(row.model),
   };
+  addTotals(amount.totals, row);
+  amount.estimatedCost += pricing.estimateCost(row, row.model, row.endpointId);
+  byModel.set(row.model, amount);
 }
 
 function sumTotals(parts: readonly UsageTokenTotals[]): UsageTokenTotals {

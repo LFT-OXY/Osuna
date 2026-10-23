@@ -395,6 +395,8 @@ function ConnectionSheet({
   const hasManagement = useHostFeature(serverId, "apiEndpointManagement");
   // COMPAT(apiEndpointBalance): added in v0.17.0, remove gate after 2027-04-22. 老主机不认 balance 与 check_balance。
   const hasBalance = useHostFeature(serverId, "apiEndpointBalance");
+  // COMPAT(gatewayLedger): added in v0.17.0, remove gate after 2027-04-23.
+  const hasLedger = useHostFeature(serverId, "gatewayLedger");
   const templates = useEndpointTemplates({ serverId, enabled: hasManagement });
   const handlePick = useCallback(
     (templateId: string | null) =>
@@ -444,6 +446,7 @@ function ConnectionSheet({
       followsListWhenNew={hasManagement}
       canSetRequestExtras={hasManagement}
       canSetBalance={hasManagement && hasBalance}
+      canSetPriceMultiplier={hasManagement && hasLedger}
       templates={templates.status === "ready" ? templates.templates : []}
       onBack={sheet.backToPicker ? handleBack : null}
       onSave={endpoints.save}

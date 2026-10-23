@@ -1272,6 +1272,17 @@ and renderImport in internal/gui/assets/app.js:
   packages/server/src/server/api-endpoints/import-link.test.ts
   packages/app/src/api-endpoints/import-link-sheet.tsx
 
+An endpoint's price multiplier (from 0 to 1000 in steps of 0.001; a save that
+leaves it out keeps it and null clears it; empty in the editor is the list
+price, a comma read as the decimal point; a table price scaled by it and a
+price the user set for a model left as set) follows PriceRate and PriceRateOK
+in magpie's internal/provider/provider.go and internal/provider/models.go, its
+use in priceOf there, priceRateOf in internal/gui/providers.go, and decimalOf
+and priceRateOfDraft in internal/gui/assets/app.js:
+
+  packages/protocol/src/api-endpoint/price-multiplier.ts
+  packages/app/src/api-endpoints/internal/price-multiplier-form.ts
+
 MIT License
 
 Copyright (c) 2026 yetone

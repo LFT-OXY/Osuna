@@ -1123,6 +1123,7 @@ describe("an API key is optional", () => {
           },
         },
       },
+      priceMultiplier: 0.8,
     });
     const endpointId = saved.endpoint?.id ?? "";
     await client.apiEndpointFetchModels({
@@ -1171,6 +1172,7 @@ describe("an API key is optional", () => {
           },
         },
       },
+      priceMultiplier: 0.8,
     });
   });
 });
@@ -1192,6 +1194,7 @@ describe("Duplicate", () => {
       manualModels: [{ id: "by-hand" }],
       searchesWeb: true,
       modelSettings: { models: { "local-1": { context: 64_000 } } },
+      priceMultiplier: 1.5,
     });
     const endpointId = saved.endpoint?.id ?? "";
     await client.apiEndpointFetchModels({
@@ -1244,6 +1247,7 @@ describe("Duplicate", () => {
       searchesWeb: true,
       catalog: { models: [{ id: "local-1" }] },
       modelSettings: { models: { "local-1": { context: 64_000 } } },
+      priceMultiplier: 1.5,
     });
     // 原来那家不变。
     expect(listed[0]).toEqual(before[0]);

@@ -2896,6 +2896,12 @@ export const es: TranslationResources = {
             timeHint: "cada día, p. ej. {{example}}",
             timeProblem: "Escribe una hora como 08:00, o 00:00+08:00 en el horario del proveedor",
           },
+          priceMultiplier: {
+            label: "Multiplicador de precio",
+            placeholder: "1, el precio público",
+            hint: "Coste estimado = precio público × multiplicador. Un modelo con precio personalizado no se multiplica.",
+            problem: "Escribe un número de 0 a {{max}}, con tres decimales como máximo",
+          },
         },
         insecureTls: {
           label: "Certificado",

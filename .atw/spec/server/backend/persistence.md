@@ -51,7 +51,7 @@ A save from an old client (the official Paseo app) omits every field it doesn't 
 
 ### A file several writers update keeps the fields each write doesn't own
 
-`api-endpoints/endpoint-snapshots.json` (id → last name, price multiplier, deleted) is written on every endpoint save and at startup, and the multiplier is set elsewhere. `recordEndpointSnapshots` (`api-endpoints/store.ts`) spreads the stored entry and overwrites only `name` / `deleted`; writing a fresh `{ name }` would clear the multiplier on every rename. Same rule as `buildEndpoint` above: start from what is stored. Cover it with a store test that sets the other field, renames, and reads it back (`api-endpoints/store.test.ts`).
+`api-endpoints/endpoint-snapshots.json` (id → last name, price multiplier, deleted) is written on every endpoint save and at startup. `recordEndpointSnapshots` (`api-endpoints/store.ts`) spreads the stored entry and overwrites only what it mirrors from the live endpoint (`name`, `priceMultiplier`) and `deleted`; a gone endpoint keeps its entry as stored, which is how a deleted endpoint stays priced at its last multiplier. A field a later writer adds must survive the same way. Cover it with a store test that renames, deletes and clears, and reads the file back (`api-endpoints/store.test.ts`).
 
 ### Removing a field from the agent record
 

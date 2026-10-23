@@ -396,6 +396,10 @@ import {
   type ExtraBodyProblem,
 } from "@getpaseo/protocol/api-endpoint/request-extras";
 import {
+  API_ENDPOINT_PRICE_MULTIPLIER_MAX,
+  isPriceMultiplier,
+} from "@getpaseo/protocol/api-endpoint/price-multiplier";
+import {
   API_ENDPOINT_COOLDOWN_MAX_DAYS,
   API_ENDPOINT_COOLDOWN_MAX_MINUTES,
   cooldownSettingsProblem,
@@ -445,6 +449,8 @@ export type ApiEndpointErrorCode =
   | "insecure_tls_template"
   // 冷却设置的分钟数不是 0 到八天的整数（params.field、max）。
   | "invalid_cooldown_settings"
+  // 价格倍率不是 0 到 1000、多于三位小数（params.max）。
+  | "invalid_price_multiplier"
   // 余额设置的方法不是 GET、POST（params.field 为 method）。
   | "invalid_balance_settings"
   // 导入时那一条已经不在它的软件里了（重新扫描）；替换给的不是名称撞上的那条（params.name）。
@@ -551,6 +557,8 @@ export interface ApiEndpointSaveInput extends ApiEndpointRequestExtrasInput {
   modelSettings?: ApiEndpointModelSettings;
   // 冷却设置，整份替换、空对象清掉；undefined 保留原来的（复制时是原来那家的）。
   cooldownSettings?: ApiEndpointCooldownSettings;
+  // 价格倍率：null 清掉（按原价），undefined 保留原来的（复制时是原来那家的）。
+  priceMultiplier?: number | null;
   // 余额设置，整份替换、没有地址即清掉；undefined 保留原来的（复制时是原来那家的）。
   balance?: ApiEndpointBalanceSettings;
   // 账户令牌：非空换上，空白清掉，undefined 保留原来的（复制时是原来那家的）。
@@ -689,6 +697,8 @@ export interface ApiEndpointServiceOptions {
   now?: () => Date;
   // 某个 Agent 的总开关、默认模型、可用模型或指向的接口变了之后调用；daemon 据此刷新该提供方的快照。
   onActiveEndpointChanged?: (provider: ApiEndpointProvider) => void;
+  // 某家接口的价格倍率改了：用量的估算成本随之变，客户端要重读。
+  onPriceMultipliersChanged?: () => void;
   // 该提供方下还活着的 Agent session 数；改写 CLI 配置会影响到它们，列表查询时带给 App 写进确认框。
   countLiveSessions: (provider: ApiEndpointProvider) => number;
   // 该提供方下 before 之前启动、还活着的 Agent session 数：提示区说它们要重开才用上新设置。
@@ -960,6 +970,7 @@ export class ApiEndpointService {
   private readonly reachesGateway: (base: string) => Promise<boolean>;
   private readonly now: () => Date;
   private readonly onActiveEndpointChanged: (provider: ApiEndpointProvider) => void;
+  private readonly onPriceMultipliersChanged: (() => void) | undefined;
   private readonly countLiveSessions: (provider: ApiEndpointProvider) => number;
   private readonly countSessionsStartedBefore: ApiEndpointServiceOptions["countSessionsStartedBefore"];
   private readonly reopenHints: CliReopenHints;
@@ -1045,6 +1056,7 @@ export class ApiEndpointService {
     });
     this.now = options.now ?? (() => new Date());
     this.onActiveEndpointChanged = options.onActiveEndpointChanged ?? (() => undefined);
+    this.onPriceMultipliersChanged = options.onPriceMultipliersChanged;
     this.countLiveSessions = options.countLiveSessions;
     this.countSessionsStartedBefore = options.countSessionsStartedBefore;
     let adapter = options.hostProcesses ?? null;
@@ -1585,6 +1597,7 @@ export class ApiEndpointService {
         catalog: input.catalog,
         requestExtras: savedRequestExtras({ request: input, base, templateId }),
         cooldownSettings: savedCooldownSettings({ requested: input.cooldownSettings, base }),
+        priceMultiplier: savedPriceMultiplier({ requested: input.priceMultiplier, base }),
         balance: savedBalanceSettings({ requested: input.balance, base }),
         // 新客户端建的接口默认开着；老客户端建的要等 set_active 才开，和以前「保存不启用」一样。
         enabledWhenNew: !isLegacyForm,
@@ -2801,8 +2814,20 @@ export class ApiEndpointService {
     return next;
   }
 
-  /** 通知设置有变的 Agent；两个总开关从都关着到有一个打开时让 models.dev 马上检查一次。 */
+  /**
+   * 通知设置有变的 Agent，以及价格倍率改了（删掉的接口按删除时的倍率算，不算改）；
+   * 两个总开关从都关着到有一个打开时让 models.dev 马上检查一次。
+   */
   private announceCommitted(previous: ApiEndpointState, next: ApiEndpointState): void {
+    const multiplierBefore = new Map(
+      previous.endpoints.map((endpoint) => [endpoint.id, endpoint.priceMultiplier]),
+    );
+    const repriced = next.endpoints.some(
+      (endpoint) =>
+        multiplierBefore.has(endpoint.id) &&
+        multiplierBefore.get(endpoint.id) !== endpoint.priceMultiplier,
+    );
+    if (repriced) this.onPriceMultipliersChanged?.();
     for (const provider of API_ENDPOINT_PROVIDERS) {
       if (agentFingerprint(previous, provider) !== agentFingerprint(next, provider)) {
         this.onActiveEndpointChanged(provider);
@@ -5122,6 +5147,9 @@ export class ApiEndpointService {
       ...(endpoint.cooldownSettings !== undefined
         ? { cooldownSettings: endpoint.cooldownSettings }
         : {}),
+      ...(endpoint.priceMultiplier !== undefined
+        ? { priceMultiplier: endpoint.priceMultiplier }
+        : {}),
       ...(endpoint.balance !== undefined ? { balance: endpoint.balance } : {}),
     };
   }
@@ -5625,6 +5653,8 @@ function buildEndpoint(input: {
   requestExtras: StoredRequestExtras;
   // 冷却设置：savedCooldownSettings 已按请求与 base 定好，没设就没有这项。
   cooldownSettings: StoredCooldownSettings;
+  // 价格倍率：savedPriceMultiplier 已按请求与 base 定好，没设就没有这项。
+  priceMultiplier: StoredPriceMultiplier;
   // 余额设置：savedBalanceSettings 已按请求与 base 定好，没设就没有这项。
   balance: StoredBalanceSettings;
   enabledWhenNew: boolean;
@@ -5645,6 +5675,7 @@ function buildEndpoint(input: {
     keyHeader: _keyHeader,
     insecureTls: _insecureTls,
     cooldownSettings: _cooldownSettings,
+    priceMultiplier: _priceMultiplier,
     balance: _balance,
     ...kept
   } = base ?? {};
@@ -5666,6 +5697,7 @@ function buildEndpoint(input: {
     ...catalogFieldOf({ requested: input.catalog, timestamp: input.timestamp }),
     ...input.requestExtras,
     ...input.cooldownSettings,
+    ...input.priceMultiplier,
     ...input.balance,
     createdAt: existing?.createdAt ?? input.timestamp,
     updatedAt: input.timestamp,
@@ -5711,6 +5743,32 @@ function savedRequestExtras(input: {
 }
 
 type StoredCooldownSettings = Pick<StoredApiEndpoint, "cooldownSettings">;
+
+type StoredPriceMultiplier = Pick<StoredApiEndpoint, "priceMultiplier">;
+
+/**
+ * 存下的价格倍率：请求给了数就换上，null 清掉（按原价），没给留 base 的（老客户端保存、复制）。
+ * 不是 0 到 1000、多于三位小数的拒收（照 magpie priceRateOf 与 PriceRateOK）。
+ */
+function savedPriceMultiplier(input: {
+  requested: number | null | undefined;
+  base: StoredApiEndpoint | null;
+}): StoredPriceMultiplier {
+  const { requested } = input;
+  if (requested === undefined) {
+    const kept = input.base?.priceMultiplier;
+    return kept === undefined ? {} : { priceMultiplier: kept };
+  }
+  if (requested === null) return {};
+  if (!isPriceMultiplier(requested)) {
+    throw new ApiEndpointRequestError({
+      code: "invalid_price_multiplier",
+      message: `A price multiplier is from 0 to ${API_ENDPOINT_PRICE_MULTIPLIER_MAX} with at most three decimals, not ${requested}`,
+      params: { max: String(API_ENDPOINT_PRICE_MULTIPLIER_MAX) },
+    });
+  }
+  return { priceMultiplier: requested };
+}
 
 type StoredBalanceSettings = Pick<StoredApiEndpoint, "balance">;
 

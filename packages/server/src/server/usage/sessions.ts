@@ -106,7 +106,7 @@ export function buildUsageSessions(input: BuildUsageSessionsInput): UsageSession
       accumulator = createAccumulator({ day, cli: row.cli, sessionId, bucket: row.bucket });
       accumulators.set(key, accumulator);
     }
-    addRow(accumulator, row, input.pricing.estimateCost(row, row.model));
+    addRow(accumulator, row, input.pricing.estimateCost(row, row.model, row.endpointId));
   }
 
   const byDay = new Map<string, UsageSessionRow[]>();

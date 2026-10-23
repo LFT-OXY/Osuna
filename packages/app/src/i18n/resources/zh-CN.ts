@@ -2857,6 +2857,12 @@ export const zhCN: TranslationResources = {
             timeHint: "每天，如 {{example}}",
             timeProblem: "请填 08:00 这样的时刻；按厂商的时区就写 00:00+08:00",
           },
+          priceMultiplier: {
+            label: "价格倍率",
+            placeholder: "1，即原价",
+            hint: "估算成本 = 公开价 × 倍率；模型设了自定义价格时不乘倍率",
+            problem: "填 0 到 {{max}} 的数，最多三位小数",
+          },
         },
         insecureTls: {
           label: "证书",

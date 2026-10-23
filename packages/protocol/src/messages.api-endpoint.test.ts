@@ -1232,6 +1232,31 @@ describe("API endpoint management (apiEndpointManagement)", () => {
     }
   });
 
+  it("parses an endpoint and a save carrying a price multiplier, a save that clears it, and older ones without", () => {
+    const save = {
+      type: "provider.api_endpoint.save.request" as const,
+      requestId: "req-p1",
+      provider: "claude",
+      endpointId: "ep_1",
+      name: "Relay",
+      baseUrls: [{ format: "anthropic_messages", url: "https://relay.example" }],
+      models: [],
+      priceMultiplier: 0.125,
+    };
+    expect(SessionInboundMessageSchema.parse(save)).toEqual(save);
+    const cleared = { ...save, priceMultiplier: null };
+    expect(SessionInboundMessageSchema.parse(cleared)).toEqual(cleared);
+    const { priceMultiplier: _multiplier, ...older } = save;
+    expect(SessionInboundMessageSchema.parse(older)).toEqual(older);
+    for (const endpoint of [{ ...ENDPOINT, priceMultiplier: 0 }, ENDPOINT]) {
+      const response = {
+        type: "provider.api_endpoint.save.response" as const,
+        payload: { requestId: "req-p1", endpoint, error: null },
+      };
+      expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+    }
+  });
+
   it("parses an endpoint and a save carrying cooldown settings, a save that clears them, and older ones without", () => {
     const cooldownSettings = { quotaRestMinutes: 60, restCapMinutes: 0, noFailRest: true };
     const save = {

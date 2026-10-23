@@ -78,6 +78,8 @@ export interface ApiEndpointConnectionSheetProps {
   canSetRequestExtras: boolean;
   // 主机声明了 apiEndpointBalance：「高级」里能设余额查询地址、方法、取值写法，能「查询余额」。
   canSetBalance: boolean;
+  // 主机声明了 gatewayLedger：「高级」里能设价格倍率。
+  canSetPriceMultiplier: boolean;
   // 主机给的模板清单（老主机为空）：新建时按 seed 的模板填好，编辑从模板加的接口时能切区域或套餐。
   templates: readonly ApiEndpointTemplate[];
   // 从模板列表进来时回到列表；其余为 null。
@@ -120,6 +122,7 @@ export function ApiEndpointConnectionSheet({
   followsListWhenNew,
   canSetRequestExtras,
   canSetBalance,
+  canSetPriceMultiplier,
   templates,
   onBack,
   onSave,
@@ -163,6 +166,7 @@ export function ApiEndpointConnectionSheet({
       followsListWhenNew,
       canSetRequestExtras,
       canSetBalance,
+      canSetPriceMultiplier,
       templates,
     },
   );

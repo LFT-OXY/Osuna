@@ -45,11 +45,12 @@ export interface UsageReportRequest {
 }
 
 /**
- * What one model costs and whether the table knows it. The report asks per
- * model, not per row, because the answer is memoized behind this port.
+ * What one model costs and whether the table knows it. The price is memoized
+ * per model behind this port; `endpointId` scales it by that endpoint's price
+ * multiplier, and an Official row (no endpoint) is not scaled.
  */
 export interface UsageReportPricing {
-  estimateCost(totals: UsageTokenTotals, model: string): number;
+  estimateCost(totals: UsageTokenTotals, model: string, endpointId?: string): number;
   isPriced(model: string): boolean;
 }
 
@@ -87,7 +88,7 @@ export function buildUsageReport(input: BuildUsageReportInput): UsageReport {
     if (!matchesUsageFilters(row, request.filters, input.projects)) continue;
     filtered.push({
       ...row,
-      cost: input.pricing.estimateCost(row, row.model),
+      cost: input.pricing.estimateCost(row, row.model, row.endpointId),
       canonicalSessionId: input.canonicalSessionId(row.cli, row.sessionId),
     });
   }
