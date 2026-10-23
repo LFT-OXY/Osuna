@@ -1595,14 +1595,15 @@ export const ApiEndpointReadBalanceResponseSchema = z.object({
 export type ApiEndpointReadBalanceResponse = z.infer<typeof ApiEndpointReadBalanceResponseSchema>;
 
 /**
- * 接口的「最近异常」里的一行：这家出过事的一次请求（中转站账本的逐条记录）。at 是请求开始的时刻；model 是问这家时
- * 用的模型；failure、reason、cooldownUntil 取这次请求里这家最后一次没答成的尝试（失败分类、上游原话、冷却到何时），
+ * 接口的「最近异常」里的一行：这家出过事的一次请求（中转站账本的逐条记录）。at 是请求开始的时刻；requestedModel 是
+ * CLI 请求的模型，model 是问这家时用的模型；failure、reason、cooldownUntil 取这次请求里这家最后一次没答成的尝试（失败分类、上游原话、冷却到何时），
  * 这家没有没答成的尝试（答了一半请求仍失败）时都为 null。switchedTo 是这家之后换到的那一家（endpointId null 即官方），
  * 没换为 null；status 是整次请求的结果。
  */
 export const ApiEndpointRecentProblemSchema = z.object({
   id: z.string(),
   at: z.string(),
+  requestedModel: z.string(),
   model: z.string(),
   failure: z.string().nullable(),
   reason: z.string().nullable(),

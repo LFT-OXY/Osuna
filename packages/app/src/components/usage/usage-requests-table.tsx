@@ -34,9 +34,9 @@ import {
   formatRequestMs,
   formatRequestTime,
   INITIAL_USAGE_REQUESTS_FILTERS,
-  isKnownUsageRequestFailure,
   toUsageRequestFilters,
   USAGE_REQUESTS_PAGE_SIZE,
+  usageRequestFailureLabel,
   usageRequestStatus,
   usageRequestsFiltersFor,
   type MergedUsageRequestRow,
@@ -695,7 +695,7 @@ function useRequestCells(
   let statusColor: RequestCellValue["color"];
   let fullStatus: string;
   if (status.kind === "failed") {
-    const reason = status.failure ? failureLabel(status.failure, t) : null;
+    const reason = status.failure ? usageRequestFailureLabel(status.failure, t) : null;
     statusColor = "statusDanger";
     fullStatus = reason
       ? t("usage.requests.statusCell.failedWith", { reason })
@@ -738,10 +738,6 @@ function useRequestCells(
       status: { text: fullStatus, color: statusColor },
     },
   };
-}
-
-function failureLabel(failure: string, t: (key: string) => string): string {
-  return isKnownUsageRequestFailure(failure) ? t(`usage.requests.failures.${failure}`) : failure;
 }
 
 function RequestCell({
@@ -798,7 +794,7 @@ function AttemptLine({
   const isFailure = attempt.result !== "answered";
   // 只有结果与失败原因用状态色，其余是说明。
   const outcome = [t(`usage.requests.result.${attempt.result}`)];
-  if (attempt.failure) outcome.push(failureLabel(attempt.failure, t));
+  if (attempt.failure) outcome.push(usageRequestFailureLabel(attempt.failure, t));
   const after = [formatRequestMs(attempt.durationMs)];
   if (attempt.cooldownUntil) {
     after.push(

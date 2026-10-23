@@ -204,6 +204,11 @@ export function isKnownUsageRequestFailure(value: string): value is UsageRequest
   return (USAGE_REQUEST_FAILURES as readonly string[]).includes(value);
 }
 
+/** A failure class in the UI's words; one the client does not know is shown as written. */
+export function usageRequestFailureLabel(failure: string, t: (key: string) => string): string {
+  return isKnownUsageRequestFailure(failure) ? t(`usage.requests.failures.${failure}`) : failure;
+}
+
 /** `1.2 s` under a minute, `850 ms` under a second. */
 export function formatRequestMs(ms: number | null): string {
   if (ms === null) return "—";

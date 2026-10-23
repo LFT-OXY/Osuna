@@ -1735,6 +1735,7 @@ describe("an endpoint's recent problems", () => {
     const d = await waitForProblems(harness, "ep_d", (problems) => problems.length === 1);
     expect(d).toEqual([
       expect.objectContaining({
+        requestedModel: "gpt-5.5",
         model: "gpt-5.5",
         failure: "credit",
         reason: expect.stringContaining("insufficient balance"),
@@ -1782,6 +1783,33 @@ describe("an endpoint's recent problems", () => {
     );
     expect(problems.every((problem) => problem.status === "failed")).toBe(true);
     expect(problems.every((problem) => problem.failure !== null)).toBe(true);
+  });
+
+  test("a request the agent cancelled is not the endpoint's problem", async () => {
+    const harness = await start();
+    let asked: () => void = () => undefined;
+    const reached = new Promise<void>((resolve) => {
+      asked = resolve;
+    });
+    // B 收到请求后迟迟不回，Codex 这时走掉：是 Agent 的事，不是 B 的（magpie renderActs 跳过 canceled）。
+    harness.replies.b = () => asked();
+    const controller = new AbortController();
+    const pending = fetch(`${harness.gateway}/v1/responses`, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        authorization: `Bearer ${CODEX_TOKEN}`,
+        "content-type": "application/json",
+        session_id: THREAD,
+      },
+      body: JSON.stringify({ model: "gpt-5.5", stream: true, input: [] }),
+    }).catch(() => null);
+    await reached;
+    controller.abort();
+    await pending;
+    await waitForRequests(harness, (page) => page.requests[0]?.status === "cancelled");
+
+    expect((await harness.client.apiEndpointRecentProblems("ep_b")).problems).toEqual([]);
   });
 
   test("are still there after a restart", async () => {

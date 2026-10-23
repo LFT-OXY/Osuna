@@ -12,7 +12,7 @@ import { settingsStyles } from "@/styles/settings";
 import {
   formatCooldownTime,
   formatRequestTime,
-  isKnownUsageRequestFailure,
+  usageRequestFailureLabel,
 } from "@/usage-stats/requests";
 import { getDeviceTimeZone } from "@/utils/device-timezone";
 import { buildUsageRequestsRoute } from "@/utils/host-routes";
@@ -79,17 +79,17 @@ function RecentProblemsBody({
     );
   }
   if (problems.status === "error") {
+    // 原因与原话在左，「重试」在这一行右侧（同余额分区的「填写余额查询地址」），不和底部按钮叠在一起。
     return (
-      <View
-        style={[settingsStyles.row, styles.failure]}
-        testID="api-endpoint-recent-problems-error"
-      >
-        <Text variant="caption" color="statusWarning">
-          {t("settings.apiEndpoints.recentProblems.loadFailed")}
-        </Text>
-        <Text variant="caption" color="foregroundMuted" selectable numberOfLines={3}>
-          {problems.message}
-        </Text>
+      <View style={settingsStyles.row} testID="api-endpoint-recent-problems-error">
+        <View style={styles.failure}>
+          <Text variant="caption" color="statusDanger">
+            {t("settings.apiEndpoints.recentProblems.loadFailed")}
+          </Text>
+          <Text variant="caption" color="foregroundMuted" selectable numberOfLines={3}>
+            {problems.message}
+          </Text>
+        </View>
         <Button
           variant="outline"
           size="xs"
@@ -131,7 +131,7 @@ function RecentProblemRow({
   const timezone = useMemo(() => getDeviceTimeZone(), []);
   const locale = i18n.language;
   const failure = problem.failure
-    ? failureLabel(problem.failure, t)
+    ? usageRequestFailureLabel(problem.failure, t)
     : t("settings.apiEndpoints.recentProblems.failed");
   const after = afterFailure({ problem, t, locale, timezone });
   return (
@@ -145,7 +145,7 @@ function RecentProblemRow({
         {after.length > 0 ? ` · ${after.join(" · ")}` : ""}
       </Text>
       <Text variant="caption" color="foregroundMuted" numberOfLines={1}>
-        {`${formatRequestTime(problem.at, locale, timezone)} · ${problem.model}`}
+        {`${formatRequestTime(problem.at, locale, timezone)} · ${modelOf(problem)}`}
       </Text>
       {problem.reason ? (
         <Text variant="caption" color="foregroundMuted" selectable numberOfLines={2}>
@@ -154,6 +154,12 @@ function RecentProblemRow({
       ) : null}
     </View>
   );
+}
+
+/** CLI 请求的模型与问这家时用的模型；不同时写「请求的 → 这家的」（照 magpie 路由页的行标题）。 */
+function modelOf(problem: ApiEndpointRecentProblem): string {
+  if (problem.requestedModel === problem.model) return problem.model;
+  return `${problem.requestedModel} → ${problem.model}`;
 }
 
 /** 失败之后的事：冷却到几点、换到了哪家；没换且请求失败时写 Agent 收到了报错。 */
@@ -184,10 +190,6 @@ function afterFailure(input: {
   return parts;
 }
 
-function failureLabel(failure: string, t: TFunction): string {
-  return isKnownUsageRequestFailure(failure) ? t(`usage.requests.failures.${failure}`) : failure;
-}
-
 function Notice({ text, testID }: { text: string; testID: string }) {
   return (
     <View style={settingsStyles.row} testID={testID}>
@@ -206,8 +208,8 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[0.5],
   },
   failure: {
-    flexDirection: "column",
-    alignItems: "flex-start",
+    flex: 1,
+    minWidth: 0,
     gap: theme.spacing[1],
   },
   footer: {

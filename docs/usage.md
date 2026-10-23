@@ -179,15 +179,20 @@ browser downloads, and native hands the file to the share sheet.
 ### An endpoint's Recent problems
 
 `provider.api_endpoint.recent_problems` reads the same records: the endpoint's 20
-latest requests in which one of its tries did not answer (it failed, refused,
-the agent left while it was asked, or it was passed over while cooling down), or
+latest requests in which one of its tries did not answer (it failed, refused, or
+was turned away without asking because every endpoint was cooling down), or
 that ended failed on it, newest first. That is magpie's moved and bad routes,
 narrowed to one endpoint; magpie shows them on its Routing page, Osuna on the
-endpoint page. Each row takes the endpoint's last try that did not answer: its
-failure class, the vendor's words and the cooldown, plus the endpoint tried
-next, if any. The section follows the records' retention and survives a
-restart. It is served by the usage service, so a daemon without usage tracking
-answers with an error.
+endpoint page. Two things do not count, as in magpie's per-account tally
+(`renderActs` in `internal/gui/assets/plugins/routing/client.js`): a try the
+agent cancelled, which is the agent's doing, and an endpoint passed over while
+it cooled down and another answered, which leaves no try in the ledger and
+which magpie only notes as found resting. Each row takes the endpoint's last
+try that did not answer: the model the CLI asked for and the one the endpoint
+was asked, the failure class, the vendor's words and the cooldown, plus the
+endpoint tried next, if any. The section follows the records' retention and
+survives a restart. It is served by the usage service, so a daemon without
+usage tracking answers with an error.
 
 ### Endpoint cards
 

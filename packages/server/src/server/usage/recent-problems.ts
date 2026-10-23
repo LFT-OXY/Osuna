@@ -1,11 +1,18 @@
-// 什么算出过事（这家的尝试没答成：失败、拒答、Agent 走了、在冷却中被跳过；或请求最后停在这家仍失败）、
-// 新的在前，照 magpie（https://github.com/yetone/magpie，internal/gui/assets/plugins/routing/client.js 的
-// outcome、failedRoute、tryOk 与 allListed：答了但换过家的是 moved，失败或取消的是 bad，按请求新旧倒排）
+// 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/gui/assets/plugins/routing/client.js 的 outcome、failedRoute、tryOk、allListed、renderActs）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+
+/*
+ * 什么算这家出过事：这家的尝试没答成（失败、拒答、全在冷却时不问就交出的那次），或请求最后停在这家仍失败；
+ * Agent 走掉的不算（renderActs 跳过 canceled：Agent 的事，不是这家的）。冷却中被跳过、别家答了的不留尝试，也不算
+ * （renderActs 只把它记作「看到它在冷却」）。新的在前，同 allListed。
+ */
 import type { ApiEndpointRecentProblem } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { UsageListedCall } from "./call-merge.js";
 import type { GatewayLedgerAttempt, GatewayLedgerRow } from "./ledger.js";
 import type { UsageEndpointIdentity } from "./types.js";
+
+// Agent 走掉时尝试记的失败分类（gateway/ledger-call.ts 的 CANCELED_FAILURE；用量层不反向引中转站）。
+const CANCELED_FAILURE = "canceled";
 
 /** The endpoint page shows this many, as the prd's Recent problems section does. */
 export const RECENT_PROBLEMS_LIMIT = 20;
@@ -38,11 +45,14 @@ function problemOf(
 ): ApiEndpointRecentProblem | null {
   const { attempts } = ledger;
   const last = attempts.at(-1);
-  // 这家最后一次没答成的尝试；没有时，请求停在这家（答了一半断了）仍失败也算。
+  // 这家最后一次没答成的尝试（Agent 走掉的不算）；没有时，请求停在这家（答了一半断了）仍失败也算。
   const missedAt = attempts.findLastIndex(
-    (attempt) => attempt.endpointId === input.endpointId && attempt.result !== "answered",
+    (attempt) =>
+      attempt.endpointId === input.endpointId &&
+      attempt.result !== "answered" &&
+      attempt.failure !== CANCELED_FAILURE,
   );
-  const endedHere = ledger.status !== "ok" && last?.endpointId === input.endpointId;
+  const endedHere = ledger.status === "failed" && last?.endpointId === input.endpointId;
   if (missedAt === -1 && !endedHere) return null;
   const missed: GatewayLedgerAttempt | null = missedAt === -1 ? null : attempts[missedAt];
   const tried = missed ?? last;
@@ -50,6 +60,7 @@ function problemOf(
   return {
     id: `${ledger.agent}:${ledger.replyId ?? ledger.at}#${index}`,
     at: ledger.at,
+    requestedModel: ledger.model,
     model: tried?.model ?? ledger.model,
     failure: missed?.failure ?? null,
     reason: missed?.reason ?? null,

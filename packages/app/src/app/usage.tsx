@@ -20,6 +20,7 @@ export default function UsageRoute() {
 
   return (
     <HostRouteBootstrapBoundary>
+      {/* 换了跳转目标就重新挂上，筛选与标签从这次的目标开始。 */}
       <UsageScreen key={JSON.stringify(requestsIntent)} requestsIntent={requestsIntent} />
     </HostRouteBootstrapBoundary>
   );

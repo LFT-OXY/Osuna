@@ -1315,7 +1315,8 @@ in internal/gui/usage.go:
 
 An endpoint's Recent problems (a request counts when one of the endpoint's
 tries did not answer or the request ended failed on it, as magpie's moved and
-bad routes; newest first) follows outcome, failedRoute, tryOk and allListed in
+bad routes, a try the agent cancelled left out as renderActs leaves it out;
+newest first) follows outcome, failedRoute, tryOk, allListed and renderActs in
 magpie's internal/gui/assets/plugins/routing/client.js:
 
   packages/server/src/server/usage/recent-problems.ts
