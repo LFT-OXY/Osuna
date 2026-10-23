@@ -4942,7 +4942,13 @@ export const ja: TranslationResources = {
       },
       export: {
         button: "CSV をエクスポート",
-        failed: "エクスポートに失敗しました：{{reason}}",
+        exporting: "エクスポート中…",
+        failed: "リクエストをエクスポートできませんでした",
+        notIncluded: "含まれていないホスト：{{hosts}}",
+        hostReason: "{{host}}（{{reason}}）",
+        hostSeparator: "、",
+        offline: "オフライン",
+        error: "エラー",
       },
     },
     sessionRow: {

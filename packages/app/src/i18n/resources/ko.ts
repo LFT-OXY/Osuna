@@ -4910,7 +4910,13 @@ export const ko: TranslationResources = {
       },
       export: {
         button: "CSV 내보내기",
-        failed: "내보내기 실패: {{reason}}",
+        exporting: "내보내는 중…",
+        failed: "요청을 내보내지 못했습니다",
+        notIncluded: "포함되지 않음: {{hosts}}",
+        hostReason: "{{host}} ({{reason}})",
+        hostSeparator: ", ",
+        offline: "오프라인",
+        error: "오류",
       },
     },
     sessionRow: {

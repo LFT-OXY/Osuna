@@ -4,7 +4,11 @@ import { useCallback, useMemo } from "react";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import type { UsageHostInput } from "@/usage-stats/aggregated-usage";
 import { resolveUsageNow, type UsageRange } from "@/usage-stats/period";
-import { fetchUsageRequestsCsv, usageRequestsCsvFileName } from "@/usage-stats/requests-export";
+import {
+  fetchUsageRequestsCsv,
+  usageRequestsCsvFileName,
+  type UsageRequestsExportSkip,
+} from "@/usage-stats/requests-export";
 import { toErrorMessage } from "@/utils/error-messages";
 import { saveTextFile } from "@/utils/save-text-file";
 
@@ -15,10 +19,25 @@ export interface UseUsageRequestsExportInput {
   filters: UsageRequestFilters;
 }
 
+/** Why nothing was saved: no host answered, or saving the file failed. */
+export type UsageRequestsExportFailure =
+  | { kind: "hosts"; skipped: UsageRequestsExportSkip[] }
+  | { kind: "save"; message: string };
+
 export type UsageRequestsExportState =
   | { status: "idle" }
   | { status: "exporting" }
-  | { status: "failed"; message: string };
+  | { status: "failed"; failure: UsageRequestsExportFailure }
+  /** Saved, without the rows of the hosts listed. */
+  | { status: "partial"; skipped: UsageRequestsExportSkip[] };
+
+/** No host answered the export; carries each host and why. */
+class UsageRequestsNoHostError extends Error {
+  constructor(readonly skipped: UsageRequestsExportSkip[]) {
+    super("No host could export requests");
+    this.name = "UsageRequestsNoHostError";
+  }
+}
 
 export interface UsageRequestsExport {
   state: UsageRequestsExportState;
@@ -28,37 +47,44 @@ export interface UsageRequestsExport {
 }
 
 /**
- * The Requests tab's Export CSV: every request the filters keep, saved through
- * the platform (save dialog, download, or share sheet). A failure stays until
- * the user retries or dismisses it; success says nothing.
+ * The Requests tab's Export CSV: every request the filters keep on the hosts
+ * that answer, saved through the platform (save dialog, download, or share
+ * sheet). A failure, or the hosts a saved file leaves out, stays until the user
+ * dismisses it or exports again; a whole export says nothing.
  */
 export function useUsageRequestsExport(input: UseUsageRequestsExportInput): UsageRequestsExport {
   const { hosts, range, timezone, filters } = input;
   const mutation = useMutation({
-    mutationFn: async () => {
-      const csv = await fetchUsageRequestsCsv({
+    mutationFn: async (): Promise<UsageRequestsExportSkip[]> => {
+      const result = await fetchUsageRequestsCsv({
         hosts,
         runtime: getHostRuntimeStore(),
         range,
         timezone,
         filters,
       });
+      if (result.status === "none") throw new UsageRequestsNoHostError(result.skipped);
       await saveTextFile({
         fileName: usageRequestsCsvFileName(range, resolveUsageNow(timezone).day),
-        contents: csv,
+        contents: result.csv,
         mimeType: "text/csv",
         uti: "public.comma-separated-values-text",
         filterName: "CSV",
         extension: "csv",
       });
+      return result.skipped;
     },
   });
-  const { mutate, reset, isPending, error } = mutation;
+  const { mutate, reset, isPending, error, data } = mutation;
   const start = useCallback(() => mutate(), [mutate]);
   return useMemo(() => {
     let state: UsageRequestsExportState = { status: "idle" };
     if (isPending) state = { status: "exporting" };
-    else if (error) state = { status: "failed", message: toErrorMessage(error) };
+    else if (error instanceof UsageRequestsNoHostError) {
+      state = { status: "failed", failure: { kind: "hosts", skipped: error.skipped } };
+    } else if (error) {
+      state = { status: "failed", failure: { kind: "save", message: toErrorMessage(error) } };
+    } else if (data && data.length > 0) state = { status: "partial", skipped: data };
     return { state, start, dismiss: reset };
-  }, [isPending, error, start, reset]);
+  }, [isPending, error, data, start, reset]);
 }

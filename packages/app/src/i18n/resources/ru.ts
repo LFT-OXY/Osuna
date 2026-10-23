@@ -4960,7 +4960,13 @@ export const ru: TranslationResources = {
       },
       export: {
         button: "Экспорт в CSV",
-        failed: "Не удалось экспортировать: {{reason}}",
+        exporting: "Экспорт…",
+        failed: "Не удалось экспортировать запросы",
+        notIncluded: "Не включены: {{hosts}}",
+        hostReason: "{{host}} ({{reason}})",
+        hostSeparator: ", ",
+        offline: "не в сети",
+        error: "ошибка",
       },
     },
     sessionRow: {

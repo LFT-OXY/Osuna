@@ -5012,7 +5012,13 @@ export const en = {
       },
       export: {
         button: "Export CSV",
-        failed: "Export failed: {{reason}}",
+        exporting: "Exporting…",
+        failed: "Couldn't export requests",
+        notIncluded: "Not included: {{hosts}}",
+        hostReason: "{{host}} ({{reason}})",
+        hostSeparator: ", ",
+        offline: "offline",
+        error: "error",
       },
     },
     sessionRow: {

@@ -4981,7 +4981,13 @@ export const es: TranslationResources = {
       },
       export: {
         button: "Exportar CSV",
-        failed: "No se pudo exportar: {{reason}}",
+        exporting: "Exportando…",
+        failed: "No se pudieron exportar las solicitudes",
+        notIncluded: "No incluidos: {{hosts}}",
+        hostReason: "{{host}} ({{reason}})",
+        hostSeparator: ", ",
+        offline: "sin conexión",
+        error: "error",
       },
     },
     sessionRow: {

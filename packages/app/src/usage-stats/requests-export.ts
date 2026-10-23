@@ -8,8 +8,6 @@ import { toErrorMessage } from "@/utils/error-messages";
 import type { UsageHostInput, UsageRuntimeSnapshot } from "./aggregated-usage";
 import type { UsageRange } from "./period";
 
-export const NO_USAGE_REQUEST_EXPORT_HOSTS_MESSAGE = "No connected hosts could export requests";
-
 export interface UsageRequestsExportRuntime {
   getClient(serverId: string): Pick<DaemonClient, "usageRequestsExport"> | null;
   getSnapshot(serverId: string): UsageRuntimeSnapshot | null | undefined;
@@ -24,22 +22,34 @@ export interface FetchUsageRequestsCsvInput {
   filters: UsageRequestFilters;
 }
 
+/** A host whose rows are not in the file: not connected, or it answered with an error. */
+export interface UsageRequestsExportSkip {
+  serverId: string;
+  serverName: string;
+  reason: { kind: "offline" } | { kind: "error"; message: string };
+}
+
+export type UsageRequestsCsvResult =
+  | { status: "exported"; csv: string; skipped: UsageRequestsExportSkip[] }
+  | { status: "none"; skipped: UsageRequestsExportSkip[] };
+
 /**
- * Every request the filters keep on every connected host, as one CSV. A host
- * that fails fails the export, named when more than one is counted: a file
- * missing a host's rows would not add up against a bill.
+ * Every request the filters keep on every host that answers, as one CSV, and
+ * the hosts left out with why. Only when no host answers is there no file.
  */
-export async function fetchUsageRequestsCsv(input: FetchUsageRequestsCsvInput): Promise<string> {
-  const askable = input.hosts.filter(
-    (host) =>
-      input.runtime.getSnapshot(host.serverId)?.connectionStatus === "online" &&
-      input.runtime.getClient(host.serverId),
-  );
-  if (askable.length === 0) throw new Error(NO_USAGE_REQUEST_EXPORT_HOSTS_MESSAGE);
-  const csvs = await Promise.all(
-    askable.map(async (host) => {
+export async function fetchUsageRequestsCsv(
+  input: FetchUsageRequestsCsvInput,
+): Promise<UsageRequestsCsvResult> {
+  const answers = await Promise.all(
+    input.hosts.map(async (host): Promise<{ csv: string } | UsageRequestsExportSkip> => {
       const client = input.runtime.getClient(host.serverId);
-      if (!client) throw new Error(NO_USAGE_REQUEST_EXPORT_HOSTS_MESSAGE);
+      const online = input.runtime.getSnapshot(host.serverId)?.connectionStatus === "online";
+      const skip = (reason: UsageRequestsExportSkip["reason"]): UsageRequestsExportSkip => ({
+        serverId: host.serverId,
+        serverName: host.serverName,
+        reason,
+      });
+      if (!client || !online) return skip({ kind: "offline" });
       try {
         const payload = await client.usageRequestsExport({
           from: input.range.from,
@@ -47,17 +57,24 @@ export async function fetchUsageRequestsCsv(input: FetchUsageRequestsCsvInput): 
           timezone: input.timezone,
           filters: input.filters,
         });
-        return payload.csv;
+        return { csv: payload.csv };
       } catch (error) {
         // daemon 的报错去掉日志用的 requestType= / code= 再给人看。
-        const message = extractFailureReason(error) || toErrorMessage(error);
-        throw new Error(askable.length > 1 ? `${host.serverName}: ${message}` : message, {
-          cause: error,
+        return skip({
+          kind: "error",
+          message: extractFailureReason(error) || toErrorMessage(error),
         });
       }
     }),
   );
-  return mergeUsageRequestCsvs(csvs);
+  const csvs: string[] = [];
+  const skipped: UsageRequestsExportSkip[] = [];
+  for (const answer of answers) {
+    if ("csv" in answer) csvs.push(answer.csv);
+    else skipped.push(answer);
+  }
+  if (csvs.length === 0) return { status: "none", skipped };
+  return { status: "exported", csv: mergeUsageRequestCsvs(csvs), skipped };
 }
 
 /**

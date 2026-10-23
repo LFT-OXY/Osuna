@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { Download, Page } from "@playwright/test";
@@ -10,15 +11,18 @@ import {
   startFakeRelay,
   type FakeRelay,
 } from "../support/helpers/api-endpoints";
-import { daemonWsRoutePattern } from "../support/helpers/daemon-port";
+import { daemonWsRoutePattern, wsRoutePatternForPort } from "../support/helpers/daemon-port";
+import { addConnectedHostAndReload } from "../support/helpers/hosts";
+import { startIsolatedHostDaemon } from "../support/helpers/isolated-host-daemon";
 import { createUsageFixtureRoots } from "../support/helpers/usage-fixtures";
-import { openUsagePage } from "../support/helpers/usage-page";
+import { openUsagePage, openUsagePageFromShell } from "../support/helpers/usage-page";
 
 /*
  * 用量页明细的「请求」标签（任务 10-16-gateway-ledger-usage 工单 05）：真实 daemon 读用量夹具与一份 105 次调用的
  * 会话记录（直连），再经真实中转站问本机的假中转服务（一次成功、一次余额不足失败），列表按筛选、翻页、展开读出来。
  */
 const fixtures = createUsageFixtureRoots("paseo-usage-requests-");
+const secondaryFixtures = createUsageFixtureRoots("paseo-usage-requests-second-");
 const cliHome = fixtures.root;
 const PAGING_MODEL = "claude-paging-1";
 const PAGING_CALLS = 105;
@@ -136,10 +140,15 @@ async function holdRequestsList(page: Page): Promise<() => void> {
   return release;
 }
 
-/** 把前 `times` 次导出请求就地回成 daemon 的 rpc_error，之后的照常交给 daemon。 */
-async function failRequestsExport(page: Page, reason: string, times: number): Promise<void> {
+/** 把前 `times` 次导出请求就地回成 daemon 的 rpc_error，之后的照常交给 daemon；默认拦主 daemon。 */
+async function failRequestsExport(
+  page: Page,
+  reason: string,
+  times: number,
+  pattern: RegExp = daemonWsRoutePattern(),
+): Promise<void> {
   let remaining = times;
-  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
+  await page.routeWebSocket(pattern, (ws) => {
     const server = ws.connectToServer();
     ws.onMessage((message) => {
       const raw = typeof message === "string" ? message : message.toString("utf8");
@@ -322,7 +331,11 @@ test.describe("Usage page Requests tab", () => {
 
     await page.getByTestId("usage-requests-export").click();
     const error = page.getByTestId("usage-requests-export-error");
-    await expect(error).toHaveText("Export failed: usage ledger is unreadable");
+    // 一句给人看的话，daemon 的原话跟在后面、颜色更淡。
+    await expect(error).toHaveText("Couldn't export requests · usage ledger is unreadable");
+    await expect(page.getByTestId("usage-requests-export-error-detail")).toHaveText(
+      " · usage ledger is unreadable",
+    );
     await expect(page.getByTestId("usage-requests-export-retry")).toBeVisible();
     await expect(page.getByTestId("usage-requests-export")).toBeEnabled();
     await page.getByTestId("usage-requests-export-dismiss").click();
@@ -335,6 +348,52 @@ test.describe("Usage page Requests tab", () => {
     expect(rows.length).toBeGreaterThanOrEqual(PAGING_CALLS);
     await expect(error).toHaveCount(0);
     await expect(page.getByTestId("usage-requests-export-retry")).toHaveCount(0);
+  });
+
+  test("across hosts a host that fails is left out of the file and named beside the button", async ({
+    page,
+  }) => {
+    test.setTimeout(240_000);
+    writePagingSession();
+    const secondaryServerId = `srv_requests_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+    const secondary = await startIsolatedHostDaemon(secondaryServerId, {
+      environment: secondaryFixtures.environment,
+    });
+    try {
+      await failRequestsExport(
+        page,
+        "usage ledger is unreadable",
+        1,
+        wsRoutePatternForPort(String(secondary.port)),
+      );
+      await openUsagePage(page);
+      await addConnectedHostAndReload(page, {
+        serverId: secondary.serverId,
+        label: "Second box",
+        port: secondary.port,
+        primaryLabel: "First box",
+      });
+      await openUsagePageFromShell(page);
+      await page.getByTestId("usage-details-tab-requests").click();
+      await expect
+        .poll(() => rangeAfterPickingModel(page, PAGING_MODEL), { timeout: 60_000 })
+        .toBe(`1–100 of ${PAGING_CALLS}`);
+
+      const [, ...rows] = await exportAndRead(page, "usage-requests-export");
+      expect(rows).toHaveLength(PAGING_CALLS);
+      const partial = page.getByTestId("usage-requests-export-partial");
+      await expect(partial).toContainText("Not included: Second box (error)");
+      await expect(page.getByTestId("usage-requests-export-partial-detail")).toHaveText(
+        " · Second box: usage ledger is unreadable",
+      );
+      await expect(page.getByTestId("usage-requests-export-error")).toHaveCount(0);
+
+      // 下一次导出两台都答了：说明消失。
+      await exportAndRead(page, "usage-requests-export");
+      await expect(partial).toHaveCount(0);
+    } finally {
+      await secondary.close().catch(() => undefined);
+    }
   });
 
   test("shows a skeleton while the first page loads", async ({ page }) => {

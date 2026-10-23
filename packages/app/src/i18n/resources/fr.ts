@@ -5006,7 +5006,13 @@ export const fr: TranslationResources = {
       },
       export: {
         button: "Exporter en CSV",
-        failed: "Échec de l’export : {{reason}}",
+        exporting: "Exportation…",
+        failed: "Impossible d’exporter les requêtes",
+        notIncluded: "Non inclus : {{hosts}}",
+        hostReason: "{{host}} ({{reason}})",
+        hostSeparator: ", ",
+        offline: "hors ligne",
+        error: "erreur",
       },
     },
     sessionRow: {

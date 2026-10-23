@@ -4852,7 +4852,13 @@ export const zhCN: TranslationResources = {
       },
       export: {
         button: "导出 CSV",
-        failed: "导出失败：{{reason}}",
+        exporting: "正在导出…",
+        failed: "导出失败",
+        notIncluded: "未包含：{{hosts}}",
+        hostReason: "{{host}}（{{reason}}）",
+        hostSeparator: "、",
+        offline: "离线",
+        error: "出错",
       },
     },
     sessionRow: {

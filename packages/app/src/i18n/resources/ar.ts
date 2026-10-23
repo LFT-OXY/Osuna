@@ -4866,7 +4866,13 @@ export const ar: TranslationResources = {
       },
       export: {
         button: "تصدير CSV",
-        failed: "تعذّر التصدير: {{reason}}",
+        exporting: "جارٍ التصدير…",
+        failed: "تعذّر تصدير الطلبات",
+        notIncluded: "غير مضمَّنة: {{hosts}}",
+        hostReason: "{{host}} ({{reason}})",
+        hostSeparator: "، ",
+        offline: "غير متصل",
+        error: "خطأ",
       },
     },
     sessionRow: {

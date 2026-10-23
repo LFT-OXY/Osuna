@@ -4954,7 +4954,13 @@ export const ptBR: TranslationResources = {
       },
       export: {
         button: "Exportar CSV",
-        failed: "Falha ao exportar: {{reason}}",
+        exporting: "Exportando…",
+        failed: "Não foi possível exportar as solicitações",
+        notIncluded: "Não incluídos: {{hosts}}",
+        hostReason: "{{host}} ({{reason}})",
+        hostSeparator: ", ",
+        offline: "offline",
+        error: "erro",
       },
     },
     sessionRow: {

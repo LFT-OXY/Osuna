@@ -162,13 +162,18 @@ exact.
 Export CSV (`usage.requests.export`) writes every row the filters keep, all
 pages, in magpie's CSV shape: snake_case headers, RFC 3339 times with the
 client's offset, the cost in USD with six decimals whatever currency the page
-shows (empty for an unpriced model), and Go's `encoding/csv` quoting. The file
-has the list's columns plus reasoning tokens, the failure class and message, the
-tries, the reply id and the session; a direct row leaves timing and tries empty.
-Across hosts the client merges the files newest first, and one host failing
-fails the export, since a file missing a host would not add up against a bill.
-Desktop saves through a save dialog, the browser downloads, and native hands the
-file to the share sheet.
+shows (empty for an unpriced model), and Go's `encoding/csv` quoting. Headers
+and values are fixed English whatever the UI language, as in magpie (the
+endpoint column says `Official` for a direct row). The file has the list's
+columns plus reasoning tokens, the failure class and message, the tries, the
+reply id and the session; a direct row leaves timing and tries empty.
+
+Across hosts the client merges the files of the hosts that answer, newest
+first. A host that is offline or answers with an error is left out, and a note
+beside the button names each one and why until it is dismissed or the next
+export starts; only when no host answers is nothing saved. Desktop saves through
+a save dialog (the main process parses the IPC payload before writing), the
+browser downloads, and native hands the file to the share sheet.
 
 ### Endpoint cards
 

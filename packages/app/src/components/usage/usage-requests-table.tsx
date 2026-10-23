@@ -22,10 +22,8 @@ import { SearchField } from "@/components/ui/search-field";
 import { Text } from "@/components/ui/text";
 import { UsageSegmentedControl } from "@/components/usage/usage-segmented-control";
 import { useUsageRequests } from "@/hooks/use-usage-requests";
-import {
-  useUsageRequestsExport,
-  type UsageRequestsExport,
-} from "@/hooks/use-usage-requests-export";
+import { useUsageRequestsExport } from "@/hooks/use-usage-requests-export";
+import { UsageRequestsExportBar } from "@/components/usage/usage-requests-export-bar";
 import type { UsageHostInput } from "@/usage-stats/aggregated-usage";
 import { formatGroupedNumber, formatSessionCost } from "@/usage-stats/format";
 import type { UsageRange } from "@/usage-stats/period";
@@ -244,53 +242,6 @@ export function UsageRequestsTable({
       ) : null}
       {body}
       {data ? <UsageRequestsExportBar exporter={exporter} /> : null}
-    </View>
-  );
-}
-
-/**
- * Export CSV at the tab's foot. While it runs the button spins and is
- * disabled; a failure stays beside it with Retry until retried or dismissed.
- */
-function UsageRequestsExportBar({ exporter }: { exporter: UsageRequestsExport }) {
-  const { t } = useTranslation();
-  const { state, start, dismiss } = exporter;
-  return (
-    <View style={styles.exportBar}>
-      <Button
-        variant="outline"
-        size="sm"
-        loading={state.status === "exporting"}
-        onPress={start}
-        testID="usage-requests-export"
-      >
-        {t("usage.requests.export.button")}
-      </Button>
-      {state.status === "failed" ? (
-        <View style={styles.exportFailure}>
-          <Text
-            variant="caption"
-            color="statusDanger"
-            style={styles.exportReason}
-            testID="usage-requests-export-error"
-          >
-            {t("usage.requests.export.failed", { reason: state.message })}
-          </Text>
-          <View style={styles.exportFailureActions}>
-            <Button variant="ghost" size="sm" onPress={start} testID="usage-requests-export-retry">
-              {t("common.actions.retry")}
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onPress={dismiss}
-              testID="usage-requests-export-dismiss"
-            >
-              {t("common.actions.dismiss")}
-            </Button>
-          </View>
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -1068,25 +1019,6 @@ const styles = StyleSheet.create((theme) => {
       justifyContent: "space-between",
       gap: theme.spacing[2],
       paddingTop: theme.spacing[3],
-    },
-    exportBar: {
-      flexDirection: "row",
-      alignItems: "flex-start",
-      gap: theme.spacing[3],
-      paddingTop: theme.spacing[3],
-    },
-    exportFailure: {
-      flexShrink: 1,
-      minWidth: 0,
-    },
-    exportReason: {
-      // 第一行与 28 高的按钮文字对齐；原因换行时按钮不动。
-      paddingTop: (28 - theme.typeScale.caption.lineHeight) / 2,
-    },
-    exportFailureActions: {
-      flexDirection: "row",
-      // 无边框按钮的字与上面的原因左对齐。
-      marginLeft: -theme.spacing[3],
     },
     pagerButtons: {
       flexDirection: "row",

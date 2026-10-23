@@ -61,6 +61,7 @@ export function writeUsageRequestsCsv(rows: readonly UsageRequestRow[], timezone
       row.status,
       failed ? (row.attempts.at(-1)?.failure ?? "") : "",
       row.error ?? "",
+      // magpie 只在多于一次时写次数；这里一次也写 1，比它多给信息，直连没有尝试留空。
       row.through === "gateway" ? String(row.attempts.length) : "",
       row.replyId ?? "",
       row.sessionId ?? "",
