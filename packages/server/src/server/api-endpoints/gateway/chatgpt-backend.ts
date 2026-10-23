@@ -223,9 +223,10 @@ export function relayToChatGpt(input: {
     method: req.method,
     headers: input.headers ?? relayedHeaders(req.headers),
   });
-  // Codex 先断开（用户中断）：不再等 ChatGPT。
+  // Codex 先断开（用户中断）：不再等 ChatGPT。还没回复时照 magpie 当作连不上 ChatGPT（请求的 context 被取消），
+  // 账本经下面的 error 记这一次失败（codex_backend.go 的 client.Do 出错与 codexUnreached）。
   const abandon = () => {
-    if (!res.writableFinished) upstream.destroy();
+    if (!res.writableFinished) upstream.destroy(new Error("context canceled"));
   };
   res.once("close", abandon);
   watch?.watchGone(res);

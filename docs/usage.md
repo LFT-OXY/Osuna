@@ -68,8 +68,10 @@ Codex's ChatGPT models, which the gateway relays to ChatGPT when Codex signs in
 with ChatGPT, get a row too, under **Official** and never at an endpoint's
 multiplier, with the ask to ChatGPT as its one try. Only `/responses` is
 recorded, as in magpie; compaction and search are not. A ChatGPT reply that
-breaks off after it began is booked as far as it came, not as a failure, as
-magpie's `codexUpstreamOn` does.
+breaks off after it began, or that Codex leaves, is booked as far as it came,
+not as a failure; Codex leaving before ChatGPT answers is booked as ChatGPT not
+reached (`context canceled`), not as cancelled. Both are what magpie's
+`codexUpstreamOn` does.
 
 A request no one answered is a row of 0 tokens: every endpoint failed, or the
 agent went away first. The first is `failed`, the second `cancelled` with a

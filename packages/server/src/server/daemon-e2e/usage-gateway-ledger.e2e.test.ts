@@ -939,6 +939,37 @@ describe("the gateway ledger merged with Codex's logs", () => {
     ]);
   });
 
+  test("Codex leaving before ChatGPT answers is booked as ChatGPT unreached, as magpie does", async () => {
+    const harness = await start();
+    let asked: () => void = () => undefined;
+    const reached = new Promise<void>((resolve) => {
+      asked = resolve;
+    });
+    // 假 ChatGPT 收到请求后迟迟不回，Codex 这时走掉。
+    harness.replies.chatgpt = () => asked();
+    const controller = new AbortController();
+    const pending = fetch(`${harness.gateway}/backend-api/codex/responses`, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        authorization: `Bearer ${CHATGPT_SIGN_IN}`,
+        "content-type": "application/json",
+        session_id: THREAD,
+      },
+      body: JSON.stringify({ model: "gpt-5.6", stream: true, input: [] }),
+    }).catch(() => null);
+    await reached;
+    controller.abort();
+    await pending;
+
+    const [row] = await waitForLedgerRows(harness.usageDir, (rows) => rows.length === 1);
+    expect(row).toMatchObject({ status: "failed", endpointId: null, output: 0 });
+    expect(row?.error).toMatch(/^ChatGPT can't be reached \(context canceled\)/);
+    expect(row?.attempts).toEqual([
+      expect.objectContaining({ endpointId: null, model: "gpt-5.6", result: "failed" }),
+    ]);
+  });
+
   test("a ChatGPT reply that breaks off is booked as it came, like magpie, not as a failure", async () => {
     const harness = await start();
     harness.replies.chatgpt = (res) => {

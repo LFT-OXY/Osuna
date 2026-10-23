@@ -7,12 +7,7 @@ import type { IncomingMessage } from "node:http";
 import type { Response } from "express";
 import { isRecord, parseJson } from "../upstream-http.js";
 import { endpointFailure } from "./failure.js";
-import {
-  CANCELED_FAILURE,
-  CANCELED_REASON,
-  type LedgerAttemptEnd,
-  type LedgerCall,
-} from "./ledger-call.js";
+import type { LedgerAttemptEnd, LedgerCall } from "./ledger-call.js";
 import { ReplyTap } from "./reply-tap.js";
 
 // 失败回复最多读这么多来找原话。
@@ -20,8 +15,8 @@ const MAX_ERROR_BYTES = 8 * 1024;
 
 /**
  * 转给 ChatGPT 的一次对话（ADR 0010）在账本里的那一行：回复边转边读出编号、用量与首字，一个字节不改；
- * 接口记为官方，问 ChatGPT 的那一次记成一次尝试。ChatGPT 报错或连不上记失败；回复开了头之后不管是断了
- * 还是 Codex 走了，都照已收到的记（magpie 同样）；回复之前 Codex 就走了记取消。每个请求只记一行。
+ * 接口记为官方，问 ChatGPT 的那一次记成一次尝试。ChatGPT 报错或连不上记失败（回复之前 Codex 就走了也算连不上）；
+ * 回复开了头之后不管是断了还是 Codex 走了，都照已收到的记（magpie 同样）。每个请求只记一行。
  */
 export class ChatGptLedgerWatch {
   private isDone = false;
@@ -72,23 +67,13 @@ export class ChatGptLedgerWatch {
     });
   }
 
-  /** 从请求一到就看着：Codex 在回复开头之前走了记取消；开头之后照已收到的记。 */
+  /**
+   * 从请求一到就看着：回复开头之后 Codex 走了，照已收到的记。开头之前走的不在这里记：转发那边当作
+   * 连不上 ChatGPT 交给 failed（magpie 同样记成连不上）。
+   */
   watchGone(res: Response): void {
     res.once("close", () => {
-      if (res.writableFinished) return;
-      if (this.reply !== null) {
-        this.answered();
-        return;
-      }
-      this.done(() => {
-        this.attempt({
-          result: "failed",
-          failure: CANCELED_FAILURE,
-          reason: CANCELED_REASON,
-          cooldownUntil: null,
-        });
-        this.input.call.cancelled();
-      });
+      if (!res.writableFinished) this.answered();
     });
   }
 
