@@ -336,6 +336,49 @@ test.describe("Usage page by endpoint", () => {
     });
   });
 
+  test("the Speed card shows each group's speed and wait with how many replies it is of, switches grouping, and says when no request went through the gateway", async ({
+    page,
+  }) => {
+    await seedApiEndpoint(client, {
+      name: "Relay Paced",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/paced` }],
+      models: ["claude-paced-1"],
+    });
+    await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: true });
+    expect(await sendThroughGateway("claude-paced-1", { stream: true })).toBe(200);
+    expect(await sendThroughGateway("claude-paced-1", { stream: true })).toBe(200);
+
+    await openUsagePage(page);
+    const card = page.getByTestId("usage-speed-card");
+    const rowOf = (name: string) => card.getByTestId("usage-speed-row").filter({ hasText: name });
+
+    await test.step("by endpoint: the endpoint's speed, wait and the two replies it is of", async () => {
+      const row = rowOf("Relay Paced");
+      await expect(row).toContainText("Based on 2", { timeout: 30_000 });
+      await expect(row).toContainText(/\d+ tok\/s/);
+      await expect(row).toContainText(/\d+\.\d+ s/);
+      // 不流式的请求（别的用例经 /good 问的）没有计时，不成一行。
+      await expect(rowOf("Relay Alpha")).toHaveCount(0);
+    });
+
+    await test.step("by model, by model and endpoint, and by agent", async () => {
+      await page.getByTestId("usage-speed-group-model").click();
+      await expect(rowOf("claude-paced-1")).toContainText("Based on 2");
+      await page.getByTestId("usage-speed-group-model_endpoint").click();
+      await expect(rowOf("claude-paced-1 · Relay Paced")).toContainText("Based on 2");
+      await page.getByTestId("usage-speed-group-agent").click();
+      await expect(rowOf("Claude Code")).toContainText("Based on 2");
+    });
+
+    await test.step("a day with no gateway request says so", async () => {
+      await page.getByTestId("usage-period-tab-day").click();
+      await page.getByTestId("usage-period-prev").click();
+      await expect(card.getByTestId("usage-speed-empty")).toHaveText(
+        "No requests through the gateway in this period",
+      );
+    });
+  });
+
   test("a daemon without the gateway ledger shows no Endpoints split, no Requests tab and no price multiplier", async ({
     page,
   }) => {
@@ -350,6 +393,7 @@ test.describe("Usage page by endpoint", () => {
     await expect(page.getByTestId("usage-breakdown")).toHaveCount(0);
     await expect(page.getByTestId("usage-details-tab-daily")).toBeVisible();
     await expect(page.getByTestId("usage-details-tab-requests")).toHaveCount(0);
+    await expect(page.getByTestId("usage-speed-card")).toHaveCount(0);
 
     await openApiEndpointsPage(page);
     await page.getByTestId(`api-endpoint-row-${endpointId}`).filter({ visible: true }).click();

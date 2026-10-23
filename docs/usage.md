@@ -122,7 +122,7 @@ only the ledger counts it, as magpie's `calls_pi.go` does.
 ### Two layers: summaries and per-request records
 
 Usage is kept twice. The 15-minute bucket and turn rows are the summaries: every
-total, split and cost on the page reads them, and they are kept forever. The
+total, split, cost and speed on the page reads them, and they are kept forever. The
 per-request records under `usage/requests/` are the ledger rows, the CLI log
 replies (Claude Code, Codex, Pi and OMP; Pi and OMP name a reply by session and
 entry id) and the `merged` markers. They back the Requests tab and an endpoint's
@@ -154,9 +154,8 @@ tries. Status follows magpie: failed is a request the agent got an error for
 (failed or cancelled), named after its last try's failure class; switched is one
 answered after more than one try. A request no one answered is listed at the
 endpoint it last tried. The search looks in the model, the endpoint names, the
-session, the project, the error and the tries' reasons, ignoring case. Output
-speed is magpie's `DecodeOf` without the held-reply check, which needs a
-streaming time the ledger does not keep yet. The client asks each counted host
+session, the project, the error and the tries' reasons, ignoring case. A row's
+output speed is the one the Speed card sums ([Speed](#speed)). The client asks each counted host
 for its newest `offset + limit` rows and merges them, so a page across hosts is
 exact.
 
@@ -175,6 +174,42 @@ beside the button names each one and why until it is dismissed or the next
 export starts; only when no host answers is nothing saved. Desktop saves through
 a save dialog (the main process parses the IPC payload before writing), the
 browser downloads, and native hands the file to the share sheet.
+
+### Speed
+
+The Speed card follows magpie's `DecodeOf` (`usage/speed.ts`); the gateway times
+each streamed reply as it goes to the CLI (`gateway/reply-clock.ts`, magpie's
+`ttft.go`). Only gateway requests that streamed have timing; a direct call, a
+reply not streamed and a request no one answered have none.
+
+- **Time to first token** is from the gateway taking the request to the first
+  content (text, reasoning or a tool call) sent to the CLI, failed tries
+  before it included. A group's is the mean over its answered, timed requests,
+  each counted even when it tells no speed.
+- **Output speed** is output tokens over the time from the first content to the
+  end. A reply that reasoned counts only its answer (output less reasoning) from
+  its first text. One with no text counts all its output from where its
+  reasoning began, but only when that reasoning came first, streamed visibly for
+  100 ms or more, and from a Chat or Anthropic upstream.
+- A reply tells no speed when its window is under 100 ms, it would be over
+  10,000 tokens a second, its content came in under a quarter of its window
+  (held and let go at once: the flow, the time the middle 80% of its content
+  bytes took scaled to the whole, times 4 is under the window), its answer came
+  over 20 times faster than its reasoning, or its reasoning was sealed
+  (Anthropic `redacted_thinking`, Responses `encrypted_content`, or any
+  Responses reasoning, which is only a summary) and it has no text.
+- A group's speed is its counted tokens over its counted windows, so a long
+  reply weighs more than a short one. There is no minimum sample; each row says
+  how many replies its speed is of. Groups are by endpoint, model, model and
+  endpoint, or agent; the fastest first, then the one of more tokens.
+
+The sums sit in the bucket rows (`ttftCount`, `ttftMs`, `speedCount`,
+`speedOutput`, `speedMs`), added when the ledger row lands and moved with its
+tokens when the log's reply is merged, so a speed outlives the 30 days of
+per-request records and follows the period and filters like every other
+figure. Ledger rows written before the gateway kept a reply's flow add none.
+Across hosts the client adds the sums up, endpoints by name as on the endpoint
+cards.
 
 ### An endpoint's Recent problems
 

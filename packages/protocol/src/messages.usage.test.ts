@@ -223,6 +223,42 @@ describe("usage by endpoint (gateway ledger)", () => {
     expect(parsed.type === "usage.report.get.response" && parsed.payload.endpoints).toBe(undefined);
   });
 
+  it("parses a speed request and a report with speed groups as sums", () => {
+    const request = {
+      type: "usage.report.get.request" as const,
+      requestId: "req-6",
+      from: null,
+      to: null,
+      timezone: "UTC",
+      speed: { groupBy: "model_endpoint" as const },
+    };
+    expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+    const response = {
+      type: "usage.report.get.response" as const,
+      payload: {
+        requestId: "req-6",
+        ...EMPTY_REPORT,
+        speed: {
+          groupBy: "model_endpoint" as const,
+          groups: [
+            {
+              cli: null,
+              model: "kimi-k2",
+              endpoint: { endpointId: "ep_a", name: "Relay A", deleted: false },
+              tokens: 415,
+              ttftCount: 2,
+              ttftMs: 1500,
+              speedCount: 1,
+              speedOutput: 300,
+              speedMs: 3000,
+            },
+          ],
+        },
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+  });
+
   it("parses the gatewayLedger flag, and its absence on an older daemon", () => {
     const advertised = ServerInfoStatusPayloadSchema.parse({
       status: "server_info",

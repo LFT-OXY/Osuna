@@ -83,6 +83,7 @@ import { withTemplateTranslatedRewrites } from "./template-rewrites.js";
 import { servedFormats } from "../templates.js";
 import { refusedAfterOpening } from "./safety-filter.js";
 import { isWholeReply } from "./whole-stream.js";
+import { ReplyClock, UNTIMED } from "./reply-clock.js";
 import {
   ANSWERED_BY_HEADER,
   isEventStream,
@@ -595,7 +596,7 @@ async function streamReply(input: {
     write: (text) => res.write(text),
     request: input.request,
   });
-  const delivery = new DeliveryClock();
+  const delivery = new ReplyClock(input.to);
   const fence = fenceFilter({
     request: input.request,
     emit: (event) => {
@@ -617,18 +618,24 @@ async function streamReply(input: {
   };
   let reply = input.reply;
   while (true) {
-    const tried = await readTry({ ...input, reply, soFar });
+    const tried = await readTry({
+      ...input,
+      reply,
+      soFar,
+      onData: (data) => delivery.sawRaw(data),
+    });
     if (tried.kind === "gone") return tried;
     if (tried.kind === "ended") {
       flush();
       encoder.finish();
       res.end();
       const { stop } = tried.read.finish();
+      const usage = encoder.usage();
       const delivered: DeliveredReply = {
         id: encoder.replyId(),
-        usage: encoder.usage(),
+        usage,
         stop,
-        ...delivery.times(),
+        ...delivery.times({ reasoning: usage.reasoning }),
       };
       const refused = refusedAfterOpening({ stop, error: tried.read.error });
       if (refused) return { kind: "refused", reply: delivered };
@@ -682,6 +689,8 @@ async function readTry(input: {
   request: GatewayRequest;
   reply: UpstreamReply;
   soFar: ReplySoFar;
+  // 上游每个事件的原文（计时看推理是否被封存）。
+  onData: (data: string) => void;
 }): Promise<TryEnd> {
   const { soFar } = input;
   const decoder = protocolOf(input.to).decoder();
@@ -697,7 +706,13 @@ async function readTry(input: {
     ending.add(event);
     calls.event(event);
   };
-  const end = await decodeReply({ res: input.res, reply: input.reply, decoder, emit });
+  const end = await decodeReply({
+    res: input.res,
+    reply: input.reply,
+    decoder,
+    emit,
+    onData: input.onData,
+  });
   if (end.kind === "gone") return end;
   const broken = brokenReason({ end, format: input.to, ending });
   if (broken !== null) return { kind: "broken", reason: broken, release: () => calls.end() };
@@ -772,35 +787,11 @@ async function wholeReply(input: {
     id: typeof rendered.id === "string" ? rendered.id : "",
     usage: reply.usage,
     stop: reply.stop,
-    firstContentAt: null,
-    firstTextAt: null,
+    ...UNTIMED,
   };
   const refused = refusedAfterOpening({ stop: reply.stop, error: collector.error });
   if (refused) return { kind: "refused", reply: delivered };
   return { kind: "complete", usage: reply.usage, reply: delivered };
-}
-
-/** 第一个内容（文字、思考、工具调用、联网搜索）与第一段文字交给编码器、写给 Agent 的时刻。 */
-class DeliveryClock {
-  private firstContentAt: number | null = null;
-  private firstTextAt: number | null = null;
-
-  saw(event: StreamEvent): void {
-    const text = event.kind === "text" && event.text !== "";
-    const content =
-      text ||
-      (event.kind === "think" && event.text !== "") ||
-      event.kind === "tool_start" ||
-      event.kind === "search";
-    if (!content) return;
-    const now = Date.now();
-    this.firstContentAt ??= now;
-    if (text) this.firstTextAt ??= now;
-  }
-
-  times(): Pick<DeliveredReply, "firstContentAt" | "firstTextAt"> {
-    return { firstContentAt: this.firstContentAt, firstTextAt: this.firstTextAt };
-  }
 }
 
 /** 开口后上游断了的原因：连接中断，或流读完了却没说完；说完了为 null。 */
@@ -846,13 +837,17 @@ async function decodeReply(input: {
   reply: UpstreamReply;
   decoder: StreamDecoder;
   emit: EmitEvent;
+  onData?: (data: string) => void;
 }): Promise<StreamEnd> {
   const { reply, decoder, emit } = input;
   if (reply.kind === "whole") {
     decoder.whole(reply.body, emit);
     return { kind: "ended" };
   }
-  const reader = new SseReader((data) => decoder.decode(data, emit));
+  const reader = new SseReader((data) => {
+    input.onData?.(data);
+    decoder.decode(data, emit);
+  });
   const end = await readStream({ ...reply, res: input.res, onText: (text) => reader.feed(text) });
   if (end.kind !== "ended") return end;
   reader.end();

@@ -4706,6 +4706,23 @@ export const zhCN: TranslationResources = {
       dayCountMany: "{{count}} 天",
       none: "—",
     },
+    speed: {
+      title: "速度",
+      groupBy: {
+        label: "分组",
+        endpoint: "接口",
+        model: "模型",
+        modelEndpoint: "模型 · 接口",
+        agent: "Agent",
+      },
+      columns: {
+        speed: "出字速度",
+        ttft: "首字等待",
+      },
+      samples: "基于 {{count}} 条",
+      empty: "这段时间没有经过中转站的请求",
+      loadError: "速度读取失败。",
+    },
     heatmap: {
       title: "热力图",
       less: "少",

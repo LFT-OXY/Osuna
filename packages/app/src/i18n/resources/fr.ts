@@ -4859,6 +4859,23 @@ export const fr: TranslationResources = {
       dayCountMany: "{{count}} jours",
       none: "—",
     },
+    speed: {
+      title: "Vitesse",
+      groupBy: {
+        label: "Grouper par",
+        endpoint: "Endpoint",
+        model: "Modèle",
+        modelEndpoint: "Modèle · Endpoint",
+        agent: "Agent",
+      },
+      columns: {
+        speed: "Vitesse de sortie",
+        ttft: "Délai du premier token",
+      },
+      samples: "Sur {{count}}",
+      empty: "Aucune requête via la passerelle sur cette période",
+      loadError: "Impossible de charger la vitesse.",
+    },
     heatmap: {
       title: "Carte de chaleur",
       less: "Moins",

@@ -2,6 +2,7 @@ import type { GatewayLedger, GatewayLedgerAttempt, GatewayLedgerRow } from "../.
 import type { ApiEndpointProvider } from "../store.js";
 import type { EndpointRest } from "./cooldown.js";
 import type { GatewayCandidate } from "./routing.js";
+import { UNTIMED } from "./reply-clock.js";
 import { emptyUsage } from "./translation/ir.js";
 import type { DeliveredReply } from "./upstream-call.js";
 
@@ -42,13 +43,12 @@ type LedgerOutcome =
   | { kind: "failed"; told: string }
   | { kind: "cancelled" };
 
-// 没人交回复时记的：0 token，没有编号与首字。
+// 没人交回复时记的：0 token，没有编号与计时。
 const NO_REPLY: DeliveredReply = {
   id: "",
   usage: emptyUsage(),
   stop: null,
-  firstContentAt: null,
-  firstTextAt: null,
+  ...UNTIMED,
 };
 
 /**
@@ -163,6 +163,9 @@ export class LedgerCall {
       durationMs: Math.max(0, Date.now() - input.since),
       ttftMs: sinceRequest(reply.firstContentAt),
       firstTextMs: sinceRequest(reply.firstTextAt),
+      flowMs: reply.flowMs,
+      firstReasoningMs: sinceRequest(reply.firstReasoningAt),
+      reasoningHidden: reply.reasoningHidden,
       replyId: reply.id === "" ? null : reply.id,
       stop: reply.stop,
       ...statusOf(outcome),

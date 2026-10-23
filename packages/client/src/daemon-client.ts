@@ -903,6 +903,8 @@ export interface UsageReportOptions {
   timezone: string;
   filters?: Extract<SessionInboundMessage, { type: "usage.report.get.request" }>["filters"];
   trend?: Extract<SessionInboundMessage, { type: "usage.report.get.request" }>["trend"];
+  /** Ask for the Speed card's groups (`features.gatewayLedger`). */
+  speed?: Extract<SessionInboundMessage, { type: "usage.report.get.request" }>["speed"];
   requestId?: string;
 }
 
@@ -6512,6 +6514,7 @@ export class DaemonClient {
         timezone: options.timezone,
         ...(options.filters ? { filters: options.filters } : {}),
         ...(options.trend ? { trend: options.trend } : {}),
+        ...(options.speed ? { speed: options.speed } : {}),
       },
       responseType: "usage.report.get.response",
     });

@@ -352,3 +352,130 @@ describe("by endpoint", () => {
     expect(official.days.map((day) => day.turns)).toEqual([1]);
   });
 });
+
+describe("speed", () => {
+  // 两个桶：A 家 kimi-k2 一条 300 token / 3000 ms、首字 1000 ms；另一条只有首字 500 ms（攒着吐出的不计速度）。
+  // 官方 gpt-5.5 一条 900 token / 1000 ms、首字 2000 ms；还有一条直连的没有任何速度数据。
+  function speedRow(input: {
+    bucket: string;
+    model: string;
+    cli?: UsageCli;
+    endpointId?: string;
+    output: number;
+    sums: Partial<
+      Pick<UsageBucketRow, "ttftCount" | "ttftMs" | "speedCount" | "speedOutput" | "speedMs">
+    >;
+  }): UsageBucketRow {
+    return {
+      ...emptyBucketRow({
+        cli: input.cli ?? "claude",
+        backend: null,
+        model: input.model,
+        sessionId: "",
+        cwd: "",
+        bucket: input.bucket,
+        endpointId: input.endpointId,
+      }),
+      output: input.output,
+      ...input.sums,
+    };
+  }
+  const rows = [
+    speedRow({
+      bucket: "2026-09-19T08:00:00.000Z",
+      model: "kimi-k2",
+      endpointId: "ep_a",
+      output: 300,
+      sums: { ttftCount: 1, ttftMs: 1000, speedCount: 1, speedOutput: 300, speedMs: 3000 },
+    }),
+    speedRow({
+      bucket: "2026-09-19T09:00:00.000Z",
+      model: "kimi-k2",
+      endpointId: "ep_a",
+      output: 50,
+      sums: { ttftCount: 1, ttftMs: 500 },
+    }),
+    speedRow({
+      bucket: "2026-09-19T09:00:00.000Z",
+      model: "gpt-5.5",
+      cli: "codex",
+      output: 900,
+      sums: { ttftCount: 1, ttftMs: 2000, speedCount: 1, speedOutput: 900, speedMs: 1000 },
+    }),
+    speedRow({ bucket: "2026-09-19T09:00:00.000Z", model: "claude-opus-5", output: 70, sums: {} }),
+  ];
+  const ALL = { from: null, to: null, timezone: "UTC" };
+
+  test("no speed unless asked for", () => {
+    expect(build(rows, ALL).speed).toBeUndefined();
+  });
+
+  test("by endpoint: the sums of each, the fastest first, and nothing for calls with no timing", () => {
+    const { speed } = build(rows, { ...ALL, speed: { groupBy: "endpoint" } });
+    expect(speed).toEqual({
+      groupBy: "endpoint",
+      groups: [
+        {
+          cli: null,
+          model: null,
+          endpoint: { endpointId: null, name: null, deleted: false },
+          tokens: 970,
+          ttftCount: 1,
+          ttftMs: 2000,
+          speedCount: 1,
+          speedOutput: 900,
+          speedMs: 1000,
+        },
+        {
+          cli: null,
+          model: null,
+          endpoint: { endpointId: "ep_a", name: "Relay A", deleted: false },
+          tokens: 350,
+          ttftCount: 2,
+          ttftMs: 1500,
+          speedCount: 1,
+          speedOutput: 300,
+          speedMs: 3000,
+        },
+      ],
+    });
+  });
+
+  test("by model, by model and endpoint, and by agent", () => {
+    const keys = (groupBy: "model" | "model_endpoint" | "agent") =>
+      build(rows, { ...ALL, speed: { groupBy } }).speed?.groups.map((group) => [
+        group.cli,
+        group.model,
+        group.endpoint?.endpointId ?? (group.endpoint ? "official" : null),
+        group.ttftCount,
+      ]);
+    expect(keys("model")).toEqual([
+      [null, "gpt-5.5", null, 1],
+      [null, "kimi-k2", null, 2],
+    ]);
+    expect(keys("model_endpoint")).toEqual([
+      [null, "gpt-5.5", "official", 1],
+      [null, "kimi-k2", "ep_a", 2],
+    ]);
+    expect(keys("agent")).toEqual([
+      ["codex", null, null, 1],
+      ["claude", null, null, 2],
+    ]);
+  });
+
+  test("follows the range and the filters", () => {
+    const relayA = build(rows, {
+      ...ALL,
+      filters: { endpoints: ["ep_a"] },
+      speed: { groupBy: "endpoint" },
+    });
+    expect(relayA.speed?.groups.map((group) => group.ttftCount)).toEqual([2]);
+    const yesterday = build(rows, {
+      from: "2026-09-18",
+      to: "2026-09-18",
+      timezone: "UTC",
+      speed: { groupBy: "model" },
+    });
+    expect(yesterday.speed).toEqual({ groupBy: "model", groups: [] });
+  });
+});

@@ -4720,6 +4720,23 @@ export const ar: TranslationResources = {
       dayCountMany: "{{count}} أيام",
       none: "—",
     },
+    speed: {
+      title: "السرعة",
+      groupBy: {
+        label: "التجميع حسب",
+        endpoint: "نقطة النهاية",
+        model: "النموذج",
+        modelEndpoint: "النموذج · نقطة الاتصال",
+        agent: "الوكيل",
+      },
+      columns: {
+        speed: "سرعة الإخراج",
+        ttft: "حتى أول رمز",
+      },
+      samples: "بناءً على {{count}}",
+      empty: "لا توجد طلبات عبر البوابة في هذه الفترة",
+      loadError: "تعذّر تحميل السرعة.",
+    },
     heatmap: {
       title: "الخريطة الحرارية",
       less: "أقل",

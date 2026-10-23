@@ -4866,6 +4866,23 @@ export const en = {
       dayCountMany: "{{count}} days",
       none: "—",
     },
+    speed: {
+      title: "Speed",
+      groupBy: {
+        label: "Group by",
+        endpoint: "Endpoint",
+        model: "Model",
+        modelEndpoint: "Model · Endpoint",
+        agent: "Agent",
+      },
+      columns: {
+        speed: "Output speed",
+        ttft: "Time to first token",
+      },
+      samples: "Based on {{count}}",
+      empty: "No requests through the gateway in this period",
+      loadError: "Could not load speed.",
+    },
     heatmap: {
       title: "Heatmap",
       less: "Less",

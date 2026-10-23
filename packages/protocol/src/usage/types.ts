@@ -98,6 +98,46 @@ export const UsageEndpointBreakdownSchema = z.object({
 });
 export type UsageEndpointBreakdown = z.infer<typeof UsageEndpointBreakdownSchema>;
 
+/** How the Speed card groups the gateway's requests. */
+export const UsageSpeedGroupBySchema = z.enum(["endpoint", "model", "model_endpoint", "agent"]);
+export type UsageSpeedGroupBy = z.infer<typeof UsageSpeedGroupBySchema>;
+
+/** The endpoint a speed group is of; `endpointId: null` is Official. */
+export const UsageSpeedEndpointSchema = z.object({
+  endpointId: z.string().nullable(),
+  name: z.string().nullable(),
+  deleted: z.boolean(),
+});
+export type UsageSpeedEndpoint = z.infer<typeof UsageSpeedEndpointSchema>;
+
+/**
+ * One group's speed, as sums so groups from several hosts add up: of the
+ * answered gateway requests whose first content was timed, how many and their
+ * waits in ms (the mean is `ttftMs / ttftCount`); of those that told a speed,
+ * how many, their output tokens and their windows in ms (the speed is
+ * `speedOutput / speedMs`, weighted by tokens). `cli`, `model` and `endpoint`
+ * are the fields the grouping is by, null for the others. `tokens` is what the
+ * group's calls billed, which orders groups of the same speed.
+ */
+export const UsageSpeedGroupSchema = z.object({
+  cli: UsageCliSchema.nullable(),
+  model: z.string().nullable(),
+  endpoint: UsageSpeedEndpointSchema.nullable(),
+  tokens: z.number().int(),
+  ttftCount: z.number().int(),
+  ttftMs: z.number().int(),
+  speedCount: z.number().int(),
+  speedOutput: z.number().int(),
+  speedMs: z.number().int(),
+});
+export type UsageSpeedGroup = z.infer<typeof UsageSpeedGroupSchema>;
+
+export const UsageSpeedSchema = z.object({
+  groupBy: UsageSpeedGroupBySchema,
+  groups: z.array(UsageSpeedGroupSchema),
+});
+export type UsageSpeed = z.infer<typeof UsageSpeedSchema>;
+
 export const UsageModelBreakdownSchema = z.object({
   model: z.string(),
   cli: UsageCliSchema,
@@ -185,6 +225,8 @@ export const UsageReportSchema = z.object({
   projects: z.array(UsageProjectBreakdownSchema),
   // 没有中转站账本的 daemon 不给（能力位 gatewayLedger）。
   endpoints: z.array(UsageEndpointBreakdownSchema).optional(),
+  // 只在请求要了速度时给；没有中转站账本的 daemon 不给（能力位 gatewayLedger）。
+  speed: UsageSpeedSchema.optional(),
   backfill: UsageBackfillSchema,
   error: z.string().nullable(),
 });

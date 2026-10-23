@@ -4808,6 +4808,23 @@ export const ptBR: TranslationResources = {
       dayCountMany: "{{count}} dias",
       none: "—",
     },
+    speed: {
+      title: "Velocidade",
+      groupBy: {
+        label: "Agrupar por",
+        endpoint: "Endpoint",
+        model: "Modelo",
+        modelEndpoint: "Modelo · Endpoint",
+        agent: "Agente",
+      },
+      columns: {
+        speed: "Velocidade de saída",
+        ttft: "Tempo até o primeiro token",
+      },
+      samples: "Com base em {{count}}",
+      empty: "Nenhuma requisição pelo gateway neste período",
+      loadError: "Não foi possível carregar a velocidade.",
+    },
     heatmap: {
       title: "Mapa de calor",
       less: "Menos",

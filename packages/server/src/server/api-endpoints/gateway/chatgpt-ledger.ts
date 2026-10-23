@@ -102,8 +102,7 @@ export class ChatGptLedgerWatch {
         id: tapped.id,
         usage: tapped.usage,
         stop: tapped.stop,
-        firstContentAt: tapped.firstContentAt,
-        firstTextAt: tapped.firstTextAt,
+        ...reply.tap.times(),
       });
     });
   }

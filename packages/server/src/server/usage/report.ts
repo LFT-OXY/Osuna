@@ -12,6 +12,9 @@ import type {
   UsageReportFilters,
   UsageSourceBreakdown,
   UsageSourceRef,
+  UsageSpeed,
+  UsageSpeedGroup,
+  UsageSpeedGroupBy,
   UsageTokenTotals,
   UsageTrend,
   UsageTrendGranularity,
@@ -24,7 +27,10 @@ import {
   type LocalTimeResolver,
 } from "./local-time.js";
 import type { UsageProjectAttribution } from "./project-attribution.js";
+import { groupOutputSpeed } from "./speed.js";
 import {
+  KEY_SEPARATOR,
+  SPEED_COLUMNS,
   addTotals,
   carriesNothing,
   emptyTotals,
@@ -42,6 +48,7 @@ export interface UsageReportRequest {
   timezone: string;
   filters?: UsageReportFilters;
   trend?: { granularity?: UsageTrendGranularity; stackBy: UsageTrendStackBy };
+  speed?: { groupBy: UsageSpeedGroupBy };
 }
 
 /**
@@ -114,6 +121,9 @@ export function buildUsageReport(input: BuildUsageReportInput): UsageReport {
     heatmapDays: buildHeatmap(filtered, local, today),
     projects: buildProjects(inRange, input.projects),
     endpoints: buildEndpoints(inRange, input.endpointIdentities),
+    ...(request.speed
+      ? { speed: buildSpeed(inRange, request.speed.groupBy, input.endpointIdentities) }
+      : {}),
     backfill: input.backfill,
     error: input.error,
   };
@@ -427,6 +437,81 @@ function buildEndpoints(
   })
     .filter((group) => hasTokens(group.totals))
     .sort(byTokensDescending);
+}
+
+/**
+ * The Speed card's groups: the bucket rows' speed sums added up by the chosen
+ * grouping, the fastest first and, at the same speed, the one of more tokens
+ * (magpie's ledCategories). A group none of whose requests was timed is not
+ * one: only gateway requests that streamed carry timing.
+ */
+function buildSpeed(
+  rows: PricedRow[],
+  groupBy: UsageSpeedGroupBy,
+  identities: ReadonlyMap<string, UsageEndpointIdentity>,
+): UsageSpeed {
+  const groups = new Map<string, UsageSpeedGroup>();
+  for (const row of rows) {
+    const key = speedKeyOf(row, groupBy);
+    let group = groups.get(key);
+    if (!group) {
+      group = emptySpeedGroup(row, groupBy, identities);
+      groups.set(key, group);
+    }
+    group.tokens += billableTokens(row);
+    for (const column of SPEED_COLUMNS) group[column] += row[column] ?? 0;
+  }
+  return {
+    groupBy,
+    groups: Array.from(groups.values())
+      .filter((group) => group.ttftCount > 0 || group.speedCount > 0)
+      .sort(
+        (a, b) => (groupOutputSpeed(b) ?? 0) - (groupOutputSpeed(a) ?? 0) || b.tokens - a.tokens,
+      ),
+  };
+}
+
+function speedKeyOf(row: UsageBucketRow, groupBy: UsageSpeedGroupBy): string {
+  const endpointId = row.endpointId ?? "";
+  switch (groupBy) {
+    case "endpoint":
+      return endpointId;
+    case "model":
+      return row.model;
+    case "model_endpoint":
+      return `${row.model}${KEY_SEPARATOR}${endpointId}`;
+    case "agent":
+      return row.cli;
+  }
+}
+
+function emptySpeedGroup(
+  row: UsageBucketRow,
+  groupBy: UsageSpeedGroupBy,
+  identities: ReadonlyMap<string, UsageEndpointIdentity>,
+): UsageSpeedGroup {
+  const byEndpoint = groupBy === "endpoint" || groupBy === "model_endpoint";
+  const byModel = groupBy === "model" || groupBy === "model_endpoint";
+  return {
+    cli: groupBy === "agent" ? row.cli : null,
+    model: byModel ? row.model : null,
+    endpoint: byEndpoint ? speedEndpointOf(row.endpointId ?? null, identities) : null,
+    tokens: 0,
+    ttftCount: 0,
+    ttftMs: 0,
+    speedCount: 0,
+    speedOutput: 0,
+    speedMs: 0,
+  };
+}
+
+function speedEndpointOf(
+  endpointId: string | null,
+  identities: ReadonlyMap<string, UsageEndpointIdentity>,
+): NonNullable<UsageSpeedGroup["endpoint"]> {
+  if (endpointId === null) return { endpointId, name: null, deleted: false };
+  const identity = identities.get(endpointId);
+  return { endpointId, name: identity?.name ?? endpointId, deleted: identity?.deleted ?? false };
 }
 
 /** The same source / model / project narrowing the session listing applies. */

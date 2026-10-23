@@ -51,6 +51,10 @@ export const GATEWAY_LEDGER_ROW_SCHEMA = z.object({
   durationMs: z.number().int().nonnegative(),
   ttftMs: z.number().int().nonnegative().nullable(),
   firstTextMs: z.number().int().nonnegative().nullable(),
+  // 出字速度要用的（usage/speed.ts）：内容流动的时长、可见推理的起点、推理是否封存。工单 09 之前写的行没有它们。
+  flowMs: z.number().int().nonnegative().nullable().optional(),
+  firstReasoningMs: z.number().int().nonnegative().nullable().optional(),
+  reasoningHidden: z.boolean().optional(),
   replyId: z.string().nullable(),
   stop: z.string().nullable(),
   status: z.enum(["ok", "failed", "cancelled"]),

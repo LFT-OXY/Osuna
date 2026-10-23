@@ -1,4 +1,5 @@
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import type { UsageSpeedGroupBy } from "@getpaseo/protocol/usage/types";
 import { toErrorMessage } from "@/utils/error-messages";
 import { mergeUsageReports, type MergedUsageReport } from "./merge";
 import type { UsageRange } from "./period";
@@ -39,6 +40,8 @@ export interface FetchUsageReportInput {
    * and would answer with everything.
    */
   endpoints?: readonly (string | null)[];
+  /** Ask for the Speed card's groups; pass only hosts with `features.gatewayLedger`. */
+  speedGroupBy?: UsageSpeedGroupBy;
 }
 
 export type FetchUsageReportState =
@@ -79,6 +82,7 @@ export async function fetchUsageReport(
           to: input.range.to,
           timezone: input.timezone,
           ...(input.endpoints ? { filters: { endpoints: [...input.endpoints] } } : {}),
+          ...(input.speedGroupBy ? { speed: { groupBy: input.speedGroupBy } } : {}),
         });
         reports.push({ serverId: host.serverId, report: payload });
       } catch (error) {

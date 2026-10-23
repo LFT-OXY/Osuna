@@ -2192,3 +2192,448 @@ describe("the Requests list keeps 30 days and 200 MB", () => {
     expect(restarted.requests).toEqual(after.requests);
   });
 });
+
+/*
+ * 速度卡片（工单 09）：假上游按给定的节奏一段一段地写回复，中转站照 magpie DecodeOf 计时。
+ * 时刻是真实的，所以数值断言给的是节奏决定的区间，过滤规则的例子都离边界很远。
+ */
+
+/** 回复里的一段：等 afterMs 毫秒再写 event。 */
+interface PacedStep {
+  afterMs: number;
+  event: Record<string, unknown>;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** 按节奏写的 Anthropic 流：开头立刻写，steps 按各自的间隔写，最后报 outputTokens 个输出 token。 */
+function pacedAnthropic(messageId: string, steps: PacedStep[], outputTokens: number): Respond {
+  return (res) => {
+    void (async () => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      const write = (event: Record<string, unknown>) =>
+        res.write(`event: ${String(event.type)}\ndata: ${JSON.stringify(event)}\n\n`);
+      write({
+        type: "message_start",
+        message: {
+          id: messageId,
+          type: "message",
+          role: "assistant",
+          model: "kimi-k2",
+          content: [],
+          usage: { input_tokens: 40, output_tokens: 0 },
+        },
+      });
+      for (const step of steps) {
+        await sleep(step.afterMs);
+        write(step.event);
+      }
+      write({
+        type: "message_delta",
+        delta: { stop_reason: "end_turn" },
+        usage: { output_tokens: outputTokens },
+      });
+      write({ type: "message_stop" });
+      res.end();
+    })();
+  };
+}
+
+const textStart = (index: number) => ({
+  type: "content_block_start",
+  index,
+  content_block: { type: "text", text: "" },
+});
+const textDelta = (index: number, text: string) => ({
+  type: "content_block_delta",
+  index,
+  delta: { type: "text_delta", text },
+});
+
+/** 一段文字等 firstMs 后开头，再分 pieces 段、每段隔 everyMs 写完。 */
+function evenText(input: { firstMs: number; pieces: number; everyMs: number }): PacedStep[] {
+  const steps: PacedStep[] = [
+    { afterMs: input.firstMs, event: textStart(0) },
+    { afterMs: 0, event: textDelta(0, REPLY_TEXT) },
+  ];
+  for (let i = 1; i < input.pieces; i += 1) {
+    steps.push({ afterMs: input.everyMs, event: textDelta(0, " and some more of the answer") });
+  }
+  return steps;
+}
+
+/** 按节奏写的 Chat 流（翻译路径）：编号 id，steps 是一个个 chunk 的 delta，最后报用量。 */
+function pacedChat(
+  id: string,
+  steps: { afterMs: number; delta: Record<string, unknown> }[],
+  usage: { completion: number; reasoning: number },
+): Respond {
+  return (res) => {
+    void (async () => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      const write = (chunk: Record<string, unknown>) =>
+        res.write(`data: ${JSON.stringify({ id, model: "deepseek-v3", ...chunk })}\n\n`);
+      for (const step of steps) {
+        await sleep(step.afterMs);
+        write({ choices: [{ index: 0, delta: step.delta }] });
+      }
+      write({ choices: [{ index: 0, delta: {}, finish_reason: "stop" }] });
+      write({
+        choices: [],
+        usage: {
+          prompt_tokens: 120,
+          completion_tokens: usage.completion,
+          completion_tokens_details: { reasoning_tokens: usage.reasoning },
+        },
+      });
+      res.end("data: [DONE]\n\n");
+    })();
+  };
+}
+
+/** 按节奏写的 Responses 流（Codex 走接口 B）：文字分段写，回复编号 responseId。 */
+function pacedResponses(
+  responseId: string,
+  input: { firstMs: number; pieces: number; everyMs: number },
+): Respond {
+  return (res) => {
+    void (async () => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      const write = (event: Record<string, unknown>) =>
+        res.write(`event: ${String(event.type)}\ndata: ${JSON.stringify(event)}\n\n`);
+      write({
+        type: "response.created",
+        response: { id: responseId, model: "gpt-5.5", status: "in_progress" },
+      });
+      await sleep(input.firstMs);
+      write({
+        type: "response.output_item.added",
+        output_index: 0,
+        item: { id: "msg_1", type: "message", role: "assistant", content: [] },
+      });
+      write({ type: "response.output_text.delta", item_id: "msg_1", delta: REPLY_TEXT });
+      for (let i = 1; i < input.pieces; i += 1) {
+        await sleep(input.everyMs);
+        write({ type: "response.output_text.delta", item_id: "msg_1", delta: " and more" });
+      }
+      write({
+        type: "response.completed",
+        response: {
+          id: responseId,
+          status: "completed",
+          output: [],
+          usage: {
+            input_tokens: 500,
+            output_tokens: 60,
+            input_tokens_details: { cached_tokens: 400 },
+            output_tokens_details: { reasoning_tokens: 10 },
+          },
+        },
+      });
+      res.end();
+    })();
+  };
+}
+
+/** Claude Code 打中转站一轮，读完回复（不要求回复里有文字：只有工具调用的回复也行）。 */
+async function askClaudeAny(harness: Harness, model: string): Promise<void> {
+  const response = await fetch(`${harness.gateway}/v1/messages`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${CLAUDE_TOKEN}`,
+      "content-type": "application/json",
+      "anthropic-version": "2023-06-01",
+      "x-claude-code-session-id": SESSION_ID,
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 64,
+      stream: true,
+      messages: [{ role: "user", content: PROMPT_TEXT }],
+    }),
+  });
+  expect(response.status).toBe(200);
+  await response.text();
+}
+
+type SpeedGroupBy = "endpoint" | "model" | "model_endpoint" | "agent";
+type SpeedGroups = NonNullable<UsageReport["speed"]>["groups"];
+
+function speedRequest(
+  groupBy: SpeedGroupBy,
+  filters?: UsageReport extends never
+    ? never
+    : Parameters<DaemonClient["usageReportGet"]>[0]["filters"],
+) {
+  return { ...ALL_TIME, speed: { groupBy }, ...(filters ? { filters } : {}) };
+}
+
+/** 等报告里所有组加起来的首字条数到 count，回各组。 */
+async function waitForTimed(
+  harness: Harness,
+  count: number,
+  request: Parameters<DaemonClient["usageReportGet"]>[0] = speedRequest("endpoint"),
+): Promise<SpeedGroups> {
+  const report = await waitForReport(
+    harness,
+    (candidate) =>
+      (candidate.speed?.groups ?? []).reduce((total, group) => total + group.ttftCount, 0) ===
+      count,
+    request,
+  );
+  return report.speed?.groups ?? [];
+}
+
+function speedCountOf(groups: SpeedGroups): number {
+  return groups.reduce((total, group) => total + group.speedCount, 0);
+}
+
+/** 列表里只剩 Codex 的请求：那天 Claude Code 的逐条记录修剪掉了。 */
+function onlyCodexListed(page: RequestsListPage): boolean {
+  return page.requests.every((row) => row.cli === "codex");
+}
+
+describe("the Speed card", () => {
+  test("a streamed reply's speed is its output over the time after its first content, the same in the Requests list, and it follows the call to its project", async () => {
+    const harness = await start();
+    // 首字在开头后约 300ms；之后 120 个 token 分 11 段、每段隔 60ms 写完：窗口至少 600ms，速度不超过 200 token/秒。
+    harness.replies.a = pacedAnthropic(
+      "msg_gw_1",
+      evenText({ firstMs: 300, pieces: 11, everyMs: 60 }),
+      120,
+    );
+    await askClaudeAny(harness, "kimi-k2");
+    const [group] = await waitForTimed(harness, 1);
+    expect(group).toMatchObject({
+      endpoint: { endpointId: "ep_a", name: "Relay A", deleted: false },
+      ttftCount: 1,
+      speedCount: 1,
+      speedOutput: 120,
+    });
+    const speed = ((group?.speedOutput ?? 0) * 1000) / (group?.speedMs ?? 1);
+    expect(speed).toBeGreaterThan(100);
+    expect(speed).toBeLessThanOrEqual(200);
+    expect(group?.ttftMs).toBeGreaterThanOrEqual(300);
+    expect(group?.ttftMs).toBeLessThan(3000);
+
+    const page = await waitForRequests(harness, (candidate) => candidate.total === 1);
+    expect(page.requests[0]?.outputSpeed).toBeCloseTo(speed, 6);
+    expect(page.requests[0]?.ttftMs).toBe(group?.ttftMs);
+
+    // 会话记录到了：这次调用挪到它的项目，速度跟着走，「未知项目」那边不留。
+    await appendTurn(harness, { promptId: "p1", calls: [gatewayCall()] });
+    const inProject = await waitForTimed(
+      harness,
+      1,
+      speedRequest("endpoint", { projects: ["/work/demo"] }),
+    );
+    expect(inProject).toEqual([group]);
+    expect(await waitForTimed(harness, 1)).toEqual([group]);
+  });
+
+  test("each rule leaves a reply out of the speed but keeps its wait: too short, too fast, held and let go at once, and hidden reasoning", async () => {
+    const harness = await start();
+    const rounds: { name: string; steps: PacedStep[]; output: number }[] = [
+      // 全部一下子写完：窗口不到 100ms。
+      { name: "too short", steps: evenText({ firstMs: 50, pieces: 3, everyMs: 0 }), output: 30 },
+      // 5000 个 token 在 200ms 左右写完：每秒两万多，超过一万。
+      { name: "too fast", steps: evenText({ firstMs: 50, pieces: 5, everyMs: 50 }), output: 5000 },
+      // 开头一个字，等 700ms 后其余一次吐出：内容流动不到窗口的四分之一。
+      {
+        name: "held",
+        steps: [
+          { afterMs: 50, event: textStart(0) },
+          { afterMs: 0, event: textDelta(0, "a") },
+          { afterMs: 700, event: textDelta(0, `${REPLY_TEXT} ${"x".repeat(4000)}`) },
+        ],
+        output: 80,
+      },
+      // 封存的思考之后只有一个按节奏写的工具调用，没有文字：推理的量看不见，说不出速度。
+      {
+        name: "hidden reasoning",
+        steps: [
+          {
+            afterMs: 50,
+            event: {
+              type: "content_block_start",
+              index: 0,
+              content_block: { type: "redacted_thinking", data: "sealed" },
+            },
+          },
+          { afterMs: 0, event: { type: "content_block_stop", index: 0 } },
+          {
+            afterMs: 0,
+            event: {
+              type: "content_block_start",
+              index: 1,
+              content_block: { type: "tool_use", id: "toolu_1", name: "Read", input: {} },
+            },
+          },
+          ...Array.from({ length: 8 }, () => ({
+            afterMs: 60,
+            event: {
+              type: "content_block_delta",
+              index: 1,
+              delta: { type: "input_json_delta", partial_json: '{"path":"a.txt"}' },
+            },
+          })),
+        ],
+        output: 120,
+      },
+    ];
+    for (const [index, round] of rounds.entries()) {
+      harness.replies.a = pacedAnthropic(`msg_rule_${index}`, round.steps, round.output);
+      await askClaudeAny(harness, "kimi-k2");
+      const groups = await waitForTimed(harness, index + 1);
+      expect(speedCountOf(groups), round.name).toBe(0);
+    }
+
+    // 翻译路径（Chat 上游）：推理 10 个 token 慢慢来了 500ms，290 个正文 token 只用了约 200ms，快了二十倍以上。
+    harness.replies.c = pacedChat(
+      "chatcmpl-speed-1",
+      [
+        { afterMs: 50, delta: { role: "assistant", reasoning_content: "let me think" } },
+        { afterMs: 500, delta: { content: REPLY_TEXT } },
+        ...Array.from({ length: 4 }, () => ({
+          afterMs: 50,
+          delta: { content: " more answer text" },
+        })),
+      ],
+      { completion: 300, reasoning: 10 },
+    );
+    await askClaudeAny(harness, "deepseek-v3");
+    expect(speedCountOf(await waitForTimed(harness, rounds.length + 1))).toBe(0);
+  });
+
+  test("a reply that reasoned counts only its answer from its first text; one with no text counts from its paced visible reasoning", async () => {
+    const harness = await start();
+    // 推理 50 个 token 写了约 400ms，正文 250 个 token 匀速写了约 400ms：只算正文。
+    harness.replies.c = pacedChat(
+      "chatcmpl-speed-2",
+      [
+        { afterMs: 50, delta: { role: "assistant", reasoning_content: "thinking" } },
+        ...Array.from({ length: 4 }, () => ({
+          afterMs: 100,
+          delta: { reasoning_content: " still thinking" },
+        })),
+        { afterMs: 100, delta: { content: REPLY_TEXT } },
+        ...Array.from({ length: 8 }, () => ({
+          afterMs: 50,
+          delta: { content: " more answer text" },
+        })),
+      ],
+      { completion: 300, reasoning: 50 },
+    );
+    await askClaudeAny(harness, "deepseek-v3");
+    const [answer] = await waitForTimed(harness, 1);
+    expect(answer).toMatchObject({ speedCount: 1, speedOutput: 250 });
+    expect(answer?.speedMs).toBeGreaterThanOrEqual(400);
+    expect(answer?.speedMs).toBeLessThan(1500);
+
+    // 只有推理（按节奏写了约 600ms）和一个工具调用，没有文字：全部 200 个输出 token 从推理开始算。
+    harness.replies.c = pacedChat(
+      "chatcmpl-speed-3",
+      [
+        { afterMs: 50, delta: { role: "assistant", reasoning_content: "thinking" } },
+        ...Array.from({ length: 6 }, () => ({
+          afterMs: 100,
+          delta: { reasoning_content: " still thinking" },
+        })),
+        {
+          afterMs: 0,
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                id: "call_1",
+                type: "function",
+                function: { name: "Read", arguments: "{}" },
+              },
+            ],
+          },
+        },
+      ],
+      { completion: 200, reasoning: 150 },
+    );
+    await askClaudeAny(harness, "deepseek-v3");
+    const [both] = await waitForTimed(harness, 2);
+    expect(both).toMatchObject({ ttftCount: 2, speedCount: 2, speedOutput: 450 });
+  });
+
+  test("groups by endpoint, by model, by model and endpoint, and by agent", async () => {
+    const harness = await start();
+    harness.replies.a = pacedAnthropic(
+      "msg_gw_1",
+      evenText({ firstMs: 100, pieces: 6, everyMs: 50 }),
+      100,
+    );
+    await askClaudeAny(harness, "kimi-k2");
+    harness.replies.c = pacedChat(
+      "chatcmpl-speed-4",
+      [
+        { afterMs: 100, delta: { role: "assistant", content: REPLY_TEXT } },
+        ...Array.from({ length: 5 }, () => ({ afterMs: 50, delta: { content: " more" } })),
+      ],
+      { completion: 60, reasoning: 0 },
+    );
+    await askClaudeAny(harness, "deepseek-v3");
+    harness.replies.b = pacedResponses("resp_gw_1", { firstMs: 100, pieces: 6, everyMs: 50 });
+    await codexReplyId(await askCodex(harness));
+
+    const keysOf = async (groupBy: SpeedGroupBy) =>
+      (await waitForTimed(harness, 3, speedRequest(groupBy)))
+        .map((group) => ({
+          cli: group.cli,
+          model: group.model,
+          endpoint: group.endpoint?.name ?? null,
+          ttftCount: group.ttftCount,
+          speedCount: group.speedCount,
+        }))
+        .sort((x, y) => JSON.stringify(x).localeCompare(JSON.stringify(y)));
+    expect(await keysOf("endpoint")).toEqual([
+      { cli: null, model: null, endpoint: "Relay A", ttftCount: 1, speedCount: 1 },
+      { cli: null, model: null, endpoint: "Relay B", ttftCount: 1, speedCount: 1 },
+      { cli: null, model: null, endpoint: "Relay C", ttftCount: 1, speedCount: 1 },
+    ]);
+    expect(await keysOf("model")).toEqual([
+      { cli: null, model: "deepseek-v3", endpoint: null, ttftCount: 1, speedCount: 1 },
+      { cli: null, model: "gpt-5.5", endpoint: null, ttftCount: 1, speedCount: 1 },
+      { cli: null, model: "kimi-k2", endpoint: null, ttftCount: 1, speedCount: 1 },
+    ]);
+    expect(await keysOf("model_endpoint")).toEqual([
+      { cli: null, model: "deepseek-v3", endpoint: "Relay C", ttftCount: 1, speedCount: 1 },
+      { cli: null, model: "gpt-5.5", endpoint: "Relay B", ttftCount: 1, speedCount: 1 },
+      { cli: null, model: "kimi-k2", endpoint: "Relay A", ttftCount: 1, speedCount: 1 },
+    ]);
+    expect(await keysOf("agent")).toEqual([
+      { cli: "claude", model: null, endpoint: null, ttftCount: 2, speedCount: 2 },
+      { cli: "codex", model: null, endpoint: null, ttftCount: 1, speedCount: 1 },
+    ]);
+  });
+
+  test("the all-time speed stays when the per-request records are pruned, and across a restart", async () => {
+    const clock = movableClock();
+    const harness = await start({ now: clock.now });
+    harness.replies.a = pacedAnthropic(
+      "msg_gw_1",
+      evenText({ firstMs: 100, pieces: 6, everyMs: 50 }),
+      100,
+    );
+    await askClaudeAny(harness, "kimi-k2");
+    const [before] = await waitForTimed(harness, 1);
+    expect(before?.speedCount).toBe(1);
+
+    // 31 天后的下一次写入修剪掉那一天的逐条记录；汇总里的速度还在。
+    clock.advance(31 * DAY_MS);
+    await codexReplyId(await askCodex(harness));
+    await waitForRequests(harness, onlyCodexListed);
+    const relayA = (groups: SpeedGroups) =>
+      groups.find((group) => group.endpoint?.endpointId === "ep_a");
+    expect(relayA(await waitForTimed(harness, 2))).toEqual(before);
+
+    await harness.restart();
+    expect(relayA(await waitForTimed(harness, 2))).toEqual(before);
+  });
+});

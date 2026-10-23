@@ -40,8 +40,32 @@ export const USAGE_BUCKET_ROW_SCHEMA = z.object({
    * count, so a group of only failed requests is listed. Absent is none.
    */
   errors: z.number().int().optional(),
+  /**
+   * What the group's speed is summed from (usage/speed.ts, magpie's
+   * `Totals.Timed`, `TTFT`, `DecodeN`, `DecodeOut`, `DecodeMs`): of the
+   * answered gateway requests whose first content was timed, how many and
+   * their waits in ms; of those that told a speed, how many, their tokens and
+   * their windows in ms. Kept here, not read off the per-request records, so
+   * a speed outlives their 30 days. Increments like the token columns: the
+   * move to the log's project takes them back from the unknown project.
+   * Absent is none, as on every row written before they were.
+   */
+  ttftCount: z.number().int().optional(),
+  ttftMs: z.number().int().optional(),
+  speedCount: z.number().int().optional(),
+  speedOutput: z.number().int().optional(),
+  speedMs: z.number().int().optional(),
 });
 export type UsageBucketRow = z.infer<typeof USAGE_BUCKET_ROW_SCHEMA>;
+
+/** The bucket columns a speed is summed from. */
+export const SPEED_COLUMNS = [
+  "ttftCount",
+  "ttftMs",
+  "speedCount",
+  "speedOutput",
+  "speedMs",
+] as const satisfies readonly (keyof UsageBucketRow)[];
 
 /**
  * One turn's usage, split by the model that produced it. Like a bucket row it
@@ -371,7 +395,8 @@ export function carriesNothing(row: UsageBucketRow): boolean {
     row.reasoning === 0 &&
     row.turns === 0 &&
     row.durationMs === 0 &&
-    (row.errors ?? 0) === 0
+    (row.errors ?? 0) === 0 &&
+    SPEED_COLUMNS.every((column) => (row[column] ?? 0) === 0)
   );
 }
 
@@ -384,6 +409,10 @@ export function addBucketRow(target: UsageBucketRow, source: UsageBucketRow): vo
   target.turns += source.turns;
   target.durationMs += source.durationMs;
   if (source.errors !== undefined) target.errors = (target.errors ?? 0) + source.errors;
+  for (const column of SPEED_COLUMNS) {
+    const value = source[column];
+    if (value !== undefined) target[column] = (target[column] ?? 0) + value;
+  }
 }
 
 /** Sum `row` into the map's entry for its key, cloning it on first sight. */

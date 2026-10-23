@@ -4796,6 +4796,23 @@ export const ja: TranslationResources = {
       dayCountMany: "{{count}}日",
       none: "—",
     },
+    speed: {
+      title: "速度",
+      groupBy: {
+        label: "グループ",
+        endpoint: "エンドポイント",
+        model: "モデル",
+        modelEndpoint: "モデル · エンドポイント",
+        agent: "エージェント",
+      },
+      columns: {
+        speed: "出力速度",
+        ttft: "最初のトークンまで",
+      },
+      samples: "{{count}} 件に基づく",
+      empty: "この期間にゲートウェイを通ったリクエストはありません",
+      loadError: "速度を読み込めませんでした。",
+    },
     heatmap: {
       title: "ヒートマップ",
       less: "少",

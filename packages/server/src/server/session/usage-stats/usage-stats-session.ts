@@ -51,6 +51,7 @@ export class UsageStatsSession {
         timezone: request.timezone,
         filters: request.filters,
         trend: request.trend,
+        speed: request.speed,
       });
       return {
         type: "usage.report.get.response",

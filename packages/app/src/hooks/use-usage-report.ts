@@ -1,4 +1,4 @@
-import type { UsageBackfill } from "@getpaseo/protocol/usage/types";
+import type { UsageBackfill, UsageSpeedGroupBy } from "@getpaseo/protocol/usage/types";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFetchQuery } from "@/data/query";
@@ -33,6 +33,8 @@ export interface UseUsageReportInput {
   timezone: string;
   /** Only these API endpoints' usage (`null` is Official); see `fetchUsageReport`. */
   endpoints?: readonly (string | null)[];
+  /** Ask for the Speed card's groups, grouped so; see `fetchUsageReport`. */
+  speedGroupBy?: UsageSpeedGroupBy;
   /** False keeps the query and its live events idle. */
   enabled?: boolean;
 }
@@ -53,6 +55,7 @@ export function usageReportQueryKey(input: {
   range: UsageRange;
   timezone: string;
   endpoints?: readonly (string | null)[];
+  speedGroupBy?: UsageSpeedGroupBy;
 }) {
   return [
     ...usageQueryBaseKey,
@@ -61,6 +64,7 @@ export function usageReportQueryKey(input: {
     input.range.to ?? "all",
     input.timezone,
     input.endpoints ? input.endpoints.map((id) => id ?? "").join("|") : "any-endpoint",
+    input.speedGroupBy ?? "no-speed",
   ] as const;
 }
 
@@ -82,6 +86,7 @@ export function useUsageReport(input: UseUsageReportInput): UseUsageReportResult
         range: input.range,
         timezone: input.timezone,
         endpoints: input.endpoints,
+        speedGroupBy: input.speedGroupBy,
       }),
       connectionStatusKey,
     ],
@@ -92,6 +97,7 @@ export function useUsageReport(input: UseUsageReportInput): UseUsageReportResult
         range: input.range,
         timezone: input.timezone,
         endpoints: input.endpoints,
+        speedGroupBy: input.speedGroupBy,
       }),
     enabled,
     dataShape: "list",

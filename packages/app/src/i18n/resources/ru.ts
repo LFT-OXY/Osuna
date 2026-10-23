@@ -4814,6 +4814,23 @@ export const ru: TranslationResources = {
       dayCountMany: "{{count}} дн.",
       none: "—",
     },
+    speed: {
+      title: "Скорость",
+      groupBy: {
+        label: "Группировать",
+        endpoint: "Эндпоинт",
+        model: "Модель",
+        modelEndpoint: "Модель · Эндпоинт",
+        agent: "Агент",
+      },
+      columns: {
+        speed: "Скорость вывода",
+        ttft: "До первого токена",
+      },
+      samples: "По {{count}}",
+      empty: "За этот период запросов через шлюз не было",
+      loadError: "Не удалось загрузить скорость.",
+    },
     heatmap: {
       title: "Тепловая карта",
       less: "Меньше",

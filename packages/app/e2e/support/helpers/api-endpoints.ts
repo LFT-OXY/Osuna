@@ -81,6 +81,7 @@ function send(response: ServerResponse, status: number, body: unknown) {
  * - /broke：Anthropic 对话回 402 欠费（中转站让它冷却 30 分钟）。
  * - /reject：Anthropic 对话回 401（中转站把它标成需要检查）。
  * - /free：像不要 key 的本机服务，谁来都答，其余同 /good。
+ * - /paced：Anthropic 对话流式回，文字分 11 段、每段隔 40ms 写完，输出 PACED_OUTPUT_TOKENS 个 token（速度卡片用）。
  * - /balance/usage：余额查询地址，回 {"data":{"left":7.5}}（key 不对时照样 401）。
  * - /api/user/self：new-api 的账户余额，只认 RELAY_ACCOUNT_TOKEN（原样作 Authorization）；没有 New-Api-User 时照 new-api
  *   回 success:false，有时回 quota 6000000（$12.00）。
@@ -215,7 +216,7 @@ export async function startFakeRelay(): Promise<FakeRelay> {
 }
 
 /**
- * 经中转站问 /good 的一轮对话：Claude Code 的 Messages 与 Codex 的 Responses 都回带编号与用量的整份回复，
+ * 经中转站问 /good 的一轮对话：Claude Code 的 Messages 与 Codex 的 Responses 都回带编号与用量的整份回复（/paced 流式回），
  * 这一条会记进账，用量页按接口分时看得到它（GOOD_REPLY_TOKENS、GOOD_RESPONSES_TOKENS）。返回 true 即已回。
  */
 function answersGoodTurn(input: {
@@ -225,6 +226,10 @@ function answersGoodTurn(input: {
 }): boolean {
   const { url, response } = input;
   const count = input.relay.requests.length;
+  if (url === "/paced/v1/messages") {
+    streamPacedReply({ id: `msg_paced_${count}`, response });
+    return true;
+  }
   if (url === "/good/v1/messages") {
     send(response, 200, {
       id: `msg_relay_${count}`,
@@ -250,6 +255,43 @@ function answersGoodTurn(input: {
     usage: { input_tokens: 200, output_tokens: 40 },
   });
   return true;
+}
+
+/** /paced 一轮回的输出 token。 */
+export const PACED_OUTPUT_TOKENS = 100;
+
+/** /paced 的流式回复：首字之后约 400ms 匀速写完，中转站算得出速度与首字等待。 */
+function streamPacedReply(input: { id: string; response: ServerResponse }): void {
+  const { response } = input;
+  response.writeHead(200, { "content-type": "text/event-stream" });
+  const write = (event: Record<string, unknown>) =>
+    response.write(`event: ${String(event.type)}\ndata: ${JSON.stringify(event)}\n\n`);
+  write({
+    type: "message_start",
+    message: {
+      id: input.id,
+      type: "message",
+      role: "assistant",
+      content: [],
+      usage: { input_tokens: 120, output_tokens: 0 },
+    },
+  });
+  write({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } });
+  let sent = 0;
+  const timer = setInterval(() => {
+    write({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "hi " } });
+    sent += 1;
+    if (sent < 11) return;
+    clearInterval(timer);
+    write({ type: "content_block_stop", index: 0 });
+    write({
+      type: "message_delta",
+      delta: { stop_reason: "end_turn" },
+      usage: { output_tokens: PACED_OUTPUT_TOKENS },
+    });
+    write({ type: "message_stop" });
+    response.end();
+  }, 40);
 }
 
 export const CLAUDE_CODE_ONLY = "This group only allows Claude Code clients";
@@ -612,9 +654,12 @@ export async function setCliHeaderSamples(
 
 /**
  * 像 Claude Code 那样经 daemon 中转站发一条对话，让选中这个模型的接口按上游的回复进入冷却或需要检查。
- * 调用前 Claude Code 的总开关要开着（口令从 gateway-tokens.json 读）。
+ * 调用前 Claude Code 的总开关要开着（口令从 gateway-tokens.json 读）。`stream` 要流式回复（默认整份）。
  */
-export async function sendThroughGateway(model: string): Promise<number> {
+export async function sendThroughGateway(
+  model: string,
+  options: { stream?: boolean } = {},
+): Promise<number> {
   const home = process.env.E2E_PASEO_HOME;
   if (!home) throw new Error("E2E_PASEO_HOME is not set (expected from the Playwright worker).");
   const tokens = JSON.parse(
@@ -635,6 +680,7 @@ export async function sendThroughGateway(model: string): Promise<number> {
         model,
         max_tokens: 16,
         messages: [{ role: "user", content: "hi" }],
+        ...(options.stream ? { stream: true } : {}),
       }),
     },
   );

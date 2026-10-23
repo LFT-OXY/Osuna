@@ -52,6 +52,7 @@ import {
 } from "./refused-fields.js";
 import { isGrokReply, WholeArgsTidy } from "./grok-integral.js";
 import { chainedTidy, ReplyModelName, type ReplyTidy } from "./reply-tidy.js";
+import { UNTIMED } from "./reply-clock.js";
 import type { ReplyTap, TappedReply } from "./reply-tap.js";
 import { refusedAfterOpening } from "./safety-filter.js";
 import { withFixedEffort, type FixedEffort } from "./fixed-effort.js";
@@ -459,27 +460,27 @@ function tappedShort(input: {
 /** 回复收完了：开口后才拒答的照常转给了 Agent，不算答成功；别的带上这次的用量。 */
 function endOf(tap: ReplyTap | null, deliveredAt: number | null): AnswerEnd {
   const reply = tap?.end();
-  const delivered = deliveredReply(reply, deliveredAt);
+  const delivered = deliveredReply(tap, reply, deliveredAt);
   if (reply && refusedAfterOpening(reply)) return { kind: "refused", reply: delivered };
   return { kind: "complete", usage: delivered.usage, reply: delivered };
 }
 
 /**
- * 直通原样转出回复，回复编号就是上游的；首个内容早于交出的时刻（扣下的帧里）时按交出的时刻算，
- * 没流式交出（deliveredAt 为 null）时不记。
+ * 直通原样转出回复，回复编号就是上游的；扣下的帧里早于交出的时刻按交出的时刻算，
+ * 没流式交出（deliveredAt 为 null）时不计时。
  */
 function deliveredReply(
+  tap: ReplyTap | null,
   reply: TappedReply | undefined,
   deliveredAt: number | null,
 ): DeliveredReply {
-  const delivered = (at: number | null) =>
-    at === null || deliveredAt === null ? null : Math.max(at, deliveredAt);
+  const times =
+    tap === null || deliveredAt === null ? UNTIMED : tap.times({ notBefore: deliveredAt });
   return {
     id: reply?.id ?? "",
     usage: reply?.usage ?? emptyUsage(),
     stop: reply?.stop ?? null,
-    firstContentAt: delivered(reply?.firstContentAt ?? null),
-    firstTextAt: delivered(reply?.firstTextAt ?? null),
+    ...times,
   };
 }
 

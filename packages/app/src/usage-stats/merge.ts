@@ -12,6 +12,7 @@ import type {
   UsageSummary,
   UsageTokenTotals,
 } from "@getpaseo/protocol/usage/types";
+import { mergeUsageSpeed, type MergedUsageSpeed, type UsageHostSpeed } from "./speed";
 import { totalUsageTokens, usageSourceKey } from "./totals";
 
 /** A project row never merges across hosts, so it carries the host it came from. */
@@ -36,9 +37,14 @@ export interface MergedUsageEndpoint extends Omit<UsageEndpointBreakdown, "endpo
   members: UsageEndpointMember[];
 }
 
-export interface MergedUsageReport extends Omit<UsageReport, "projects" | "trend" | "endpoints"> {
+export interface MergedUsageReport extends Omit<
+  UsageReport,
+  "projects" | "trend" | "endpoints" | "speed"
+> {
   projects: MergedUsageProject[];
   endpoints?: MergedUsageEndpoint[];
+  /** Only when it was asked for and a host with the gateway ledger answered. */
+  speed?: MergedUsageSpeed;
 }
 
 export interface UsageHostReport {
@@ -286,6 +292,7 @@ export function mergeUsageReports(inputs: readonly UsageHostReport[]): MergedUsa
   // 只有带中转站账本的 daemon 回 endpoints；一台都没有时整个字段不给。
   let endpoints: Map<string | null, MergedUsageEndpoint> | null = null;
   const split = namesNotMerged(inputs);
+  const speeds: UsageHostSpeed[] = [];
   let error: string | null = null;
 
   for (const { serverId, report } of inputs) {
@@ -302,6 +309,7 @@ export function mergeUsageReports(inputs: readonly UsageHostReport[]): MergedUsa
       endpoints ??= new Map();
       foldEndpoints({ target: endpoints, serverId, endpoints: report.endpoints, split });
     }
+    if (report.speed) speeds.push({ serverId, speed: report.speed });
     error ??= report.error;
   }
 
@@ -316,6 +324,7 @@ export function mergeUsageReports(inputs: readonly UsageHostReport[]): MergedUsa
     heatmapDays: [...heatmapDays.values()].sort((a, b) => byKeyAsc(a.day, b.day)),
     projects: projects.sort(byTokensDesc),
     endpoints: resolveEndpoints(endpoints),
+    speed: mergeUsageSpeed(speeds),
     backfill: mergeUsageBackfill(inputs.map(({ report }) => report.backfill)),
     error,
   };

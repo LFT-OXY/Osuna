@@ -13,6 +13,7 @@ import {
   UsageRequestFiltersSchema,
   UsageRequestRowSchema,
   UsageSessionRowSchema,
+  UsageSpeedGroupBySchema,
   UsageTrendGranularitySchema,
   UsageTrendStackBySchema,
 } from "./types.js";
@@ -34,6 +35,8 @@ export const UsageReportGetRequestSchema = z.object({
       stackBy: UsageTrendStackBySchema,
     })
     .optional(),
+  /** Ask for the Speed card's groups; a daemon without `features.gatewayLedger` ignores it. */
+  speed: z.object({ groupBy: UsageSpeedGroupBySchema }).optional(),
 });
 export type UsageReportGetRequest = z.infer<typeof UsageReportGetRequestSchema>;
 

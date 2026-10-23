@@ -77,6 +77,7 @@ const zhCNEnglishAllowlist = {
     "workspace.tabs.toasts.agentIdCopiedLabel",
     "usage.requests.filters.agent",
     "usage.requests.columns.agent",
+    "usage.speed.groupBy.agent",
   ],
   abbreviations: [
     "desktop.daemon.status.pid",

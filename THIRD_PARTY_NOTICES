@@ -1295,14 +1295,30 @@ failed as LostRequest and switched as RetriedRequest, a search over several
 fields ignoring case, filter choices from the whole period) follows QueryPage in
 internal/usage/request_page.go, Filter.keepsRecord and SourceOf in
 internal/usage/ledger.go, and LostRequest and RetriedRequest in
-internal/usage/usage.go; a reply's output speed follows DecodeWindow and
-DecodeOf in internal/usage/usage.go:
+internal/usage/usage.go:
 
   packages/server/src/server/usage/store.ts
   packages/server/src/server/usage/request-files.ts
   packages/server/src/server/usage/requests.ts
-  packages/server/src/server/usage/speed.ts
   packages/app/src/usage-stats/requests.ts
+
+A reply's output speed and time to first token (the 100 ms window floor, the
+10,000 tokens a second ceiling, a reply held and let go at once told by its
+flow and by an answer 20 times faster than its reasoning, an answer timed from
+its first text, paced visible reasoning timed from its start, sealed reasoning
+telling none) follow DecodeWindow, DecodeOf and Record.Decode in magpie's
+internal/usage/usage.go, and how the gateway times them (first content and
+first text, the flow as the middle 80% of content bytes scaled to the whole,
+the 8 MB and 65,536-mark limits, hidesReasoning and reasoningMs) follows
+firstToken, flowMs, flowFor, hidesReasoning, reasoningMs and timingKind in
+internal/gateway/ttft.go; a group's speed weighted by tokens and its mean wait
+follow Totals.addFrom, MeanTTFT and Speed in internal/usage/usage.go, and the
+Speed card's order (fastest first, then more tokens) follows ledSpeed, ledTTFT
+and ledCategories in internal/gui/assets/app.js:
+
+  packages/server/src/server/usage/speed.ts
+  packages/server/src/server/api-endpoints/gateway/reply-clock.ts
+  packages/app/src/usage-stats/speed.ts
 
 The Requests CSV export (snake_case headers, RFC 3339 times with their offset,
 the cost in USD to six decimals and empty when unpriced, empty cells for a time

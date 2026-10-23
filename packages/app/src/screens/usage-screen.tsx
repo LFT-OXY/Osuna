@@ -15,6 +15,7 @@ import {
   type UsageEndpointSelection,
 } from "@/components/usage/usage-overview-card";
 import { UsagePlanCard } from "@/components/usage/usage-plan-card";
+import { UsageSpeedCard, type UsageSpeedRequests } from "@/components/usage/usage-speed-card";
 import { UsageStatsCard } from "@/components/usage/usage-stats-card";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useUsageReport } from "@/hooks/use-usage-report";
@@ -91,6 +92,13 @@ function UsageScreenContent({ requestsIntent }: UsageScreenProps): ReactElement 
     [ledgerHosts, range],
   );
   const endpointFilter = useMemo(() => activeEndpoint?.endpointIds, [activeEndpoint]);
+  const speedRequests = useMemo<UsageSpeedRequests | null>(
+    () =>
+      ledgerHosts.length > 0
+        ? { hosts: ledgerHosts, range, timezone, endpoints: endpointFilter }
+        : null,
+    [endpointFilter, ledgerHosts, range, timezone],
+  );
   const filtered = useUsageReport({
     hosts: ledgerHosts,
     range,
@@ -185,6 +193,7 @@ function UsageScreenContent({ requestsIntent }: UsageScreenProps): ReactElement 
     const mainColumn = (
       <View style={styles.mainColumn}>
         {overview}
+        {speedRequests ? <UsageSpeedCard requests={speedRequests} /> : null}
         <UsageDetailsCard
           report={report}
           hosts={detailsHosts}

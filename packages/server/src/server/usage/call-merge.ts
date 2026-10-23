@@ -5,6 +5,7 @@ import type {
   UsageMergedCall,
   UsageRequestRecord,
 } from "./ledger.js";
+import { speedSumsOf, type UsageSpeedSums } from "./speed.js";
 import {
   KEY_SEPARATOR,
   addTotals,
@@ -127,8 +128,9 @@ export class UsageCallMerge {
       return output;
     }
     const totals = totalsOf(row);
-    if (Object.values(totals).every((value) => value === 0)) return output;
-    pushAt(output, unknownProjectKey(row), null, row.at, totals);
+    const speed = speedOf(row);
+    if (Object.values(totals).every((value) => value === 0) && speed === null) return output;
+    pushAt(output, unknownProjectKey(row), null, row.at, totals, speed);
     return output;
   }
 
@@ -154,8 +156,10 @@ export class UsageCallMerge {
       if (!call || !cli || !ledger) continue;
       const official = { ...mergedKey(cli, ledger), endpointId: undefined };
       pushAt(output, official, cli.turnKey, cli.at, negated(totalsOf(cli)));
-      pushAt(output, unknownProjectKey(ledger), null, ledger.at, negated(totalsOf(ledger)));
-      pushAt(output, mergedKey(cli, ledger), cli.turnKey, cli.at, totalsOf(ledger));
+      const speed = speedOf(ledger);
+      const unknown = unknownProjectKey(ledger);
+      pushAt(output, unknown, null, ledger.at, negated(totalsOf(ledger)), negatedSpeed(speed));
+      pushAt(output, mergedKey(cli, ledger), cli.turnKey, cli.at, totalsOf(ledger), speed);
       const marker: UsageMergedCall = {
         kind: "merged",
         agent: ledger.agent,
@@ -276,6 +280,26 @@ function negated(totals: UsageTokenTotals): UsageTokenTotals {
   return result;
 }
 
+/**
+ * What an answered request adds to its bucket's speed sums. A row written
+ * before the ledger kept a reply's flow was never summed, so it moves none.
+ */
+function speedOf(row: GatewayLedgerRow): UsageSpeedSums | null {
+  if (row.flowMs === undefined) return null;
+  return speedSumsOf(row);
+}
+
+function negatedSpeed(speed: UsageSpeedSums | null): UsageSpeedSums | null {
+  if (speed === null) return null;
+  return {
+    ttftCount: -speed.ttftCount,
+    ttftMs: -speed.ttftMs,
+    speedCount: -speed.speedCount,
+    speedOutput: -speed.speedOutput,
+    speedMs: -speed.speedMs,
+  };
+}
+
 /** The bucket a log delta itself went to: Official, at the line's own key. */
 function deltaKey(delta: UsageCallDelta): UsageBucketKey {
   return {
@@ -322,15 +346,19 @@ function failedKey(row: GatewayLedgerRow): UsageBucketKey {
   return unknownProjectKey(row, row.attempts.at(-1)?.endpointId ?? null);
 }
 
-/** One increment at a bucket key, and at its turn when the call ran in one. */
+/**
+ * One increment at a bucket key, and at its turn when the call ran in one. A
+ * speed goes to the bucket alone: turns show no speed.
+ */
 function pushAt(
   output: UsageMergeOutput,
   key: UsageBucketKey,
   turnKey: string | null,
   at: string,
   amounts: UsageTokenTotals,
+  speed: UsageSpeedSums | null = null,
 ): void {
-  output.buckets.push({ ...emptyBucketRow(key), ...amounts });
+  output.buckets.push({ ...emptyBucketRow(key), ...amounts, ...speed });
   if (turnKey === null || key.sessionId === "") return;
   output.turns.push({
     cli: key.cli,
