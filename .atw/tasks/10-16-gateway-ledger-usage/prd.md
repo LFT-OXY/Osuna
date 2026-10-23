@@ -225,7 +225,7 @@
 - [x] 旧客户端兼容：新字段都可选；旧形状保存接口不清掉价格倍率；没有 `gatewayLedger` 时客户端照旧；官方 Paseo 手机 App 的用量页照常。
 - [x] 文档：`docs/usage.md`（来源、合并、历史、Pi / OMP 规则、存储、速度、倍率、Outbound requests）、`docs/data-model.md`、`docs/glossary.md`（新词条与 5 个旧词条）、ADR 0014 与 0007 的标注、`THIRD_PARTY_NOTICES`。
 - [x] 9 种界面语言的 i18n 测试通过：键齐全，中文没有残留英文。
-- [ ] UI and Design 的界面验收截图由主会话拍摄并给用户看过。
+- [x] UI and Design 的界面验收截图由主会话拍摄并给用户看过。
 
 ## Further Notes
 
