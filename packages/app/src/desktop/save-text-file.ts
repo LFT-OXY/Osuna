@@ -1,10 +1,8 @@
-import { getDesktopHost } from "@/desktop/host";
-import type { SaveTextFileInput } from "./save-text-file-types";
-
-export type { SaveTextFileInput } from "./save-text-file-types";
+import { getDesktopHost } from "./host";
+import type { SaveTextFileInput } from "@/utils/save-text-file-types";
 
 /** Desktop: the save dialog asks where; cancelling saves nothing. */
-export async function saveTextFile(input: SaveTextFileInput): Promise<void> {
+export async function saveTextFileWithDesktopDialog(input: SaveTextFileInput): Promise<void> {
   const saveText = getDesktopHost()?.dialog?.saveText;
   if (typeof saveText !== "function") {
     throw new Error("Desktop dialog saveText() is unavailable in this environment.");

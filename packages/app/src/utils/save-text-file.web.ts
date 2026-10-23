@@ -1,9 +1,15 @@
+import { getIsElectron } from "@/constants/platform";
+import { saveTextFileWithDesktopDialog } from "@/desktop/save-text-file";
 import type { SaveTextFileInput } from "./save-text-file-types";
 
 export type { SaveTextFileInput } from "./save-text-file-types";
 
-/** Browser: the file downloads under its name. */
+/** Desktop: the save dialog asks where. Browser: the file downloads under its name. */
 export async function saveTextFile(input: SaveTextFileInput): Promise<void> {
+  if (getIsElectron()) {
+    await saveTextFileWithDesktopDialog(input);
+    return;
+  }
   const url = URL.createObjectURL(new Blob([input.contents], { type: input.mimeType }));
   const link = document.createElement("a");
   link.href = url;

@@ -367,6 +367,8 @@ describe("loadAppSettingsFromStorage", () => {
       displayAs: "used",
       pins: null,
       serverId: null,
+      currency: "usd",
+      chineseUnits: false,
     });
 
     const deps = makeDeps({
@@ -391,6 +393,8 @@ describe("loadAppSettingsFromStorage", () => {
         { sourceId: "claude", windowId: "five-hour" },
       ],
       serverId: "server",
+      currency: "usd",
+      chineseUnits: false,
     });
   });
 
@@ -406,6 +410,8 @@ describe("loadAppSettingsFromStorage", () => {
       displayAs: "remaining",
       pins: [],
       serverId: "server",
+      currency: "usd",
+      chineseUnits: false,
     });
   });
 
@@ -426,6 +432,8 @@ describe("loadAppSettingsFromStorage", () => {
       displayAs: "used",
       pins: [{ sourceId: "claude", windowId: "weekly" }],
       serverId: null,
+      currency: "usd",
+      chineseUnits: false,
     });
   });
 
