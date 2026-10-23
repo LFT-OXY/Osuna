@@ -4784,7 +4784,7 @@ export const ja: TranslationResources = {
       rateFallback: "為替レートをまだ取得していません。{{rate}} で計算しています",
       rateLoading: "為替レートを取得中…",
       rateFailed: "為替レートを取得できません。米ドルで表示しています",
-      rateOnChoose: "当日の為替レートで換算します",
+      rateOnChoose: "推定コストを人民元に換算して表示します",
       chineseUnits: "大きな数を「万 / 亿」で表示",
     },
     hostFilter: {

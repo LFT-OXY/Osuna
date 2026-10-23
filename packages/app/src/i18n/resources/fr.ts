@@ -4847,7 +4847,7 @@ export const fr: TranslationResources = {
       rateFallback: "Pas encore de taux de change ; {{rate}} utilisé pour l'instant",
       rateLoading: "Récupération du taux de change…",
       rateFailed: "Taux de change indisponible ; affichage en USD",
-      rateOnChoose: "Converti au taux de change du jour",
+      rateOnChoose: "Affiche les coûts estimés en yuans",
       chineseUnits: "Afficher les grands nombres en 万 / 亿",
     },
     hostFilter: {

@@ -53,8 +53,14 @@ function useExchangeRateServerId(): string | null {
   );
 }
 
+/**
+ * The daemon answers the rate at once and fetches a day-old one behind it, then sends
+ * `usage.pricing.updated`; whoever hears that invalidates this prefix to ask again.
+ */
+export const usageExchangeRateQueryBaseKey = ["usage-exchange-rate"] as const;
+
 function exchangeRateQueryKey(serverId: string | null) {
-  return ["usage-exchange-rate", serverId] as const;
+  return [...usageExchangeRateQueryBaseKey, serverId] as const;
 }
 
 /** The rate, asked for only while CNY is chosen; "off" otherwise or when no host can answer. */

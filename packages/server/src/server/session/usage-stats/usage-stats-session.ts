@@ -151,7 +151,7 @@ export class UsageStatsSession {
   ): Promise<void> {
     await this.respond(request, async () => ({
       type: "usage.exchange_rate.get.response",
-      payload: { requestId: request.requestId, ...(await this.usageService.getExchangeRate()) },
+      payload: { requestId: request.requestId, ...this.usageService.getExchangeRate() },
     }));
   }
 

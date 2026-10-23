@@ -592,6 +592,26 @@ describe("exchange rate", () => {
     return rate;
   }
 
+  /** The broadcast that tells clients a fetched rate landed and they should ask again. */
+  function nextRateLanding(client: DaemonClient): Promise<void> {
+    return new Promise<void>((resolve) => {
+      client.on("usage.pricing.updated", () => resolve());
+    });
+  }
+
+  /** Asks once, which answers at once and fetches behind it, then waits for the rate to land. */
+  async function fetchBehind(client: DaemonClient): Promise<void> {
+    const landed = nextRateLanding(client);
+    await rateOf(client);
+    await landed;
+  }
+
+  /** Nothing should be sent; give a fetch that was wrongly started the time to reach the server. */
+  async function expectNoFetchBeyond(count: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(rates.requests).toHaveLength(count);
+  }
+
   beforeEach(async () => {
     nowMs = RATE_START;
     rates = await FakeRateServer.start();
@@ -604,9 +624,19 @@ describe("exchange rate", () => {
     await rates.close();
   });
 
-  test("fetches the rate once, as Osuna, with no credentials, and keeps it in a private file", async () => {
+  // magpie's page never waits on the network: fx.Soon answers what it knows and
+  // fetches behind it (internal/fx/fx.go:132-157, internal/gui/api.go:333-344).
+  test("answers 7.2 at once, fetches behind it as Osuna with no credentials, and tells clients", async () => {
     const client = await start({ autoUpdate: true });
+    const landed = nextRateLanding(client);
 
+    expect(await rateOf(client)).toEqual({
+      cnyPerUsd: 7.2,
+      fetchedAt: null,
+      fallback: true,
+      stale: true,
+    });
+    await landed;
     expect(await rateOf(client)).toEqual({
       cnyPerUsd: 7.12,
       fetchedAt: "2026-10-23T08:00:00.000Z",
@@ -629,23 +659,27 @@ describe("exchange rate", () => {
     if (process.platform !== "win32") expect((await stat(cachePath)).mode & 0o777).toBe(0o600);
   });
 
-  test("answers from the cache for a day, across a restart, then fetches again", async () => {
+  test("answers from the cache for a day, across a restart, then refreshes it behind the answer", async () => {
     let client = await start({ autoUpdate: true });
-    await rateOf(client);
+    await fetchBehind(client);
 
     nowMs = RATE_START + 23 * HOUR;
     await stopAll();
     client = await start({ autoUpdate: true });
     rates.reply = rateReply(7.3);
-    expect(await rateOf(client)).toEqual({
+    const cached = {
       cnyPerUsd: 7.12,
       fetchedAt: "2026-10-23T08:00:00.000Z",
       fallback: false,
       stale: false,
-    });
-    expect(rates.requests).toHaveLength(1);
+    };
+    expect(await rateOf(client)).toEqual(cached);
+    await expectNoFetchBeyond(1);
 
     nowMs = RATE_START + 24 * HOUR;
+    const landed = nextRateLanding(client);
+    expect(await rateOf(client)).toEqual({ ...cached, stale: true });
+    await landed;
     expect(await rateOf(client)).toEqual({
       cnyPerUsd: 7.3,
       fetchedAt: "2026-10-24T08:00:00.000Z",
@@ -655,9 +689,9 @@ describe("exchange rate", () => {
     expect(rates.requests).toHaveLength(2);
   });
 
-  test("answers the last rate when a fetch fails, and waits ten minutes before trying again", async () => {
+  test("keeps the last rate when a fetch fails, and waits ten minutes before trying again", async () => {
     const client = await start({ autoUpdate: true });
-    await rateOf(client);
+    await fetchBehind(client);
 
     nowMs = RATE_START + 25 * HOUR;
     rates.reply = { status: 503, body: "busy" };
@@ -668,14 +702,17 @@ describe("exchange rate", () => {
       stale: true,
     };
     expect(await rateOf(client)).toEqual(lastRate);
-    expect(rates.requests).toHaveLength(2);
+    await expect.poll(() => rates.requests.length).toBe(2);
+    await expectNoFetchBeyond(2);
+    expect(await rateOf(client)).toEqual(lastRate);
 
     rates.reply = rateReply(7.3);
     nowMs += 9 * 60 * 1000;
     expect(await rateOf(client)).toEqual(lastRate);
-    expect(rates.requests).toHaveLength(2);
+    await expectNoFetchBeyond(2);
 
     nowMs += 60 * 1000;
+    await fetchBehind(client);
     expect((await rateOf(client)).cnyPerUsd).toBe(7.3);
     expect(rates.requests).toHaveLength(3);
   });
@@ -683,14 +720,12 @@ describe("exchange rate", () => {
   test("answers 7.2 as the fallback when no rate was ever fetched", async () => {
     rates.reply = { status: 200, body: JSON.stringify({ result: "error", rates: {} }) };
     const client = await start({ autoUpdate: true });
+    const fallback = { cnyPerUsd: 7.2, fetchedAt: null, fallback: true, stale: true };
 
-    expect(await rateOf(client)).toEqual({
-      cnyPerUsd: 7.2,
-      fetchedAt: null,
-      fallback: true,
-      stale: true,
-    });
-    expect(rates.requests).toHaveLength(1);
+    expect(await rateOf(client)).toEqual(fallback);
+    await expect.poll(() => rates.requests.length).toBe(1);
+    expect(await rateOf(client)).toEqual(fallback);
+    await expectNoFetchBeyond(1);
   });
 
   test("sends nothing while the price table's auto-update is off", async () => {
@@ -701,9 +736,10 @@ describe("exchange rate", () => {
       fallback: true,
       stale: true,
     });
+    await expectNoFetchBeyond(0);
 
     await client.patchDaemonConfig({ usage: { pricing: { autoUpdate: true } } });
-    await rateOf(client);
+    await fetchBehind(client);
     expect(rates.requests).toHaveLength(1);
 
     nowMs = RATE_START + 48 * HOUR;
@@ -714,9 +750,10 @@ describe("exchange rate", () => {
       fallback: false,
       stale: true,
     });
+    await expectNoFetchBeyond(1);
     await stopAll();
     client = await start({ autoUpdate: false });
     expect((await rateOf(client)).cnyPerUsd).toBe(7.12);
-    expect(rates.requests).toHaveLength(1);
+    await expectNoFetchBeyond(1);
   });
 });

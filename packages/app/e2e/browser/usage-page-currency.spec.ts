@@ -2,6 +2,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { Page } from "@playwright/test";
 import { expect, test } from "../support/fixtures";
+import { daemonWsRoutePattern } from "../support/helpers/daemon-port";
+import { openAgentRoute, seedMockAgentWorkspace } from "../support/helpers/mock-agent";
 import { createUsageFixtureRoots } from "../support/helpers/usage-fixtures";
 import { hideGatewayLedger, openUsagePage, waitForUsageTotal } from "../support/helpers/usage-page";
 
@@ -41,6 +43,53 @@ async function openOptions(page: Page): Promise<void> {
   await expect(page.getByTestId("usage-options-menu")).toBeVisible({ timeout: 10_000 });
 }
 
+/**
+ * The mock provider writes no CLI log, so the daemon has no turn rows for it. The page's
+ * turn list is answered with one priced turn ($0.50) per turn id the timeline carried,
+ * which is all the footer needs to show a cost.
+ */
+async function answerTurnsWithOnePricedTurn(page: Page): Promise<void> {
+  const turnIds = new Set<string>();
+  const messageIds = new Set<string>();
+  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((message) => server.send(message));
+    server.onMessage((message) => {
+      if (typeof message !== "string") {
+        ws.send(message);
+        return;
+      }
+      for (const match of message.matchAll(/"turnId":"([^"]+)"/g)) turnIds.add(match[1]);
+      for (const match of message.matchAll(/"messageId":"([^"]+)"/g)) messageIds.add(match[1]);
+      if (!message.includes('"usage.agent.turns.list.response"')) {
+        ws.send(message);
+        return;
+      }
+      const envelope = JSON.parse(message) as {
+        message: { payload: { turns: unknown[]; complete: boolean } };
+      };
+      const at = new Date().toISOString();
+      envelope.message.payload.complete = true;
+      envelope.message.payload.turns = [...turnIds].map((turnId) => ({
+        cli: "claude",
+        backend: null,
+        sessionId: "mock-session",
+        turnKey: turnId,
+        turnId,
+        userMessageIds: [...messageIds],
+        startedAt: at,
+        endedAt: at,
+        durationMs: 1000,
+        byModel: [],
+        totals: { input: 1000, cachedInput: 0, cacheWrite: 0, output: 500, reasoning: 0 },
+        estimatedCost: 0.5,
+        priced: true,
+      }));
+      ws.send(JSON.stringify(envelope));
+    });
+  });
+}
+
 test.describe("Usage page currency and 万 / 亿", () => {
   test("choosing CNY shows every estimated cost in yuan with the rate under it", async ({
     page,
@@ -53,7 +102,7 @@ test.describe("Usage page currency and 万 / 亿", () => {
 
     await openOptions(page);
     const cny = page.getByTestId("usage-options-currency-cny");
-    await expect(cny).toContainText("Converted at the day's exchange rate");
+    await expect(cny).toContainText("Shows estimated costs in yuan");
     await expect(page.getByTestId("usage-options-chinese-units")).toHaveCount(0);
     await cny.click();
     await expect(cny).toContainText(/1 USD = 7\.12 CNY · fetched \d/);
@@ -107,6 +156,34 @@ test.describe("Usage page currency and 万 / 亿", () => {
     await waitForUsageTotal(page, FIXTURE_TOKENS_WAN_YI);
     await expect(page.getByTestId("usage-total-cost")).toHaveText(YUAN);
     await expect(page.getByTestId("usage-stats-card")).toContainText("万");
+  });
+
+  test("a turn's cost reads in yuan once CNY is chosen", async ({ page }) => {
+    test.setTimeout(120_000);
+    await seedExchangeRate();
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "@paseo:app-settings",
+        JSON.stringify({ language: "en", usage: { displayAs: "used", currency: "cny" } }),
+      );
+    });
+    const agent = await seedMockAgentWorkspace({
+      repoPrefix: "usage-currency-turn-",
+      title: "Turn cost in yuan",
+    });
+    try {
+      await agent.client.sendAgentMessage(agent.agentId, "Say hello");
+      await agent.client.waitForFinish(agent.agentId, 30_000);
+      await answerTurnsWithOnePricedTurn(page);
+      await openAgentRoute(page, agent);
+      // $0.50 at 7.12.
+      await expect(page.getByTestId("turn-usage-segment").first()).toContainText("¥3.56", {
+        timeout: 30_000,
+      });
+      await expect(page.getByTestId("turn-usage-segment").first()).not.toContainText("$");
+    } finally {
+      await agent.cleanup();
+    }
   });
 
   test("a daemon without the gateway ledger offers no currency", async ({ page }) => {

@@ -11,6 +11,7 @@ import {
 } from "@/usage-stats/aggregated-usage";
 import { usageRequestsQueryBaseKey } from "@/usage-stats/aggregated-requests";
 import { usageSessionsQueryBaseKey } from "@/usage-stats/aggregated-sessions";
+import { usageExchangeRateQueryBaseKey } from "@/usage-stats/use-usage-money";
 import {
   EMPTY_USAGE_REPORT,
   mergeUsageBackfill,
@@ -111,6 +112,8 @@ export function useUsageReport(input: UseUsageReportInput): UseUsageReportResult
     // stale with it; the card refetches whatever it shows.
     void queryClient.invalidateQueries({ queryKey: usageSessionsQueryBaseKey });
     void queryClient.invalidateQueries({ queryKey: usageRequestsQueryBaseKey });
+    // usage.pricing.updated 也报「汇率取到了」：人民币显示的成本跟着重读。
+    void queryClient.invalidateQueries({ queryKey: usageExchangeRateQueryBaseKey });
   }, [query, queryClient]);
 
   const liveBackfill = useUsageLiveEvents({

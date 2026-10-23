@@ -4796,7 +4796,7 @@ export const ptBR: TranslationResources = {
       rateFallback: "Ainda sem taxa de câmbio; usando {{rate}} por enquanto",
       rateLoading: "Obtendo a taxa de câmbio…",
       rateFailed: "Não foi possível obter a taxa de câmbio; mostrando em USD",
-      rateOnChoose: "Convertido pela taxa de câmbio do dia",
+      rateOnChoose: "Mostra os custos estimados em yuans",
       chineseUnits: "Mostrar números grandes em 万 / 亿",
     },
     hostFilter: {

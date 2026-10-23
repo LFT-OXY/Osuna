@@ -233,6 +233,8 @@ export class UsageService {
       autoUpdate: () => options.getPricingConfig().autoUpdate,
       url: options.config?.exchangeRate?.url,
       fetch: options.config?.exchangeRate?.fetch,
+      // 汇率换了，人民币显示的成本也换了：沿用价格变了的那条通知，客户端照常重读。
+      onUpdated: options.onPricingUpdated,
     });
   }
 
@@ -260,6 +262,7 @@ export class UsageService {
   async dispose(): Promise<void> {
     this.disposed = true;
     this.pricing.dispose();
+    await this.exchangeRates.dispose();
     this.unsubscribeTurns?.();
     this.unsubscribeTurns = null;
     for (const timer of this.retryTimers) clearTimeout(timer);
@@ -463,8 +466,11 @@ export class UsageService {
     };
   }
 
-  /** The CNY rate, fetched only while it is a day old and the price table auto-updates. */
-  getExchangeRate(): Promise<UsageExchangeRate> {
+  /**
+   * The CNY rate known now, never waited for. A day-old one is fetched behind the answer
+   * while the price table auto-updates, and `usage.pricing.updated` tells clients it landed.
+   */
+  getExchangeRate(): UsageExchangeRate {
     return this.exchangeRates.get();
   }
 

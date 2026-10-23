@@ -4751,7 +4751,7 @@ export const ko: TranslationResources = {
       rateFallback: "아직 환율을 가져오지 못해 {{rate}}로 계산합니다",
       rateLoading: "환율을 가져오는 중…",
       rateFailed: "환율을 가져올 수 없어 달러로 표시합니다",
-      rateOnChoose: "당일 환율로 환산합니다",
+      rateOnChoose: "예상 비용을 위안화로 환산해 표시합니다",
       chineseUnits: "큰 숫자를 万 / 亿로 표시",
     },
     hostFilter: {

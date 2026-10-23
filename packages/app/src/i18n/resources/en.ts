@@ -4854,7 +4854,7 @@ export const en = {
       rateFallback: "No exchange rate yet; using {{rate}} for now",
       rateLoading: "Getting the exchange rate…",
       rateFailed: "Couldn't get the exchange rate; showing USD",
-      rateOnChoose: "Converted at the day's exchange rate",
+      rateOnChoose: "Shows estimated costs in yuan",
       chineseUnits: "Show large numbers in 万 / 亿",
     },
     hostFilter: {

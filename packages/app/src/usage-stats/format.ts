@@ -1,4 +1,4 @@
-// 万 / 亿的写法（亿两位小数、万一位小数、去掉末尾的 0）照 magpie 的 fmtN，人民币的换算照 fmtCost
+// 万 / 亿的写法（亿两位小数、万一位小数、去掉末尾的 0）照 magpie 的 fmtN，美元乘汇率换成人民币照 fmtCost（只取换算，小数位数仍按本文件）
 // （https://github.com/yetone/magpie，internal/gui/assets/app.js，7597c132）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 /**

@@ -1,4 +1,4 @@
-// 汇率的取法（open.er-api.com、只认 rates.CNY > 0、回复最多读 1 MB、失败后 10 分钟内不再试、从没取到过按 7.2、读不懂的缓存当作没有）移植自 magpie（https://github.com/yetone/magpie，internal/fx/fx.go，7597c132）
+// 汇率的取法（先回已知的、过期了在后台取，页面从不等网络、open.er-api.com、只认 rates.CNY > 0、回复最多读 1 MB、失败后 10 分钟内不再试、从没取到过按 7.2、读不懂的缓存当作没有）移植自 magpie（https://github.com/yetone/magpie，internal/fx/fx.go，7597c132）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import type { Logger } from "pino";
 import { z } from "zod";
@@ -32,6 +32,8 @@ export interface UsageExchangeRateOptions {
   autoUpdate: () => boolean;
   url?: string;
   fetch?: typeof globalThis.fetch;
+  /** A fetched rate landed; clients that show CNY should ask again. */
+  onUpdated: () => void;
 }
 
 /**
@@ -49,7 +51,9 @@ export class UsageExchangeRates {
   private readonly fetchApi: typeof globalThis.fetch;
   private cached: CachedRate | null | undefined = undefined;
   private failedAt: number | null = null;
-  private fetching: Promise<CachedRate | null> | null = null;
+  private fetching: Promise<void> | null = null;
+  private disposed = false;
+  private readonly onUpdated: () => void;
 
   constructor(options: UsageExchangeRateOptions) {
     this.filePath = options.filePath;
@@ -59,14 +63,26 @@ export class UsageExchangeRates {
     this.autoUpdate = options.autoUpdate;
     this.url = options.url ?? EXCHANGE_RATE_URL;
     this.fetchApi = options.fetch ?? globalThis.fetch;
+    this.onUpdated = options.onUpdated;
   }
 
-  async get(): Promise<UsageExchangeRate> {
+  /**
+   * The rate known now, never waited for (magpie's `fx.Soon`, internal/fx/fx.go:132-157,
+   * which the page asks through `currentFX`, internal/gui/api.go:333-344): the cache, else 7.2.
+   * When that is a day old it is fetched behind the answer, one fetch at a time, and
+   * `onUpdated` tells clients to ask again once it lands.
+   */
+  get(): UsageExchangeRate {
     const known = this.known();
-    if (known && !this.isStale(known)) return this.answer(known);
-    if (!this.autoUpdate() || this.failedRecently()) return this.answer(known);
-    const fetched = await this.fetchOnce();
-    return this.answer(fetched ?? known);
+    const due = !known || this.isStale(known);
+    if (due && this.autoUpdate() && !this.failedRecently()) this.fetchBehind();
+    return this.answer(known);
+  }
+
+  /** Waits for a fetch behind an answer, so nothing is written once the daemon is gone. */
+  async dispose(): Promise<void> {
+    this.disposed = true;
+    await this.fetching;
   }
 
   private known(): CachedRate | null {
@@ -89,15 +105,15 @@ export class UsageExchangeRates {
     return { ...rate, fallback: false, stale: this.isStale(rate) };
   }
 
-  /** One fetch at a time: callers that arrive while it runs share its answer. */
-  private fetchOnce(): Promise<CachedRate | null> {
-    this.fetching ??= this.fetchLive().finally(() => {
+  /** One fetch at a time (magpie's `refreshing` lock); the next look shows what it got. */
+  private fetchBehind(): void {
+    if (this.fetching || this.disposed) return;
+    this.fetching = this.fetchLive().finally(() => {
       this.fetching = null;
     });
-    return this.fetching;
   }
 
-  private async fetchLive(): Promise<CachedRate | null> {
+  private async fetchLive(): Promise<void> {
     try {
       const response = await this.fetchApi(this.url, {
         headers: { "user-agent": this.userAgent },
@@ -111,15 +127,16 @@ export class UsageExchangeRates {
         cnyPerUsd: reply.data.rates.CNY,
         fetchedAt: new Date(this.now()).toISOString(),
       };
+      // daemon 已经关了：不写盘也不通知（magpie 的 fetch 换了家目录就丢掉结果）。
+      if (this.disposed) return;
       this.cached = rate;
       this.failedAt = null;
       this.write(rate);
-      return rate;
+      this.onUpdated();
     } catch (error) {
       // 取不到汇率不是事故：照旧用上次的（或 7.2）。
       this.failedAt = this.now();
       this.logger.info({ err: error }, "Exchange rate fetch failed; keeping the last rate");
-      return null;
     }
   }
 

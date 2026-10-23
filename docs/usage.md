@@ -371,13 +371,15 @@ only linked, never read.
 
 The exchange rate is fetched only while a client has chosen CNY in the usage
 page's options, and only while the price table's auto-update is on. The client
-asks its host with `usage.exchange_rate.get`; the daemon answers from
-`$PASEO_HOME/usage/exchange-rate.json` while the rate there is under a day old,
-and otherwise sends one GET to `https://open.er-api.com/v6/latest/USD` with
-Osuna's user agent and nothing else: no authentication, no query string, no
-body. It keeps `rates.CNY` and when it got it. A request times out after 15
-seconds; a failure is logged at `info`, the last rate is answered, and nothing
-is tried again for 10 minutes. A daemon that never got a rate answers 7.2 and
+asks its host with `usage.exchange_rate.get`, and the daemon answers at once
+with the rate in `$PASEO_HOME/usage/exchange-rate.json` (7.2 when there is
+none), so the page never waits on the network (magpie's `fx.Soon`). When that
+rate is a day old, the daemon sends one GET behind the answer to
+`https://open.er-api.com/v6/latest/USD` with Osuna's user agent and nothing
+else: no authentication, no query string, no body. It keeps `rates.CNY` and
+when it got it, and sends `usage.pricing.updated` so open pages ask again. A
+request times out after 15 seconds; a failure is logged at `info`, the last
+rate stays, and nothing is tried again for 10 minutes. A daemon that never got a rate answers 7.2 and
 says so, and the page reads "No exchange rate yet; using 7.2 for now". With USD
 chosen, or auto-update off, nothing is sent; with auto-update off the page
 converts with the rate already on disk, or 7.2. Costs stay in USD everywhere

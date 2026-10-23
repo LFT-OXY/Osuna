@@ -4708,7 +4708,7 @@ export const ar: TranslationResources = {
       rateFallback: "لا يوجد سعر صرف بعد؛ يُستخدم {{rate}} مؤقتًا",
       rateLoading: "جارٍ جلب سعر الصرف…",
       rateFailed: "تعذّر جلب سعر الصرف؛ تُعرض المبالغ بالدولار",
-      rateOnChoose: "يُحوَّل بسعر صرف اليوم",
+      rateOnChoose: "تُعرض التكلفة المقدّرة باليوان",
       chineseUnits: "عرض الأعداد الكبيرة بـ 万 / 亿",
     },
     hostFilter: {

@@ -172,7 +172,9 @@ per option. A menu whose every option is on screen at once does not survive its 
 
 Independent toggles stay on their page as a checkmark list. A pick-one group can share that page
 below a `MenuSeparator`; make selecting the checked row clear it, so "none" doesn't need a row of
-its own.
+its own. A lone on/off preference, a setting rather than one item of a list, is a row with a
+trailing `Switch` and `closeOnSelect={false}`, toggled from the row or the switch: the Usage page's
+options menu (`packages/app/src/components/usage/usage-options-menu.tsx`) is the example.
 
 ## Gotchas
 

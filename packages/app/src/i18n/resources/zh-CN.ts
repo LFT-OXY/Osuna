@@ -4694,7 +4694,7 @@ export const zhCN: TranslationResources = {
       rateFallback: "尚未取到汇率，暂按 {{rate}} 计算",
       rateLoading: "正在取汇率…",
       rateFailed: "取不到汇率，暂按美元显示",
-      rateOnChoose: "按当天汇率换算",
+      rateOnChoose: "估算成本按汇率换成人民币显示",
       chineseUnits: "用「万 / 亿」显示大数",
     },
     hostFilter: {

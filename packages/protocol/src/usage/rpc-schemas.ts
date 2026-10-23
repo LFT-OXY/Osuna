@@ -165,11 +165,12 @@ export type UsagePricingRefreshResponse = z.infer<typeof UsagePricingRefreshResp
 
 /**
  * The dollar-to-yuan rate the CNY currency choice converts estimated costs with. The client asks
- * only while CNY is chosen. The daemon answers from its cache while the rate is under a day old,
- * else fetches it once (never while the price table's auto-update is off); a failed fetch answers
- * the last rate it had. `fallback` is the fixed 7.2 used before any rate was ever fetched, with
- * `fetchedAt: null`; `stale` says the rate is a day old or more. Only daemons that declare
- * `features.gatewayLedger` know this request.
+ * only while CNY is chosen. The daemon answers at once with the rate it knows, never waiting on
+ * the network; when that is a day old it fetches one behind the answer (never while the price
+ * table's auto-update is off, not again within 10 minutes of a failure) and sends
+ * `usage.pricing.updated` once it lands. `fallback` is the fixed 7.2 used before any rate was
+ * ever fetched, with `fetchedAt: null`; `stale` says the rate is a day old or more. Only daemons
+ * that declare `features.gatewayLedger` know this request.
  */
 export const UsageExchangeRateGetRequestSchema = z.object({
   type: z.literal("usage.exchange_rate.get.request"),
@@ -192,7 +193,7 @@ export const UsageExchangeRateGetResponseSchema = z.object({
 export type UsageExchangeRateGetResponse = z.infer<typeof UsageExchangeRateGetResponseSchema>;
 
 /**
- * Sent when the table or the overrides changed; the client re-reads what it
+ * Sent when the table, the overrides or the CNY exchange rate changed; the client re-reads what it
  * needs. It carries no payload — a correlated one would make it look like a
  * reply to the session's reply classifier.
  */

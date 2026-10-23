@@ -4823,7 +4823,7 @@ export const es: TranslationResources = {
       rateFallback: "Aún no hay tipo de cambio; se usa {{rate}} por ahora",
       rateLoading: "Obteniendo el tipo de cambio…",
       rateFailed: "No se pudo obtener el tipo de cambio; se muestra en USD",
-      rateOnChoose: "Se convierte al tipo de cambio del día",
+      rateOnChoose: "Muestra los costos estimados en yuanes",
       chineseUnits: "Mostrar números grandes en 万 / 亿",
     },
     hostFilter: {

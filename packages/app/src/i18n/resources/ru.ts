@@ -4802,7 +4802,7 @@ export const ru: TranslationResources = {
       rateFallback: "Курса ещё нет; пока используется {{rate}}",
       rateLoading: "Получение курса…",
       rateFailed: "Не удалось получить курс; суммы в USD",
-      rateOnChoose: "Пересчёт по курсу дня",
+      rateOnChoose: "Показывает расчётную стоимость в юанях",
       chineseUnits: "Показывать большие числа в 万 / 亿",
     },
     hostFilter: {

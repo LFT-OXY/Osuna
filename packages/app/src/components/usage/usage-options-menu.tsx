@@ -22,7 +22,10 @@ import {
   type UsageExchangeRateState,
 } from "@/usage-stats/use-usage-money";
 
-/** Defined once so the trigger does not take a new style function every render. */
+/**
+ * Defined once so the trigger does not take a new style function every render. Hovered or
+ * open, it takes the `interactionHighlight` fill (docs/design.md), not a coloured outline.
+ */
 function triggerStyle({ hovered, open }: MenuTriggerState): StyleProp<ViewStyle> {
   return [styles.trigger, (hovered || open) && styles.triggerHovered];
 }
@@ -126,8 +129,8 @@ type Translate = ReturnType<typeof useTranslation>["t"];
 
 /**
  * The line under CNY. It is there whichever currency is chosen, so picking one
- * does not change the menu's height: before CNY is chosen nothing is fetched,
- * and the line says when the rate will be.
+ * does not change the menu's height: before CNY is chosen no rate is asked for,
+ * and the line says what choosing it does.
  */
 function describeRate(input: {
   currency: UsageCurrency;
@@ -179,13 +182,13 @@ const styles = StyleSheet.create((theme) => {
       borderColor: palette.controlBorder,
     },
     triggerHovered: {
-      borderColor: palette.brand,
+      backgroundColor: theme.colors.interactionHighlight,
     },
     glyph: {
       color: palette.inkFaint,
     },
     glyphHovered: {
-      color: palette.brand,
+      color: palette.ink,
     },
   };
 });
