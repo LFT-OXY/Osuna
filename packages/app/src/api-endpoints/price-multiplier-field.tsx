@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Field, FormTextInput } from "@/components/ui/form-field";
+import { Text } from "@/components/ui/text";
 import type { ConnectionFormModel, ConnectionFormState } from "./internal/connection-form-model";
 import { priceMultiplierProblemText } from "./price-multiplier-copy";
 
@@ -24,12 +25,15 @@ export function PriceMultiplierField({
   size: "sm" | "md";
 }) {
   const { t } = useTranslation();
-  if (!state.canSetPriceMultiplier) return null;
   const label = t(`${KEY}.label`);
+  // 与「高级」里别的字段标签同色（AdvancedFieldLabel 的文字），不用 Field 缺省的浅色。
+  const labelElement = useMemo(() => <Text>{label}</Text>, [label]);
+  if (!state.canSetPriceMultiplier) return null;
   const isInvalid = state.priceMultiplierInvalid;
   return (
     <Field
       label={label}
+      labelElement={labelElement}
       hint={t(`${KEY}.hint`)}
       error={isInvalid ? priceMultiplierProblemText(t) : null}
       reservesTwoLines

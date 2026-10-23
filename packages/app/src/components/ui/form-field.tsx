@@ -26,6 +26,8 @@ import {
 
 interface FieldProps {
   label: string;
+  /** 换下缺省的浅色标签文字（如对话框某一区的标签用主前景色）；不给就用 label 画缺省样式。 */
+  labelElement?: ReactNode;
   children: ReactNode;
   trailing?: ReactNode;
   hint?: string;
@@ -37,6 +39,7 @@ interface FieldProps {
 
 export function Field({
   label,
+  labelElement,
   children,
   trailing,
   hint,
@@ -71,7 +74,7 @@ export function Field({
   return (
     <View style={styles.container} testID={testID}>
       <View style={styles.header}>
-        <Text style={styles.label}>{label}</Text>
+        {labelElement ?? <Text style={styles.label}>{label}</Text>}
         {trailing}
       </View>
       {children}
