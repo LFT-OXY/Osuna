@@ -596,7 +596,7 @@ async function streamReply(input: {
     write: (text) => res.write(text),
     request: input.request,
   });
-  const delivery = new ReplyClock(input.to);
+  const delivery = new ReplyClock({ upstream: input.to });
   const fence = fenceFilter({
     request: input.request,
     emit: (event) => {

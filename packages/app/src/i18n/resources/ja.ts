@@ -4809,6 +4809,10 @@ export const ja: TranslationResources = {
         speed: "出力速度",
         ttft: "最初のトークンまで",
       },
+      columnsCompact: {
+        speed: "速度",
+        ttft: "初回トークン",
+      },
       samples: "{{count}} 件に基づく",
       empty: "この期間にゲートウェイを通ったリクエストはありません",
       loadError: "速度を読み込めませんでした。",

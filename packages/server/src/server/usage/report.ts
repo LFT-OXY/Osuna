@@ -122,7 +122,13 @@ export function buildUsageReport(input: BuildUsageReportInput): UsageReport {
     projects: buildProjects(inRange, input.projects),
     endpoints: buildEndpoints(inRange, input.endpointIdentities),
     ...(request.speed
-      ? { speed: buildSpeed(inRange, request.speed.groupBy, input.endpointIdentities) }
+      ? {
+          speed: buildSpeed({
+            rows: inRange,
+            groupBy: request.speed.groupBy,
+            identities: input.endpointIdentities,
+          }),
+        }
       : {}),
     backfill: input.backfill,
     error: input.error,
@@ -445,17 +451,18 @@ function buildEndpoints(
  * (magpie's ledCategories). A group none of whose requests was timed is not
  * one: only gateway requests that streamed carry timing.
  */
-function buildSpeed(
-  rows: PricedRow[],
-  groupBy: UsageSpeedGroupBy,
-  identities: ReadonlyMap<string, UsageEndpointIdentity>,
-): UsageSpeed {
+function buildSpeed(input: {
+  rows: PricedRow[];
+  groupBy: UsageSpeedGroupBy;
+  identities: ReadonlyMap<string, UsageEndpointIdentity>;
+}): UsageSpeed {
+  const { rows, groupBy, identities } = input;
   const groups = new Map<string, UsageSpeedGroup>();
   for (const row of rows) {
     const key = speedKeyOf(row, groupBy);
     let group = groups.get(key);
     if (!group) {
-      group = emptySpeedGroup(row, groupBy, identities);
+      group = emptySpeedGroup({ row, groupBy, identities });
       groups.set(key, group);
     }
     group.tokens += billableTokens(row);
@@ -485,17 +492,22 @@ function speedKeyOf(row: UsageBucketRow, groupBy: UsageSpeedGroupBy): string {
   }
 }
 
-function emptySpeedGroup(
-  row: UsageBucketRow,
-  groupBy: UsageSpeedGroupBy,
-  identities: ReadonlyMap<string, UsageEndpointIdentity>,
-): UsageSpeedGroup {
+function emptySpeedGroup(input: {
+  row: UsageBucketRow;
+  groupBy: UsageSpeedGroupBy;
+  identities: ReadonlyMap<string, UsageEndpointIdentity>;
+}): UsageSpeedGroup {
+  const { row, groupBy, identities } = input;
+  const byAgent = groupBy === "agent";
   const byEndpoint = groupBy === "endpoint" || groupBy === "model_endpoint";
   const byModel = groupBy === "model" || groupBy === "model_endpoint";
+  const cli = byAgent ? row.cli : null;
+  const model = byModel ? row.model : null;
+  const endpoint = byEndpoint ? speedEndpointOf(row.endpointId ?? null, identities) : null;
   return {
-    cli: groupBy === "agent" ? row.cli : null,
-    model: byModel ? row.model : null,
-    endpoint: byEndpoint ? speedEndpointOf(row.endpointId ?? null, identities) : null,
+    cli,
+    model,
+    endpoint,
     tokens: 0,
     ttftCount: 0,
     ttftMs: 0,

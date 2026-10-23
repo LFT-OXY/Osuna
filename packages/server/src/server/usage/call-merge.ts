@@ -100,7 +100,13 @@ export class UsageCallMerge {
       else call.cli = cliCallOf(delta);
       touched.set(key, call.cli);
       if (call.settled) {
-        pushAt(output, deltaKey(delta), delta.turnKey, delta.at, negated(delta.amounts));
+        pushAt({
+          output,
+          key: deltaKey(delta),
+          turnKey: delta.turnKey,
+          at: delta.at,
+          amounts: negated(delta.amounts),
+        });
       }
     }
     output.records.push(...Array.from(touched.values(), (call) => ({ ...call })));
@@ -130,7 +136,14 @@ export class UsageCallMerge {
     const totals = totalsOf(row);
     const speed = speedOf(row);
     if (Object.values(totals).every((value) => value === 0) && speed === null) return output;
-    pushAt(output, unknownProjectKey(row), null, row.at, totals, speed);
+    pushAt({
+      output,
+      key: unknownProjectKey(row),
+      turnKey: null,
+      at: row.at,
+      amounts: totals,
+      speed,
+    });
     return output;
   }
 
@@ -155,11 +168,31 @@ export class UsageCallMerge {
       const { cli, ledger } = call ?? { cli: null, ledger: null };
       if (!call || !cli || !ledger) continue;
       const official = { ...mergedKey(cli, ledger), endpointId: undefined };
-      pushAt(output, official, cli.turnKey, cli.at, negated(totalsOf(cli)));
+      pushAt({
+        output,
+        key: official,
+        turnKey: cli.turnKey,
+        at: cli.at,
+        amounts: negated(totalsOf(cli)),
+      });
       const speed = speedOf(ledger);
       const unknown = unknownProjectKey(ledger);
-      pushAt(output, unknown, null, ledger.at, negated(totalsOf(ledger)), negatedSpeed(speed));
-      pushAt(output, mergedKey(cli, ledger), cli.turnKey, cli.at, totalsOf(ledger), speed);
+      pushAt({
+        output,
+        key: unknown,
+        turnKey: null,
+        at: ledger.at,
+        amounts: negated(totalsOf(ledger)),
+        speed: negatedSpeed(speed),
+      });
+      pushAt({
+        output,
+        key: mergedKey(cli, ledger),
+        turnKey: cli.turnKey,
+        at: cli.at,
+        amounts: totalsOf(ledger),
+        speed,
+      });
       const marker: UsageMergedCall = {
         kind: "merged",
         agent: ledger.agent,
@@ -350,15 +383,16 @@ function failedKey(row: GatewayLedgerRow): UsageBucketKey {
  * One increment at a bucket key, and at its turn when the call ran in one. A
  * speed goes to the bucket alone: turns show no speed.
  */
-function pushAt(
-  output: UsageMergeOutput,
-  key: UsageBucketKey,
-  turnKey: string | null,
-  at: string,
-  amounts: UsageTokenTotals,
-  speed: UsageSpeedSums | null = null,
-): void {
-  output.buckets.push({ ...emptyBucketRow(key), ...amounts, ...speed });
+function pushAt(input: {
+  output: UsageMergeOutput;
+  key: UsageBucketKey;
+  turnKey: string | null;
+  at: string;
+  amounts: UsageTokenTotals;
+  speed?: UsageSpeedSums | null;
+}): void {
+  const { output, key, turnKey, at, amounts } = input;
+  output.buckets.push({ ...emptyBucketRow(key), ...amounts, ...input.speed });
   if (turnKey === null || key.sessionId === "") return;
   output.turns.push({
     cli: key.cli,

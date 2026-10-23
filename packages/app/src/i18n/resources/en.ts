@@ -4879,6 +4879,10 @@ export const en = {
         speed: "Output speed",
         ttft: "Time to first token",
       },
+      columnsCompact: {
+        speed: "Speed",
+        ttft: "First token",
+      },
       samples: "Based on {{count}}",
       empty: "No requests through the gateway in this period",
       loadError: "Could not load speed.",

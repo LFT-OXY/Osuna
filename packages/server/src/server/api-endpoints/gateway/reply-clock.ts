@@ -56,7 +56,14 @@ export class ReplyClock {
   private sum = 0;
   private marks: FlowMark[] = [];
 
-  constructor(private readonly upstream: ApiEndpointRequestFormat) {}
+  private readonly upstream: ApiEndpointRequestFormat;
+  private readonly now: () => number;
+
+  /** `now` is the clock events are timed by; tests pass their own. */
+  constructor(input: { upstream: ApiEndpointRequestFormat; now?: () => number }) {
+    this.upstream = input.upstream;
+    this.now = input.now ?? Date.now;
+  }
 
   /** 上游一个事件的原文：只看推理是否被封存（Anthropic 的 redacted_thinking、Responses 的 encrypted_content）。 */
   sawRaw(data: string): void {
@@ -66,8 +73,9 @@ export class ReplyClock {
   }
 
   /** 交给 Agent 的一个事件。 */
-  saw(event: StreamEvent, at: number = Date.now()): void {
+  saw(event: StreamEvent): void {
     if (this.off) return;
+    const at = this.now();
     const size = JSON.stringify(event).length;
     this.read += size;
     if (this.read > MOST_READ) {
@@ -98,12 +106,15 @@ export class ReplyClock {
     const text = at(this.text);
     const marks = floor === null ? this.marks : clamped(this.marks, floor);
     const from = input.reasoning > 0 && text !== null ? text : first;
+    const flowKnown = from !== null && !this.off;
+    const flowMs = flowKnown ? flowFrom(marks, from) : null;
+    const firstReasoningAt = this.visibleReasoning() ? at(this.reasoning) : null;
     return {
       firstContentAt: first,
       firstTextAt: text,
-      firstReasoningAt: this.visibleReasoning() ? at(this.reasoning) : null,
+      firstReasoningAt,
       reasoningHidden: this.hidesReasoning(),
-      flowMs: from === null || this.off ? null : flowFrom(marks, from),
+      flowMs,
     };
   }
 

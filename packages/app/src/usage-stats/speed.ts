@@ -84,11 +84,12 @@ export function formatWaitSeconds(ms: number | null): string {
   return `${seconds < 1 ? seconds.toFixed(2) : seconds.toFixed(1)} s`;
 }
 
-function endpointKey(
-  endpoint: UsageSpeedEndpoint,
-  serverId: string,
-  joining: ReadonlySet<string>,
-): string {
+function endpointKey(input: {
+  endpoint: UsageSpeedEndpoint;
+  serverId: string;
+  joining: ReadonlySet<string>;
+}): string {
+  const { endpoint, serverId, joining } = input;
   if (endpoint.endpointId === null) return "official";
   if (joining.has(endpoint.endpointId)) return `name:${endpoint.name ?? endpoint.endpointId}`;
   return `host:${serverId}:${endpoint.endpointId}`;
@@ -100,7 +101,8 @@ function groupKey(input: {
   joining: ReadonlySet<string>;
 }): string {
   const { group, serverId, joining } = input;
-  const endpoint = group.endpoint === null ? "" : endpointKey(group.endpoint, serverId, joining);
+  const endpoint =
+    group.endpoint === null ? "" : endpointKey({ endpoint: group.endpoint, serverId, joining });
   return [group.cli ?? "", group.model ?? "", endpoint].join("\u0000");
 }
 

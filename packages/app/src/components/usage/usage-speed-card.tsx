@@ -11,9 +11,7 @@ import {
   type UsageSegmentedOption,
 } from "@/components/usage/usage-segmented-control";
 import { useIsCompactFormFactor } from "@/constants/layout";
-import { useUsageReport } from "@/hooks/use-usage-report";
-import type { UsageHostInput } from "@/usage-stats/aggregated-usage";
-import type { UsageRange } from "@/usage-stats/period";
+import { useUsageReport, type UseUsageReportInput } from "@/hooks/use-usage-report";
 import { formatOutputSpeed } from "@/usage-stats/requests";
 import { usageSourceLabel } from "@/usage-stats/sources";
 import {
@@ -24,13 +22,10 @@ import {
 } from "@/usage-stats/speed";
 
 /** What the card asks: the hosts with the gateway ledger, and the page's range and endpoint filter. */
-export interface UsageSpeedRequests {
-  hosts: readonly UsageHostInput[];
-  range: UsageRange;
-  timezone: string;
-  /** The endpoint card the page is narrowed to; undefined is every endpoint. */
-  endpoints: readonly (string | null)[] | undefined;
-}
+export type UsageSpeedRequests = Pick<
+  UseUsageReportInput,
+  "hosts" | "range" | "timezone" | "endpoints"
+>;
 
 const GROUPINGS: readonly UsageSpeedGroupBy[] = ["endpoint", "model", "model_endpoint", "agent"];
 const GROUPING_LABEL_KEYS = {
@@ -84,22 +79,22 @@ export function UsageSpeedCard({ requests }: { requests: UsageSpeedRequests }): 
     const groups = loadState.data.speed?.groups ?? [];
     body =
       groups.length === 0 ? (
-        <View style={styles.empty}>
+        <View style={[styles.body, styles.empty]}>
           <Text variant="caption" color="foregroundMuted" testID="usage-speed-empty">
             {t("usage.speed.empty")}
           </Text>
         </View>
       ) : (
-        <View testID="usage-speed-rows">
+        <View style={styles.body} testID="usage-speed-rows">
           <UsageSpeedHead />
-          {groups.map((group) => (
-            <UsageSpeedRow key={group.key} group={group} />
+          {groups.map((group, index) => (
+            <UsageSpeedRow key={group.key} group={group} divided={index > 0} />
           ))}
         </View>
       );
   } else if (isError) {
     body = (
-      <View style={styles.empty}>
+      <View style={[styles.body, styles.empty]}>
         <Text variant="caption" color="statusDanger" testID="usage-speed-error">
           {t("usage.speed.loadError")}
         </Text>
@@ -110,10 +105,10 @@ export function UsageSpeedCard({ requests }: { requests: UsageSpeedRequests }): 
     );
   } else {
     body = (
-      <View testID="usage-speed-loading" accessibilityRole="progressbar">
+      <View style={styles.body} testID="usage-speed-loading" accessibilityRole="progressbar">
         <UsageSpeedHead />
-        {SKELETON_KEYS.map((key) => (
-          <View key={key} style={styles.row}>
+        {SKELETON_KEYS.map((key, index) => (
+          <View key={key} style={[styles.row, index > 0 && styles.rowDivided]}>
             <View style={styles.nameColumn}>
               <View style={styles.skeletonBar} />
             </View>
@@ -145,27 +140,54 @@ export function UsageSpeedCard({ requests }: { requests: UsageSpeedRequests }): 
 /** The column names over the rows (and their skeleton). */
 function UsageSpeedHead() {
   const { t } = useTranslation();
+  const isCompact = useIsCompactFormFactor();
+  // 窄窗口用短名，表头各占一行。
+  const labels = isCompact ? "usage.speed.columnsCompact" : "usage.speed.columns";
   return (
     <View style={styles.head}>
       <View style={styles.nameColumn} />
-      <Text variant="caption" color="foregroundMuted" style={[styles.speedColumn, styles.number]}>
-        {t("usage.speed.columns.speed")}
+      <Text
+        variant="caption"
+        color="foregroundMuted"
+        numberOfLines={1}
+        style={[styles.speedColumn, styles.number]}
+      >
+        {t(`${labels}.speed`)}
       </Text>
-      <Text variant="caption" color="foregroundMuted" style={[styles.waitColumn, styles.number]}>
-        {t("usage.speed.columns.ttft")}
+      <Text
+        variant="caption"
+        color="foregroundMuted"
+        numberOfLines={1}
+        style={[styles.waitColumn, styles.number]}
+      >
+        {t(`${labels}.ttft`)}
       </Text>
     </View>
   );
 }
 
-/** One group: its name, its speed with how many replies that is of under it, and its mean wait. */
-function UsageSpeedRow({ group }: { group: MergedUsageSpeedGroup }) {
+/**
+ * One group: its name, its speed with how many replies that is of under it, and its mean wait.
+ * On a narrow window a model's endpoint goes on a muted line of its own under the model.
+ */
+function UsageSpeedRow({ group, divided }: { group: MergedUsageSpeedGroup; divided: boolean }) {
   const { t } = useTranslation();
+  const isCompact = useIsCompactFormFactor();
+  const { name, endpoint } = speedGroupLabel(group, t);
+  const splitsEndpoint = isCompact && endpoint !== null;
+  const oneLine = endpoint === null ? name : `${name} · ${endpoint}`;
   return (
-    <View style={styles.row} testID="usage-speed-row">
-      <Text variant="label" numberOfLines={2} style={styles.nameColumn}>
-        {speedGroupName(group, t)}
-      </Text>
+    <View style={[styles.row, divided && styles.rowDivided]} testID="usage-speed-row">
+      <View style={styles.nameColumn}>
+        <Text variant="label" numberOfLines={splitsEndpoint ? 1 : 2}>
+          {splitsEndpoint ? name : oneLine}
+        </Text>
+        {splitsEndpoint ? (
+          <Text variant="caption" color="foregroundMuted" numberOfLines={1}>
+            {endpoint}
+          </Text>
+        ) : null}
+      </View>
       <View style={styles.speedColumn}>
         <Text variant="label" weight="medium" style={styles.number}>
           {formatOutputSpeed(usageGroupSpeed(group))}
@@ -181,16 +203,26 @@ function UsageSpeedRow({ group }: { group: MergedUsageSpeedGroup }) {
   );
 }
 
+/** A speed group's name, and the endpoint apart when the group is a model at an endpoint. */
+interface SpeedGroupLabel {
+  name: string;
+  endpoint: string | null;
+}
+
 /** A group's name in the grouping it is of: the endpoint (Official), the model, both, or the agent. */
-function speedGroupName(group: MergedUsageSpeedGroup, t: (key: string) => string): string {
-  const parts: string[] = [];
-  if (group.cli !== null) parts.push(usageSourceLabel({ cli: group.cli, backend: null }));
-  if (group.model !== null) parts.push(group.model);
-  if (group.endpoint !== null) {
-    const name = group.endpoint.name ?? t("usage.overview.official");
-    parts.push(group.endpoint.deleted ? `${name} ${t("usage.overview.deletedEndpoint")}` : name);
+function speedGroupLabel(
+  group: MergedUsageSpeedGroup,
+  t: (key: string) => string,
+): SpeedGroupLabel {
+  const endpointName = group.endpoint?.name ?? t("usage.overview.official");
+  const deletedMark = group.endpoint?.deleted ? ` ${t("usage.overview.deletedEndpoint")}` : "";
+  const endpoint = group.endpoint === null ? null : `${endpointName}${deletedMark}`;
+  if (group.cli !== null) {
+    const agent = usageSourceLabel({ cli: group.cli, backend: null });
+    return { name: agent, endpoint: null };
   }
-  return parts.join(" · ");
+  if (group.model !== null) return { name: group.model, endpoint };
+  return { name: endpoint ?? "", endpoint: null };
 }
 
 const styles = StyleSheet.create((theme) => {
@@ -220,10 +252,17 @@ const styles = StyleSheet.create((theme) => {
       alignItems: "flex-start",
       gap: theme.spacing[3],
       paddingVertical: theme.spacing[2],
-      borderBottomWidth: 1,
-      borderBottomColor: palette.divider,
       // 骨架与真实行同高。
       minHeight: rowHeight,
+    },
+    // 行与行之间的线；表头下已有一条，最后一行下面不画。
+    rowDivided: {
+      borderTopWidth: 1,
+      borderTopColor: palette.divider,
+    },
+    // 有数据、加载中、空、出错都占表头加三行的高度：换时段时卡片不跳。
+    body: {
+      minHeight: headHeight + 3 * rowHeight,
     },
     nameColumn: {
       flexGrow: 1,
@@ -252,8 +291,6 @@ const styles = StyleSheet.create((theme) => {
       alignItems: "center",
       justifyContent: "center",
       gap: theme.spacing[2],
-      // 与表头加三行骨架同高：加载完是空的时卡片不跳。
-      minHeight: headHeight + 3 * rowHeight,
     },
     skeletonBar: {
       height: 8,

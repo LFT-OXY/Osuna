@@ -2,6 +2,8 @@
 // （https://github.com/yetone/magpie，internal/usage/usage.go 的 DecodeWindow、DecodeOf、Record.Decode、Totals.addFrom、MeanTTFT 与 Speed）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
+import type { SPEED_COLUMNS, UsageBucketRow } from "./types.js";
+
 /** A window shorter than this tells no speed: the reply came in one burst at its end. */
 const MIN_DECODE_MS = 100;
 /** Faster than this a second is no stream anyone writes at: the tokens came whole. */
@@ -29,6 +31,12 @@ export interface UsageReplyTiming {
   reasoningHidden?: boolean;
 }
 
+/** The tokens a reply was seen to write and the ms it took to write them. */
+export interface DecodedSpeed {
+  tokens: number;
+  ms: number;
+}
+
 /**
  * The tokens a reply was seen to write and the ms it took, or null when it
  * tells no speed. A reply that reasoned counts only its answer, from its first
@@ -37,7 +45,7 @@ export interface UsageReplyTiming {
  * content came in under a quarter of its window, or its answer over 20 times
  * faster than its reasoning came — tells none.
  */
-export function decodeOf(timing: UsageReplyTiming): { tokens: number; ms: number } | null {
+export function decodeOf(timing: UsageReplyTiming): DecodedSpeed | null {
   const ttft = timing.ttftMs ?? 0;
   const firstText = timing.firstTextMs ?? 0;
   if (timing.reasoningHidden === true && firstText <= 0) return null;
@@ -56,13 +64,19 @@ export function decodeOf(timing: UsageReplyTiming): { tokens: number; ms: number
   return heldBack({ timing, tokens, window }) ? null : { tokens, ms: window };
 }
 
+/** The tokens a speed counts and the ms from the request they are counted from. */
+interface CountedTokens {
+  tokens: number;
+  start: number;
+}
+
 /**
  * Which tokens count and from when: all of them from the first content; a
  * reply that reasoned, its answer from its first text, or with no text all of
  * them from where its paced visible reasoning began. Null when it reasoned and
  * neither is known.
  */
-function countedFrom(timing: UsageReplyTiming): { tokens: number; start: number } | null {
+function countedFrom(timing: UsageReplyTiming): CountedTokens | null {
   const ttft = timing.ttftMs ?? 0;
   const firstText = timing.firstTextMs ?? 0;
   const firstReasoning = timing.firstReasoningMs ?? 0;
@@ -102,13 +116,7 @@ export function outputSpeedOf(timing: UsageReplyTiming): number | null {
  * those that told a speed, how many (`speedCount`), their tokens and their
  * windows. All are absent on rows that carry none.
  */
-export interface UsageSpeedSums {
-  ttftCount: number;
-  ttftMs: number;
-  speedCount: number;
-  speedOutput: number;
-  speedMs: number;
-}
+export type UsageSpeedSums = Required<Pick<UsageBucketRow, (typeof SPEED_COLUMNS)[number]>>;
 
 /** One answered request's share of the sums, or null when it was not streamed or not answered. */
 export function speedSumsOf(
@@ -131,11 +139,4 @@ export function groupOutputSpeed(
   sums: Pick<UsageSpeedSums, "speedOutput" | "speedMs">,
 ): number | null {
   return sums.speedMs > 0 ? sums.speedOutput / (sums.speedMs / 1000) : null;
-}
-
-/** A group's mean wait for the first content, whole ms as magpie's MeanTTFT; null when none was timed. */
-export function groupTimeToFirstTokenMs(
-  sums: Pick<UsageSpeedSums, "ttftCount" | "ttftMs">,
-): number | null {
-  return sums.ttftCount > 0 ? Math.trunc(sums.ttftMs / sums.ttftCount) : null;
 }

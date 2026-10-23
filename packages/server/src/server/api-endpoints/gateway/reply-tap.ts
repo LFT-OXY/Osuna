@@ -80,7 +80,7 @@ export class ReplyTap {
   constructor(input: { format: ApiEndpointRequestFormat; stream: boolean }) {
     this.decoder = protocolOf(input.format).decoder();
     if (input.stream) {
-      const clock = new ReplyClock(input.format);
+      const clock = new ReplyClock({ upstream: input.format });
       this.clock = clock;
       const events = new SseReader((data) => {
         this.raw = data;

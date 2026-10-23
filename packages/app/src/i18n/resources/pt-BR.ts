@@ -4821,6 +4821,10 @@ export const ptBR: TranslationResources = {
         speed: "Velocidade de saída",
         ttft: "Tempo até o primeiro token",
       },
+      columnsCompact: {
+        speed: "Velocidade",
+        ttft: "1º token",
+      },
       samples: "Com base em {{count}}",
       empty: "Nenhuma requisição pelo gateway neste período",
       loadError: "Não foi possível carregar a velocidade.",

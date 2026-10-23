@@ -4872,6 +4872,10 @@ export const fr: TranslationResources = {
         speed: "Vitesse de sortie",
         ttft: "Délai du premier token",
       },
+      columnsCompact: {
+        speed: "Vitesse",
+        ttft: "1er token",
+      },
       samples: "Sur {{count}}",
       empty: "Aucune requête via la passerelle sur cette période",
       loadError: "Impossible de charger la vitesse.",

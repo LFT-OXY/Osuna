@@ -460,7 +460,7 @@ function tappedShort(input: {
 /** 回复收完了：开口后才拒答的照常转给了 Agent，不算答成功；别的带上这次的用量。 */
 function endOf(tap: ReplyTap | null, deliveredAt: number | null): AnswerEnd {
   const reply = tap?.end();
-  const delivered = deliveredReply(tap, reply, deliveredAt);
+  const delivered = deliveredReply({ tap, reply, deliveredAt });
   if (reply && refusedAfterOpening(reply)) return { kind: "refused", reply: delivered };
   return { kind: "complete", usage: delivered.usage, reply: delivered };
 }
@@ -469,11 +469,12 @@ function endOf(tap: ReplyTap | null, deliveredAt: number | null): AnswerEnd {
  * 直通原样转出回复，回复编号就是上游的；扣下的帧里早于交出的时刻按交出的时刻算，
  * 没流式交出（deliveredAt 为 null）时不计时。
  */
-function deliveredReply(
-  tap: ReplyTap | null,
-  reply: TappedReply | undefined,
-  deliveredAt: number | null,
-): DeliveredReply {
+function deliveredReply(input: {
+  tap: ReplyTap | null;
+  reply: TappedReply | undefined;
+  deliveredAt: number | null;
+}): DeliveredReply {
+  const { tap, reply, deliveredAt } = input;
   const times =
     tap === null || deliveredAt === null ? UNTIMED : tap.times({ notBefore: deliveredAt });
   return {

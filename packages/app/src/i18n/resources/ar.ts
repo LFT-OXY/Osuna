@@ -4726,12 +4726,16 @@ export const ar: TranslationResources = {
         label: "التجميع حسب",
         endpoint: "نقطة النهاية",
         model: "النموذج",
-        modelEndpoint: "النموذج · نقطة الاتصال",
+        modelEndpoint: "النموذج · نقطة النهاية",
         agent: "الوكيل",
       },
       columns: {
         speed: "سرعة الإخراج",
         ttft: "حتى أول رمز",
+      },
+      columnsCompact: {
+        speed: "السرعة",
+        ttft: "أول رمز",
       },
       samples: "بناءً على {{count}}",
       empty: "لا توجد طلبات عبر البوابة في هذه الفترة",

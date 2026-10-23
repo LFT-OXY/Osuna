@@ -4776,6 +4776,10 @@ export const ko: TranslationResources = {
         speed: "출력 속도",
         ttft: "첫 토큰까지",
       },
+      columnsCompact: {
+        speed: "속도",
+        ttft: "첫 토큰",
+      },
       samples: "{{count}}건 기준",
       empty: "이 기간에 게이트웨이를 거친 요청이 없습니다",
       loadError: "속도를 불러오지 못했습니다.",

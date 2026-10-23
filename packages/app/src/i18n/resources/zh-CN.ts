@@ -4719,6 +4719,10 @@ export const zhCN: TranslationResources = {
         speed: "出字速度",
         ttft: "首字等待",
       },
+      columnsCompact: {
+        speed: "出字速度",
+        ttft: "首字等待",
+      },
       samples: "基于 {{count}} 条",
       empty: "这段时间没有经过中转站的请求",
       loadError: "速度读取失败。",

@@ -4827,6 +4827,10 @@ export const ru: TranslationResources = {
         speed: "Скорость вывода",
         ttft: "До первого токена",
       },
+      columnsCompact: {
+        speed: "Скорость",
+        ttft: "1-й токен",
+      },
       samples: "По {{count}}",
       empty: "За этот период запросов через шлюз не было",
       loadError: "Не удалось загрузить скорость.",
