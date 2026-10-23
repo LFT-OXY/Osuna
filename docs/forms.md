@@ -76,6 +76,14 @@ complete`), keyed off the opened snapshot's serverId. Waiting for data is a
 - Copy is opt-in and rare. No hint/subtext unless the maintainer approved the
   exact string; validation errors are the exception. State a fact (like the
   timezone) once — never in a preview line AND a helper line.
+- A field with an approved hint and a validation error passes both to `Field`
+  (`hint`, `error`); the error replaces the hint in the same row. When the hint
+  wraps to two lines in some locale or at 390 wide, set `reservesTwoLines` so the
+  row keeps its height and the form doesn't jump when the error appears. Inside a
+  section whose labels are a custom component (the endpoint dialog's advanced
+  section uses `AdvancedFieldLabel`), pass that through `labelElement` rather
+  than restyling `Field`'s default label. The price multiplier field
+  (`api-endpoints/price-multiplier-field.tsx`) is the example.
 - `useUnistyles` is banned (see docs/unistyles.md); lint enforces.
 
 ## Settings rows

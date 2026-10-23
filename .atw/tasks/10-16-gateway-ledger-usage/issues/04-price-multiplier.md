@@ -4,7 +4,7 @@
 
 **Blocked by:** 03
 **Status:** ready-for-agent
-**Impl:** doing
+**Impl:** done
 
 - [ ] 接口新增可选字段价格倍率：存储、线上、保存请求都可选；旧客户端保存不带时保留原值；复制接口时一并复制；超范围或多于三位小数保存被拒。
 - [ ] 找价顺序照 prd 第 15 条（照 magpie `priceOf`）；官方行不乘倍率。
