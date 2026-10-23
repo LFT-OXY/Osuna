@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately
 **Status:** ready-for-agent
-**Impl:** doing
+**Impl:** done
 
 - [ ] 冷却状态（接口、模型、冷却到何时、原因分类）原子写盘，启动时读回，过期的丢掉；文件坏了当作没有冷却；失败计数仍只在内存。
 - [ ] 端到端测试：冷却 → 重启 → 仍跳过这家；到点恢复；「立刻恢复」→ 重启 → 不冷却；坏文件 → 正常启动。

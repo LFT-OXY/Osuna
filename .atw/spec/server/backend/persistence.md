@@ -194,6 +194,19 @@ only warns. It holds no key: each entry carries a digest of the settings it was
 read with and is dropped when they no longer match. Contract:
 rpc-and-protocol.md, "the last balance reading".
 
+`api-endpoints/cooldowns.json` (`EndpointCooldowns`, gateway-ledger-usage
+ticket 07) is a cache too: losing it costs one more failed request to that
+endpoint, never a wrong state, so no `.bak`. Two rules beyond the list above:
+
+- Persist the outcome, not the counter. Each rest's `until`, class and the
+  redacted upstream text are stored; the consecutive-failure count that drives
+  rate-limit doubling is stripped on save and restored as 0, so backoff starts
+  over after a restart (`failures > 0` gates the doubling in `rateRest`).
+- Derive the TS unions from the Zod enums the file uses (`RestBySchema`,
+  `RestWhySchema` in `gateway/cooldown.ts`). A hand-written parallel union lets a
+  new value compile, then makes the write-side `parse` throw and the next read
+  drop the whole file.
+
 ### State files keep a last good copy (`.bak` / `.bad-<time>`)
 
 `LastGoodFile<T>` (`server/api-endpoints/last-good.ts`, magpie `lastgood` /
