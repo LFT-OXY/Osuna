@@ -402,7 +402,7 @@ describe("mergeUsageReports endpoints", () => {
         ],
       },
       {
-        key: "Relay A:0",
+        key: "name:Relay A",
         name: "Relay A",
         deleted: false,
         totals: totals(30, 0),
@@ -421,7 +421,7 @@ describe("mergeUsageReports endpoints", () => {
 
     expect(merged.endpoints).toEqual([
       {
-        key: "Relay:0",
+        key: "name:Relay",
         name: "Relay",
         deleted: false,
         totals: totals(40, 0),
@@ -447,34 +447,46 @@ describe("mergeUsageReports endpoints", () => {
         endpoint.deleted,
         endpoint.members.map(memberId),
       ]),
-    ).toEqual([["Relay:0", false, ["ep_a", "ep_b"]]]);
+    ).toEqual([["name:Relay", false, ["ep_a", "ep_b"]]]);
   });
 
-  it("keeps endpoints of one name on the same host apart, a deleted one included", () => {
+  it("gives every endpoint of a name its own card once a host has two live ones of it", () => {
+    const merged = mergeUsageReports([
+      {
+        serverId: "a",
+        report: report({ endpoints: [group("ep_1", "Relay", 30), group("ep_2", "Relay", 20)] }),
+      },
+      { serverId: "b", report: report({ endpoints: [group("ep_3", "Relay", 40)] }) },
+      { serverId: "c", report: report({ endpoints: [group("ep_4", "Other", 5)] }) },
+      { serverId: "d", report: report({ endpoints: [group("ep_5", "Other", 5)] }) },
+    ]);
+
+    expect(
+      merged.endpoints?.map((endpoint) => [endpoint.name, endpoint.members.map(memberId)]),
+    ).toEqual([
+      ["Relay", ["ep_3"]],
+      ["Relay", ["ep_1"]],
+      ["Relay", ["ep_2"]],
+      ["Other", ["ep_4", "ep_5"]],
+    ]);
+  });
+
+  it("joins a host's live endpoint to the name's card and keeps its deleted one of that name apart", () => {
     const merged = mergeUsageReports([
       {
         serverId: "a",
         report: report({
-          endpoints: [
-            group("ep_1", "Relay", 30),
-            group("ep_2", "Relay", 20),
-            group("ep_3", "Relay", 10, true),
-          ],
+          endpoints: [group("ep_1", "Relay", 30, true), group("ep_2", "Relay", 20)],
         }),
       },
-      { serverId: "b", report: report({ endpoints: [group("ep_4", "Relay", 40)] }) },
+      { serverId: "b", report: report({ endpoints: [group("ep_3", "Relay", 40)] }) },
     ]);
 
     expect(
-      merged.endpoints?.map((endpoint) => [
-        endpoint.key,
-        endpoint.deleted,
-        endpoint.members.map(memberId),
-      ]),
+      merged.endpoints?.map((endpoint) => [endpoint.deleted, endpoint.members.map(memberId)]),
     ).toEqual([
-      ["Relay:0", false, ["ep_1", "ep_4"]],
-      ["Relay:1", false, ["ep_2"]],
-      ["Relay:2", true, ["ep_3"]],
+      [false, ["ep_2", "ep_3"]],
+      [true, ["ep_1"]],
     ]);
   });
 

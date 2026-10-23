@@ -149,28 +149,63 @@ function combineHeatmapDays(a: UsageHeatmapDay, b: UsageHeatmapDay): UsageHeatma
 }
 
 /**
- * The card one host's endpoint joins: Official, or the nth endpoint of that name
- * on its host. Across hosts one name is one card (decisions Q17); on one host an
- * endpoint is its id (Q16), so two of one name there, a deleted one included,
- * stay two cards.
+ * Names some host has two or more live endpoints of. Which of them is the one
+ * another host's endpoint stands for can't be told, so no endpoint of such a
+ * name joins another host's: each is a card of its own.
  */
-function endpointKeysOf(endpoints: readonly UsageEndpointBreakdown[]): (string | null)[] {
-  const seen = new Map<string, number>();
+function namesNotMerged(reports: readonly UsageHostReport[]): Set<string> {
+  const split = new Set<string>();
+  for (const { report } of reports) {
+    const live = new Set<string>();
+    for (const endpoint of report.endpoints ?? []) {
+      if (endpoint.endpointId === null || endpoint.deleted || endpoint.name === null) continue;
+      if (live.has(endpoint.name)) split.add(endpoint.name);
+      live.add(endpoint.name);
+    }
+  }
+  return split;
+}
+
+/**
+ * The card each of one host's endpoints joins. Across hosts one name is one card
+ * (decisions Q17); on one host an endpoint is its id (Q16). A host's live endpoint
+ * of a name joins the name's card, or its only one of that name when all are
+ * deleted; any other endpoint of that name on the host is a card of its own, as is
+ * every endpoint of a name in `split`. `null` is Official.
+ */
+function endpointKeysOf(input: {
+  serverId: string;
+  endpoints: readonly UsageEndpointBreakdown[];
+  split: ReadonlySet<string>;
+}): (string | null)[] {
+  const { serverId, endpoints, split } = input;
+  const byName = new Map<string, UsageEndpointBreakdown[]>();
+  for (const endpoint of endpoints) {
+    if (endpoint.endpointId === null || endpoint.name === null) continue;
+    byName.set(endpoint.name, [...(byName.get(endpoint.name) ?? []), endpoint]);
+  }
+  const joining = new Set<UsageEndpointBreakdown>();
+  for (const [name, named] of byName) {
+    if (split.has(name)) continue;
+    const live = named.find((endpoint) => !endpoint.deleted);
+    const stand = live ?? (named.length === 1 ? named[0] : undefined);
+    if (stand) joining.add(stand);
+  }
   return endpoints.map((endpoint) => {
     if (endpoint.endpointId === null) return null;
-    const name = endpoint.name ?? endpoint.endpointId;
-    const nth = seen.get(name) ?? 0;
-    seen.set(name, nth + 1);
-    return `${name}:${nth}`;
+    if (joining.has(endpoint)) return `name:${endpoint.name}`;
+    return `host:${serverId}:${endpoint.endpointId}`;
   });
 }
 
-function foldEndpoints(
-  target: Map<string | null, MergedUsageEndpoint>,
-  serverId: string,
-  endpoints: readonly UsageEndpointBreakdown[],
-): void {
-  const keys = endpointKeysOf(endpoints);
+function foldEndpoints(input: {
+  target: Map<string | null, MergedUsageEndpoint>;
+  serverId: string;
+  endpoints: readonly UsageEndpointBreakdown[];
+  split: ReadonlySet<string>;
+}): void {
+  const { target, serverId, endpoints, split } = input;
+  const keys = endpointKeysOf({ serverId, endpoints, split });
   for (const [index, { endpointId, ...endpoint }] of endpoints.entries()) {
     const key = keys[index] ?? null;
     const member = { serverId, endpointId, deleted: endpoint.deleted };
@@ -250,6 +285,7 @@ export function mergeUsageReports(inputs: readonly UsageHostReport[]): MergedUsa
   const projects: MergedUsageProject[] = [];
   // 只有带中转站账本的 daemon 回 endpoints；一台都没有时整个字段不给。
   let endpoints: Map<string | null, MergedUsageEndpoint> | null = null;
+  const split = namesNotMerged(inputs);
   let error: string | null = null;
 
   for (const { serverId, report } of inputs) {
@@ -264,7 +300,7 @@ export function mergeUsageReports(inputs: readonly UsageHostReport[]): MergedUsa
     }
     if (report.endpoints) {
       endpoints ??= new Map();
-      foldEndpoints(endpoints, serverId, report.endpoints);
+      foldEndpoints({ target: endpoints, serverId, endpoints: report.endpoints, split });
     }
     error ??= report.error;
   }

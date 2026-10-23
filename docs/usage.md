@@ -131,8 +131,12 @@ was lost) is deleted too, under the name its last ledger row recorded.
 
 Across hosts the client puts endpoints of one name on one card and adds Official
 up, since the same relay set up on two machines has two ids; the card is deleted
-only when it is deleted on every host. On one host an endpoint is its id, so two
-of one name there, a deleted one included, stay two cards. Picking a host splits
+only when it is deleted on every host. On one host an endpoint is its id: a host
+joins the card with its live endpoint of that name (or its only one, when all are
+deleted), and any other of that name there is a card of its own. When some host
+has two or more live endpoints of one name, no endpoint of that name is merged
+across hosts, since nothing says which of the two the other host's stands for.
+Picking a host splits
 them again. The balance line is the first host's reading that has something to
 show.
 
