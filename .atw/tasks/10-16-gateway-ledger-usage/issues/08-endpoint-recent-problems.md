@@ -4,7 +4,7 @@
 
 **Blocked by:** 05
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** doing
 
 - [ ] 新 RPC `provider.api_endpoint.recent_problems.request` / `.response`，读逐条记录；端到端测试：内容、上限 20、重启后还在、只含这家。
 - [ ] 详情页开着时随 `usage.updated` 重读。
