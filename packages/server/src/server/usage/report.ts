@@ -370,6 +370,7 @@ function buildProjects(
       rootPath: entry.attribution.rootPath,
       displayName: entry.attribution.displayName,
       kind: entry.attribution.kind,
+      unknown: entry.attribution.unknown,
       totals: entry.amount.totals,
       estimatedCost: entry.amount.estimatedCost,
       sources: Array.from(entry.sources.values())

@@ -34,6 +34,12 @@ export const USAGE_BUCKET_ROW_SCHEMA = z.object({
    * ledger existed. Part of the key.
    */
   endpointId: z.string().optional(),
+  /**
+   * Requests the agent got an error for (the gateway ledger's failed and
+   * cancelled rows), magpie's `Totals.Errors`: they carry no tokens but still
+   * count, so a group of only failed requests is listed. Absent is none.
+   */
+  errors: z.number().int().optional(),
 });
 export type UsageBucketRow = z.infer<typeof USAGE_BUCKET_ROW_SCHEMA>;
 
@@ -363,7 +369,8 @@ export function carriesNothing(row: UsageBucketRow): boolean {
     row.output === 0 &&
     row.reasoning === 0 &&
     row.turns === 0 &&
-    row.durationMs === 0
+    row.durationMs === 0 &&
+    (row.errors ?? 0) === 0
   );
 }
 
@@ -375,6 +382,7 @@ export function addBucketRow(target: UsageBucketRow, source: UsageBucketRow): vo
   target.reasoning += source.reasoning;
   target.turns += source.turns;
   target.durationMs += source.durationMs;
+  if (source.errors !== undefined) target.errors = (target.errors ?? 0) + source.errors;
 }
 
 /** Sum `row` into the map's entry for its key, cloning it on first sight. */

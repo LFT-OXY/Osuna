@@ -751,7 +751,7 @@ async function wholeReply(input: {
     if (refusedAfterThinking) {
       const message = `${endpoint.name}: ${failure.message}`;
       sendRefusal({ res, wire: input.wire, message, headers });
-      return { kind: "refused", reply: null };
+      return { kind: "refused_as_error", told: message };
     }
     sendAgentError({
       res,

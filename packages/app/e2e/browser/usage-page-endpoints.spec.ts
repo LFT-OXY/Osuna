@@ -145,7 +145,7 @@ test.describe("Usage page by endpoint", () => {
       await page.getByTestId("usage-details-tab-projects").click();
       const unknown = page.getByTestId(/^usage-details-project-.+:$/);
       await expect(unknown).toContainText("Unknown project");
-      await expect(unknown).toContainText("Gateway requests no session log names");
+      await expect(unknown).toContainText("Gateway requests not found in session logs");
       await expect(unknown).not.toContainText("Directory");
     });
   });

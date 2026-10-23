@@ -232,7 +232,9 @@ export function relayToChatGpt(input: {
   upstream.once("response", (reply) => {
     // ChatGPT 自己的 401、403 原样回；只有 OpenAI API 拒收 API key 的 401 照 magpie 改写成说明。
     if (isToOpenAiApi && reply.statusCode === 401) {
-      void sendApiKeyRefused({ res, reply }).then((message) => watch?.failed(message));
+      void sendApiKeyRefused({ res, reply }).then((message) =>
+        watch?.failed({ status: 401, message }),
+      );
       return;
     }
     const headers = relayedHeaders(reply.headers);
@@ -243,13 +245,8 @@ export function relayToChatGpt(input: {
     res.writeHead(reply.statusCode ?? 502, headers);
     watch?.replied(reply);
     reply.pipe(res);
-    // ChatGPT 中途断流：Codex 看到的是断开，账本记失败（Codex 先走的已经记了取消）。
-    const broke = () => {
-      watch?.failed("ChatGPT: the reply broke off");
-      res.destroy();
-    };
-    reply.once("error", broke);
-    reply.once("aborted", broke);
+    reply.once("error", () => res.destroy());
+    reply.once("aborted", () => res.destroy());
   });
   upstream.once("error", (error) => {
     res.off("close", abandon);
@@ -260,7 +257,7 @@ export function relayToChatGpt(input: {
     const reason = error instanceof Error && "code" in error ? String(error.code) : error.message;
     input.logger.warn({ err: error, host: target.host }, "ChatGPT backend unreachable");
     const message = `ChatGPT can't be reached (${reason}). Codex's own models go to ChatGPT with Codex's own sign-in through Osuna's API endpoint gateway: let this computer reach ${target.host}, or pick an endpoint model (<endpoint>/<model>) in Codex`;
-    watch?.failed(message);
+    watch?.failed({ status: 502, message });
     sendAgentError({ res, wire: "openai", error: { status: 502, message } });
   });
   if (input.body === undefined) {

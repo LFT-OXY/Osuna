@@ -8,16 +8,21 @@ export interface UsageProjectAttribution {
   rootPath: string;
   displayName: string;
   kind: UsageProjectKind;
+  /** Only `UNKNOWN_PROJECT` has it. */
+  unknown?: true;
 }
 
 /**
- * Where a call only the gateway ledger knows is counted: no directory, no
- * name. The client shows it as the unknown project.
+ * Where a call only the gateway ledger knows is counted (its rows have cwd
+ * ""): no directory, no name. The wire still needs a string `rootPath` and a
+ * `kind` for older clients, so those are placeholders; `unknown` is what says
+ * it, and the client shows it as the unknown project.
  */
 export const UNKNOWN_PROJECT: UsageProjectAttribution = {
   rootPath: "",
   displayName: "",
   kind: "directory",
+  unknown: true,
 };
 
 /**

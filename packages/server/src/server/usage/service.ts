@@ -230,6 +230,10 @@ export class UsageService {
       this.timer = null;
     }
     await this.round?.catch(() => undefined);
+    // 正在写的账本行写完再走：不然 daemon 关掉之后它还会在 PASEO_HOME 下建出 usage 目录。
+    // 还在等 start 读盘的行放行，它们看到 disposed 就不写了。
+    this.markLoaded();
+    await this.ledgerWrites;
   }
 
   /**

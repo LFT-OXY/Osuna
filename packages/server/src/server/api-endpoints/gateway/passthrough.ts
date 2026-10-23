@@ -846,7 +846,7 @@ function retryHeaders(headers: IncomingHttpHeaders): Record<string, string | str
   return out;
 }
 
-/** 把一次失败的尝试按 Agent 协议交给它：状态码照抄，文字是「<接口名>: <上游原文>」再接上 `suffix`。 */
+/** 把一次失败的尝试按 Agent 协议交给它：状态码照抄，文字是「<接口名>: <上游原文>」再接上 `suffix`；返回这句文字。 */
 export function sendFailedAttempt(input: {
   res: Response;
   wire: AgentWire;
@@ -854,20 +854,18 @@ export function sendFailedAttempt(input: {
   failed: FailedAttempt;
   suffix: string;
   headers: Record<string, string>;
-}): void {
+}): string {
   const { failed } = input;
+  const message = `${input.endpoint.name}: ${failed.detail}${input.suffix}`;
   sendAgentError({
     res: input.res,
     wire: input.wire,
-    error: {
-      status: failed.status,
-      message: `${input.endpoint.name}: ${failed.detail}${input.suffix}`,
-      ...failed.upstreamError,
-    },
+    error: { status: failed.status, message, ...failed.upstreamError },
     headers: {
       ...retryHeaders(failed.headers),
       ...input.headers,
       [ANSWERED_BY_HEADER]: input.endpoint.slug,
     },
   });
+  return message;
 }

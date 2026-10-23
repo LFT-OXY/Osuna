@@ -888,8 +888,11 @@ describe("the gateway ledger merged with Codex's logs", () => {
       input: 100,
       cachedInput: 400,
       output: 60,
-      attempts: [],
     });
+    // 照 magpie：官方那一次也是一次尝试，没有接口。
+    expect(row?.attempts).toEqual([
+      expect.objectContaining({ endpointId: null, model: "gpt-5.6", result: "answered" }),
+    ]);
     expect(row?.ttftMs).toEqual(expect.any(Number));
 
     await appendCodexTurn(harness, {
@@ -905,6 +908,56 @@ describe("the gateway ledger merged with Codex's logs", () => {
         candidate.projects[0]?.rootPath === "/work/demo",
     );
     expect(report.endpoints).toEqual([endpointGroup(null, null, CODEX_LEDGER_TOTALS, 1)]);
+  });
+
+  test("ChatGPT's own error is a failed try with no endpoint, and the agent's words in error", async () => {
+    const harness = await start();
+    harness.replies.chatgpt = (res) => {
+      res.writeHead(500, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: { message: "ChatGPT is having a moment" } }));
+    };
+    const response = await askCodex(harness, { via: "chatgpt", model: "gpt-5.6" });
+    expect(response.status).toBe(500);
+    await response.text();
+
+    const [row] = await waitForLedgerRows(harness.usageDir, (rows) => rows.length === 1);
+    expect(row).toMatchObject({
+      status: "failed",
+      endpointId: null,
+      output: 0,
+      error: "ChatGPT is having a moment",
+    });
+    expect(row?.attempts).toEqual([
+      expect.objectContaining({
+        endpointId: null,
+        model: "gpt-5.6",
+        result: "failed",
+        failure: "other",
+        reason: "ChatGPT is having a moment",
+        cooldownUntil: null,
+      }),
+    ]);
+  });
+
+  test("a ChatGPT reply that breaks off is booked as it came, like magpie, not as a failure", async () => {
+    const harness = await start();
+    harness.replies.chatgpt = (res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      const created = {
+        type: "response.created",
+        response: { id: "resp_native_2", model: "gpt-5.6", status: "in_progress" },
+      };
+      res.write(`event: response.created\ndata: ${JSON.stringify(created)}\n\n`);
+      setTimeout(() => res.destroy(), 20);
+    };
+    const response = await askCodex(harness, { via: "chatgpt", model: "gpt-5.6" });
+    await response.text().catch(() => "");
+
+    const [row] = await waitForLedgerRows(harness.usageDir, (rows) => rows.length === 1);
+    expect(row).toMatchObject({ status: "ok", replyId: "resp_native_2", endpointId: null });
+    expect(row?.attempts).toEqual([
+      expect.objectContaining({ endpointId: null, result: "answered" }),
+    ]);
   });
 
   test("a request every endpoint failed is one row of 0 tokens with each try's endpoint, class, masked reason and cooldown", async () => {
@@ -935,7 +988,8 @@ describe("the gateway ledger merged with Codex's logs", () => {
       cachedInput: 0,
       output: 0,
     });
-    expect(row?.error).toContain("insufficient balance");
+    // 交给 Codex 的就是最后那家的说法，带上它的名字。
+    expect(row?.error).toMatch(/^Relay D: insufficient balance/);
     const attempts = row?.attempts as Record<string, unknown>[];
     expect(attempts.map((attempt) => [attempt.endpointId, attempt.result])).toEqual([
       ["ep_b", "failed"],
@@ -949,10 +1003,47 @@ describe("the gateway ledger merged with Codex's logs", () => {
     expect(attempts[1]?.failure).toBe("credit");
     expect(attempts[1]?.reason).toContain("insufficient balance");
 
-    // 0 token 的行不进汇总：按项目分也没有它。
-    const report = await waitForReport(harness, () => true);
+    // 0 token，汇总不变；按项目分照 magpie 把失败的请求算进去：只有失败的请求时也有「未知项目」一行。
+    const report = await waitForReport(harness, (candidate) => candidate.projects.length === 1);
     expect(report.summary.totals).toEqual(emptyTotals());
-    expect(report.projects).toEqual([]);
+    expect(
+      report.projects.map((project) => [project.rootPath, project.unknown, project.totals]),
+    ).toEqual([[UNKNOWN_PROJECT, true, emptyTotals()]]);
+    expect(report.endpoints).toEqual([]);
+  });
+
+  test("a request turned away while every endpoint rests records the resting endpoint as its try, without asking", async () => {
+    const harness = await start();
+    const broke = (res: ServerResponse) => {
+      res.writeHead(402, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: { message: "insufficient balance" } }));
+    };
+    harness.replies.b = broke;
+    harness.replies.d = broke;
+    await (await askCodex(harness)).text();
+    await waitForLedgerRows(harness.usageDir, (rows) => rows.length === 1);
+    harness.replies.b = () => {
+      throw new Error("a resting endpoint was asked");
+    };
+
+    const response = await askCodex(harness);
+    expect(response.status).toBe(402);
+    await response.text();
+
+    const rows = await waitForLedgerRows(harness.usageDir, (all) => all.length === 2);
+    const held = rows[1];
+    expect(held).toMatchObject({ status: "failed", endpointId: null, output: 0 });
+    expect(held?.error).toMatch(/^Relay B: insufficient balance/);
+    expect(held?.attempts).toEqual([
+      expect.objectContaining({
+        endpointId: "ep_b",
+        result: "failed",
+        failure: "credit",
+        reason: "insufficient balance",
+        cooldownUntil: expect.any(String),
+        durationMs: 0,
+      }),
+    ]);
   });
 
   test("a request the agent cancels before the reply is one cancelled row of 0 tokens", async () => {

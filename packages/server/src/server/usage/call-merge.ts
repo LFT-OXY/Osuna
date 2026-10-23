@@ -96,7 +96,8 @@ export class UsageCallMerge {
   /**
    * A request the gateway carried: counted under no project until `settle`
    * finds the log's reply. A second row for the same reply is kept on disk and
-   * counted nowhere, and so is a row of 0 tokens (a failed or cancelled request).
+   * counted nowhere. A failed or cancelled request counts as an error under no
+   * project, at the endpoint it last tried, as magpie counts it in its groups.
    */
   addLedgerRow(row: GatewayLedgerRow): UsageMergeOutput {
     const output = emptyOutput();
@@ -106,6 +107,10 @@ export class UsageCallMerge {
       if (call.ledger) return output;
       call.ledger = row;
       this.awaiting.add(callKey(row.agent, row.replyId));
+    }
+    if (row.status !== "ok") {
+      output.buckets.push({ ...emptyBucketRow(failedKey(row)), errors: 1 });
+      return output;
     }
     const totals = totalsOf(row);
     if (Object.values(totals).every((value) => value === 0)) return output;
@@ -242,7 +247,10 @@ function mergedKey(call: UsageCliCall, ledger: GatewayLedgerRow): UsageBucketKey
 }
 
 /** A ledger row the log has not named: no session, no project, at the request's own bucket. */
-function unknownProjectKey(row: GatewayLedgerRow): UsageBucketKey {
+function unknownProjectKey(
+  row: GatewayLedgerRow,
+  endpointId: string | null = row.endpointId,
+): UsageBucketKey {
   return {
     cli: row.agent,
     backend: null,
@@ -250,8 +258,13 @@ function unknownProjectKey(row: GatewayLedgerRow): UsageBucketKey {
     sessionId: "",
     cwd: "",
     bucket: toBucketStart(Date.parse(row.at)),
-    ...(row.endpointId === null ? {} : { endpointId: row.endpointId }),
+    ...(endpointId === null ? {} : { endpointId }),
   };
+}
+
+/** Where a request no one answered counts: under no project, at the endpoint it last tried. */
+function failedKey(row: GatewayLedgerRow): UsageBucketKey {
+  return unknownProjectKey(row, row.attempts.at(-1)?.endpointId ?? null);
 }
 
 /** One increment at a bucket key, and at its turn when the call ran in one. */

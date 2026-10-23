@@ -1,5 +1,6 @@
 import type { GatewayLedger, GatewayLedgerAttempt, GatewayLedgerRow } from "../../usage/ledger.js";
 import type { ApiEndpointProvider } from "../store.js";
+import type { EndpointRest } from "./cooldown.js";
 import type { GatewayCandidate } from "./routing.js";
 import { emptyUsage } from "./translation/ir.js";
 import type { DeliveredReply } from "./upstream-call.js";
@@ -21,14 +22,34 @@ export interface LedgerAttemptEnd {
   cooldownUntil: number | null;
 }
 
-// 没人交回复时记的：0 token，没有编号与首字。
-const NO_ANSWER: { by: Answerer; reply: DeliveredReply } = {
-  by: null,
-  reply: { id: "", usage: emptyUsage(), stop: null, firstContentAt: null, firstTextAt: null },
-};
-
 /** 把回复交给 Agent 的那家：接口的这个模型，或 ChatGPT 自带模型（官方，null）。 */
 type Answerer = { endpointId: string; endpointName: string; upstreamModel: string } | null;
+
+/** 一次尝试问的是谁：接口的这个模型，或官方（ChatGPT 后端，没有接口）。 */
+interface AttemptTarget {
+  endpointId: string | null;
+  endpointName: string | null;
+  model: string;
+}
+
+/**
+ * 这次请求落在哪：还没结果；有一家把回复交给了 Agent；失败（told 是交给 Agent 的说法）；Agent 先走了。
+ * 还没结果就结束的只有请求处理本身崩了，记失败、没有说法。
+ */
+type LedgerOutcome =
+  | { kind: "open" }
+  | { kind: "answered"; by: Answerer; reply: DeliveredReply }
+  | { kind: "failed"; told: string }
+  | { kind: "cancelled" };
+
+// 没人交回复时记的：0 token，没有编号与首字。
+const NO_REPLY: DeliveredReply = {
+  id: "",
+  usage: emptyUsage(),
+  stop: null,
+  firstContentAt: null,
+  firstTextAt: null,
+};
 
 /**
  * 中转站给一个 CLI 请求记的那一行账（usage/ledger.ts）：每次尝试随问随记，请求结束时交给账本。
@@ -37,10 +58,7 @@ type Answerer = { endpointId: string; endpointName: string; upstreamModel: strin
  */
 export class LedgerCall {
   private readonly attempts: GatewayLedgerAttempt[] = [];
-  private answer: { by: Answerer; reply: DeliveredReply } | null = null;
-  private isCancelled = false;
-  // 没问任何一家就交给 Agent 的错误（全在冷却时交出记着的那次）。
-  private told: string | null = null;
+  private outcome: LedgerOutcome = { kind: "open" };
 
   constructor(
     private readonly input: {
@@ -59,19 +77,29 @@ export class LedgerCall {
     reasked: boolean;
     end: LedgerAttemptEnd;
   }): void {
-    const { candidate, end } = input;
-    this.attempts.push({
-      endpointId: candidate.endpoint.id,
-      endpointName: candidate.endpoint.name,
-      model: candidate.upstreamModel,
-      startedAt: new Date(input.startedAt).toISOString(),
-      durationMs: Math.max(0, Date.now() - input.startedAt),
-      result: end.result,
-      failure: end.failure,
-      reason: end.reason === null ? null : end.reason.slice(0, REASON_MAX_CHARS),
-      cooldownUntil: end.cooldownUntil === null ? null : new Date(end.cooldownUntil).toISOString(),
-      reasked: input.reasked,
+    const { candidate } = input;
+    this.push({ ...input, target: targetOf(candidate) });
+  }
+
+  /** 问 ChatGPT 后端（官方）的那一次（magpie codex_backend.go 的 Tries[0]）。 */
+  officialAttempt(input: { model: string; startedAt: number; end: LedgerAttemptEnd }): void {
+    const target = { endpointId: null, endpointName: null, model: input.model };
+    this.push({ ...input, target, reasked: false });
+  }
+
+  /**
+   * 全在冷却、没问就交出记着的错误（magpie gateway.go 的 quotaHeld 与 verifyHeld 分支同样留一次尝试）：
+   * 这家记一次 0 毫秒的失败，带冷却的分类、原话与到期时刻；told 是交给 Agent 的说法。
+   */
+  heldBack(input: { candidate: GatewayCandidate; rest: EndpointRest; told: string }): void {
+    const { rest } = input;
+    this.push({
+      target: targetOf(input.candidate),
+      startedAt: Date.now(),
+      reasked: false,
+      end: { result: "failed", failure: rest.why, reason: rest.said, cooldownUntil: rest.until },
     });
+    this.failed(input.told);
   }
 
   /** 问这家时 Agent 走了：记一次取消的尝试，这次请求记为取消。 */
@@ -90,34 +118,33 @@ export class LedgerCall {
 
   /** Agent 走了（没在问哪一家时也算）。 */
   cancelled(): void {
-    this.isCancelled = true;
+    this.outcome = { kind: "cancelled" };
   }
 
-  /** 没问任何一家就交给 Agent 的错误；message 已打码。 */
-  failedWithout(message: string): void {
-    this.told = message;
+  /** 这次请求失败了：told 是交给 Agent 的说法（key 已打码）。 */
+  failed(told: string): void {
+    this.outcome = { kind: "failed", told };
   }
 
   /** 这家把回复交给了 Agent：记账用它的回复编号、用量与首字。 */
   answered(candidate: GatewayCandidate, reply: DeliveredReply): void {
     const { endpoint, upstreamModel } = candidate;
-    this.answer = {
-      by: { endpointId: endpoint.id, endpointName: endpoint.name, upstreamModel },
-      reply,
-    };
+    const by = { endpointId: endpoint.id, endpointName: endpoint.name, upstreamModel };
+    this.outcome = { kind: "answered", by, reply };
   }
 
   /** ChatGPT 自带模型把回复交给了 Agent：接口记为官方。 */
   answeredByOfficial(reply: DeliveredReply): void {
-    this.answer = { by: null, reply };
+    this.outcome = { kind: "answered", by: null, reply };
   }
 
   /** 请求结束：记一行。交了回复的记用量；没交的记失败或取消、0 token。 */
   finish(): void {
-    const { input } = this;
+    const { input, outcome } = this;
     const sinceRequest = (at: number | null) =>
       at === null ? null : Math.max(0, at - input.since);
-    const { by, reply } = this.answer ?? NO_ANSWER;
+    const by = outcome.kind === "answered" ? outcome.by : null;
+    const reply = outcome.kind === "answered" ? outcome.reply : NO_REPLY;
     input.ledger.record({
       kind: "gateway",
       at: new Date(input.since).toISOString(),
@@ -138,22 +165,50 @@ export class LedgerCall {
       firstTextMs: sinceRequest(reply.firstTextAt),
       replyId: reply.id === "" ? null : reply.id,
       stop: reply.stop,
-      status: this.status(),
-      error: this.error(),
+      ...statusOf(outcome),
       attempts: this.attempts,
     });
   }
 
-  private status(): GatewayLedgerRow["status"] {
-    if (this.answer) return "ok";
-    return this.isCancelled ? "cancelled" : "failed";
+  private push(input: {
+    target: AttemptTarget;
+    startedAt: number;
+    reasked: boolean;
+    end: LedgerAttemptEnd;
+  }): void {
+    const { end } = input;
+    this.attempts.push({
+      ...input.target,
+      startedAt: new Date(input.startedAt).toISOString(),
+      durationMs: Math.max(0, Date.now() - input.startedAt),
+      result: end.result,
+      failure: end.failure,
+      reason: cut(end.reason),
+      cooldownUntil: end.cooldownUntil === null ? null : new Date(end.cooldownUntil).toISOString(),
+      reasked: input.reasked,
+    });
   }
+}
 
-  /** 交给 Agent 的说法：取消的照 magpie；失败的是没问就交出的那次，或最后一次尝试的原因。 */
-  private error(): string | null {
-    if (this.answer) return null;
-    if (this.isCancelled) return CANCELED_REASON;
-    const said = this.told ?? this.attempts.at(-1)?.reason ?? null;
-    return said === null ? null : said.slice(0, REASON_MAX_CHARS);
+function targetOf(candidate: GatewayCandidate): AttemptTarget {
+  const { endpoint, upstreamModel } = candidate;
+  return { endpointId: endpoint.id, endpointName: endpoint.name, model: upstreamModel };
+}
+
+/** 行上的状态与交给 Agent 的说法（magpie 的 Route.Error 即交出的那句，截短）。 */
+function statusOf(outcome: LedgerOutcome): Pick<GatewayLedgerRow, "status" | "error"> {
+  switch (outcome.kind) {
+    case "answered":
+      return { status: "ok", error: null };
+    case "cancelled":
+      return { status: "cancelled", error: CANCELED_REASON };
+    case "failed":
+      return { status: "failed", error: cut(outcome.told) };
+    case "open":
+      return { status: "failed", error: null };
   }
+}
+
+function cut(text: string | null): string | null {
+  return text === null ? null : text.slice(0, REASON_MAX_CHARS);
 }

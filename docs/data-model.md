@@ -616,18 +616,19 @@ buckets, and the same pass into one row per turn.
 
 Append-only, one file per UTC month, one JSON object per line.
 
-| Field                                                           | Type                                   | Notes                                                                              |
-| --------------------------------------------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------- |
-| `cli`                                                           | `"claude" \| "codex" \| "pi" \| "omp"` | Part of the key                                                                    |
-| `backend`                                                       | `string \| null`                       | Pi/OMP route to a backend; null for Claude and Codex. Part of the key              |
-| `model`                                                         | `string`                               | As the log spells it. Part of the key                                              |
-| `sessionId`                                                     | `string`                               | The provider's own id. Part of the key                                             |
-| `cwd`                                                           | `string`                               | First cwd seen in the file. Part of the key                                        |
-| `bucket`                                                        | `string`                               | ISO start of a **UTC 15-minute** bucket. Part of the key                           |
-| `input` / `cachedInput` / `cacheWrite` / `output` / `reasoning` | `number`                               | `input` is uncached input; `reasoning` is a subset of `output`                     |
-| `turns`                                                         | `number`                               | Counted at the bucket the user message fell in                                     |
-| `durationMs`                                                    | `number`                               | Wall clock, appended in segments as a turn settles                                 |
-| `endpointId`                                                    | `string?`                              | API endpoint the gateway ledger says answered. Absent is Official. Part of the key |
+| Field                                                           | Type                                   | Notes                                                                                             |
+| --------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `cli`                                                           | `"claude" \| "codex" \| "pi" \| "omp"` | Part of the key                                                                                   |
+| `backend`                                                       | `string \| null`                       | Pi/OMP route to a backend; null for Claude and Codex. Part of the key                             |
+| `model`                                                         | `string`                               | As the log spells it. Part of the key                                                             |
+| `sessionId`                                                     | `string`                               | The provider's own id. Part of the key                                                            |
+| `cwd`                                                           | `string`                               | First cwd seen in the file. Part of the key                                                       |
+| `bucket`                                                        | `string`                               | ISO start of a **UTC 15-minute** bucket. Part of the key                                          |
+| `input` / `cachedInput` / `cacheWrite` / `output` / `reasoning` | `number`                               | `input` is uncached input; `reasoning` is a subset of `output`                                    |
+| `turns`                                                         | `number`                               | Counted at the bucket the user message fell in                                                    |
+| `durationMs`                                                    | `number`                               | Wall clock, appended in segments as a turn settles                                                |
+| `endpointId`                                                    | `string?`                              | API endpoint the gateway ledger says answered. Absent is Official. Part of the key                |
+| `errors`                                                        | `number?`                              | Gateway requests the agent got an error for (failed or cancelled), with no tokens. Absent is none |
 
 A row is an **increment**, not a total: one parse pass writes what it just read for a
 key, and startup sums same-key rows. Token columns can be negative — a response is
@@ -688,11 +689,12 @@ A torn line is dropped on load. Three kinds, discriminated on `kind`
   of the endpoint that answered (null for Official, and when no one answered), the token
   columns plus `cacheWrite1h`, `durationMs`, `ttftMs` and `firstTextMs` (from the gateway
   taking the request; null for a reply that was not streamed), `replyId` (Claude `message.id`,
-  Codex `response_id`), `stop`, `status` (`ok`, `failed`, `cancelled`), `error` (what the agent
-  was told when the request failed or was cancelled; absent on rows written before it), and
-  `attempts` (endpoint, model,
-  start, duration, result, failure class, the vendor's words masked and cut to 200 characters,
-  cooldown end, whether it was asked again without a refused field). No conversation content.
+  Codex `response_id`), `stop`, `status` (`ok`, `failed`, `cancelled`), `error` (the text the
+  agent was sent when the request failed, or the endpoint and reason when a begun reply broke
+  off, cut to 200 characters; absent on rows written before it), and `attempts` (endpoint, null
+  for the ChatGPT backend, model, start, duration, result, failure class, the vendor's words
+  masked and cut to 200 characters, cooldown end, whether it was asked again without a refused
+  field). No conversation content.
 - `cli` — one CLI log reply as deduplicated so far, with the session, cwd, bucket, model and
   turn its tokens went to when first seen. Written whole again each time a later line corrects
   it; the last line of a `replyId` wins on load.

@@ -4890,7 +4890,7 @@ export const es: TranslationResources = {
       topProjects: "Top {{count}}",
       projectLimit: "Cuántos proyectos",
       unknownProject: "Proyecto desconocido",
-      unknownProjectHint: "Solicitudes del gateway que ningún registro de sesión nombra",
+      unknownProjectHint: "Solicitudes del gateway que no aparecen en los registros de sesión",
       projectKind: {
         non_git: "Sin git",
         directory: "Directorio",

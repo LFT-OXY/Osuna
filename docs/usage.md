@@ -66,17 +66,23 @@ endpoint or to the CLI.
 
 Codex's ChatGPT models, which the gateway relays to ChatGPT when Codex signs in
 with ChatGPT, get a row too, under **Official** and never at an endpoint's
-multiplier. Only `/responses` is recorded, as in magpie; compaction and search
-are not.
+multiplier, with the ask to ChatGPT as its one try. Only `/responses` is
+recorded, as in magpie; compaction and search are not. A ChatGPT reply that
+breaks off after it began is booked as far as it came, not as a failure, as
+magpie's `codexUpstreamOn` does.
 
-A request no one answered is a row of 0 tokens: every endpoint failed (or all
-were resting and the gateway handed back the stored error without asking),
-or the agent went away first. The first is `failed`, the second `cancelled`
-with a `canceled` try, magpie's words. Each try keeps its endpoint, result,
-failure class, the vendor's words (key masked, cut to 200 characters) and the
-cooldown it caused, so a failure, a refusal (result `refused`) and a re-ask
-without a refused field (`reasked`) read apart. These rows add nothing to the
-totals.
+A request no one answered is a row of 0 tokens: every endpoint failed, or the
+agent went away first. The first is `failed`, the second `cancelled` with a
+`canceled` try, magpie's words. When every endpoint was resting and the gateway
+handed back the stored error without asking, the resting endpoint it named is
+the request's one try, 0 ms long, with its cooldown, as magpie keeps a try for
+it. Each try keeps its endpoint, result, failure class, the vendor's words (key
+masked, cut to 200 characters) and the cooldown it caused, so a failure, a
+refusal (result `refused`) and a re-ask without a refused field (`reasked`)
+read apart. The row's `error` is the text the agent was sent. These rows add no
+tokens, but count as an error under the unknown project at the endpoint last
+tried, as magpie counts failed calls in its groups, so the unknown project is
+listed even when every request in the period failed.
 
 The ledger and the CLI log meet on that id (Claude `message.id`, the
 `response_id` of Codex's `token_usage_record`; a rollout old enough to have only

@@ -78,6 +78,24 @@ describe("usage.report.get", () => {
     };
     expect(SessionOutboundMessageSchema.parse(message)).toEqual(message);
   });
+
+  it("parses the unknown project: its flag, with the placeholders older clients need", () => {
+    const unknownProject = {
+      rootPath: "",
+      displayName: "",
+      kind: "directory" as const,
+      unknown: true,
+      totals: EMPTY_TOTALS,
+      estimatedCost: 0,
+      sources: [],
+      cwds: [],
+    };
+    const message = {
+      type: "usage.report.get.response" as const,
+      payload: { requestId: "req-1", ...EMPTY_REPORT, projects: [unknownProject] },
+    };
+    expect(SessionOutboundMessageSchema.parse(message)).toEqual(message);
+  });
 });
 
 describe("usage.sessions.list", () => {

@@ -160,6 +160,12 @@ export const UsageProjectRefSchema = z.object({
 export type UsageProjectRef = z.infer<typeof UsageProjectRefSchema>;
 
 export const UsageProjectBreakdownSchema = UsageProjectRefSchema.extend({
+  /**
+   * The gateway requests no CLI log names (ADR 0014): no directory and no name.
+   * `rootPath` is "" and `kind` "directory" only because older clients require
+   * both; read this flag, not them.
+   */
+  unknown: z.boolean().optional(),
   totals: UsageTokenTotalsSchema,
   estimatedCost: z.number(),
   /** Which CLIs and backends ran here, largest first; the row wears their marks. */

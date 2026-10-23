@@ -29,11 +29,11 @@ export interface TopUsageProjects {
 }
 
 /**
- * The row of gateway requests no CLI log names (ADR 0014): the daemon reports
- * them under a project with no directory.
+ * The row of gateway requests no CLI log names (ADR 0014). Its `rootPath` and
+ * `kind` are placeholders the wire keeps for older clients; only the flag says it.
  */
-export function isUnknownUsageProject(project: Pick<MergedUsageProject, "rootPath">): boolean {
-  return project.rootPath === "";
+export function isUnknownUsageProject(project: Pick<MergedUsageProject, "unknown">): boolean {
+  return project.unknown === true;
 }
 
 /**

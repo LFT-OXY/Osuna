@@ -6,11 +6,12 @@ import { UsageCliSchema } from "@getpaseo/protocol/usage/types";
  * model, when it started and how long it took, how it ended, and when it
  * failed, the failure's class and the vendor's words (key masked, cut short)
  * and the cooldown it caused. `reasked` marks a try the endpoint refused a
- * field or header of and was asked again without it.
+ * field or header of and was asked again without it. `endpointId` null is
+ * Official: the ChatGPT backend a Codex ChatGPT model is relayed to.
  */
 export const GATEWAY_LEDGER_ATTEMPT_SCHEMA = z.object({
-  endpointId: z.string(),
-  endpointName: z.string(),
+  endpointId: z.string().nullable(),
+  endpointName: z.string().nullable(),
   model: z.string(),
   startedAt: z.string(),
   durationMs: z.number().int().nonnegative(),
@@ -53,7 +54,7 @@ export const GATEWAY_LEDGER_ROW_SCHEMA = z.object({
   replyId: z.string().nullable(),
   stop: z.string().nullable(),
   status: z.enum(["ok", "failed", "cancelled"]),
-  // 失败与取消时交给 Agent 的说法（key 已打码、截短）；成功为 null。工单 01 写的行没有它。
+  // 失败与取消时交给 Agent 的说法（key 已打码、截短到 200 字）；成功为 null。工单 01 写的行没有它。
   error: z.string().nullable().optional(),
   attempts: z.array(GATEWAY_LEDGER_ATTEMPT_SCHEMA),
 });

@@ -104,8 +104,9 @@ export type HandBack = () => Promise<AttemptOutcome>;
  */
 export type AnswerEnd =
   | { kind: "complete"; usage: Usage; reply: DeliveredReply }
-  // 以报错形式交给 Agent 的拒答没有回复可记，为 null。
-  | { kind: "refused"; reply: DeliveredReply | null }
+  | { kind: "refused"; reply: DeliveredReply }
+  // 以报错形式交给 Agent 的拒答：没有回复可记，told 是交给 Agent 的说法。
+  | { kind: "refused_as_error"; told: string }
   | { kind: "broken"; message: string }
   | { kind: "gone" };
 

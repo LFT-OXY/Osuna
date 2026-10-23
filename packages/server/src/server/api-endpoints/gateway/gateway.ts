@@ -504,7 +504,8 @@ function chatgptWatch(input: {
     model: input.model,
     since: input.since,
   });
-  return new ChatGptLedgerWatch({ call, streams: isRecord(parsed) && parsed.stream === true });
+  const streams = isRecord(parsed) && parsed.stream === true;
+  return new ChatGptLedgerWatch({ call, model: input.model, since: input.since, streams });
 }
 
 function relayChatGpt(input: {
@@ -1103,8 +1104,9 @@ async function handleAgentRequest(input: {
     within: turnOf(wire, parsed).within,
   });
   if (planned.kind === "rest") {
-    // 没问任何一家：交出冷却里记着的那次错误，账本也记这一行失败。
-    call.failedWithout(sendRest({ res, wire, ...planned }));
+    // 没问任何一家：交出冷却里记着的那次错误，账本记这家的冷却与交出的说法。
+    const told = sendRest({ res, wire, ...planned });
+    call.heldBack({ candidate: planned.candidate, rest: planned.rest, told });
     call.finish();
     return;
   }
@@ -1421,11 +1423,7 @@ async function askInTurn(input: {
         logSwitch({ logger, from: candidate, to: next, failure: "refused", failed, rest: null });
         continue;
       }
-      noteHandedBack({
-        call,
-        refused,
-        end: await sendAllRefused({ res, wire, refused, handBack }),
-      });
+      await sendAllRefused({ res, wire, refused, handBack, call });
       return;
     }
     // 厂商自己的清单可能还列着它（OpenCode Zen 的 exo-free）：这家的这一项一周内不进列表。
@@ -1460,7 +1458,7 @@ async function askInTurn(input: {
         continue;
       }
       const told = toldTooLong(failed, overflow);
-      sendFailedAttempt({
+      const message = sendFailedAttempt({
         res,
         wire,
         endpoint: candidate.endpoint,
@@ -1468,11 +1466,12 @@ async function askInTurn(input: {
         suffix: "",
         headers: {},
       });
+      call.failed(message);
       return;
     }
     if (!retryable(failed.status, failed.text)) {
       noteFailed(endpointFailure(failed.status, failed.text), null);
-      sendFailedAttempt({
+      const message = sendFailedAttempt({
         res,
         wire,
         endpoint: candidate.endpoint,
@@ -1480,6 +1479,7 @@ async function askInTurn(input: {
         suffix: "",
         headers: {},
       });
+      call.failed(message);
       return;
     }
     // 空回复怪不到这家，不冷却。
@@ -1491,7 +1491,7 @@ async function askInTurn(input: {
       logSwitch({ logger, from: candidate, to: next, failure, failed, rest });
       continue;
     }
-    sendFailedAttempt({
+    const message = sendFailedAttempt({
       res,
       wire,
       endpoint: candidate.endpoint,
@@ -1499,36 +1499,56 @@ async function askInTurn(input: {
       suffix: backAgainSuffix(rest),
       headers: missingRetryAfter(failed, rest),
     });
+    call.failed(message);
     return;
   }
 }
 
-/** 这家开了口、把回复交给了 Agent：记这次尝试，交出了回复（不是报错形式的拒答）的也记进账。 */
+/**
+ * 这家开了口：记这次尝试。交出了回复的（含以结束形式的拒答）记进账；以报错形式拒答的记失败与交出的说法；
+ * 开口后断了的记失败，说法是这家与断的原因（magpie 的 call.Error）。
+ */
 function noteAnswered(input: {
   call: LedgerCall;
   candidate: AskableCandidate;
   end: Exclude<AnswerEnd, { kind: "gone" }>;
   noteAttempt: (end: LedgerAttemptEnd) => void;
 }): void {
-  const { end } = input;
-  const result = end.kind === "refused" ? "refused" : "answered";
+  const { call, candidate, end } = input;
+  const isRefused = end.kind === "refused" || end.kind === "refused_as_error";
   const failure = end.kind === "broken" ? "broken" : null;
   const reason = end.kind === "broken" ? end.message : null;
-  input.noteAttempt({ result, failure, reason, cooldownUntil: null });
-  if ((end.kind === "complete" || end.kind === "refused") && end.reply) {
-    input.call.answered(input.candidate, end.reply);
-  }
+  input.noteAttempt({
+    result: isRefused ? "refused" : "answered",
+    failure,
+    reason,
+    cooldownUntil: null,
+  });
+  settleAnswer({ call, candidate, end });
 }
 
-/** 都拒答时交还给 Claude Code 的那份拒答回复也记进账，算在排第一那家。 */
-function noteHandedBack(input: {
+/** 开了口的回复怎么结束的，记进账（尝试另记）。 */
+function settleAnswer(input: {
   call: LedgerCall;
-  refused: Refused;
-  end: AnswerEnd | null;
+  candidate: AskableCandidate;
+  end: AnswerEnd;
 }): void {
-  const { end } = input;
-  if (end?.kind === "refused" && end.reply) input.call.answered(input.refused.candidate, end.reply);
-  if (end?.kind === "gone") input.call.cancelled();
+  const { call, candidate, end } = input;
+  switch (end.kind) {
+    case "complete":
+    case "refused":
+      call.answered(candidate, end.reply);
+      return;
+    case "refused_as_error":
+      call.failed(end.told);
+      return;
+    case "broken":
+      call.failed(`${candidate.endpoint.name}: ${end.message}`);
+      return;
+    case "gone":
+      call.cancelled();
+      return;
+  }
 }
 
 /** 一次拒答：哪家、它的失败（说法是安全过滤的原因）。 */
@@ -1570,23 +1590,27 @@ async function sendAllRefused(input: {
   wire: AgentWire;
   refused: Refused;
   handBack: HandBack | null;
-}): Promise<AnswerEnd | null> {
-  const { res, wire, handBack } = input;
+  call: LedgerCall;
+}): Promise<void> {
+  const { res, wire, handBack, call } = input;
+  const { candidate, failed } = input.refused;
   const handsBackToClaude = wire === "anthropic" && handBack !== null;
   if (handsBackToClaude) {
     const outcome = await handBack();
-    if (outcome.kind === "gone") return outcome;
-    if (outcome.kind === "answered") return outcome.finished;
+    if (outcome.kind === "gone") {
+      call.cancelled();
+      return;
+    }
+    if (outcome.kind === "answered") {
+      // 交还的那份拒答回复也记进账，算在排第一那家。
+      settleAnswer({ call, candidate, end: await outcome.finished });
+      return;
+    }
   }
-  const { candidate, failed } = input.refused;
   const { endpoint } = candidate;
-  sendRefusal({
-    res,
-    wire,
-    message: `${endpoint.name}: ${candidate.upstreamModel} refused this request (${failed.detail})`,
-    headers: { [ANSWERED_BY_HEADER]: endpoint.slug },
-  });
-  return null;
+  const message = `${endpoint.name}: ${candidate.upstreamModel} refused this request (${failed.detail})`;
+  sendRefusal({ res, wire, message, headers: { [ANSWERED_BY_HEADER]: endpoint.slug } });
+  call.failed(message);
 }
 
 type SettledAttempt =

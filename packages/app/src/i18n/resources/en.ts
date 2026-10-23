@@ -4922,7 +4922,7 @@ export const en = {
       topProjects: "Top {{count}}",
       projectLimit: "How many projects",
       unknownProject: "Unknown project",
-      unknownProjectHint: "Gateway requests no session log names",
+      unknownProjectHint: "Gateway requests not found in session logs",
       projectKind: {
         non_git: "Not git",
         directory: "Directory",
