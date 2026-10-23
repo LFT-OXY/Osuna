@@ -4665,6 +4665,7 @@ export const ar: TranslationResources = {
       allSources: "الكل",
       official: "الرسمي",
       deletedEndpoint: "(محذوف)",
+      deletedEndpointName: "{{name}} (محذوف)",
       breakdown: {
         label: "التقسيم حسب",
         sources: "المصادر",
@@ -4867,7 +4868,7 @@ export const ar: TranslationResources = {
         output: "الإخراج",
         cacheRead: "قراءة الذاكرة المؤقتة",
         cacheWrite: "كتابة الذاكرة المؤقتة",
-        cost: "التكلفة",
+        cost: "التكلفة التقديرية",
         duration: "المدة",
         ttft: "حتى أول رمز",
         speed: "سرعة الإخراج",

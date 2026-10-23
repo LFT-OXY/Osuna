@@ -4780,6 +4780,7 @@ export const es: TranslationResources = {
       allSources: "Todas",
       official: "Oficial",
       deletedEndpoint: "(eliminado)",
+      deletedEndpointName: "{{name}} (eliminado)",
       breakdown: {
         label: "Dividir por",
         sources: "Orígenes",
@@ -4982,7 +4983,7 @@ export const es: TranslationResources = {
         output: "Salida",
         cacheRead: "Lectura de caché",
         cacheWrite: "Escritura de caché",
-        cost: "Costo",
+        cost: "Coste est.",
         duration: "Duración",
         ttft: "Tiempo al primer token",
         speed: "Velocidad de salida",

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { UsageRequestRow } from "@getpaseo/protocol/usage/types";
 import {
   formatRequestMs,
+  usageRequestEndpointLabel,
+  usageRequestModelLabel,
   INITIAL_USAGE_REQUESTS_FILTERS,
   mergeUsageRequestPages,
   toUsageRequestFilters,
@@ -190,5 +192,35 @@ describe("formatRequestMs", () => {
     expect(formatRequestMs(1234)).toBe("1.2 s");
     expect(formatRequestMs(12_345)).toBe("12 s");
     expect(formatRequestMs(null)).toBe("—");
+  });
+});
+
+describe("usageRequestModelLabel", () => {
+  it("adds the model the answering endpoint was asked when it differs from the one requested", () => {
+    const answered = { ...attempt("ep_b", "answered", null), model: "kimi-k2-0905" };
+    expect(
+      usageRequestModelLabel(
+        row("a", "t", { attempts: [attempt("ep_a", "failed", "credit"), answered] }),
+      ),
+    ).toBe("kimi-k2 → kimi-k2-0905");
+    expect(
+      usageRequestModelLabel(row("b", "t", { attempts: [{ ...answered, model: "kimi-k2" }] })),
+    ).toBe("kimi-k2");
+    expect(usageRequestModelLabel(row("c", "t"))).toBe("kimi-k2");
+  });
+});
+
+describe("usageRequestEndpointLabel", () => {
+  const t = (key: string, options?: Record<string, unknown>) =>
+    key === "usage.overview.deletedEndpointName" ? `${String(options?.name)}（已删除）` : key;
+
+  it("names Official, a live endpoint, and a deleted one in the language's own words", () => {
+    expect(usageRequestEndpointLabel({ name: null, deleted: false }, t)).toBe(
+      "usage.overview.official",
+    );
+    expect(usageRequestEndpointLabel({ name: "Relay A", deleted: false }, t)).toBe("Relay A");
+    expect(usageRequestEndpointLabel({ name: "Relay D", deleted: true }, t)).toBe(
+      "Relay D（已删除）",
+    );
   });
 });

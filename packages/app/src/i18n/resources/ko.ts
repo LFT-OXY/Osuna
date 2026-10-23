@@ -4708,6 +4708,7 @@ export const ko: TranslationResources = {
       allSources: "전체",
       official: "공식",
       deletedEndpoint: "(삭제됨)",
+      deletedEndpointName: "{{name}} (삭제됨)",
       breakdown: {
         label: "나누는 기준",
         sources: "소스",
@@ -4911,7 +4912,7 @@ export const ko: TranslationResources = {
         output: "출력",
         cacheRead: "캐시 읽기",
         cacheWrite: "캐시 쓰기",
-        cost: "비용",
+        cost: "추정 비용",
         duration: "소요 시간",
         ttft: "첫 토큰까지",
         speed: "출력 속도",

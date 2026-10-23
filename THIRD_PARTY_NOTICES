@@ -1293,6 +1293,13 @@ internal/gateway/codex_backend.go:
 
   packages/server/src/server/api-endpoints/gateway/chatgpt-ledger.ts
 
+Matching a gateway ledger row to the CLI log's reply by the reply id, the
+session taken from the log, follows
+codexResponseMatches and codexIdentityRow in magpie's
+internal/usage/codex_identity.go:
+
+  packages/server/src/server/usage/call-merge.ts
+
 The per-request usage records' retention (finished days gzipped, a later
 append joining as a gzip member of its own, a .gz cut short written anew from
 its whole lines, 30 days and 200 MB in all counted compressed, checked on a
@@ -1304,7 +1311,7 @@ fields ignoring case, filter choices from the whole period) follows QueryPage in
 internal/usage/request_page.go, Filter.keepsRecord and SourceOf in
 internal/usage/ledger.go, and LostRequest and RetriedRequest in
 internal/usage/usage.go; a duration or a wait for the first token is written
-as ledTook in internal/gui/assets/app.js writes it:
+as ledTook in internal/gui/assets/app.js:
 
   packages/server/src/server/usage/store.ts
   packages/server/src/server/usage/request-files.ts
@@ -1326,6 +1333,7 @@ Speed card's order (fastest first, then more tokens) follows ledSpeed, ledTTFT
 and ledCategories in internal/gui/assets/app.js:
 
   packages/server/src/server/usage/speed.ts
+  packages/server/src/server/usage/report.ts
   packages/server/src/server/api-endpoints/gateway/reply-clock.ts
   packages/app/src/usage-stats/speed.ts
 

@@ -4811,6 +4811,7 @@ export const en = {
       allSources: "All",
       official: "Official",
       deletedEndpoint: "(deleted)",
+      deletedEndpointName: "{{name}} (deleted)",
       breakdown: {
         label: "Split by",
         sources: "Sources",
@@ -5013,7 +5014,7 @@ export const en = {
         output: "Output",
         cacheRead: "Cache read",
         cacheWrite: "Cache write",
-        cost: "Cost",
+        cost: "Est. cost",
         duration: "Duration",
         ttft: "Time to first token",
         speed: "Output speed",

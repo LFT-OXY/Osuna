@@ -4753,6 +4753,7 @@ export const ptBR: TranslationResources = {
       allSources: "Tudo",
       official: "Oficial",
       deletedEndpoint: "(excluído)",
+      deletedEndpointName: "{{name}} (excluído)",
       breakdown: {
         label: "Dividir por",
         sources: "Origens",
@@ -4955,7 +4956,7 @@ export const ptBR: TranslationResources = {
         output: "Saída",
         cacheRead: "Leitura de cache",
         cacheWrite: "Escrita de cache",
-        cost: "Custo",
+        cost: "Custo est.",
         duration: "Duração",
         ttft: "Tempo até o primeiro token",
         speed: "Velocidade de saída",

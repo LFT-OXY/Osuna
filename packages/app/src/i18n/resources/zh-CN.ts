@@ -4651,6 +4651,7 @@ export const zhCN: TranslationResources = {
       allSources: "全部",
       official: "官方",
       deletedEndpoint: "（已删除）",
+      deletedEndpointName: "{{name}}（已删除）",
       breakdown: {
         label: "分法",
         sources: "来源",

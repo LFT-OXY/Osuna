@@ -1,3 +1,5 @@
+// 账本行与会话记录按回复编号对上合成一条、会话取会话记录照 magpie（https://github.com/yetone/magpie，internal/usage/codex_identity.go 的 codexResponseMatches 与 codexIdentityRow）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import type { UsageCli, UsageTokenTotals } from "@getpaseo/protocol/usage/types";
 import type {
   GatewayLedgerRow,

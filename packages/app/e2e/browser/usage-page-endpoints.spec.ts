@@ -356,7 +356,8 @@ test.describe("Usage page by endpoint", () => {
       const row = rowOf("Relay Paced");
       await expect(row).toContainText("Based on 2", { timeout: 30_000 });
       await expect(row).toContainText(/\d+ tok\/s/);
-      await expect(row).toContainText(/\d+\.\d+ s/);
+      // 首字不到 1 秒写 ms（照 magpie ledTook）。
+      await expect(row).toContainText(/\d+ ms/);
       // 不流式的请求（别的用例经 /good 问的）没有计时，不成一行。
       await expect(rowOf("Relay Alpha")).toHaveCount(0);
     });

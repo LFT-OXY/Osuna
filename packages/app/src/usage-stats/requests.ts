@@ -1,6 +1,4 @@
-// 请求列表的状态（失败取最后一次尝试的分类、答了且试过不止一次即换过家）与每页 100 条照 magpie
-// （https://github.com/yetone/magpie，internal/usage/usage.go 的 LostRequest、RetriedRequest，request_page.go 的 QueryPage）；
-// 耗时与首字等待的写法照 internal/gui/assets/app.js 的 ledTook
+// 请求列表的状态、每页 100 条与耗时写法移植自 magpie（https://github.com/yetone/magpie，internal/usage/usage.go 的 LostRequest、RetriedRequest，request_page.go 的 QueryPage，internal/gui/assets/app.js 的 ledTook）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import type {
   UsageCli,
@@ -208,6 +206,26 @@ export function isKnownUsageRequestFailure(value: string): value is UsageRequest
 /** A failure class in the UI's words; one the client does not know is shown as written. */
 export function usageRequestFailureLabel(failure: string, t: (key: string) => string): string {
   return isKnownUsageRequestFailure(failure) ? t(`usage.requests.failures.${failure}`) : failure;
+}
+
+/**
+ * The model a request asked for, and after an arrow the one the endpoint that
+ * answered (else the last one tried) was asked, when that one is spelled differently.
+ */
+export function usageRequestModelLabel(row: Pick<UsageRequestRow, "model" | "attempts">): string {
+  const answered = row.attempts.findLast((attempt) => attempt.result === "answered");
+  const upstream = (answered ?? row.attempts.at(-1))?.model;
+  return upstream && upstream !== row.model ? `${row.model} → ${upstream}` : row.model;
+}
+
+/** Official, the endpoint's name, or its name marked deleted in the language's own punctuation. */
+export function usageRequestEndpointLabel(
+  endpoint: { name: string | null; deleted: boolean },
+  t: (key: string, options?: Record<string, unknown>) => string,
+): string {
+  if (endpoint.name === null) return t("usage.overview.official");
+  if (endpoint.deleted) return t("usage.overview.deletedEndpointName", { name: endpoint.name });
+  return endpoint.name;
 }
 
 /** A duration or a wait: `850 ms` under a second, `1.2 s` under ten, `12 s` above. */

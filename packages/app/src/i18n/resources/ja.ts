@@ -4741,6 +4741,7 @@ export const ja: TranslationResources = {
       allSources: "すべて",
       official: "公式",
       deletedEndpoint: "（削除済み）",
+      deletedEndpointName: "{{name}}（削除済み）",
       breakdown: {
         label: "分け方",
         sources: "ソース",
@@ -4943,7 +4944,7 @@ export const ja: TranslationResources = {
         output: "出力",
         cacheRead: "キャッシュ読み取り",
         cacheWrite: "キャッシュ書き込み",
-        cost: "コスト",
+        cost: "推定コスト",
         duration: "所要時間",
         ttft: "最初のトークンまで",
         speed: "出力速度",

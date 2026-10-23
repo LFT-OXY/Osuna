@@ -43,7 +43,9 @@ import {
   INITIAL_USAGE_REQUESTS_FILTERS,
   toUsageRequestFilters,
   USAGE_REQUESTS_PAGE_SIZE,
+  usageRequestEndpointLabel,
   usageRequestFailureLabel,
+  usageRequestModelLabel,
   usageRequestStatus,
   usageRequestsFiltersFor,
   type MergedUsageRequestRow,
@@ -306,7 +308,7 @@ function UsageRequestsFilterBar({
     () =>
       (data?.endpoints ?? []).map((option) => ({
         key: option.key,
-        label: endpointLabel(option, t),
+        label: usageRequestEndpointLabel(option, t),
       })),
     [data?.endpoints, t],
   );
@@ -381,7 +383,9 @@ function UsageRequestsFilterBar({
           allLabel={t("usage.requests.filters.all")}
           choices={endpointChoices}
           selected={filters.endpoint?.key ?? null}
-          selectedFallbackLabel={filters.endpoint ? endpointLabel(filters.endpoint, t) : null}
+          selectedFallbackLabel={
+            filters.endpoint ? usageRequestEndpointLabel(filters.endpoint, t) : null
+          }
           onSelect={handleEndpoint}
           testID="usage-requests-filter-endpoint"
         />
@@ -396,15 +400,6 @@ function UsageRequestsFilterBar({
       </View>
     </View>
   );
-}
-
-function endpointLabel(
-  endpoint: { name: string | null; deleted: boolean },
-  t: (key: string) => string,
-): string {
-  if (endpoint.name === null) return t("usage.overview.official");
-  if (endpoint.deleted) return `${endpoint.name} ${t("usage.overview.deletedEndpoint")}`;
-  return endpoint.name;
 }
 
 interface FilterChoice {
@@ -609,6 +604,8 @@ function UsageRequestRow({
   const hidden = TIER_COLUMNS.wide.filter((column) => !columns.includes(column));
   // 窄时行上只有时刻、状态可能被截断：日期与完整状态在展开行里。
   const isNarrow = tier === "narrow";
+  // 宽度不到 13 列时模型与接口在行上会被截断：完整的写在展开行里。
+  const isCut = tier !== "wide";
 
   return (
     <View style={styles.rowBlock}>
@@ -631,6 +628,15 @@ function UsageRequestRow({
             ) : null}
             {isNarrow ? (
               <DetailItem label={t("usage.requests.columns.status")} value={cells.fullStatus} />
+            ) : null}
+            {isCut ? (
+              <DetailItem label={t("usage.requests.columns.model")} value={cells.fullModel} />
+            ) : null}
+            {isCut ? (
+              <DetailItem
+                label={t("usage.requests.columns.endpoint")}
+                value={cells.byColumn.endpoint.text}
+              />
             ) : null}
             {hidden.map((column) => (
               <DetailItem
@@ -695,6 +701,8 @@ interface RequestCells {
   fullTime: string;
   /** "Failed (reason)", which the narrow row shortens to its first word. */
   fullStatus: string;
+  /** The model asked, and the one the answering endpoint was asked when it differs. */
+  fullModel: string;
 }
 
 /** Every column's text for one row, whichever the row shows and whichever open under it. */
@@ -731,7 +739,10 @@ function useRequestCells({
     fullStatus = t("usage.requests.statusCell.ok");
   }
   const endpointName = row.endpointId === null ? null : (row.endpointName ?? row.endpointId);
-  const endpoint = endpointLabel({ name: endpointName, deleted: row.endpointDeleted }, t);
+  const endpoint = usageRequestEndpointLabel(
+    { name: endpointName, deleted: row.endpointDeleted },
+    t,
+  );
   const endpointColor = row.endpointId === null ? "foregroundMuted" : "foreground";
   const fullTime = formatRequestTime(row.at, locale, timezone);
   const shownTime = isNarrow ? formatRequestClock(row.at, locale, timezone) : fullTime;
@@ -745,6 +756,7 @@ function useRequestCells({
   return {
     fullTime,
     fullStatus,
+    fullModel: usageRequestModelLabel(row),
     byColumn: {
       time: muted(shownTime),
       agent: { text: usageSourceLabel({ cli: row.cli, backend: null }), color: "foreground" },

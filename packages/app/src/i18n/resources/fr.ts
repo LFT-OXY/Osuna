@@ -4804,6 +4804,7 @@ export const fr: TranslationResources = {
       allSources: "Tout",
       official: "Officiel",
       deletedEndpoint: "(supprimé)",
+      deletedEndpointName: "{{name}} (supprimé)",
       breakdown: {
         label: "Répartir par",
         sources: "Sources",
@@ -5007,7 +5008,7 @@ export const fr: TranslationResources = {
         output: "Sortie",
         cacheRead: "Lecture cache",
         cacheWrite: "Écriture cache",
-        cost: "Coût",
+        cost: "Coût est.",
         duration: "Durée",
         ttft: "Délai du premier token",
         speed: "Vitesse de sortie",

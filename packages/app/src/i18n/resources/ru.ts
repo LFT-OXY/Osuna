@@ -4759,6 +4759,7 @@ export const ru: TranslationResources = {
       allSources: "Все",
       official: "Официальный",
       deletedEndpoint: "(удалён)",
+      deletedEndpointName: "{{name}} (удалён)",
       breakdown: {
         label: "Разбивка",
         sources: "Источники",
@@ -4961,7 +4962,7 @@ export const ru: TranslationResources = {
         output: "Вывод",
         cacheRead: "Чтение кэша",
         cacheWrite: "Запись в кэш",
-        cost: "Стоимость",
+        cost: "Оцен. стоимость",
         duration: "Длительность",
         ttft: "До первого токена",
         speed: "Скорость вывода",

@@ -12,7 +12,11 @@ import {
 } from "@/components/usage/usage-segmented-control";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useUsageReport, type UseUsageReportInput } from "@/hooks/use-usage-report";
-import { formatOutputSpeed, formatRequestMs } from "@/usage-stats/requests";
+import {
+  formatOutputSpeed,
+  formatRequestMs,
+  usageRequestEndpointLabel,
+} from "@/usage-stats/requests";
 import { usageSourceLabel } from "@/usage-stats/sources";
 import { usageGroupSpeed, usageGroupWaitMs, type MergedUsageSpeedGroup } from "@/usage-stats/speed";
 
@@ -207,11 +211,15 @@ interface SpeedGroupLabel {
 /** A group's name in the grouping it is of: the endpoint (Official), the model, both, or the agent. */
 function speedGroupLabel(
   group: MergedUsageSpeedGroup,
-  t: (key: string) => string,
+  t: (key: string, options?: Record<string, unknown>) => string,
 ): SpeedGroupLabel {
-  const endpointName = group.endpoint?.name ?? t("usage.overview.official");
-  const deletedMark = group.endpoint?.deleted ? ` ${t("usage.overview.deletedEndpoint")}` : "";
-  const endpoint = group.endpoint === null ? null : `${endpointName}${deletedMark}`;
+  const endpoint =
+    group.endpoint === null
+      ? null
+      : usageRequestEndpointLabel(
+          { name: group.endpoint.name, deleted: group.endpoint.deleted },
+          t,
+        );
   if (group.cli !== null) {
     const agent = usageSourceLabel({ cli: group.cli, backend: null });
     return { name: agent, endpoint: null };

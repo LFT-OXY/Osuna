@@ -1,3 +1,5 @@
+// 速度卡的分组与排序（先按速度、再按 token）照 magpie（https://github.com/yetone/magpie，internal/gui/assets/app.js 的 ledCategories）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import type {
   UsageAmount,
   UsageBackfill,
