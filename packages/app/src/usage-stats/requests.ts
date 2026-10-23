@@ -46,14 +46,6 @@ export interface MergedUsageRequests {
   models: string[];
 }
 
-export const EMPTY_USAGE_REQUESTS: MergedUsageRequests = {
-  rows: [],
-  total: 0,
-  clis: [],
-  endpoints: [],
-  models: [],
-};
-
 const OFFICIAL_OPTION_KEY = "official";
 
 /**
@@ -202,6 +194,17 @@ export function formatRequestTime(at: string, locale: string, timezone: string):
   return new Intl.DateTimeFormat(locale, {
     month: "2-digit",
     day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+    timeZone: timezone,
+  }).format(new Date(at));
+}
+
+/** `14:03:05`: the narrow row's time, its day left to the expanded part. */
+export function formatRequestClock(at: string, locale: string, timezone: string): string {
+  return new Intl.DateTimeFormat(locale, {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",

@@ -25,13 +25,12 @@ export interface UsageMergeOutput {
 }
 
 /**
- * One request as the Requests list shows it: what the log counted, what the
- * gateway carried, or both for a call they share. At least one is set.
+ * One request as the Requests list shows it: one the gateway carried, with
+ * the log's reply when the log has it too, or a reply only the log has.
  */
-export interface UsageListedCall {
-  cli: UsageCliCall | null;
-  ledger: GatewayLedgerRow | null;
-}
+export type UsageListedCall =
+  | { kind: "gateway"; ledger: GatewayLedgerRow; cli: UsageCliCall | null }
+  | { kind: "direct"; cli: UsageCliCall };
 
 /** One call as far as the two sides have told it, and whether its move to the endpoint is done. */
 interface MergedCall {
@@ -177,9 +176,10 @@ export class UsageCallMerge {
   listCalls(): UsageListedCall[] {
     const listed: UsageListedCall[] = [];
     for (const { cli, ledger } of this.calls.values()) {
-      if (cli || ledger) listed.push({ cli, ledger });
+      if (ledger) listed.push({ kind: "gateway", ledger, cli });
+      else if (cli) listed.push({ kind: "direct", cli });
     }
-    for (const ledger of this.unreplied) listed.push({ cli: null, ledger });
+    for (const ledger of this.unreplied) listed.push({ kind: "gateway", ledger, cli: null });
     return listed;
   }
 

@@ -1,4 +1,6 @@
+import { randomBytes } from "node:crypto";
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { gunzipSync, gzipSync } from "node:zlib";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
@@ -655,7 +657,9 @@ async function readLedger(usageDir: string): Promise<{ text: string; modes: numb
   const modes: number[] = [];
   for (const name of await readdir(dir)) {
     const file = path.join(dir, name);
-    text += await readFile(file, "utf8");
+    const bytes = await readFile(file);
+    // 过完的一天压成了 .gz。
+    text += (name.endsWith(".gz") ? gunzipSync(bytes) : bytes).toString("utf8");
     modes.push((await stat(file)).mode & 0o777);
   }
   return { text, modes };
@@ -1698,11 +1702,21 @@ function movableClock(): { now: () => number; advance: (ms: number) => void } {
   };
 }
 
-/** 盘上某天的逐条记录文件放一行没人回答的请求；error 填长一点就占地方。 */
-async function seedFailedRequest(usageDir: string, at: number, errorLength = 0): Promise<string> {
-  const dir = path.join(usageDir, "requests");
-  await mkdir(dir, { recursive: true });
+/**
+ * 一行没人回答的请求。error 后面补 padding：`random` 压不小（随机十六进制），`plain` 一压就小。
+ */
+function failedRequestLine(
+  at: number,
+  padding: { length: number; kind: "random" | "plain" } = { length: 0, kind: "plain" },
+  label = "seeded",
+): string {
   const iso = new Date(at).toISOString();
+  const fill =
+    padding.kind === "random"
+      ? randomBytes(Math.ceil(padding.length / 2))
+          .toString("hex")
+          .slice(0, padding.length)
+      : "x".repeat(padding.length);
   const row = {
     kind: "gateway",
     at: iso,
@@ -1724,12 +1738,29 @@ async function seedFailedRequest(usageDir: string, at: number, errorLength = 0):
     replyId: null,
     stop: null,
     status: "failed",
-    error: `seeded ${"x".repeat(errorLength)}`,
+    error: `${label} ${fill}`,
     attempts: [],
   };
-  const file = path.join(dir, `${iso.slice(0, 10)}.jsonl`);
-  await writeFile(file, `${JSON.stringify(row)}\n`, { flag: "a" });
+  return `${JSON.stringify(row)}\n`;
+}
+
+/** 盘上某天的逐条记录文件追加一行没人回答的请求，回这个文件。 */
+async function seedFailedRequest(
+  usageDir: string,
+  at: number,
+  padding?: { length: number; kind: "random" | "plain" },
+): Promise<string> {
+  const dir = path.join(usageDir, "requests");
+  await mkdir(dir, { recursive: true });
+  const file = path.join(dir, `${new Date(at).toISOString().slice(0, 10)}.jsonl`);
+  await writeFile(file, failedRequestLine(at, padding), { flag: "a" });
   return file;
+}
+
+/** 某天的逐条记录文件：明文的与压过的。 */
+function dayFiles(usageDir: string, at: number): { plain: string; gz: string } {
+  const plain = path.join(usageDir, "requests", `${new Date(at).toISOString().slice(0, 10)}.jsonl`);
+  return { plain, gz: `${plain}.gz` };
 }
 
 async function exists(file: string): Promise<boolean> {
@@ -1789,41 +1820,75 @@ describe("the Requests list keeps 30 days and 200 MB", () => {
     expect(await harness.client.usageRequestsList(requestsOf())).toMatchObject({ total: 0 });
   });
 
-  test("over the size cap the oldest day goes first, at most once an hour, and today stays", async () => {
+  test("over the size cap, counted compressed, the oldest day goes first, at most once an hour, and today stays", async () => {
     const clock = movableClock();
-    const root = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-seed-"));
-    tempRoots.push(root);
-    const oldest = await seedFailedRequest(root, clock.now() - 3 * DAY_MS, 20_000);
-    const older = await seedFailedRequest(root, clock.now() - 2 * DAY_MS);
-    const cap = (await stat(oldest)).size + (await stat(older)).size + 100;
-
-    const harness = await start({ now: clock.now, requestsMaxBytes: cap });
-    // 种下的文件搬进这次 daemon 的用量目录再重启，让它读到。
-    await mkdir(path.join(harness.usageDir, "requests"), { recursive: true });
-    for (const file of [oldest, older]) {
-      await writeFile(
-        path.join(harness.usageDir, "requests", path.basename(file)),
-        await readFile(file),
-      );
-    }
+    const harness = await start({ now: clock.now, requestsMaxBytes: 10_000 });
+    // 压不小的一天（约 20 KB 压过）与一行的一天，种好后重启让 daemon 读到。
+    const oldestAt = clock.now() - 3 * DAY_MS;
+    const olderAt = clock.now() - 2 * DAY_MS;
+    await seedFailedRequest(harness.usageDir, oldestAt, { length: 40_000, kind: "random" });
+    await seedFailedRequest(harness.usageDir, olderAt);
     await harness.restart();
     await waitForRequests(harness, (page) => page.total === 2);
 
     await codexReplyId(await askCodex(harness));
-    const requestsDir = path.join(harness.usageDir, "requests");
-    await waitForGone(path.join(requestsDir, path.basename(oldest)));
+    const oldest = dayFiles(harness.usageDir, oldestAt);
+    const older = dayFiles(harness.usageDir, olderAt);
+    await waitForGone(oldest.plain);
+    expect(await exists(oldest.gz)).toBe(false);
+    // 过完的一天压成 .gz，明文的那份不在了。
+    expect(await exists(older.gz)).toBe(true);
+    expect(await exists(older.plain)).toBe(false);
     const page = await waitForRequests(harness, (candidate) => candidate.total === 2);
     expect(page.requests.map((row) => row.replyId ?? row.error)).toEqual(["resp_gw_1", "seeded "]);
-    expect(await exists(path.join(requestsDir, path.basename(older)))).toBe(true);
 
-    // 一小时内不再修剪：又塞进一个更旧的大文件，下一次写入后它还在；过了一小时才删。
-    const stale = await seedFailedRequest(harness.usageDir, clock.now() - 5 * DAY_MS, 20_000);
+    // 一小时内不再修剪：又塞进一个更旧、压不小的一天，下一次写入后它还在；过了一小时才删。
+    const staleAt = clock.now() - 5 * DAY_MS;
+    const stale = await seedFailedRequest(harness.usageDir, staleAt, {
+      length: 40_000,
+      kind: "random",
+    });
     await codexReplyId(await askCodex(harness));
     await waitForLedgerRows(harness.usageDir, (rows) => rows.length >= 4);
     expect(await exists(stale)).toBe(true);
     clock.advance(61 * 60 * 1000);
     await codexReplyId(await askCodex(harness));
     await waitForGone(stale);
-    expect(await exists(path.join(requestsDir, path.basename(older)))).toBe(true);
+    expect(await exists(dayFiles(harness.usageDir, staleAt).gz)).toBe(false);
+    expect(await exists(older.gz)).toBe(true);
+  });
+
+  test("a finished day is gzipped and still read: its .gz and a line written after it read as one day, before and after a restart", async () => {
+    const clock = movableClock();
+    const harness = await start({ now: clock.now, requestsMaxBytes: 10_000 });
+    // 前天：压过的一份里一行（明文 40 KB，压过只有几百字节），旁边明文的文件里后来又追加的一行。
+    const dayAt = clock.now() - 2 * DAY_MS;
+    const day = dayFiles(harness.usageDir, dayAt);
+    await mkdir(path.dirname(day.plain), { recursive: true });
+    const early = failedRequestLine(dayAt, { length: 40_000, kind: "plain" }, "early");
+    await writeFile(day.gz, gzipSync(early));
+    await writeFile(day.plain, failedRequestLine(dayAt + 1000, undefined, "late"));
+    await harness.restart();
+    const errorsOf = (candidate: RequestsListPage) =>
+      candidate.requests.map((row) => (row.error ?? "").slice(0, 5));
+    const before = await waitForRequests(harness, (candidate) => candidate.total === 2);
+    expect(errorsOf(before)).toEqual(["late ", "early"]);
+
+    // 下一次写入时修剪：明文那份并进 .gz；按压过的大小算没超，这一天留着。
+    await codexReplyId(await askCodex(harness));
+    await waitForGone(day.plain);
+    expect(await exists(day.gz)).toBe(true);
+    const after = await waitForRequests(harness, (candidate) => candidate.total === 3);
+    expect(errorsOf(after).slice(1)).toEqual(["late ", "early"]);
+    expect(
+      gunzipSync(await readFile(day.gz))
+        .toString("utf8")
+        .split("\n")
+        .filter(Boolean),
+    ).toHaveLength(2);
+
+    await harness.restart();
+    const restarted = await waitForRequests(harness, (candidate) => candidate.total === 3);
+    expect(restarted.requests).toEqual(after.requests);
   });
 });

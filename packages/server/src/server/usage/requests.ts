@@ -52,8 +52,7 @@ export function buildUsageRequests(input: BuildUsageRequestsInput): UsageRequest
   const local = createLocalTimeResolver(request.timezone);
   const inPeriod: ListedRow[] = [];
   for (const [index, call] of input.calls.entries()) {
-    const at = (call.ledger ?? call.cli)?.at;
-    if (!at) continue;
+    const at = call.kind === "gateway" ? call.ledger.at : call.cli.at;
     const day = local.day(Date.parse(at));
     if (request.from && day < request.from) continue;
     if (request.to && day > request.to) continue;
@@ -83,11 +82,13 @@ function listedRowOf(
   index: number,
   input: BuildUsageRequestsInput,
 ): ListedRow {
-  const { cli, ledger } = call;
+  const { cli } = call;
+  const ledger = call.kind === "gateway" ? call.ledger : null;
   const project = cli ? projectOf(cli.cwd, input.projects) : null;
-  const row = ledger
-    ? gatewayRow({ ledger, cli, project, index, input })
-    : directRow(cli!, project);
+  const row =
+    call.kind === "gateway"
+      ? gatewayRow({ ledger: call.ledger, cli: call.cli, project, index, input })
+      : directRow(call.cli, project);
   const words = [
     row.model,
     ledger?.upstreamModel,
@@ -129,8 +130,9 @@ function gatewayRow({
   input: BuildUsageRequestsInput;
 }): UsageRequestRow {
   const answered = ledger.status === "ok";
+  const callName = ledger.replyId ?? `${ledger.at}#${index}`;
   return {
-    id: `gateway:${ledger.agent}:${ledger.replyId ?? `${ledger.at}#${index}`}`,
+    id: `gateway:${ledger.agent}:${callName}`,
     at: ledger.at,
     cli: ledger.agent,
     model: cli?.model ?? ledger.model,
@@ -166,8 +168,8 @@ function endpointOf(
   ledger: GatewayLedgerRow,
   identities: ReadonlyMap<string, UsageEndpointIdentity>,
 ): Pick<UsageRequestRow, "endpointId" | "endpointName" | "endpointDeleted"> {
-  const endpointId =
-    ledger.status === "ok" ? ledger.endpointId : (ledger.attempts.at(-1)?.endpointId ?? null);
+  const lastTried = ledger.attempts.at(-1)?.endpointId ?? null;
+  const endpointId = ledger.status === "ok" ? ledger.endpointId : lastTried;
   if (endpointId === null) return { endpointId, endpointName: null, endpointDeleted: false };
   const recorded =
     ledger.endpointId === endpointId

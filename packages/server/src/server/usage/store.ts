@@ -1,5 +1,5 @@
-// 逐条记录的修剪（30 天、合计 200 MB、写入后最多每小时一次、从最旧的一天整天删、今天不删）照 magpie
-// （https://github.com/yetone/magpie，internal/gateway/history.go 的 pruneHistory）
+// 逐条记录的修剪（过完的一天先压成 .gz，30 天、按压过的大小合计 200 MB、写入后最多每小时一次、从最旧的一天整天删、
+// 今天不删）照 magpie（https://github.com/yetone/magpie，internal/gateway/history.go:29-31、93-134 的 saveRoute、pruneHistory）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -7,6 +7,7 @@ import type { Logger } from "pino";
 import type { ZodType } from "zod";
 import { writeFileAtomic, writeJsonFileAtomic } from "../atomic-file.js";
 import { USAGE_REQUEST_RECORD_SCHEMA, type UsageRequestRecord } from "./ledger.js";
+import { gzipFinishedDays, listRequestDayFiles, readRequestDayLines } from "./request-files.js";
 import { PRICING_TABLE_SCHEMA, type PricingTable } from "./pricing/table.js";
 import {
   USAGE_BUCKET_ROW_SCHEMA,
@@ -128,23 +129,20 @@ export class UsageStore {
     });
   }
 
-  /** Every request record on disk, oldest day first; a torn line is dropped. */
+  /**
+   * Every request record on disk, oldest day first, a day's gzipped part ahead
+   * of what was appended after it; a torn line is dropped.
+   */
   private async loadRequests(): Promise<UsageRequestRecord[]> {
-    let names: string[];
-    try {
-      names = await fs.readdir(this.requestsDir());
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
-      throw error;
-    }
     const records: UsageRequestRecord[] = [];
-    for (const name of names.filter((entry) => entry.endsWith(FILE_SUFFIX)).sort()) {
-      const raw = await fs.readFile(path.join(this.requestsDir(), name), "utf8");
-      for (const line of raw.split("\n")) {
-        if (line.length === 0) continue;
+    for (const file of await listRequestDayFiles(this.requestsDir())) {
+      for (const line of await readRequestDayLines(file)) {
         const parsed = USAGE_REQUEST_RECORD_SCHEMA.safeParse(parseRow(line));
         if (!parsed.success) {
-          this.logger.warn({ file: name, err: parsed.error }, "Dropped unreadable usage request");
+          this.logger.warn(
+            { file: path.basename(file.path), err: parsed.error },
+            "Dropped unreadable usage request",
+          );
           continue;
         }
         records.push(parsed.data);
@@ -171,10 +169,11 @@ export class UsageStore {
   }
 
   /**
-   * Drop the day files older than `days` (today counting as one), then the
-   * oldest until what is left fits `maxBytes`. A day goes whole, and today
-   * always stays. Summaries live in the bucket rows, which are never pruned.
-   * Returns the days removed, so the caller can forget them too.
+   * Gzip the days that are over, then drop the days older than `days` (today
+   * counting as one) and the oldest until what is left, compressed, fits
+   * `maxBytes`. A day goes whole, its `.gz` and any plain file beside it, and
+   * today always stays. Summaries live in the bucket rows, which are never
+   * pruned. Returns the days removed, so the caller can forget them too.
    */
   async pruneRequests(input: {
     now: number;
@@ -183,25 +182,18 @@ export class UsageStore {
   }): Promise<Set<string>> {
     const removed = new Set<string>();
     await this.enqueue(async () => {
-      let names: string[];
-      try {
-        names = await fs.readdir(this.requestsDir());
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
-        throw error;
-      }
+      const dir = this.requestsDir();
       const today = new Date(input.now).toISOString().slice(0, 10);
       const oldest = new Date(input.now - (input.days - 1) * DAY_MS).toISOString().slice(0, 10);
-      const files: { day: string; path: string; size: number }[] = [];
-      for (const name of names.filter((entry) => entry.endsWith(FILE_SUFFIX)).sort()) {
-        const filePath = path.join(this.requestsDir(), name);
-        const stats = await fs.stat(filePath);
-        files.push({ day: name.slice(0, -FILE_SUFFIX.length), path: filePath, size: stats.size });
-      }
+      await gzipFinishedDays({ dir, today, now: input.now });
+      const files = await listRequestDayFiles(dir);
       let total = files.reduce((sum, file) => sum + file.size, 0);
+      // 一天整天删：它的文件在列表里挨着，删了第一个就把同一天的都删掉。
+      let dropping: string | null = null;
       for (const file of files) {
-        if (file.day === today) continue;
-        if (file.day >= oldest && total <= input.maxBytes) continue;
+        const keep = file.day === today || (file.day >= oldest && total <= input.maxBytes);
+        if (file.day !== dropping && keep) continue;
+        dropping = file.day;
         await fs.rm(file.path, { force: true });
         total -= file.size;
         removed.add(file.day);

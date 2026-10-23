@@ -129,16 +129,18 @@ entry id) and the `merged` markers. They back the Requests tab, and they are wha
 a restart reloads to carry on merging.
 
 The records keep 30 days and 200 MB, as magpie keeps its routing history. After
-a write, at most once an hour, the daemon deletes the day files older than 30
-days (today counts as one), then the oldest days until the rest fit 200 MB; a
-day goes whole and today always stays. Memory forgets the same days, so the list
+a write, at most once an hour, the daemon gzips every day that is over, then
+deletes the days older than 30 days (today counts as one) and the oldest days
+until the rest fit 200 MB, counted compressed; a day goes whole and today always
+stays. A late record for a gzipped day (a log line correcting an old reply) goes
+to that day's plain file again and joins the `.gz` as a gzip member of its own
+at the next prune; until then the two read as one day. Memory forgets the same days, so the list
 and the merge end where a restart would load them. A `merged` marker sits in the
 file of its ledger row (both stamped with the request's start), so the two go
 together and a pruned day never moves a call twice. What pruning gives up: a log
 line that corrects a reply after its ledger row is gone counts at Official, and
 so does a reply first scanned after its ledger row was pruned. Summaries never
-change. Unlike magpie, finished days are not gzipped: the files stay plain
-append-only JSONL.
+change.
 
 ### The Requests tab
 

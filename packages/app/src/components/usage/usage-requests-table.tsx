@@ -1,4 +1,4 @@
-import type { UsageCli, UsageRequestAttempt } from "@getpaseo/protocol/usage/types";
+import type { UsageRequestAttempt } from "@getpaseo/protocol/usage/types";
 import { ChevronDown } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
@@ -7,7 +7,6 @@ import {
   View,
   type LayoutChangeEvent,
   type StyleProp,
-  type TextStyle,
   type ViewStyle,
 } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -29,6 +28,7 @@ import type { UsageRange } from "@/usage-stats/period";
 import {
   formatCooldownTime,
   formatOutputSpeed,
+  formatRequestClock,
   formatRequestMs,
   formatRequestTime,
   INITIAL_USAGE_REQUESTS_FILTERS,
@@ -63,14 +63,15 @@ type ColumnId =
 
 /**
  * Which columns the row shows; the rest open under it. The card's own width
- * decides, so a narrow window never slides sideways: at phone width only time,
- * model, endpoint, status and cost stay on the row.
+ * decides, so a narrow window never slides sideways: below a 960-wide card the
+ * row keeps time, model, endpoint, status and cost (at phone width the time
+ * without its day and the status as one word); from 960 all thirteen.
  */
 type TableTier = "narrow" | "medium" | "wide";
 
 const TIER_COLUMNS: Record<TableTier, readonly ColumnId[]> = {
   narrow: ["time", "model", "endpoint", "status", "cost"],
-  medium: ["time", "model", "endpoint", "input", "output", "status", "cost"],
+  medium: ["time", "model", "endpoint", "status", "cost"],
   wide: [
     "time",
     "agent",
@@ -88,18 +89,30 @@ const TIER_COLUMNS: Record<TableTier, readonly ColumnId[]> = {
   ],
 };
 /**
- * The status ("Failed (quota used up)") wraps rather than cuts; when narrow the
- * time folds to day and clock, and the model and endpoint take a second line.
+ * Every cell holds one line and cuts what does not fit. Only the status may
+ * wrap, at the widths that spell its reason out; narrow, it is one word and
+ * the reason opens under the row.
  */
 function linesOf(column: ColumnId, tier: TableTier): number {
-  if (column === "status") return tier === "narrow" ? 3 : 2;
-  if (tier !== "narrow") return 1;
-  return column === "time" || column === "model" || column === "endpoint" ? 2 : 1;
+  return column === "status" && tier !== "narrow" ? 2 : 1;
 }
+
+/** The fixed columns, so the names and the status take what is left. */
+const FIXED_COLUMN_WIDTH: Partial<Record<ColumnId, number>> = {
+  agent: 84,
+  input: 56,
+  output: 56,
+  cacheRead: 64,
+  cacheWrite: 64,
+  cost: 68,
+  duration: 60,
+  ttft: 64,
+  speed: 64,
+};
 
 /** The narrowest card each tier fits in. */
 const MEDIUM_MIN_WIDTH = 540;
-const WIDE_MIN_WIDTH = 1000;
+const WIDE_MIN_WIDTH = 960;
 
 const NUMBER_COLUMNS = new Set<ColumnId>([
   "input",
@@ -189,7 +202,7 @@ export function UsageRequestsTable({
       </Text>
     );
   } else if (!data || width === 0) {
-    body = <UsageRequestsSkeleton />;
+    body = <UsageRequestsSkeleton tier={tier} />;
   } else if (data.rows.length === 0) {
     body = (
       <Text
@@ -296,9 +309,13 @@ function UsageRequestsFilterBar({
       onChange({ through: key === "gateway" || key === "direct" ? key : "all" }),
     [onChange],
   );
+  const clis = data?.clis;
   const handleAgent = useCallback(
-    (key: string | null) => onChange({ cli: key as UsageCli | null }),
-    [onChange],
+    (key: string | null) => {
+      const cli = clis?.find((candidate) => candidate === key) ?? null;
+      onChange({ cli });
+    },
+    [clis, onChange],
   );
   const endpoints = data?.endpoints;
   const handleEndpoint = useCallback(
@@ -484,7 +501,6 @@ function UsageRequestsRows({
   pageIndex: number;
   onPage: (index: number) => void;
 }) {
-  const { t } = useTranslation();
   const [openKeys, setOpenKeys] = useState<ReadonlySet<string>>(() => new Set());
   const handleToggle = useCallback((key: string) => {
     setOpenKeys((current) => {
@@ -497,24 +513,7 @@ function UsageRequestsRows({
 
   return (
     <View testID="usage-requests-table">
-      <View style={styles.headRow}>
-        {columns.map((column) => (
-          <Text
-            key={column}
-            variant="micro"
-            weight="medium"
-            color="foregroundMuted"
-            numberOfLines={2}
-            style={[
-              styles.cell,
-              columnStyle(column, tier),
-              NUMBER_COLUMNS.has(column) && styles.numberCell,
-            ]}
-          >
-            {t(`usage.requests.columns.${column}`)}
-          </Text>
-        ))}
-      </View>
+      <UsageRequestsHead tier={tier} />
       {data.rows.map((row) => (
         <UsageRequestRow
           key={row.key}
@@ -532,16 +531,35 @@ function UsageRequestsRows({
   );
 }
 
-function columnStyle(
-  column: ColumnId,
-  tier: TableTier,
-): StyleProp<Omit<TextStyle, "color" | "fontSize" | "lineHeight" | "fontWeight">> {
+/** The column's place in the row; the same for a header, a cell and a skeleton bar. */
+function columnStyle(column: ColumnId, tier: TableTier): StyleProp<ViewStyle> {
+  const fixed = FIXED_COLUMN_WIDTH[column];
+  if (fixed !== undefined) return [styles.fixedColumn, { flexBasis: fixed }];
   if (column === "time") return tier === "narrow" ? styles.timeColumnNarrow : styles.timeColumn;
   if (column === "model") return styles.modelColumn;
   if (column === "endpoint") return styles.endpointColumn;
-  if (column === "agent") return styles.agentColumn;
-  if (column === "status") return styles.statusColumn;
-  return styles.numberColumn;
+  return styles.statusColumn;
+}
+
+function UsageRequestsHead({ tier }: { tier: TableTier }) {
+  const { t } = useTranslation();
+  return (
+    <View style={styles.headRow}>
+      {TIER_COLUMNS[tier].map((column) => (
+        <View key={column} style={[styles.cell, columnStyle(column, tier)]}>
+          <Text
+            variant="micro"
+            weight="medium"
+            color="foregroundMuted"
+            numberOfLines={tier === "wide" ? 2 : 1}
+            style={NUMBER_COLUMNS.has(column) && styles.numberCell}
+          >
+            {t(`usage.requests.columns.${column}`)}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
 }
 
 function UsageRequestRow({
@@ -564,8 +582,10 @@ function UsageRequestRow({
   const { t, i18n } = useTranslation();
   const handlePress = useCallback(() => onToggle(row.key), [onToggle, row.key]);
   const accessibilityState = useMemo(() => ({ expanded: isOpen }), [isOpen]);
-  const cells = useRequestCells(row, timezone);
+  const cells = useRequestCells(row, timezone, tier);
   const hidden = TIER_COLUMNS.wide.filter((column) => !columns.includes(column));
+  // 窄时行上只有时刻与一个词的状态：日期与失败原因在展开行里。
+  const isNarrow = tier === "narrow";
 
   return (
     <View style={styles.rowBlock}>
@@ -577,17 +597,23 @@ function UsageRequestRow({
         testID={`usage-request-row-${row.key}`}
       >
         {columns.map((column) => (
-          <RequestCell key={column} column={column} tier={tier} cell={cells[column]} />
+          <RequestCell key={column} column={column} tier={tier} cell={cells.byColumn[column]} />
         ))}
       </Pressable>
       {isOpen ? (
         <View style={styles.details} testID={`usage-request-details-${row.key}`}>
           <View style={styles.detailGrid}>
+            {isNarrow ? (
+              <DetailItem label={t("usage.requests.columns.time")} value={cells.fullTime} />
+            ) : null}
+            {isNarrow ? (
+              <DetailItem label={t("usage.requests.columns.status")} value={cells.fullStatus} />
+            ) : null}
             {hidden.map((column) => (
               <DetailItem
                 key={column}
                 label={t(`usage.requests.columns.${column}`)}
-                value={cells[column].text}
+                value={cells.byColumn[column].text}
               />
             ))}
             {hostLabel ? (
@@ -602,7 +628,11 @@ function UsageRequestRow({
             ) : null}
           </View>
           {row.error ? (
-            <Text variant="caption" color="statusDanger" testID={`usage-request-error-${row.key}`}>
+            <Text
+              variant="caption"
+              color="foregroundMuted"
+              testID={`usage-request-error-${row.key}`}
+            >
               {row.error}
             </Text>
           ) : null}
@@ -636,59 +666,74 @@ interface RequestCellValue {
   color: "foreground" | "foregroundMuted" | "statusDanger" | "statusWarning";
 }
 
+interface RequestCells {
+  byColumn: Record<ColumnId, RequestCellValue>;
+  /** Day and clock, which the narrow row leaves to its expanded part. */
+  fullTime: string;
+  /** "Failed (reason)", which the narrow row shortens to its first word. */
+  fullStatus: string;
+}
+
 /** Every column's text for one row, whichever the row shows and whichever open under it. */
 function useRequestCells(
   row: MergedUsageRequestRow,
   timezone: string,
-): Record<ColumnId, RequestCellValue> {
+  tier: TableTier,
+): RequestCells {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
+  const isNarrow = tier === "narrow";
   const status = usageRequestStatus(row);
-  let statusCell: RequestCellValue;
+  let statusColor: RequestCellValue["color"];
+  let fullStatus: string;
+  let shortStatus: string;
   if (status.kind === "failed") {
     const reason = status.failure ? failureLabel(status.failure, t) : null;
-    statusCell = {
-      text: reason
-        ? t("usage.requests.statusCell.failedWith", { reason })
-        : t("usage.requests.statusCell.failed"),
-      color: "statusDanger",
-    };
+    statusColor = "statusDanger";
+    fullStatus = reason
+      ? t("usage.requests.statusCell.failedWith", { reason })
+      : t("usage.requests.statusCell.failed");
+    shortStatus = t("usage.requests.statusCell.failed");
   } else if (status.kind === "switched") {
-    statusCell = {
-      text: t("usage.requests.statusCell.switched", { count: status.count }),
-      color: "statusWarning",
-    };
+    statusColor = "statusWarning";
+    fullStatus = t("usage.requests.statusCell.switched", { count: status.count });
+    shortStatus = t("usage.requests.status.switched");
   } else {
-    statusCell = { text: t("usage.requests.statusCell.ok"), color: "foregroundMuted" };
+    statusColor = "foregroundMuted";
+    fullStatus = t("usage.requests.statusCell.ok");
+    shortStatus = fullStatus;
   }
-  const endpoint = endpointLabel(
-    {
-      name: row.endpointId === null ? null : (row.endpointName ?? row.endpointId),
-      deleted: row.endpointDeleted,
-    },
-    t,
-  );
+  const endpointName = row.endpointId === null ? null : (row.endpointName ?? row.endpointId);
+  const endpoint = endpointLabel({ name: endpointName, deleted: row.endpointDeleted }, t);
+  const endpointColor = row.endpointId === null ? "foregroundMuted" : "foreground";
+  const fullTime = formatRequestTime(row.at, locale, timezone);
+  const shownTime = isNarrow ? formatRequestClock(row.at, locale, timezone) : fullTime;
+  const shownStatus = isNarrow ? shortStatus : fullStatus;
   const count = (value: number): RequestCellValue => ({
     text: formatGroupedNumber(value, locale),
     color: "foreground",
   });
   const muted = (text: string): RequestCellValue => ({ text, color: "foregroundMuted" });
+  const costText = row.priced ? formatSessionCost(row.estimatedCost) : "—";
+  const costColor = row.priced ? "foreground" : "foregroundMuted";
   return {
-    time: muted(formatRequestTime(row.at, locale, timezone)),
-    agent: { text: usageSourceLabel({ cli: row.cli, backend: null }), color: "foreground" },
-    model: { text: row.model, color: "foreground" },
-    endpoint: { text: endpoint, color: row.endpointId === null ? "foregroundMuted" : "foreground" },
-    input: count(row.totals.input),
-    output: count(row.totals.output),
-    cacheRead: count(row.totals.cachedInput),
-    cacheWrite: count(row.totals.cacheWrite),
-    cost: row.priced
-      ? { text: formatSessionCost(row.estimatedCost), color: "foreground" }
-      : muted("—"),
-    duration: muted(formatRequestMs(row.durationMs)),
-    ttft: muted(formatRequestMs(row.ttftMs)),
-    speed: muted(formatOutputSpeed(row.outputSpeed)),
-    status: statusCell,
+    fullTime,
+    fullStatus,
+    byColumn: {
+      time: muted(shownTime),
+      agent: { text: usageSourceLabel({ cli: row.cli, backend: null }), color: "foreground" },
+      model: { text: row.model, color: "foreground" },
+      endpoint: { text: endpoint, color: endpointColor },
+      input: count(row.totals.input),
+      output: count(row.totals.output),
+      cacheRead: count(row.totals.cachedInput),
+      cacheWrite: count(row.totals.cacheWrite),
+      cost: { text: costText, color: costColor },
+      duration: muted(formatRequestMs(row.durationMs)),
+      ttft: muted(formatRequestMs(row.ttftMs)),
+      speed: muted(formatOutputSpeed(row.outputSpeed)),
+      status: { text: shownStatus, color: statusColor },
+    },
   };
 }
 
@@ -705,21 +750,17 @@ function RequestCell({
   tier: TableTier;
   cell: RequestCellValue;
 }) {
-  // 窄时时间折成日期、时刻两行，状态折两行，其余一行截断。
-  const lines = linesOf(column, tier);
   return (
-    <Text
-      variant="caption"
-      color={cell.color}
-      numberOfLines={lines}
-      style={[
-        styles.cell,
-        columnStyle(column, tier),
-        NUMBER_COLUMNS.has(column) && styles.numberCell,
-      ]}
-    >
-      {cell.text}
-    </Text>
+    <View style={[styles.cell, columnStyle(column, tier)]}>
+      <Text
+        variant="caption"
+        color={cell.color}
+        numberOfLines={linesOf(column, tier)}
+        style={NUMBER_COLUMNS.has(column) && styles.numberCell}
+      >
+        {cell.text}
+      </Text>
+    </View>
   );
 }
 
@@ -751,11 +792,13 @@ function AttemptLine({
     attempt.endpointId === null
       ? t("usage.overview.official")
       : (attempt.endpointName ?? attempt.endpointId);
-  const parts = [`${name} · ${attempt.model}`, t(`usage.requests.result.${attempt.result}`)];
-  if (attempt.failure) parts.push(failureLabel(attempt.failure, t));
-  parts.push(formatRequestMs(attempt.durationMs));
+  const isFailure = attempt.result !== "answered";
+  // 只有结果与失败原因用状态色，其余是说明。
+  const outcome = [t(`usage.requests.result.${attempt.result}`)];
+  if (attempt.failure) outcome.push(failureLabel(attempt.failure, t));
+  const after = [formatRequestMs(attempt.durationMs)];
   if (attempt.cooldownUntil) {
-    parts.push(
+    after.push(
       t("usage.requests.details.cooldownUntil", {
         time: formatCooldownTime(attempt.cooldownUntil, locale, timezone),
       }),
@@ -763,8 +806,12 @@ function AttemptLine({
   }
   return (
     <View style={styles.attempt}>
-      <Text variant="caption" color={attempt.result === "answered" ? "foreground" : "statusDanger"}>
-        {parts.join(" · ")}
+      <Text variant="caption" color="foregroundMuted">
+        {`${name} · ${attempt.model} · `}
+        <Text variant="caption" color={isFailure ? "statusDanger" : "foreground"}>
+          {outcome.join(" · ")}
+        </Text>
+        {` · ${after.join(" · ")}`}
       </Text>
       {attempt.reason ? (
         <Text variant="caption" color="foregroundMuted" numberOfLines={2}>
@@ -822,15 +869,23 @@ function UsageRequestsPager({
   );
 }
 
-/** Grey bars where rows will be, while the first page is on its way. */
-function UsageRequestsSkeleton() {
+/**
+ * The table's own head and rows, a grey bar in each cell, while the first page
+ * is on its way: the rows that replace it are the same height and columns.
+ */
+function UsageRequestsSkeleton({ tier }: { tier: TableTier }) {
   return (
     <View testID="usage-requests-loading" accessibilityRole="progressbar">
+      <UsageRequestsHead tier={tier} />
       {SKELETON_KEYS.map((key) => (
-        <View key={key} style={styles.skeletonRow}>
-          <View style={[styles.skeletonBar, styles.skeletonTime]} />
-          <View style={[styles.skeletonBar, styles.skeletonName]} />
-          <View style={[styles.skeletonBar, styles.skeletonShort]} />
+        <View key={key} style={[styles.rowBlock, styles.row]}>
+          {TIER_COLUMNS[tier].map((column) => (
+            <View key={column} style={[styles.cell, columnStyle(column, tier)]}>
+              <View style={styles.skeletonLine}>
+                <View style={styles.skeletonBar} />
+              </View>
+            </View>
+          ))}
         </View>
       ))}
     </View>
@@ -919,33 +974,26 @@ const styles = StyleSheet.create((theme) => {
     timeColumnNarrow: {
       flexGrow: 0,
       flexShrink: 0,
-      flexBasis: 68,
+      flexBasis: 64,
+    },
+    fixedColumn: {
+      flexGrow: 0,
+      flexShrink: 0,
     },
     modelColumn: {
-      flexGrow: 2.4,
+      flexGrow: 2,
       flexShrink: 1,
       flexBasis: 0,
     },
     endpointColumn: {
-      flexGrow: 1.8,
-      flexShrink: 1,
-      flexBasis: 0,
-    },
-    agentColumn: {
-      flexGrow: 1,
+      flexGrow: 1.4,
       flexShrink: 1,
       flexBasis: 0,
     },
     statusColumn: {
-      flexGrow: 1.6,
+      flexGrow: 1.8,
       flexShrink: 1,
       flexBasis: 0,
-    },
-    numberColumn: {
-      flexGrow: 1,
-      flexShrink: 1,
-      flexBasis: 0,
-      textAlign: "right",
     },
     details: {
       gap: theme.spacing[2],
@@ -983,28 +1031,15 @@ const styles = StyleSheet.create((theme) => {
       flexDirection: "row",
       gap: theme.spacing[2],
     },
-    skeletonRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: theme.spacing[3],
-      paddingVertical: theme.spacing[3],
-      borderBottomWidth: 1,
-      borderBottomColor: palette.divider,
+    skeletonLine: {
+      height: theme.typeScale.caption.lineHeight,
+      justifyContent: "center",
     },
     skeletonBar: {
-      height: 10,
+      height: 8,
+      width: "80%",
       borderRadius: theme.borderRadius.full,
       backgroundColor: palette.track,
-    },
-    skeletonTime: {
-      width: 88,
-    },
-    skeletonName: {
-      flexGrow: 1,
-      flexBasis: 0,
-    },
-    skeletonShort: {
-      width: 56,
     },
   };
 });

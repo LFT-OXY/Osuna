@@ -23,12 +23,7 @@ export interface UseUsageRequestsInput {
 export type UsageRequestsLoadState =
   | { status: "loading" }
   | { status: "error" }
-  | {
-      status: "loaded";
-      data: MergedUsageRequests;
-      hostErrors: UsageHostError[];
-      isFetching: boolean;
-    };
+  | { status: "loaded"; data: MergedUsageRequests; hostErrors: UsageHostError[] };
 
 export function usageRequestsQueryKey(input: {
   serverIds: readonly string[];
@@ -96,7 +91,6 @@ export function useUsageRequests(input: UseUsageRequestsInput): UsageRequestsLoa
       status: "loaded",
       data: query.data.data,
       hostErrors: query.data.hostErrors,
-      isFetching: query.isFetching,
     };
   }
   if (query.isError) return { status: "error" };
