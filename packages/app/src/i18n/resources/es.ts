@@ -4761,6 +4761,7 @@ export const es: TranslationResources = {
       refresh: "Actualizar",
       allSources: "Todas",
       official: "Oficial",
+      deletedEndpoint: "(eliminado)",
       breakdown: {
         label: "Dividir por",
         sources: "Orígenes",

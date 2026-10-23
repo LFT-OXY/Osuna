@@ -30,6 +30,7 @@ import {
   emptyTotals,
   modelRowKey,
   type UsageBucketRow,
+  type UsageEndpointIdentity,
 } from "./types.js";
 
 const HEATMAP_DAYS = 182;
@@ -56,8 +57,8 @@ export interface BuildUsageReportInput {
   rows: UsageBucketRow[];
   request: UsageReportRequest;
   projects: Map<string, UsageProjectAttribution>;
-  /** What each endpoint the rows name was last called, as the gateway ledger recorded it. */
-  endpointNames: Map<string, string>;
+  /** The last name of each endpoint the rows name, and whether it has been deleted. */
+  endpointIdentities: ReadonlyMap<string, UsageEndpointIdentity>;
   pricing: UsageReportPricing;
   /**
    * The id a session is counted under. A Claude resume chain is one session in
@@ -111,7 +112,7 @@ export function buildUsageReport(input: BuildUsageReportInput): UsageReport {
     months: buildMonths(inRange, local),
     heatmapDays: buildHeatmap(filtered, local, today),
     projects: buildProjects(inRange, input.projects),
-    endpoints: buildEndpoints(inRange, input.endpointNames),
+    endpoints: buildEndpoints(inRange, input.endpointIdentities),
     backfill: input.backfill,
     error: input.error,
   };
@@ -394,7 +395,10 @@ function buildProjects(
  * so a group left with turns and no tokens — every call of it moved to an
  * endpoint — is not one.
  */
-function buildEndpoints(rows: PricedRow[], names: Map<string, string>): UsageEndpointBreakdown[] {
+function buildEndpoints(
+  rows: PricedRow[],
+  identities: ReadonlyMap<string, UsageEndpointIdentity>,
+): UsageEndpointBreakdown[] {
   const byEndpoint = new Map<string | null, UsageAmount>();
   for (const row of rows) {
     const endpointId = row.endpointId ?? null;
@@ -409,14 +413,17 @@ function buildEndpoints(rows: PricedRow[], names: Map<string, string>): UsageEnd
     (total, amount) => total + billableTokens(amount.totals),
     0,
   );
-  return Array.from(byEndpoint, ([endpointId, amount]) => ({
-    endpointId,
-    name: endpointId === null ? null : (names.get(endpointId) ?? endpointId),
-    deleted: false,
-    totals: amount.totals,
-    estimatedCost: amount.estimatedCost,
-    share: grandTotal > 0 ? billableTokens(amount.totals) / grandTotal : 0,
-  }))
+  return Array.from(byEndpoint, ([endpointId, amount]) => {
+    const identity = endpointId === null ? null : identities.get(endpointId);
+    return {
+      endpointId,
+      name: endpointId === null ? null : (identity?.name ?? endpointId),
+      deleted: identity?.deleted ?? false,
+      totals: amount.totals,
+      estimatedCost: amount.estimatedCost,
+      share: grandTotal > 0 ? billableTokens(amount.totals) / grandTotal : 0,
+    };
+  })
     .filter((group) => hasTokens(group.totals))
     .sort(byTokensDescending);
 }

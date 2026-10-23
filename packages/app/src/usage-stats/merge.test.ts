@@ -1,4 +1,8 @@
-import type { UsageReport, UsageTokenTotals } from "@getpaseo/protocol/usage/types";
+import type {
+  UsageEndpointBreakdown,
+  UsageReport,
+  UsageTokenTotals,
+} from "@getpaseo/protocol/usage/types";
 import { describe, expect, it } from "vitest";
 import { mergeUsageBackfill, mergeUsageReports } from "./merge";
 
@@ -356,11 +360,20 @@ describe("mergeUsageBackfill", () => {
   });
 });
 
+function memberId(member: { endpointId: string | null }): string | null {
+  return member.endpointId;
+}
+
 describe("mergeUsageReports endpoints", () => {
-  const group = (endpointId: string | null, name: string | null, input: number) => ({
+  const group = (
+    endpointId: string | null,
+    name: string | null,
+    input: number,
+    deleted = false,
+  ): UsageEndpointBreakdown => ({
     endpointId,
     name,
-    deleted: false,
+    deleted,
     totals: totals(input, 0),
     estimatedCost: input / 100,
     share: 1,
@@ -376,8 +389,77 @@ describe("mergeUsageReports endpoints", () => {
     ]);
 
     expect(merged.endpoints).toEqual([
-      { ...group(null, null, 70), estimatedCost: 0.7, share: 0.7 },
-      { ...group("ep_a", "Relay A", 30), share: 0.3 },
+      {
+        key: null,
+        name: null,
+        deleted: false,
+        totals: totals(70, 0),
+        estimatedCost: 0.7,
+        share: 0.7,
+        members: [
+          { serverId: "a", endpointId: null },
+          { serverId: "b", endpointId: null },
+        ],
+      },
+      {
+        key: "live:Relay A:0",
+        name: "Relay A",
+        deleted: false,
+        totals: totals(30, 0),
+        estimatedCost: 0.3,
+        share: 0.3,
+        members: [{ serverId: "a", endpointId: "ep_a" }],
+      },
+    ]);
+  });
+
+  it("puts endpoints of one name on different hosts on one card", () => {
+    const merged = mergeUsageReports([
+      { serverId: "a", report: report({ endpoints: [group("ep_a", "Relay", 30)] }) },
+      { serverId: "b", report: report({ endpoints: [group("ep_b", "Relay", 10)] }) },
+    ]);
+
+    expect(merged.endpoints).toEqual([
+      {
+        key: "live:Relay:0",
+        name: "Relay",
+        deleted: false,
+        totals: totals(40, 0),
+        estimatedCost: 0.4,
+        share: 1,
+        members: [
+          { serverId: "a", endpointId: "ep_a" },
+          { serverId: "b", endpointId: "ep_b" },
+        ],
+      },
+    ]);
+  });
+
+  it("keeps two endpoints of one name on the same host apart, and a deleted one apart from a live one", () => {
+    const merged = mergeUsageReports([
+      {
+        serverId: "a",
+        report: report({
+          endpoints: [
+            group("ep_1", "Relay", 30),
+            group("ep_2", "Relay", 20),
+            group("ep_3", "Relay", 10, true),
+          ],
+        }),
+      },
+      { serverId: "b", report: report({ endpoints: [group("ep_4", "Relay", 40)] }) },
+    ]);
+
+    expect(
+      merged.endpoints?.map((endpoint) => [
+        endpoint.key,
+        endpoint.deleted,
+        endpoint.members.map(memberId),
+      ]),
+    ).toEqual([
+      ["live:Relay:0", false, ["ep_1", "ep_4"]],
+      ["live:Relay:1", false, ["ep_2"]],
+      ["deleted:Relay:0", true, ["ep_3"]],
     ]);
   });
 

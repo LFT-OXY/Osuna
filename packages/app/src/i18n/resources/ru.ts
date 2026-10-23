@@ -4741,6 +4741,7 @@ export const ru: TranslationResources = {
       refresh: "Обновить",
       allSources: "Все",
       official: "Официальный",
+      deletedEndpoint: "(удалён)",
       breakdown: {
         label: "Разбивка",
         sources: "Источники",

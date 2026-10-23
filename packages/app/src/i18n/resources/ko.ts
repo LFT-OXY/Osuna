@@ -4690,6 +4690,7 @@ export const ko: TranslationResources = {
       refresh: "새로 고침",
       allSources: "전체",
       official: "공식",
+      deletedEndpoint: "(삭제됨)",
       breakdown: {
         label: "나누는 기준",
         sources: "소스",

@@ -1549,6 +1549,13 @@ export async function createPaseoDaemon(
     onUsageUpdated: (payload) => {
       wsServer?.broadcast(wrapSessionMessage({ type: "usage.updated", payload }));
     },
+    endpointIdentities: () =>
+      new Map(
+        Object.entries(apiEndpointService.endpointSnapshots()).map(([id, snapshot]) => [
+          id,
+          { name: snapshot.name, deleted: snapshot.deleted === true },
+        ]),
+      ),
   });
   daemonConfigStore.onChange(() => usageService.applyPricingConfig());
   logger.info({ elapsed: elapsed() }, "Loading persisted agent registry");

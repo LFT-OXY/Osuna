@@ -19,8 +19,25 @@ export interface MergedUsageProject extends UsageProjectBreakdown {
   serverId: string;
 }
 
-export interface MergedUsageReport extends Omit<UsageReport, "projects" | "trend"> {
+/** Which host's endpoint a card counts; `endpointId: null` is Official. */
+export interface UsageEndpointMember {
+  serverId: string;
+  endpointId: string | null;
+}
+
+/**
+ * One endpoint card. Hosts are told apart by name, not id: the same relay set
+ * up on two machines has two ids. `key` is null for Official, which adds up
+ * across every host.
+ */
+export interface MergedUsageEndpoint extends Omit<UsageEndpointBreakdown, "endpointId"> {
+  key: string | null;
+  members: UsageEndpointMember[];
+}
+
+export interface MergedUsageReport extends Omit<UsageReport, "projects" | "trend" | "endpoints"> {
   projects: MergedUsageProject[];
+  endpoints?: MergedUsageEndpoint[];
 }
 
 export interface UsageHostReport {
@@ -130,21 +147,49 @@ function combineHeatmapDays(a: UsageHeatmapDay, b: UsageHeatmapDay): UsageHeatma
   return { day: a.day, totals: addUsageTotals(a.totals, b.totals) };
 }
 
-function combineEndpoints(
-  a: UsageEndpointBreakdown,
-  b: UsageEndpointBreakdown,
-): UsageEndpointBreakdown {
-  return {
-    ...a,
-    totals: addUsageTotals(a.totals, b.totals),
-    estimatedCost: a.estimatedCost + b.estimatedCost,
-  };
+/**
+ * The card one host's endpoint joins: Official, or the nth endpoint of that name
+ * and deleted state on its host. Two endpoints of one name on one host (a copy
+ * renamed back, a deleted one beside a new one) stay two cards.
+ */
+function endpointKeysOf(endpoints: readonly UsageEndpointBreakdown[]): (string | null)[] {
+  const seen = new Map<string, number>();
+  return endpoints.map((endpoint) => {
+    if (endpoint.endpointId === null) return null;
+    const base = `${endpoint.deleted ? "deleted" : "live"}:${endpoint.name ?? endpoint.endpointId}`;
+    const nth = seen.get(base) ?? 0;
+    seen.set(base, nth + 1);
+    return `${base}:${nth}`;
+  });
 }
 
-/** Official adds up across hosts; an endpoint by its id. The share is taken again over the sum. */
+function foldEndpoints(
+  target: Map<string | null, MergedUsageEndpoint>,
+  serverId: string,
+  endpoints: readonly UsageEndpointBreakdown[],
+): void {
+  const keys = endpointKeysOf(endpoints);
+  for (const [index, { endpointId, ...endpoint }] of endpoints.entries()) {
+    const key = keys[index] ?? null;
+    const member = { serverId, endpointId };
+    const existing = target.get(key);
+    if (!existing) {
+      target.set(key, { ...endpoint, key, members: [member] });
+      continue;
+    }
+    target.set(key, {
+      ...existing,
+      totals: addUsageTotals(existing.totals, endpoint.totals),
+      estimatedCost: existing.estimatedCost + endpoint.estimatedCost,
+      members: [...existing.members, member],
+    });
+  }
+}
+
+/** The share is taken again over the sum of every host. */
 function resolveEndpoints(
-  endpoints: Map<string, UsageEndpointBreakdown> | null,
-): UsageEndpointBreakdown[] | undefined {
+  endpoints: Map<string | null, MergedUsageEndpoint> | null,
+): MergedUsageEndpoint[] | undefined {
   if (endpoints === null) return undefined;
   const all = [...endpoints.values()];
   const grandTotal = all.reduce((sum, entry) => sum + totalUsageTokens(entry.totals), 0);
@@ -200,7 +245,7 @@ export function mergeUsageReports(inputs: readonly UsageHostReport[]): MergedUsa
   const heatmapDays = new Map<string, UsageHeatmapDay>();
   const projects: MergedUsageProject[] = [];
   // 只有带中转站账本的 daemon 回 endpoints；一台都没有时整个字段不给。
-  let endpoints: Map<string, UsageEndpointBreakdown> | null = null;
+  let endpoints: Map<string | null, MergedUsageEndpoint> | null = null;
   let error: string | null = null;
 
   for (const { serverId, report } of inputs) {
@@ -215,7 +260,7 @@ export function mergeUsageReports(inputs: readonly UsageHostReport[]): MergedUsa
     }
     if (report.endpoints) {
       endpoints ??= new Map();
-      foldRows(endpoints, report.endpoints, (row) => row.endpointId ?? "", combineEndpoints);
+      foldEndpoints(endpoints, serverId, report.endpoints);
     }
     error ??= report.error;
   }

@@ -4,6 +4,7 @@ import type { CliTestClient } from "./test-as.js";
 import { randomBytes } from "node:crypto";
 import { readFileSync, rmSync } from "node:fs";
 import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import type pino from "pino";
 import { z } from "zod";
 import {
@@ -50,6 +51,7 @@ import { ModelFactsSchema } from "./model-facts.js";
  * - cli-start-reads.json：每个 Agent 启动时读、Osuna 替它写的那部分的摘要与它变成这样的时刻，这之前启动的副本要重开（reopen-hints.ts）；
  * - gateway-seen.json：中转站最近一次收到每个 Agent 请求的时刻，重启后还在（cli-bypass.ts 的 GatewaySightings 读写）；
  * - import-fingerprint-key.json：导入指纹的 HMAC 密钥，第一次扫描时随机取，重启后指纹不变、已忽略的发现照样认得（import-apps.ts）；
+ * - endpoint-snapshots.json：每家接口最后的名字、价格倍率与是否已删除，用量页按接口编号显示名字，删掉的也认得；
  * - icons/：「自定义」加的接口自选的图片，按内容起名，没有接口用就删（endpoint-icons.ts）；
  * - backups/：首次改写前的完整副本，只供手动找回。
  * endpoints.json、keys.json、gateway-tokens.json 写坏时用上一份好的 .bak（last-good.ts）；
@@ -315,7 +317,20 @@ const CliHeaderSamplesFileSchema = z.object({
 });
 type CliHeaderSamplesFile = z.infer<typeof CliHeaderSamplesFileSchema>;
 
+// 用量按接口编号认：每家最后的名字、价格倍率（工单 04 接上）与是否已删除；删掉的条目一直留着。
+const EndpointSnapshotSchema = z.object({
+  name: z.string(),
+  priceMultiplier: z.number().optional(),
+  deleted: z.literal(true).optional(),
+});
+export type EndpointSnapshot = z.infer<typeof EndpointSnapshotSchema>;
+const EndpointSnapshotsFileSchema = z.object({
+  endpoints: z.record(z.string(), EndpointSnapshotSchema),
+});
+type EndpointSnapshots = z.infer<typeof EndpointSnapshotsFileSchema>["endpoints"];
+
 const ENDPOINTS_FILE = "endpoints.json";
+const ENDPOINT_SNAPSHOTS_FILE = "endpoint-snapshots.json";
 const CLI_HEADER_SAMPLES_FILE = "cli-header-samples.json";
 const CLI_START_READS_FILE = "cli-start-reads.json";
 const CLI_REWRITES_FILE = "cli-rewrites.json";
@@ -424,9 +439,52 @@ export class ApiEndpointStore {
     };
   }
 
-  /** 每次都整份写新格式；旧格式的文件第一次写入后即升级。 */
+  /** 每次都整份写新格式；旧格式的文件第一次写入后即升级。接口的名字快照随之更新。 */
   writeState(state: ApiEndpointState): void {
     this.endpointsFile.write(EndpointsFileSchema.parse(state));
+    this.recordEndpointSnapshots(state.endpoints);
+  }
+
+  /** 每家接口最后的名字、倍率与是否已删除；文件没有或读不懂时为空（用量页退回账本里记的名字）。 */
+  readEndpointSnapshots(): EndpointSnapshots {
+    let raw: unknown;
+    try {
+      raw = this.readJson(ENDPOINT_SNAPSHOTS_FILE);
+    } catch (error) {
+      if (!(error instanceof SyntaxError)) throw error;
+      raw = undefined;
+    }
+    if (raw === null) return {};
+    const parsed = EndpointSnapshotsFileSchema.safeParse(raw);
+    if (parsed.success) return parsed.data.endpoints;
+    this.logger.warn(
+      { file: ENDPOINT_SNAPSHOTS_FILE },
+      "Endpoint snapshots file could not be parsed; it is rewritten from the current endpoints",
+    );
+    return {};
+  }
+
+  /**
+   * 照现在的接口更新名字快照：在的写上现在的名字，快照里有、现在没有的标成已删除、名字留着。
+   * 这份只供用量页显示，写不进去只记警告，不让保存接口失败；下次写入或重启时补上。
+   */
+  recordEndpointSnapshots(endpoints: readonly StoredApiEndpoint[]): void {
+    try {
+      const previous = this.readEndpointSnapshots();
+      const next: EndpointSnapshots = {};
+      const live = new Set(endpoints.map((endpoint) => endpoint.id));
+      for (const [id, snapshot] of Object.entries(previous)) {
+        if (!live.has(id)) next[id] = { ...snapshot, deleted: true };
+      }
+      for (const endpoint of endpoints) next[endpoint.id] = { name: endpoint.name };
+      if (isDeepStrictEqual(next, previous)) return;
+      this.writeJson(
+        ENDPOINT_SNAPSHOTS_FILE,
+        EndpointSnapshotsFileSchema.parse({ endpoints: next }),
+      );
+    } catch (error) {
+      this.logger.warn({ err: error }, "Failed to record endpoint snapshots");
+    }
   }
 
   /**

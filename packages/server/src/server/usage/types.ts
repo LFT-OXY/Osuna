@@ -429,3 +429,9 @@ export function mergeTurnRow(into: Map<string, UsageTurnRow>, row: UsageTurnRow)
   }
   into.set(key, { ...row, userMessageIds: [...row.userMessageIds] });
 }
+
+/** What usage shows for an endpoint id: the last name it had, and whether it has been deleted. */
+export interface UsageEndpointIdentity {
+  name: string;
+  deleted: boolean;
+}

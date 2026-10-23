@@ -4785,6 +4785,7 @@ export const fr: TranslationResources = {
       refresh: "Actualiser",
       allSources: "Tout",
       official: "Officiel",
+      deletedEndpoint: "(supprimé)",
       breakdown: {
         label: "Répartir par",
         sources: "Sources",

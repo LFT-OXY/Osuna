@@ -787,6 +787,71 @@ describe("the gateway ledger merged with Claude Code's logs", () => {
   });
 });
 
+function hasDeletedEndpoint(report: UsageReport): boolean {
+  return report.endpoints?.some((group) => group.deleted) === true;
+}
+
+/** 用当前存着的地址与模型改存接口 A（改名），或从它复制出一家。 */
+async function saveFromA(
+  harness: Harness,
+  input: { name: string; copy: boolean },
+): Promise<string> {
+  const listed = await harness.client.apiEndpointList("claude");
+  const a = listed.endpoints.find((endpoint) => endpoint.id === "ep_a");
+  if (!a?.baseUrls) throw new Error("Expected endpoint A with its addresses");
+  const saved = await harness.client.apiEndpointSave({
+    provider: "claude",
+    name: input.name,
+    baseUrls: a.baseUrls,
+    models: [{ id: "kimi-k2" }],
+    ...(input.copy ? { copyOf: "ep_a" } : { endpointId: "ep_a" }),
+  });
+  expect(saved.error).toBeNull();
+  if (!saved.endpoint) throw new Error("Expected a saved endpoint");
+  return saved.endpoint.id;
+}
+
+describe("usage knows an endpoint by its id", () => {
+  test("a rename shows the new name over all of its calls, a copy is its own group, and a deleted endpoint keeps its usage and last name across a restart", async () => {
+    const harness = await start();
+    await askClaude(harness);
+    await waitForLedgerRow(harness.usageDir, "msg_gw_1");
+
+    await saveFromA(harness, { name: "Relay A renamed", copy: false });
+    harness.replies.a = anthropicStream("msg_gw_2");
+    expect(await askClaude(harness)).toBe("msg_gw_2");
+    const twice = sum(LEDGER_TOTALS, LEDGER_TOTALS);
+    const renamed = await waitForReport(harness, (report) =>
+      sameTotals(report.summary.totals, twice),
+    );
+    expect(renamed.endpoints).toEqual([endpointGroup("ep_a", "Relay A renamed", twice, 1)]);
+
+    // 复制出来的那家用同一个上游；A 关掉后请求落到它身上。
+    const copyId = await saveFromA(harness, { name: "Relay A copy", copy: true });
+    expect(copyId).not.toBe("ep_a");
+    await harness.client.apiEndpointSetEndpointState({ endpointId: "ep_a", enabled: false });
+    harness.replies.a = anthropicStream("msg_copy_1");
+    expect(await askClaude(harness)).toBe("msg_copy_1");
+    const thrice = sum(twice, LEDGER_TOTALS);
+    await waitForReport(harness, (report) => sameTotals(report.summary.totals, thrice));
+
+    expect((await harness.client.apiEndpointDelete("claude", "ep_a")).error).toBeNull();
+    const expected = [
+      { ...endpointGroup("ep_a", "Relay A renamed", twice, 2 / 3), deleted: true },
+      endpointGroup(copyId, "Relay A copy", LEDGER_TOTALS, 1 / 3),
+    ];
+    const afterDelete = await waitForReport(harness, hasDeletedEndpoint);
+    expect(afterDelete.endpoints).toEqual(expected);
+    expect(afterDelete.summary.totals).toEqual(thrice);
+
+    await harness.restart();
+    const restarted = await waitForReport(harness, (report) =>
+      sameTotals(report.summary.totals, thrice),
+    );
+    expect(restarted.endpoints).toEqual(expected);
+  });
+});
+
 /** 账本里的各行（不含会话记录的回复与合并标记）。 */
 async function ledgerRows(usageDir: string): Promise<Record<string, unknown>[]> {
   const ledger = await readLedger(usageDir).catch(() => ({ text: "" }));

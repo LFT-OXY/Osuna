@@ -57,7 +57,7 @@ function build(
     rows,
     request,
     projects: PROJECTS,
-    endpointNames: new Map([["ep_a", "Relay A"]]),
+    endpointIdentities: new Map([["ep_a", { name: "Relay A", deleted: false }]]),
     pricing,
     canonicalSessionId,
     backfill: { state: "done", filesTotal: 0, filesDone: 0, startedAt: null },

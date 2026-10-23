@@ -1,6 +1,5 @@
 import type {
   UsageBackfill,
-  UsageEndpointBreakdown,
   UsageModelBreakdown,
   UsageSourceBreakdown,
 } from "@getpaseo/protocol/usage/types";
@@ -9,10 +8,13 @@ import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Pressable, Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
+import { balanceSummaryText } from "@/api-endpoints/balance-copy";
+import { useEndpointBalances } from "@/api-endpoints/use-endpoint-balances";
 import { FormTextInput } from "@/components/ui/form-field";
 import { UsageCard } from "@/components/usage/usage-card";
 import { UsageHostFilter } from "@/components/usage/usage-host-filter";
 import { UsageSegmentedControl } from "@/components/usage/usage-segmented-control";
+import { useAppSettings } from "@/hooks/use-settings";
 import {
   formatUsageCost,
   formatUsageShare,
@@ -20,7 +22,7 @@ import {
   formatGroupedNumber,
 } from "@/usage-stats/format";
 import type { UsageHostOption, UsageHostSelection } from "@/usage-stats/host-options";
-import type { MergedUsageReport } from "@/usage-stats/merge";
+import type { MergedUsageEndpoint, MergedUsageReport } from "@/usage-stats/merge";
 import {
   canShiftUsageRangeForward,
   resolveUsageRange,
@@ -36,9 +38,14 @@ import { totalUsageTokens, usageSourceKey } from "@/usage-stats/totals";
 /** `all` is the first source card, not a source, so it needs a key of its own. */
 export const ALL_USAGE_SOURCES = "all";
 
-/** Which API endpoint the page is narrowed to; `endpointId: null` is Official. */
+/**
+ * Which endpoint card the page is narrowed to (`key: null` is Official), and the
+ * ids its hosts know it by. Every id goes to every host: ids are unique, so a
+ * host matches only its own.
+ */
 export interface UsageEndpointSelection {
-  endpointId: string | null;
+  key: string | null;
+  endpointIds: (string | null)[];
 }
 
 export type UsageBreakdown = "sources" | "endpoints";
@@ -56,7 +63,7 @@ interface UsageOverviewCardProps {
    * while one of them narrows the page. Absent when no host keeps a gateway
    * ledger, and then there is no "Endpoints" split.
    */
-  endpoints: readonly UsageEndpointBreakdown[] | undefined;
+  endpoints: readonly MergedUsageEndpoint[] | undefined;
   selectedEndpoint: UsageEndpointSelection | null;
   /** Which split the cards show; kept by the screen so a layout change keeps it. */
   breakdown: UsageBreakdown;
@@ -86,7 +93,7 @@ export function UsageOverviewCard(props: UsageOverviewCardProps) {
   const unpricedModels = props.report.models.filter((model) => !model.priced).length;
   const breakdown: UsageBreakdown = props.endpoints ? props.breakdown : "sources";
   const endpointColors = useMemo(
-    () => usageEndpointColors((props.endpoints ?? []).map((endpoint) => endpoint.endpointId)),
+    () => usageEndpointColors((props.endpoints ?? []).map((endpoint) => endpoint.key)),
     [props.endpoints],
   );
   const { onSelectEndpoint, onBreakdownChange } = props;
@@ -569,7 +576,7 @@ function UsageEndpointDistributionBar({
   endpoints,
   colors,
 }: {
-  endpoints: readonly UsageEndpointBreakdown[];
+  endpoints: readonly MergedUsageEndpoint[];
   colors: ReadonlyMap<string | null, string>;
 }) {
   const { t } = useTranslation();
@@ -581,12 +588,12 @@ function UsageEndpointDistributionBar({
     >
       {endpoints.map((endpoint) => (
         <View
-          key={endpoint.endpointId ?? ""}
+          key={endpoint.key ?? ""}
           style={[
             styles.distributionSegment,
             {
               flexGrow: totalUsageTokens(endpoint.totals),
-              backgroundColor: colors.get(endpoint.endpointId),
+              backgroundColor: colors.get(endpoint.key),
             },
           ]}
         />
@@ -601,7 +608,7 @@ function UsageEndpointCards({
   selected,
   onSelect,
 }: {
-  endpoints: readonly UsageEndpointBreakdown[];
+  endpoints: readonly MergedUsageEndpoint[];
   colors: ReadonlyMap<string | null, string>;
   selected: UsageEndpointSelection | null;
   onSelect: (endpoint: UsageEndpointSelection | null) => void;
@@ -610,10 +617,10 @@ function UsageEndpointCards({
     <View style={styles.sourceGrid} testID="usage-endpoint-cards">
       {endpoints.map((endpoint) => (
         <UsageEndpointCard
-          key={endpoint.endpointId ?? ""}
+          key={endpoint.key ?? ""}
           endpoint={endpoint}
-          color={colors.get(endpoint.endpointId)}
-          isSelected={selected !== null && selected.endpointId === endpoint.endpointId}
+          color={colors.get(endpoint.key)}
+          isSelected={selected !== null && selected.key === endpoint.key}
           onSelect={onSelect}
         />
       ))}
@@ -621,50 +628,104 @@ function UsageEndpointCards({
   );
 }
 
-/** One endpoint, or Official: its name, its share, then its tokens and estimated cost. */
+/**
+ * One endpoint, or Official: its name, its share, its tokens and estimated cost,
+ * then its balance when the host reads one.
+ */
 function UsageEndpointCard({
   endpoint,
   color,
   isSelected,
   onSelect,
 }: {
-  endpoint: UsageEndpointBreakdown;
+  endpoint: MergedUsageEndpoint;
   color: string | undefined;
   isSelected: boolean;
   onSelect: (endpoint: UsageEndpointSelection | null) => void;
 }) {
   const { t, i18n } = useTranslation();
   const label = endpoint.name ?? t("usage.overview.official");
+  // 已删除写在名字外面：名字太长时只截名字，「（已删除）」一直看得见。
+  const deletedMark = endpoint.deleted ? t("usage.overview.deletedEndpoint") : null;
   const share = formatUsageShare(endpoint.share, i18n.language);
   const handlePress = useCallback(
-    () => onSelect(isSelected ? null : { endpointId: endpoint.endpointId }),
-    [endpoint.endpointId, isSelected, onSelect],
+    () =>
+      onSelect(
+        isSelected
+          ? null
+          : {
+              key: endpoint.key,
+              endpointIds: endpoint.members.map((member) => member.endpointId),
+            },
+      ),
+    [endpoint.key, endpoint.members, isSelected, onSelect],
   );
+  const balanceFrom = balanceMemberOf(endpoint);
   const accessibilityState = useMemo(() => ({ selected: isSelected }), [isSelected]);
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={t("usage.overview.accessibility.endpointCard", {
-        endpoint: label,
+        endpoint: deletedMark ? `${label} ${deletedMark}` : label,
         share,
       })}
       accessibilityState={accessibilityState}
       onPress={handlePress}
       style={[styles.sourceCard, styles.endpointCard, isSelected && styles.sourceCardSelected]}
-      testID={`usage-endpoint-card-${endpoint.endpointId ?? "official"}`}
+      testID={`usage-endpoint-card-${endpoint.members[0]?.endpointId ?? "official"}`}
     >
       <View style={styles.sourceCardHead}>
         <View style={[styles.sourceDot, { backgroundColor: color }]} />
         <Text style={styles.sourceCardLabel} numberOfLines={1}>
           {label}
         </Text>
+        {deletedMark ? <Text style={styles.endpointDeletedMark}>{deletedMark}</Text> : null}
       </View>
       <Text style={styles.sourceCardShare}>{share}</Text>
       <Text style={styles.endpointCardAmount} numberOfLines={1}>
         {`${formatUsageTokensCompact(totalUsageTokens(endpoint.totals))} · ${formatUsageCost(endpoint.estimatedCost)}`}
       </Text>
+      {balanceFrom ? (
+        <UsageEndpointBalance serverId={balanceFrom.serverId} endpointId={balanceFrom.endpointId} />
+      ) : null}
     </Pressable>
+  );
+}
+
+/**
+ * Whose balance the card shows: a live endpoint's first host. Official has none
+ * and a deleted endpoint can't be read; one name on two hosts is the same relay,
+ * so one reading stands for both.
+ */
+function balanceMemberOf(
+  endpoint: MergedUsageEndpoint,
+): { serverId: string; endpointId: string } | null {
+  if (endpoint.deleted) return null;
+  const member = endpoint.members[0];
+  if (!member || member.endpointId === null) return null;
+  return { serverId: member.serverId, endpointId: member.endpointId };
+}
+
+/** The balance line, read when the page opens; nothing while it loads or when there is nothing to show. */
+function UsageEndpointBalance({ serverId, endpointId }: { serverId: string; endpointId: string }) {
+  const { t } = useTranslation();
+  const { settings } = useAppSettings();
+  const endpointIds = useMemo(() => [endpointId], [endpointId]);
+  const balances = useEndpointBalances({ serverId, endpointIds, autoRefresh: false });
+  const reading = balances.status === "ready" ? balances.readings.get(endpointId) : undefined;
+  const text = reading
+    ? balanceSummaryText({ t, reading, displayAs: settings.usage.displayAs })
+    : null;
+  if (text === null) return null;
+  return (
+    <Text
+      style={styles.endpointCardAmount}
+      numberOfLines={1}
+      testID={`usage-endpoint-balance-${endpointId}`}
+    >
+      {text}
+    </Text>
   );
 }
 
@@ -931,12 +992,19 @@ const styles = StyleSheet.create((theme) => {
       minWidth: 0,
       flexBasis: { xs: "47%", md: "31%" },
     },
+    endpointDeletedMark: {
+      flexShrink: 0,
+      marginLeft: -theme.spacing[1],
+      fontSize: 12,
+      color: palette.inkFaint,
+    },
     endpointCardAmount: {
       marginTop: 2,
       fontSize: 11,
       color: palette.inkFaint,
       fontVariant: ["tabular-nums"],
     },
+
     breakdownRow: {
       flexDirection: "row",
       marginBottom: theme.spacing[3],

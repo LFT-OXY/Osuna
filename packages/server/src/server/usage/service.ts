@@ -45,6 +45,7 @@ import {
   mergeBucketRow,
   modelRowKey,
   type UsageBucketRow,
+  type UsageEndpointIdentity,
   type UsageCallDelta,
   type UsageParserState,
   type UsageScanCursor,
@@ -85,6 +86,8 @@ export interface UsageServiceOptions {
   onPricingUpdated: () => void;
   agents: UsageAgentBridge;
   onUsageUpdated: (event: { cli: UsageCli; sessionId: string; agentId?: string }) => void;
+  /** Each endpoint's last name and whether it was deleted, as the endpoint store keeps them. */
+  endpointIdentities: () => ReadonlyMap<string, UsageEndpointIdentity>;
 }
 
 /** A file a finished turn asked for, ahead of whatever the scan queued. */
@@ -151,6 +154,7 @@ export class UsageService {
   private round: Promise<void> | null = null;
   private disposed = false;
   private readonly agents: UsageAgentBridge;
+  private readonly endpointIdentities: () => ReadonlyMap<string, UsageEndpointIdentity>;
   private readonly onUsageUpdated: (event: {
     cli: UsageCli;
     sessionId: string;
@@ -180,6 +184,7 @@ export class UsageService {
     this.getPricingConfig = options.getPricingConfig;
     this.agents = options.agents;
     this.onUsageUpdated = options.onUsageUpdated;
+    this.endpointIdentities = options.endpointIdentities;
     this.loaded = new Promise((resolve) => {
       this.markLoaded = resolve;
     });
@@ -278,13 +283,25 @@ export class UsageService {
       rows,
       request,
       projects: attributions,
-      endpointNames: this.merge.endpointNames(),
+      endpointIdentities: this.currentEndpointIdentities(),
       pricing: this.reportPricing(),
       canonicalSessionId: (cli, sessionId) => chains.canonical(cli, sessionId),
       backfill: this.backfill,
       error: this.lastError,
       now: this.now(),
     });
+  }
+
+  /**
+   * The endpoint store's names, and for an id it never knew (its snapshot file was
+   * lost) the newest name the ledger recorded, not marked deleted.
+   */
+  private currentEndpointIdentities(): Map<string, UsageEndpointIdentity> {
+    const identities = new Map<string, UsageEndpointIdentity>();
+    for (const [id, name] of this.merge.endpointNames())
+      identities.set(id, { name, deleted: false });
+    for (const [id, identity] of this.endpointIdentities()) identities.set(id, identity);
+    return identities;
   }
 
   /** One row per session and local day, for the page's daily detail table. */

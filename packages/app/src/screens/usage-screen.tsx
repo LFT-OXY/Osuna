@@ -80,10 +80,7 @@ function UsageScreenContent(): ReactElement {
     [hostSelection.hosts, ledgerSupport],
   );
   const activeEndpoint = ledgerHosts.length > 0 ? selectedEndpoint : null;
-  const endpointFilter = useMemo(
-    () => (activeEndpoint ? [activeEndpoint.endpointId] : undefined),
-    [activeEndpoint],
-  );
+  const endpointFilter = useMemo(() => activeEndpoint?.endpointIds, [activeEndpoint]);
   const filtered = useUsageReport({
     hosts: ledgerHosts,
     range,

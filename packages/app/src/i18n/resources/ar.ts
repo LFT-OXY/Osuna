@@ -4647,6 +4647,7 @@ export const ar: TranslationResources = {
       refresh: "تحديث",
       allSources: "الكل",
       official: "الرسمي",
+      deletedEndpoint: "(محذوف)",
       breakdown: {
         label: "التقسيم حسب",
         sources: "المصادر",

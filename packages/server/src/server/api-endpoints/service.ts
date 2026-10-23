@@ -230,6 +230,7 @@ import {
   endpointNameDisplayOf,
   type ApiEndpointProvider,
   type ApiEndpointState,
+  type EndpointSnapshot,
   type GatewayTokens,
   type StoredAccessKey,
   type StoredApiEndpoint,
@@ -1022,6 +1023,7 @@ export class ApiEndpointService {
       logger: this.logger,
       fileSystem: options.dataFileSystem,
     });
+    this.syncEndpointSnapshots();
     this.env = options.env ?? process.env;
     this.homeDir = options.homeDir ?? homedir();
     this.claudeManagedSettingsDir =
@@ -1209,6 +1211,26 @@ export class ApiEndpointService {
     this.reopenHints.refresh({ includesCopies: true }).catch((error: unknown) => {
       this.logger.error({ err: error }, "Failed to look at the running CLI copies");
     });
+  }
+
+  /** 每家接口最后的名字、倍率与是否已删除，按接口编号；用量页用它显示接口名。 */
+  endpointSnapshots(): Record<string, EndpointSnapshot> {
+    return this.store.readEndpointSnapshots();
+  }
+
+  /** 启动时把名字快照对上现在的接口：升级前就有的接口补进去，手动从文件里删掉的标成已删除。 */
+  private syncEndpointSnapshots(): void {
+    let state: ApiEndpointState;
+    try {
+      state = this.store.readState();
+    } catch (error) {
+      // 读不了的接口文件由列表与保存去报错，不让 daemon 起不来；快照留到下次能读时再对。
+      if (!(error instanceof ApiEndpointsFileUnparsableError)) {
+        this.logger.warn({ err: error }, "Failed to read API endpoints for the endpoint snapshots");
+      }
+      return;
+    }
+    this.store.recordEndpointSnapshots(state.endpoints);
   }
 
   /** daemon 停下：不再每隔一会儿看要重开谁。 */

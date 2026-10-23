@@ -4793,6 +4793,7 @@ export const en = {
       refresh: "Refresh",
       allSources: "All",
       official: "Official",
+      deletedEndpoint: "(deleted)",
       breakdown: {
         label: "Split by",
         sources: "Sources",

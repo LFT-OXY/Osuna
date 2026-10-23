@@ -4734,6 +4734,7 @@ export const ptBR: TranslationResources = {
       refresh: "Atualizar",
       allSources: "Tudo",
       official: "Oficial",
+      deletedEndpoint: "(excluído)",
       breakdown: {
         label: "Dividir por",
         sources: "Origens",

@@ -4723,6 +4723,7 @@ export const ja: TranslationResources = {
       refresh: "更新",
       allSources: "すべて",
       official: "公式",
+      deletedEndpoint: "（削除済み）",
       breakdown: {
         label: "分け方",
         sources: "ソース",
