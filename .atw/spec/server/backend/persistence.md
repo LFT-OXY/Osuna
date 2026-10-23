@@ -109,6 +109,23 @@ The buffer is memory only, so state it in the docs: a restart inside the window
 loses those rows. That is a deliberate trade against persisting a second
 unresolved-row file.
 
+### Gotcha: compressing day files where a later record overrides an earlier one
+
+`usage/requests/` keeps one file per UTC day; finished days become
+`YYYY-MM-DD.jsonl.gz`, and lines appended afterwards land in a plain sibling
+that the next prune folds in as a new gzip member (`server/usage/request-files.ts`,
+ported from magpie `history.go`). Two rules that differ from a plain log:
+
+- Read `.gz` first, then the plain sibling, as one day — records are applied in
+  order and a later one wins, so the order is the contract.
+- When folding, skip the plain segment only if the whole segment already sits
+  at the end of the `.gz` (a crash after the rename, before the delete). Don't
+  dedupe line by line as magpie does: a repeated line can be the later, winning
+  version.
+
+Prune counts compressed bytes against the 200 MB cap, and runs on the same
+write queue as appends so nothing is compressed mid-write.
+
 ### Gotcha: a correction row must land in the same batch as the rows it corrects
 
 Gateway ledger rows (`usage/requests/YYYY-MM-DD.jsonl`) are written the moment a
