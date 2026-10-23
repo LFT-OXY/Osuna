@@ -228,6 +228,14 @@ function scheduleAttachmentGc(): void {
   if (gcScheduled) {
     return;
   }
+  // PR28-DEBUG: 临时诊断，合并前删除。
+  console.log(
+    `[PR28-DEBUG] ${new Date().toISOString()} gc scheduled by ${(new Error().stack ?? "")
+      .split("\n")
+      .slice(2, 7)
+      .map((line) => line.trim())
+      .join(" < ")}`,
+  );
   gcScheduled = true;
   if (typeof queueMicrotask === "function") {
     queueMicrotask(() => {
