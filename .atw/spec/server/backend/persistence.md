@@ -105,6 +105,30 @@ The buffer is memory only, so state it in the docs: a restart inside the window
 loses those rows. That is a deliberate trade against persisting a second
 unresolved-row file.
 
+### Gotcha: a correction row must land in the same batch as the rows it corrects
+
+Gateway ledger rows (`usage/requests/YYYY-MM-DD.jsonl`) are written the moment a
+request ends, but the scan's transcript rows only reach disk on `flush` (every 20
+files or 500ms). A correction derived from both — "move these tokens from no
+project to this endpoint" — written eagerly next to the ledger row survives a
+hard kill that the transcript rows it pairs with don't. The rescan then applies
+the correction a second time: official and unknown-project go negative, the
+endpoint counts twice. A graceful-stop restart test never sees this.
+
+The rule, as `UsageCallMerge` (`server/usage/call-merge.ts`) does it:
+
+- The eager write only adds what is true on its own: the ledger row counts under
+  no project.
+- The move happens in `settle()`, which `UsageService` calls inside the scan
+  batch (`service.ts`, before `flush`), so the move, the transcript rows and a
+  `{ kind: "merged" }` record land in one append.
+- On load, a `merged` record marks the call settled; a ledger row without one
+  goes back to the awaiting set and is settled by the next round.
+
+Test it with a unit test that loads state from what was on disk at the kill
+point and re-runs the scan (`call-merge.test.ts`), not only with a daemon
+restart.
+
 ### Wiring a runtime-safe `config.json` field
 
 A field users can change while the daemon runs needs five edits, and missing any one of them fails quietly rather than loudly (`features.usage.pricing.*` is the worked example):

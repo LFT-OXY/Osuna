@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately
 **Status:** ready-for-agent
-**Impl:** doing
+**Impl:** done
 
 - [ ] 中转站在请求结束时记一行账（prd 第 1–4 条的字段，Claude 部分）：直通与翻译两条路径都留下写回给 CLI 的回复编号，并记首字时间；记账不改变发给上游或 CLI 的任何字节。
 - [ ] 账本与逐条存储按 `docs/data-model.md`：追加写、读时丢坏行、0600；15 分钟汇总行加可选的接口列（旧行即官方，不迁移）。
