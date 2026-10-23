@@ -1,0 +1,9 @@
+{"file": ".atw/tasks/10-16-gateway-ledger-usage/research/decisions.md", "reason": "三轮访谈的全部决定（Q1–Q21）、照 magpie 的细则与出处，判断实现是否越界、是否照 magpie"}
+{"file": "docs/adr/0014-gateway-ledger-merges-with-cli-logs.md", "reason": "账本、合并规则、两层存储、冷却跨重启的决定"}
+{"file": ".atw/tasks/10-16-magpie-osuna-gaps/prd.md", "reason": "总任务的跨子任务规矩：身份如实、对外请求、协议、测试约束"}
+{"file": ".atw/spec/server/backend/index.md", "reason": "daemon 侧规范入口：中转站、用量服务、接口存储都在 server"}
+{"file": ".atw/spec/server/backend/persistence.md", "reason": "账本文件、冷却状态文件、汇率缓存、接口新字段要守的持久化规则"}
+{"file": ".atw/spec/server/backend/rpc-and-protocol.md", "reason": "新 RPC、可选字段与能力位的写法"}
+{"file": ".atw/spec/server/backend/testing.md", "reason": "daemon 端到端测试、本机假上游与假汇率服务"}
+{"file": ".atw/spec/app/frontend/index.md", "reason": "用量页新卡片、请求标签、接口页最近异常、编辑窗口价格倍率的界面规范"}
+{"file": ".atw/spec/app/frontend/hooks-and-data.md", "reason": "用量页读数与货币偏好"}
