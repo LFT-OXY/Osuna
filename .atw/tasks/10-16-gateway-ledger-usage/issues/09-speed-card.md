@@ -4,7 +4,7 @@
 
 **Blocked by:** 01
 **Status:** ready-for-agent
-**Impl:** doing
+**Impl:** done
 
 - [ ] 速度与首字等待的定义与过滤照 magpie `DecodeOf` 与 prd 第 17 条；组内按 token 加权；组内首字等待的汇总照 magpie。
 - [ ] 汇总行存速度要用的和，使速度不依赖 30 天的逐条记录（端到端测试：逐条记录被修剪后「全部」时段速度不变）。

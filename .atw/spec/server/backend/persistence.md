@@ -109,6 +109,21 @@ The buffer is memory only, so state it in the docs: a restart inside the window
 loses those rows. That is a deliberate trade against persisting a second
 unresolved-row file.
 
+### A statistic that must outlive pruned records lives as sums in bucket rows
+
+Per-request records (`usage/requests/`) are pruned at 30 days / 200 MB, but the
+"All" period still has to show output speed and time to first token. So the
+15-minute bucket rows carry optional sums (`ttftCount`, `ttftMs`, `speedCount`,
+`speedOutput`, `speedMs`), added when the ledger row lands and moved with the
+tokens when it merges (`server/usage/call-merge.ts`); the report divides at read
+time (`server/usage/speed.ts`). Store sums, never averages: sums add across
+buckets, groups and hosts.
+
+Rows written before the columns existed have none, and there is no migration to
+backfill them. A merge must not subtract sums that were never added: gate the
+correction on the source row carrying the field (the `speedOf` check). Say in
+`docs/usage.md` which records the statistic starts from.
+
 ### Gotcha: compressing day files where a later record overrides an earlier one
 
 `usage/requests/` keeps one file per UTC day; finished days become
