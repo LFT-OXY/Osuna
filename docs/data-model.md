@@ -680,7 +680,7 @@ migrates them. A ledger merge adds rows of both kinds that move a call's tokens 
 ### Request records (`usage/requests/YYYY-MM-DD.jsonl`)
 
 Append-only, one file per UTC day of the record's own time, directory `0700` and files `0600`.
-A torn line is dropped on load. Two kinds, discriminated on `kind`
+A torn line is dropped on load. Three kinds, discriminated on `kind`
 (`USAGE_REQUEST_RECORD_SCHEMA` in `packages/server/src/server/usage/ledger.ts`):
 
 - `gateway` — one ledger row per request the gateway carried: `at`, `agent`, the CLI's
@@ -693,9 +693,12 @@ A torn line is dropped on load. Two kinds, discriminated on `kind`
 - `cli` — one CLI log reply as deduplicated so far, with the session, cwd, bucket, model and
   turn its tokens went to when first seen. Written whole again each time a later line corrects
   it; the last line of a `replyId` wins on load.
+- `merged` — `{ agent, replyId, at }`, written in the scan batch that moved the reply's tokens
+  from Official and the unknown project to its endpoint, together with that reply's `cli`
+  record. Its absence after a restart means the move still has to happen.
 
-Loading both is how a restart carries on merging: a ledger row's first record of a reply wins,
-a log reply's last.
+Loading all three is how a restart carries on merging: a ledger row's first record of a reply
+wins, a log reply's last.
 
 ### Scan cursor (`usage/scan-state.json`)
 

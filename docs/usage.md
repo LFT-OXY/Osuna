@@ -78,14 +78,17 @@ The ledger and the CLI log meet on that id (Claude `message.id`):
   through the gateway: there is no way back to which endpoint answered them.
 
 The merge is the same whichever side reaches disk first and whether the daemon
-restarts in between. Rows are increments, so the side that arrives second adds
-the correction: a ledger row for a reply the scan already counted takes the
-log's tokens back from Official and adds its own at the endpoint; a reply the
-scan reads after its ledger row moves the ledger's tokens off the unknown
-project. The turn a call ran in stays counted on the log's row, which is why an
-Official group can be left holding turns and no tokens; the report leaves such a
-group and model out. Log replies older than 30 days are not kept for matching,
-since no ledger row can still arrive for them.
+restarts in between, a hard kill included. Rows are increments, so nothing is
+rewritten: a ledger row lands at once under no project, and the move to the
+log's project and the endpoint (Official gives back what the log counted, the
+unknown project what the ledger counted there) is written only in the scan
+batch that also writes the log's reply, with a `merged` record marking it done.
+A batch the kill threw away was never moved, so the next scan moves it; a moved
+one is marked and is not moved twice. Log lines that correct a reply after the
+move are taken back from Official as they come. The turn a call ran in stays
+counted on the log's row, which is why an Official group can be left holding
+turns and no tokens; the report leaves such a group and model out. A reply of
+any age merges, as magpie merges over the whole period it reads.
 
 Pi and OMP follow the same rule once they go through the gateway: a log entry
 matched by its reply id merges as above; one that matches no ledger row and

@@ -73,11 +73,6 @@ const FLUSH_EVERY_FILES = 20;
 const FLUSH_EVERY_MS = 500;
 const PROGRESS_INTERVAL_MS = 1000;
 const READ_CHUNK_BYTES = 1024 * 1024;
-/**
- * How far back a log reply is kept for the ledger to merge with. The ledger is
- * written as a request ends, so nothing older can still find its row.
- */
-const REQUEST_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 export interface UsageServiceOptions {
   paseoHome: string;
@@ -260,6 +255,8 @@ export class UsageService {
       turns: merged.turns,
       requests: merged.records,
     });
+    // 已读过这次回复时，挪到接口那边的修正由扫描的下一次落盘带上。
+    if (this.merge.hasUnsettled()) this.startRound({ backfill: false, discover: false });
     // 回填期间不发 usage.updated，与扫描的节奏一致：回填完成时页面整页重读。
     if (this.backfill.state === "running") return;
     const sessionId = row.sessionId ?? "";
@@ -386,8 +383,11 @@ export class UsageService {
       if (this.round !== round) return;
       this.round = null;
       // A turn that ended while this round was settling would otherwise wait
-      // for the next 60-second tick, which is not what "targeted" means.
-      if (this.targeted.size > 0) this.startRound({ backfill: false, discover: false });
+      // for the next 60-second tick, which is not what "targeted" means. A
+      // ledger row that came in after the last flush has the same claim.
+      if (this.targeted.size > 0 || this.merge.hasUnsettled()) {
+        this.startRound({ backfill: false, discover: false });
+      }
     });
   }
 
@@ -419,6 +419,16 @@ export class UsageService {
     let cursorDirty = false;
 
     const flush = async (): Promise<void> => {
+      // 账本行对上了已读的回复：在这一批里挪到接口那边，和回复本身一起落盘（UsageCallMerge.settle）。
+      if (this.merge.hasUnsettled()) {
+        const settled = this.merge.settle();
+        this.applyRows(settled.buckets);
+        this.turns.addAll(settled.turns);
+        pendingRows.buckets.push(...settled.buckets);
+        pendingRows.turns.push(...settled.turns);
+        pendingRows.requests.push(...settled.records);
+        cursorDirty = true;
+      }
       if (!cursorDirty) return;
       if (
         pendingRows.buckets.length > 0 ||
@@ -575,10 +585,7 @@ export class UsageService {
     } finally {
       await handle.close();
     }
-    const merged = this.merge.addCliDeltas(
-      calls,
-      new Date(this.now() - REQUEST_RETENTION_MS).toISOString(),
-    );
+    const merged = this.merge.addCliDeltas(calls);
     rows.buckets.push(...merged.buckets);
     rows.turns.push(...merged.turns);
     rows.requests.push(...merged.records);

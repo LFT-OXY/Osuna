@@ -79,10 +79,23 @@ export const USAGE_CLI_CALL_SCHEMA = z.object({
 });
 export type UsageCliCall = z.infer<typeof USAGE_CLI_CALL_SCHEMA>;
 
+/**
+ * Written in the scan batch that moved a call from Official and the unknown
+ * project to its endpoint, so a restart knows the move is done.
+ */
+export const USAGE_MERGED_CALL_SCHEMA = z.object({
+  kind: z.literal("merged"),
+  agent: UsageCliSchema,
+  replyId: z.string(),
+  at: z.string(),
+});
+export type UsageMergedCall = z.infer<typeof USAGE_MERGED_CALL_SCHEMA>;
+
 /** A line of `usage/requests/YYYY-MM-DD.jsonl`. */
 export const USAGE_REQUEST_RECORD_SCHEMA = z.discriminatedUnion("kind", [
   GATEWAY_LEDGER_ROW_SCHEMA,
   USAGE_CLI_CALL_SCHEMA,
+  USAGE_MERGED_CALL_SCHEMA,
 ]);
 export type UsageRequestRecord = z.infer<typeof USAGE_REQUEST_RECORD_SCHEMA>;
 

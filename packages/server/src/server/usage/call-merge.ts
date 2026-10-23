@@ -1,5 +1,10 @@
 import type { UsageCli, UsageTokenTotals } from "@getpaseo/protocol/usage/types";
-import type { GatewayLedgerRow, UsageCliCall, UsageRequestRecord } from "./ledger.js";
+import type {
+  GatewayLedgerRow,
+  UsageCliCall,
+  UsageMergedCall,
+  UsageRequestRecord,
+} from "./ledger.js";
 import {
   KEY_SEPARATOR,
   addTotals,
@@ -19,10 +24,11 @@ export interface UsageMergeOutput {
   records: UsageRequestRecord[];
 }
 
-/** One call as far as the two sides have told it. */
+/** One call as far as the two sides have told it, and whether its move to the endpoint is done. */
 interface MergedCall {
   cli: UsageCliCall | null;
   ledger: GatewayLedgerRow | null;
+  settled: boolean;
 }
 
 /**
@@ -31,13 +37,19 @@ interface MergedCall {
  * with the ledger's tokens and endpoint; a ledger row with no log entry counts
  * under no project; a log entry with no ledger row stays Official.
  *
- * Rows are increments, so the merge never rewrites: whichever side arrives
- * second adds the correction that moves the call to where both sides together
- * say it belongs. The state it needs is the records it hands back for the
- * store, so a restart reloads them and carries on from the same place.
+ * Rows are increments, so the merge never rewrites. A ledger row lands at
+ * once, under no project. The move to the log's project and the endpoint —
+ * Official's tokens taken back, the unknown project's too, the endpoint's added
+ * — happens only in `settle`, which the scan runs in the same batch that writes
+ * the log's reply, and it leaves a `merged` record behind. So whatever a hard
+ * kill throws away, what is on disk agrees with itself: an unflushed reply was
+ * never moved, and a moved one is marked. A restart reloads the records and
+ * carries on from the same place.
  */
 export class UsageCallMerge {
   private readonly calls = new Map<string, MergedCall>();
+  /** Calls with a ledger row that are not settled yet; settled once the log has them too. */
+  private readonly awaiting = new Set<string>();
 
   /** Rebuild from the stored records: the last record of a log reply, the first ledger row. */
   load(records: readonly UsageRequestRecord[]): void {
@@ -48,63 +60,91 @@ export class UsageCallMerge {
         call.ledger ??= record;
         continue;
       }
+      if (record.kind === "merged") {
+        this.callOf(record.agent, record.replyId).settled = true;
+        continue;
+      }
       this.callOf(record.cli, record.replyId).cli = record;
+    }
+    for (const [key, call] of this.calls) {
+      if (call.ledger && !call.settled) this.awaiting.add(key);
     }
   }
 
   /**
-   * What a scan read from a log. A reply the ledger already has keeps its
-   * tokens at the endpoint: every delta the log adds is taken back from
-   * Official, and the first one also moves the ledger's tokens off the unknown
-   * project. Replies older than `retainFrom` that no ledger row names are not
-   * kept: no ledger row can still arrive for them.
+   * What a scan read from a log, to go down in the scan's own batch. A reply
+   * already settled keeps its tokens at the endpoint: every delta the log adds
+   * is taken back from Official at the delta's own key.
    */
-  addCliDeltas(deltas: readonly UsageCallDelta[], retainFrom: string): UsageMergeOutput {
+  addCliDeltas(deltas: readonly UsageCallDelta[]): UsageMergeOutput {
     const output = emptyOutput();
     const touched = new Map<string, UsageCliCall>();
     for (const delta of deltas) {
       const key = callKey(delta.cli, delta.replyId);
-      const known = this.calls.get(key);
-      if (!known && delta.at < retainFrom) continue;
-      const call = known ?? this.callOf(delta.cli, delta.replyId);
-      const firstSeen = call.cli === null;
+      const call = this.callOf(delta.cli, delta.replyId);
       if (call.cli) addTotals(call.cli, delta.amounts);
       else call.cli = cliCallOf(delta);
       touched.set(key, call.cli);
-      const { ledger } = call;
-      if (!ledger) continue;
-      pushAt(output, deltaKey(delta), delta.turnKey, delta.at, negated(delta.amounts));
-      if (!firstSeen) continue;
-      pushAt(output, unknownProjectKey(ledger), null, ledger.at, negated(totalsOf(ledger)));
-      pushAt(output, mergedKey(call.cli, ledger), call.cli.turnKey, call.cli.at, totalsOf(ledger));
+      if (call.settled) {
+        pushAt(output, deltaKey(delta), delta.turnKey, delta.at, negated(delta.amounts));
+      }
     }
     output.records.push(...Array.from(touched.values(), (call) => ({ ...call })));
     return output;
   }
 
   /**
-   * A request the gateway carried. When the log already counted the reply, its
-   * tokens move from Official to the endpoint; otherwise they count under no
-   * project until the log names it. A second row for the same reply is kept
-   * on disk and counted nowhere.
+   * A request the gateway carried: counted under no project until `settle`
+   * finds the log's reply. A second row for the same reply is kept on disk and
+   * counted nowhere.
    */
   addLedgerRow(row: GatewayLedgerRow): UsageMergeOutput {
     const output = emptyOutput();
     output.records.push(row);
-    if (row.replyId === null) {
-      pushAt(output, unknownProjectKey(row), null, row.at, totalsOf(row));
-      return output;
+    if (row.replyId !== null) {
+      const call = this.callOf(row.agent, row.replyId);
+      if (call.ledger) return output;
+      call.ledger = row;
+      this.awaiting.add(callKey(row.agent, row.replyId));
     }
-    const call = this.callOf(row.agent, row.replyId);
-    if (call.ledger) return output;
-    call.ledger = row;
-    if (!call.cli) {
-      pushAt(output, unknownProjectKey(row), null, row.at, totalsOf(row));
-      return output;
+    pushAt(output, unknownProjectKey(row), null, row.at, totalsOf(row));
+    return output;
+  }
+
+  /** Whether a ledger row's reply is in the log and waiting for `settle`. */
+  hasUnsettled(): boolean {
+    for (const key of this.awaiting) {
+      if (this.calls.get(key)?.cli) return true;
     }
-    const official = { ...mergedKey(call.cli, row), endpointId: undefined };
-    pushAt(output, official, call.cli.turnKey, call.cli.at, negated(totalsOf(call.cli)));
-    pushAt(output, mergedKey(call.cli, row), call.cli.turnKey, call.cli.at, totalsOf(row));
+    return false;
+  }
+
+  /**
+   * Move every call both sides now know to the log's project and the endpoint:
+   * Official gives back what the log counted, the unknown project what the
+   * ledger counted there. Run it in the batch that writes the log's replies,
+   * never on its own ahead of them.
+   */
+  settle(): UsageMergeOutput {
+    const output = emptyOutput();
+    for (const key of this.awaiting) {
+      const call = this.calls.get(key);
+      const { cli, ledger } = call ?? { cli: null, ledger: null };
+      if (!call || !cli || !ledger) continue;
+      const official = { ...mergedKey(cli, ledger), endpointId: undefined };
+      pushAt(output, official, cli.turnKey, cli.at, negated(totalsOf(cli)));
+      pushAt(output, unknownProjectKey(ledger), null, ledger.at, negated(totalsOf(ledger)));
+      pushAt(output, mergedKey(cli, ledger), cli.turnKey, cli.at, totalsOf(ledger));
+      const marker: UsageMergedCall = {
+        kind: "merged",
+        agent: ledger.agent,
+        replyId: cli.replyId,
+        at: ledger.at,
+      };
+      output.records.push(marker);
+      call.settled = true;
+      this.awaiting.delete(key);
+    }
     return output;
   }
 
@@ -124,7 +164,7 @@ export class UsageCallMerge {
     const key = callKey(cli, replyId);
     let call = this.calls.get(key);
     if (!call) {
-      call = { cli: null, ledger: null };
+      call = { cli: null, ledger: null, settled: false };
       this.calls.set(key, call);
     }
     return call;

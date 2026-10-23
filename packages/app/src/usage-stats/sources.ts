@@ -102,8 +102,24 @@ export function usageSourceColor(ref: UsageSourceRef): string {
 // 「官方」不是哪一家接口：用不抢眼的灰。
 const OFFICIAL_ENDPOINT_COLOR = "hsl(220, 8%, 55%)";
 
-/** An API endpoint keeps one colour by its id; Official (`null`) is grey. */
-export function usageEndpointColor(endpointId: string | null): string {
-  if (endpointId === null) return OFFICIAL_ENDPOINT_COLOR;
-  return `hsl(${fallbackHue(endpointId)}, 60%, 45%)`;
+/**
+ * Endpoint hues on the source cards' scale, minus the greens, ambers and reds
+ * that would read as success, warning or danger (docs/design.md §13).
+ */
+const ENDPOINT_HUES = [230, 270, 190, 310, 250, 290, 210] as const;
+
+/**
+ * One colour per endpoint on the page, Official (`null`) grey. Hues go out in
+ * the order of the endpoint ids, so two endpoints never share one while there
+ * are fewer than seven and an endpoint keeps its colour as shares move.
+ */
+export function usageEndpointColors(
+  endpointIds: readonly (string | null)[],
+): Map<string | null, string> {
+  const colors = new Map<string | null, string>([[null, OFFICIAL_ENDPOINT_COLOR]]);
+  const ids = endpointIds.filter((id): id is string => id !== null).sort();
+  ids.forEach((id, index) => {
+    colors.set(id, `hsl(${ENDPOINT_HUES[index % ENDPOINT_HUES.length]}, 60%, 45%)`);
+  });
+  return colors;
 }

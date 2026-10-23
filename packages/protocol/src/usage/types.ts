@@ -177,7 +177,7 @@ export const UsageReportSchema = z.object({
   months: z.array(UsageMonthBreakdownSchema),
   heatmapDays: z.array(UsageHeatmapDaySchema),
   projects: z.array(UsageProjectBreakdownSchema),
-  // COMPAT(gatewayLedger): added in v0.17.0; absent from a daemon without the gateway ledger.
+  // 没有中转站账本的 daemon 不给（能力位 gatewayLedger）。
   endpoints: z.array(UsageEndpointBreakdownSchema).optional(),
   backfill: UsageBackfillSchema,
   error: z.string().nullable(),

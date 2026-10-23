@@ -30,7 +30,7 @@ import {
   type UsagePeriod,
 } from "@/usage-stats/period";
 import { describeUsageCustomTab, describeUsageRange } from "@/usage-stats/range-label";
-import { usageEndpointColor, usageSourceColor, usageSourceLabel } from "@/usage-stats/sources";
+import { usageEndpointColors, usageSourceColor, usageSourceLabel } from "@/usage-stats/sources";
 import { totalUsageTokens, usageSourceKey } from "@/usage-stats/totals";
 
 /** `all` is the first source card, not a source, so it needs a key of its own. */
@@ -85,6 +85,10 @@ export function UsageOverviewCard(props: UsageOverviewCardProps) {
   const totalTokens = totalUsageTokens(props.report.summary.totals);
   const unpricedModels = props.report.models.filter((model) => !model.priced).length;
   const breakdown: UsageBreakdown = props.endpoints ? props.breakdown : "sources";
+  const endpointColors = useMemo(
+    () => usageEndpointColors((props.endpoints ?? []).map((endpoint) => endpoint.endpointId)),
+    [props.endpoints],
+  );
   const { onSelectEndpoint, onBreakdownChange } = props;
   const handleBreakdown = useCallback(
     (next: UsageBreakdown) => {
@@ -135,8 +139,9 @@ export function UsageOverviewCard(props: UsageOverviewCardProps) {
       ) : null}
       {breakdown === "endpoints" && props.endpoints ? (
         <>
-          <UsageEndpointDistributionBar endpoints={props.endpoints} />
+          <UsageEndpointDistributionBar endpoints={props.endpoints} colors={endpointColors} />
           <UsageEndpointCards
+            colors={endpointColors}
             endpoints={props.endpoints}
             selected={props.selectedEndpoint}
             onSelect={onSelectEndpoint}
@@ -562,8 +567,10 @@ function UsageBreakdownSwitch({
 
 function UsageEndpointDistributionBar({
   endpoints,
+  colors,
 }: {
   endpoints: readonly UsageEndpointBreakdown[];
+  colors: ReadonlyMap<string | null, string>;
 }) {
   const { t } = useTranslation();
   if (endpoints.length === 0) return <View style={styles.distribution} />;
@@ -579,7 +586,7 @@ function UsageEndpointDistributionBar({
             styles.distributionSegment,
             {
               flexGrow: totalUsageTokens(endpoint.totals),
-              backgroundColor: usageEndpointColor(endpoint.endpointId),
+              backgroundColor: colors.get(endpoint.endpointId),
             },
           ]}
         />
@@ -590,10 +597,12 @@ function UsageEndpointDistributionBar({
 
 function UsageEndpointCards({
   endpoints,
+  colors,
   selected,
   onSelect,
 }: {
   endpoints: readonly UsageEndpointBreakdown[];
+  colors: ReadonlyMap<string | null, string>;
   selected: UsageEndpointSelection | null;
   onSelect: (endpoint: UsageEndpointSelection | null) => void;
 }) {
@@ -603,6 +612,7 @@ function UsageEndpointCards({
         <UsageEndpointCard
           key={endpoint.endpointId ?? ""}
           endpoint={endpoint}
+          color={colors.get(endpoint.endpointId)}
           isSelected={selected !== null && selected.endpointId === endpoint.endpointId}
           onSelect={onSelect}
         />
@@ -614,10 +624,12 @@ function UsageEndpointCards({
 /** One endpoint, or Official: its name, its share, then its tokens and estimated cost. */
 function UsageEndpointCard({
   endpoint,
+  color,
   isSelected,
   onSelect,
 }: {
   endpoint: UsageEndpointBreakdown;
+  color: string | undefined;
   isSelected: boolean;
   onSelect: (endpoint: UsageEndpointSelection | null) => void;
 }) {
@@ -639,13 +651,11 @@ function UsageEndpointCard({
       })}
       accessibilityState={accessibilityState}
       onPress={handlePress}
-      style={[styles.sourceCard, isSelected && styles.sourceCardSelected]}
+      style={[styles.sourceCard, styles.endpointCard, isSelected && styles.sourceCardSelected]}
       testID={`usage-endpoint-card-${endpoint.endpointId ?? "official"}`}
     >
       <View style={styles.sourceCardHead}>
-        <View
-          style={[styles.sourceDot, { backgroundColor: usageEndpointColor(endpoint.endpointId) }]}
-        />
+        <View style={[styles.sourceDot, { backgroundColor: color }]} />
         <Text style={styles.sourceCardLabel} numberOfLines={1}>
           {label}
         </Text>
@@ -914,6 +924,12 @@ const styles = StyleSheet.create((theme) => {
       marginTop: 2,
       fontSize: 11,
       color: palette.inkFaint,
+    },
+    // 列宽固定（窄屏两列、宽屏三列）：落单的最后一张不撑满整行，和同排的一样宽。
+    endpointCard: {
+      flexGrow: 0,
+      minWidth: 0,
+      flexBasis: { xs: "47%", md: "31%" },
     },
     endpointCardAmount: {
       marginTop: 2,
