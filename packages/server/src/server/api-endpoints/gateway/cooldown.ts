@@ -21,7 +21,6 @@ import {
   modelRefused,
   requestRefused,
   wordsOf,
-  type FailureClass,
 } from "./failure.js";
 
 /*
@@ -58,25 +57,30 @@ export const COOLDOWN = {
 } as const;
 
 /** 冷却时长由什么定的：欠费、厂商的 Retry-After、错误里写的重置时间、额度默认、起始冷却、翻倍、需要检查。 */
-export type RestBy =
-  | "credit"
-  | "retry-after"
-  | "resets"
-  | "quota"
-  | "cooldown"
-  | "backoff"
-  | "auth";
+const RestBySchema = z.enum([
+  "credit",
+  "retry-after",
+  "resets",
+  "quota",
+  "cooldown",
+  "backoff",
+  "auth",
+]);
+export type RestBy = z.infer<typeof RestBySchema>;
+
+// 会冷却的失败分类（代理没连上不冷却）；FailureClass 加了值而这里没加，markFailed 记冷却处编译不过。
+const RestWhySchema = z.enum(["credit", "quota", "rate", "other", "auth"]);
+type RestWhy = z.infer<typeof RestWhySchema>;
 
 export interface EndpointRest {
   endpointId: string;
   endpointName: string;
   // 只冷却这个模型时有值。
   model: string | null;
-  // 代理没连上不冷却。
-  why: Exclude<FailureClass, "proxy">;
+  why: RestWhy;
   status: number;
   by: RestBy;
-  // 连续失败次数，翻倍用。
+  // 连续失败次数，翻倍用；不存盘，重启后读回的记为 0，翻倍从头算。
   failures: number;
   // 需要检查（key 无效）没有结束时刻，直到用户编辑这家接口。
   until: number | null;
@@ -88,10 +92,9 @@ const StoredRestSchema = z.object({
   endpointId: z.string(),
   endpointName: z.string(),
   model: z.string().nullable(),
-  why: z.enum(["credit", "quota", "rate", "other", "auth"]),
+  why: RestWhySchema,
   status: z.number().int(),
-  by: z.enum(["credit", "retry-after", "resets", "quota", "cooldown", "backoff", "auth"]),
-  failures: z.number().int(),
+  by: RestBySchema,
   until: z.string().datetime().nullable(),
   said: z.string(),
 });
@@ -449,7 +452,7 @@ export class EndpointCooldowns {
 
   /** 这家接口（或它的这个模型）正在冷却中；先看整家，再看模型。 */
   restOf(endpointId: string, model: string): EndpointRest | null {
-    return this.active(endpointId) ?? this.active(`${endpointId}/${model}`);
+    return this.active(endpointId) ?? this.active(restKey(endpointId, model));
   }
 
   /** 整家接口的冷却，接口列表显示用。 */
@@ -466,7 +469,7 @@ export class EndpointCooldowns {
     const why = endpointFailure(attempt.status, attempt.body);
     if (why === "proxy" || requestRefused(attempt.status, attempt.body)) return null;
     const { id } = attempt.endpoint;
-    const modelKey = `${id}/${attempt.model}`;
+    const modelKey = restKey(id, attempt.model);
     const unserved = why === "other" && modelRefused(attempt.status, attempt.body);
     const modelQuota = why === "quota" && modelOwnQuota(attempt);
     let key = unserved || modelQuota ? modelKey : id;
@@ -527,7 +530,7 @@ export class EndpointCooldowns {
 
   /** 答复成功：这家与这个模型的冷却和连续失败次数一起清掉。 */
   served(endpointId: string, model: string): void {
-    for (const key of [endpointId, `${endpointId}/${model}`]) {
+    for (const key of [endpointId, restKey(endpointId, model)]) {
       this.failures.delete(key);
       this.end(key);
     }
@@ -581,7 +584,8 @@ export class EndpointCooldowns {
     const { now } = input;
     const previous = this.rests.get(input.key);
     let failures = 1;
-    if (previous?.why === "rate" && previous.until !== null) {
+    // 重启前的限流（failures 为 0）不接着翻倍：连续失败次数只在内存里。
+    if (previous?.why === "rate" && previous.until !== null && previous.failures > 0) {
       if (now < previous.until) failures = Math.max(previous.failures, 1);
       else if (now - previous.until < COOLDOWN.rateForget) {
         failures = Math.max(previous.failures, 1) + 1;
@@ -663,7 +667,7 @@ export class EndpointCooldowns {
     for (const stored of parsed.data.rests) {
       const rest = fromStored(stored);
       if (rest.until !== null && rest.until <= this.now()) continue;
-      const key = rest.model === null ? rest.endpointId : `${rest.endpointId}/${rest.model}`;
+      const key = rest.model === null ? rest.endpointId : restKey(rest.endpointId, rest.model);
       this.rests.set(key, rest);
       this.scheduleEnd(key, rest);
     }
@@ -681,10 +685,20 @@ export class EndpointCooldowns {
   }
 }
 
+/** 只冷却某个模型时的冷却键。 */
+function restKey(endpointId: string, model: string): string {
+  return `${endpointId}/${model}`;
+}
+
 function toStored(rest: EndpointRest): StoredRest {
-  return { ...rest, until: rest.until === null ? null : new Date(rest.until).toISOString() };
+  const { failures: _inMemoryOnly, ...stored } = rest;
+  return { ...stored, until: rest.until === null ? null : new Date(rest.until).toISOString() };
 }
 
 function fromStored(stored: StoredRest): EndpointRest {
-  return { ...stored, until: stored.until === null ? null : Date.parse(stored.until) };
+  return {
+    ...stored,
+    failures: 0,
+    until: stored.until === null ? null : Date.parse(stored.until),
+  };
 }

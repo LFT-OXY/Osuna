@@ -1,12 +1,12 @@
 // 用例取自 magpie（https://github.com/yetone/magpie，internal/gateway/routing.go、fallback.go 的冷却常量，internal/provider/concurrency.go 的 QuotaRest、RestCap，zhipu_resets_test.go）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import pino from "pino";
 import type { ApiEndpointCooldownSettings } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
-import { describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   COOLDOWN,
   EndpointCooldowns,
@@ -25,8 +25,16 @@ import {
 const MINUTE = 60_000;
 const START = Date.parse("2026-10-14T12:00:00Z");
 
+const tempDirs: string[] = [];
+
+afterEach(() => {
+  for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
+
 function cooldownsFile(): string {
-  return path.join(mkdtempSync(path.join(os.tmpdir(), "paseo-cooldowns-")), "cooldowns.json");
+  const dir = mkdtempSync(path.join(os.tmpdir(), "paseo-cooldowns-"));
+  tempDirs.push(dir);
+  return path.join(dir, "cooldowns.json");
 }
 
 function cooldowns(filePath = cooldownsFile()) {
@@ -666,10 +674,10 @@ describe("surviving a daemon restart", () => {
     });
 
     expect(modelRest).toMatchObject({ model: "kimi-k2", until: START + MINUTE });
-    expect(restarted.restOf("ep_a", "kimi-k2")).toEqual(modelRest);
+    expect(restarted.restOf("ep_a", "kimi-k2")).toEqual({ ...modelRest, failures: 0 });
     expect(restarted.restOf("ep_a", "glm-4.6")).toBeNull();
     expect(restarted.endpointRest("ep_a")).toBeNull();
-    expect(restarted.endpointRest("ep_b")).toEqual(creditRest);
+    expect(restarted.endpointRest("ep_b")).toEqual({ ...creditRest, failures: 0 });
     clock.now = START + 2 * MINUTE;
     expect(restarted.restOf("ep_a", "kimi-k2")).toBeNull();
     clock.now = START + 31 * MINUTE;
@@ -688,6 +696,26 @@ describe("surviving a daemon restart", () => {
 
     later.now = START;
     expect(restarted.endpointRest("ep_a")).toBeNull();
+  });
+
+  test("rate-limit backoff starts over after a restart", () => {
+    const filePath = cooldownsFile();
+    const before = cooldowns(filePath);
+    fail(before.store, { status: 429 });
+    before.clock.now = START + 2 * MINUTE;
+    expect(fail(before.store, { status: 429 })).toMatchObject({ by: "backoff", failures: 2 });
+
+    const after = cooldowns(filePath);
+    after.clock.now = START + 2 * MINUTE + 30_000;
+    expect(after.store.endpointRest("ep_a")).toMatchObject({ why: "rate" });
+    after.clock.now = START + 5 * MINUTE;
+    expect(after.store.endpointRest("ep_a")).toBeNull();
+
+    expect(fail(after.store, { status: 429 })).toMatchObject({
+      by: "cooldown",
+      failures: 1,
+      until: START + 6 * MINUTE,
+    });
   });
 
   test("clearing by hand removes the saved rest too", () => {
