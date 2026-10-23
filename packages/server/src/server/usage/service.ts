@@ -4,6 +4,7 @@ import type { FileHandle } from "node:fs/promises";
 import path from "node:path";
 import { setImmediate as yieldToEventLoop } from "node:timers/promises";
 import type { Logger } from "pino";
+import type { UsageExchangeRate } from "@getpaseo/protocol/usage/rpc-schemas";
 import type {
   UsageAgentSummary,
   UsageAgentTurn,
@@ -26,6 +27,7 @@ import {
   type UsagePricingRefreshOutcome,
 } from "./pricing/service.js";
 import { UsageProjectResolver } from "./project-attribution.js";
+import { UsageExchangeRates } from "./exchange-rate.js";
 import { buildAgentSummary, buildAgentTurns, type AgentReportInput } from "./agent-report.js";
 import { UsageCallMerge } from "./call-merge.js";
 import type { GatewayLedgerRow } from "./ledger.js";
@@ -107,6 +109,8 @@ export interface UsageServiceOptions {
   onUsageUpdated: (event: { cli: UsageCli; sessionId: string; agentId?: string }) => void;
   /** Each endpoint's last name and whether it was deleted, as the endpoint store keeps them. */
   endpointIdentities: () => ReadonlyMap<string, UsageEndpointIdentity>;
+  /** Osuna's own identity (`Osuna/<daemon version>`) on the requests the daemon makes itself. */
+  userAgent: string;
 }
 
 /** A file a finished turn asked for, ahead of whatever the scan queued. */
@@ -147,6 +151,7 @@ export class UsageService {
   private readonly now: () => number;
   private readonly pricing: UsagePricingService;
   private readonly getPricingConfig: () => UsagePricingSettings;
+  private readonly exchangeRates: UsageExchangeRates;
 
   private roots: UsageLogRoots = { claude: [], codex: [], pi: [], omp: [] };
   private rows = new Map<string, UsageBucketRow>();
@@ -219,6 +224,15 @@ export class UsageService {
       timers: options.config?.pricing?.timers,
       snapshot: options.config?.pricing?.snapshot,
       onUpdated: options.onPricingUpdated,
+    });
+    this.exchangeRates = new UsageExchangeRates({
+      filePath: path.join(options.paseoHome, "usage", "exchange-rate.json"),
+      logger: this.logger,
+      now: this.now,
+      userAgent: options.userAgent,
+      autoUpdate: () => options.getPricingConfig().autoUpdate,
+      url: options.config?.exchangeRate?.url,
+      fetch: options.config?.exchangeRate?.fetch,
     });
   }
 
@@ -447,6 +461,11 @@ export class UsageService {
       },
       isPriced: (model: string) => this.pricing.priceFor(model).priced,
     };
+  }
+
+  /** The CNY rate, fetched only while it is a day old and the price table auto-updates. */
+  getExchangeRate(): Promise<UsageExchangeRate> {
+    return this.exchangeRates.get();
   }
 
   refreshPricing(): Promise<UsagePricingRefreshOutcome> {

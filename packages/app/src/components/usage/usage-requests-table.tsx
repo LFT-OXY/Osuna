@@ -25,7 +25,14 @@ import { useUsageRequests } from "@/hooks/use-usage-requests";
 import { useUsageRequestsExport } from "@/hooks/use-usage-requests-export";
 import { UsageRequestsExportBar } from "@/components/usage/usage-requests-export-bar";
 import type { UsageHostInput } from "@/usage-stats/aggregated-usage";
-import { formatGroupedNumber, formatSessionCost } from "@/usage-stats/format";
+import {
+  formatGroupedNumber,
+  formatGroupedTokens,
+  formatSessionCost,
+  type UsageMoney,
+  type UsageTokenUnits,
+} from "@/usage-stats/format";
+import { useUsageMoney, useUsageTokenUnits } from "@/usage-stats/use-usage-money";
 import type { UsageRange } from "@/usage-stats/period";
 import {
   formatCooldownTime,
@@ -518,6 +525,8 @@ function UsageRequestsRows({
     });
   }, []);
   const columns = TIER_COLUMNS[tier];
+  const money = useUsageMoney();
+  const units = useUsageTokenUnits();
 
   return (
     <View testID="usage-requests-table">
@@ -529,6 +538,8 @@ function UsageRequestsRows({
           columns={columns}
           tier={tier}
           timezone={timezone}
+          money={money}
+          units={units}
           hostLabel={hostLabels?.get(row.serverId) ?? null}
           isOpen={openKeys.has(row.key)}
           onToggle={handleToggle}
@@ -575,6 +586,8 @@ function UsageRequestRow({
   columns,
   tier,
   timezone,
+  money,
+  units,
   hostLabel,
   isOpen,
   onToggle,
@@ -583,6 +596,8 @@ function UsageRequestRow({
   columns: readonly ColumnId[];
   tier: TableTier;
   timezone: string;
+  money: UsageMoney;
+  units: UsageTokenUnits;
   hostLabel: string | null;
   isOpen: boolean;
   onToggle: (key: string) => void;
@@ -590,7 +605,7 @@ function UsageRequestRow({
   const { t, i18n } = useTranslation();
   const handlePress = useCallback(() => onToggle(row.key), [onToggle, row.key]);
   const accessibilityState = useMemo(() => ({ expanded: isOpen }), [isOpen]);
-  const cells = useRequestCells(row, timezone, tier);
+  const cells = useRequestCells({ row, timezone, tier, money, units });
   const hidden = TIER_COLUMNS.wide.filter((column) => !columns.includes(column));
   // 窄时行上只有时刻、状态可能被截断：日期与完整状态在展开行里。
   const isNarrow = tier === "narrow";
@@ -683,11 +698,19 @@ interface RequestCells {
 }
 
 /** Every column's text for one row, whichever the row shows and whichever open under it. */
-function useRequestCells(
-  row: MergedUsageRequestRow,
-  timezone: string,
-  tier: TableTier,
-): RequestCells {
+function useRequestCells({
+  row,
+  timezone,
+  tier,
+  money,
+  units,
+}: {
+  row: MergedUsageRequestRow;
+  timezone: string;
+  tier: TableTier;
+  money: UsageMoney;
+  units: UsageTokenUnits;
+}): RequestCells {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
   const isNarrow = tier === "narrow";
@@ -713,11 +736,11 @@ function useRequestCells(
   const fullTime = formatRequestTime(row.at, locale, timezone);
   const shownTime = isNarrow ? formatRequestClock(row.at, locale, timezone) : fullTime;
   const count = (value: number): RequestCellValue => ({
-    text: formatGroupedNumber(value, locale),
+    text: formatGroupedTokens({ value, locale, units }),
     color: "foreground",
   });
   const muted = (text: string): RequestCellValue => ({ text, color: "foregroundMuted" });
-  const costText = row.priced ? formatSessionCost(row.estimatedCost) : "—";
+  const costText = row.priced ? formatSessionCost(row.estimatedCost, money) : "—";
   const costColor = row.priced ? "foreground" : "foregroundMuted";
   return {
     fullTime,

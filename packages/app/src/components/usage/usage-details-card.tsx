@@ -28,8 +28,10 @@ import {
 } from "@/usage-stats/details";
 import {
   formatGroupedNumber,
+  formatGroupedTokens,
   formatUsageCost,
-  formatUsageTokensCompact,
+  formatUsageTokens,
+  type UsageTokenUnits,
 } from "@/usage-stats/format";
 import type { UsageHostInput } from "@/usage-stats/aggregated-usage";
 import type { MergedUsageProject, MergedUsageReport } from "@/usage-stats/merge";
@@ -38,6 +40,7 @@ import { formatUsageDay, formatUsageMonth } from "@/usage-stats/range-label";
 import type { UsageRequestsEndpointIntent } from "@/usage-stats/requests";
 import { usageSourceColor, usageSourceLabel } from "@/usage-stats/sources";
 import { totalUsageTokens } from "@/usage-stats/totals";
+import { useUsageMoney, useUsageTokenUnits } from "@/usage-stats/use-usage-money";
 
 /**
  * Column floors, each including the gap on its left. Full widths hold a
@@ -104,6 +107,7 @@ interface TableLayout {
   number: StyleProp<TextStyle>;
   small: StyleProp<TextStyle>;
   formatTokens: (value: number) => string;
+  formatCost: (value: number) => string;
 }
 
 function tableStyle(kind: UsageTableKind, isCondensed: boolean): StyleProp<ViewStyle> {
@@ -115,6 +119,8 @@ function tableStyle(kind: UsageTableKind, isCondensed: boolean): StyleProp<ViewS
 function useTableLayout(kind: UsageTableKind, locale: string) {
   const fullWidth = tableMinWidth(FULL_COLUMNS, NUMBER_COLUMNS[kind]);
   const [isCondensed, setIsCondensed] = useState(false);
+  const money = useUsageMoney();
+  const units = useUsageTokenUnits();
   const onLayout = useCallback(
     (event: LayoutChangeEvent) => {
       const { width } = event.nativeEvent.layout;
@@ -131,7 +137,8 @@ function useTableLayout(kind: UsageTableKind, locale: string) {
         first: styles.firstColumn,
         number: styles.numberColumn,
         small: styles.smallColumn,
-        formatTokens: (value) => formatGroupedNumber(value, locale),
+        formatTokens: (value) => formatGroupedTokens({ value, locale, units }),
+        formatCost: (value) => formatUsageCost(value, money),
       };
     }
     return {
@@ -139,9 +146,10 @@ function useTableLayout(kind: UsageTableKind, locale: string) {
       first: [styles.firstColumn, styles.firstColumnCondensed],
       number: [styles.numberColumn, styles.numberColumnCondensed],
       small: styles.smallColumn,
-      formatTokens: formatUsageTokensCompact,
+      formatTokens: (value) => formatUsageTokens(value, units),
+      formatCost: (value) => formatUsageCost(value, money),
     };
-  }, [isCondensed, kind, locale]);
+  }, [isCondensed, kind, locale, money, units]);
   return { layout, onLayout };
 }
 
@@ -400,7 +408,7 @@ function UsageDayRow({
         </Text>
       ))}
       <Text style={[styles.cell, layout.small]}>{formatGroupedNumber(sessionCount, locale)}</Text>
-      <Text style={[styles.cell, layout.number]}>{formatUsageCost(estimatedCost)}</Text>
+      <Text style={[styles.cell, layout.number]}>{layout.formatCost(estimatedCost)}</Text>
     </Pressable>
   );
 }
@@ -446,7 +454,9 @@ function UsageMonthlyTable({ report, locale }: { report: MergedUsageReport; loca
             <Text style={[styles.cell, layout.small]}>
               {formatGroupedNumber(month.sessionCount, locale)}
             </Text>
-            <Text style={[styles.cell, layout.number]}>{formatUsageCost(month.estimatedCost)}</Text>
+            <Text style={[styles.cell, layout.number]}>
+              {layout.formatCost(month.estimatedCost)}
+            </Text>
           </View>
         ))}
       </View>
@@ -468,6 +478,8 @@ function UsageProjectsList({
   onToggleProject: (key: string) => void;
 }) {
   const top = useMemo(() => topUsageProjects(projects, limit), [limit, projects]);
+  const money = useUsageMoney();
+  const units = useUsageTokenUnits();
 
   if (top.projects.length === 0) return <UsageDetailsEmpty testID="usage-details-projects-empty" />;
 
@@ -481,6 +493,7 @@ function UsageProjectsList({
               projectKey={key}
               project={project}
               maxTokens={top.maxTokens}
+              units={units}
               hostLabel={hosts.isMultiHost ? (hosts.labels.get(project.serverId) ?? null) : null}
               isOpen={openProjects.has(key)}
               onToggle={onToggleProject}
@@ -493,7 +506,7 @@ function UsageProjectsList({
                       {cwd.cwd}
                     </Text>
                     <Text style={styles.cwdAmount}>
-                      {`${formatUsageTokensCompact(totalUsageTokens(cwd.totals))} · ${formatUsageCost(cwd.estimatedCost)}`}
+                      {`${formatUsageTokens(totalUsageTokens(cwd.totals), units)} · ${formatUsageCost(cwd.estimatedCost, money)}`}
                     </Text>
                   </View>
                 ))}
@@ -510,6 +523,7 @@ function UsageProjectRow({
   projectKey,
   project,
   maxTokens,
+  units,
   hostLabel,
   isOpen,
   onToggle,
@@ -517,6 +531,7 @@ function UsageProjectRow({
   projectKey: string;
   project: MergedUsageProject;
   maxTokens: number;
+  units: UsageTokenUnits;
   hostLabel: string | null;
   isOpen: boolean;
   onToggle: (key: string) => void;
@@ -570,7 +585,7 @@ function UsageProjectRow({
         </View>
       </View>
       <View style={styles.projectAmount}>
-        <Text style={styles.projectTokens}>{formatUsageTokensCompact(tokens)}</Text>
+        <Text style={styles.projectTokens}>{formatUsageTokens(tokens, units)}</Text>
         <View style={styles.projectTrack}>
           <View style={[styles.projectBar, { width: `${width}%` }]} />
         </View>

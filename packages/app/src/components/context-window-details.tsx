@@ -7,6 +7,7 @@ import { Text as UiText } from "@/components/ui/text";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { AgentUsage } from "@/usage";
 import { formatSessionCost, formatTokenArrows } from "@/usage-stats/format";
+import { useUsageMoney, useUsageTokenUnits } from "@/usage-stats/use-usage-money";
 import {
   addRunningTurnElapsed,
   resolveSessionSpanMs,
@@ -144,6 +145,8 @@ function SessionTotalSection({
   runningTurnStartedAt: Date | null;
 }) {
   const { t } = useTranslation();
+  const money = useUsageMoney();
+  const units = useUsageTokenUnits();
   if (state.kind === "hostUpgradeRequired") {
     return (
       <View style={styles.section} testID="context-window-session-total">
@@ -171,10 +174,10 @@ function SessionTotalSection({
         )}
       </View>
       <KeyValueRow label={t("contextWindow.sessionTotal.tokens")}>
-        {formatTokenArrows(summary.totals.input, summary.totals.output)}
+        {formatTokenArrows({ input: summary.totals.input, output: summary.totals.output, units })}
       </KeyValueRow>
       <KeyValueRow label={t("contextWindow.sessionTotal.estimatedCost")}>
-        {formatSessionCost(summary.estimatedCost)}
+        {formatSessionCost(summary.estimatedCost, money)}
       </KeyValueRow>
       <KeyValueRow label={t("contextWindow.sessionTotal.turns")}>{turnsValue}</KeyValueRow>
       <KeyValueRow label={t("contextWindow.sessionTotal.agentRuntime")}>

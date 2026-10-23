@@ -99,7 +99,8 @@ $PASEO_HOME/
 │   ├── turns-YYYY-MM.jsonl               # Token increments per (source, session, turn, model)
 │   ├── requests/YYYY-MM-DD.jsonl[.gz]    # Per-request records: ledger rows, CLI log replies, merge markers (mode 0600; finished days gzipped; 30 days, 200 MB)
 │   ├── scan-state.json                   # One cursor per scanned CLI log file
-│   └── pricing-table.json                # Last price table fetched from LiteLLM
+│   ├── pricing-table.json                # Last price table fetched from LiteLLM
+│   └── exchange-rate.json                # Last USD→CNY rate fetched from open.er-api.com (mode 0600)
 └── push-tokens.json                     # Expo push notification tokens
 ```
 
@@ -759,6 +760,19 @@ Cost is never stored. Bucket and turn rows hold tokens only and a report multipl
 at query time, so a corrected or newly added price reprices everything already recorded, with no
 migration and no backfill. `docs/usage.md` covers the refresh schedule, the single outbound
 request, and how user prices match.
+
+### Exchange rate (`usage/exchange-rate.json`)
+
+```
+{ cnyPerUsd, fetchedAt }
+```
+
+The last USD→CNY rate the daemon fetched, for clients that show estimated costs in CNY,
+and the ISO time it got it. Written atomically, mode `0600`, only after a fetch succeeds.
+A cache: a missing, unreadable or schema-invalid file counts as no rate (the daemon answers
+7.2 until it gets one), and a failed write only warns. Nothing is converted on disk: costs
+stay USD-priced on read. When it is fetched is in
+[usage.md](usage.md#outbound-requests). Read and written by `usage/exchange-rate.ts`.
 
 ---
 

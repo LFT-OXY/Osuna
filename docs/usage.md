@@ -327,8 +327,8 @@ request it makes on its own is the daily model list refresh of each API
 endpoint that is on, which carries that endpoint's key. Its other requests are
 something you asked for, such as the CLI update check or an endpoint's tests;
 follow from a page you have open, such as the vendor status pages read while the
-API endpoints or usage page is open, or an endpoint's balance; or follow from a switch you turned on: the
-API endpoint checks and the gateway's calls to endpoints, all below. Traffic the CLIs send
+API endpoints or usage page is open, or an endpoint's balance; or follow from a choice or switch you turned on: the
+CNY currency, the API endpoint checks and the gateway's calls to endpoints, all below. Traffic the CLIs send
 through the gateway is theirs, not the daemon's.
 
 | File                                           | Fetched when                                      | Used for                                                                                                                                                                                                                                                                                                                        |
@@ -353,8 +353,8 @@ Turn both off with `features.usage.pricing.autoUpdate: false` in `config.json`,
 or `PASEO_USAGE_PRICING_AUTO_UPDATE=0` at launch. Off means the daemon prices
 from the built-in snapshot and your own prices, tells Claude Code and Codex what
 an endpoint's own model list says and what a models.dev copy fetched earlier
-says, reads no vendor status page, refreshes no endpoint's model list on its
-own, and fetches neither file — including on a host that has no network at all. The switch covers the automatic check only:
+says, reads no vendor status page, fetches no exchange rate, refreshes no
+endpoint's model list on its own, and fetches neither file — including on a host that has no network at all. The switch covers the automatic check only:
 "Refresh now" in the price table still fetches the price table when you press
 it.
 
@@ -368,6 +368,22 @@ open page asks every 5 minutes, and the daemon reads each summary at most once i
 minutes, waiting up to 4 seconds on the first look. A read times out after 15
 seconds; a failure is logged at `info` and shows nothing. DeepSeek's page is
 only linked, never read.
+
+The exchange rate is fetched only while a client has chosen CNY in the usage
+page's options, and only while the price table's auto-update is on. The client
+asks its host with `usage.exchange_rate.get`; the daemon answers from
+`$PASEO_HOME/usage/exchange-rate.json` while the rate there is under a day old,
+and otherwise sends one GET to `https://open.er-api.com/v6/latest/USD` with
+Osuna's user agent and nothing else: no authentication, no query string, no
+body. It keeps `rates.CNY` and when it got it. A request times out after 15
+seconds; a failure is logged at `info`, the last rate is answered, and nothing
+is tried again for 10 minutes. A daemon that never got a rate answers 7.2 and
+says so, and the page reads "No exchange rate yet; using 7.2 for now". With USD
+chosen, or auto-update off, nothing is sent; with auto-update off the page
+converts with the rate already on disk, or 7.2. Costs stay in USD everywhere
+they are stored or exported: the price table and the CSV export are never
+converted, and neither is an endpoint's balance, which is in its vendor's own
+currency.
 
 The CLI update check runs only when you ask for it. Opening Settings →
 Providers, or pressing refresh on a provider there, makes the daemon look up the

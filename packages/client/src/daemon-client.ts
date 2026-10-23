@@ -654,6 +654,10 @@ type UsagePricingRefreshPayload = Extract<
   SessionOutboundMessage,
   { type: "usage.pricing.refresh.response" }
 >["payload"];
+type UsageExchangeRateGetPayload = Extract<
+  SessionOutboundMessage,
+  { type: "usage.exchange_rate.get.response" }
+>["payload"];
 type UsageAgentGetPayload = Extract<
   SessionOutboundMessage,
   { type: "usage.agent.get.response" }
@@ -6598,6 +6602,15 @@ export class DaemonClient {
       requestId,
       message: { type: "usage.pricing.refresh.request" },
       responseType: "usage.pricing.refresh.response",
+    });
+  }
+
+  /** 人民币显示用的汇率（1 美元合多少元）。只在选了人民币时问；只有声明了 gatewayLedger 的 daemon 认。 */
+  async usageExchangeRateGet(requestId?: string): Promise<UsageExchangeRateGetPayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "usage.exchange_rate.get.request" },
+      responseType: "usage.exchange_rate.get.response",
     });
   }
 

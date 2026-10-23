@@ -7,7 +7,12 @@ import { mutedIconColorMapping } from "@/components/ui/icon-color";
 import { Text } from "@/components/ui/text";
 import { TooltipContent } from "@/components/ui/tooltip";
 import { ICON_SIZE } from "@/styles/theme";
-import { formatSessionCost, formatUsageTokensCompact } from "@/usage-stats/format";
+import {
+  formatSessionCost,
+  formatUsageTokens,
+  type UsageMoney,
+  type UsageTokenUnits,
+} from "@/usage-stats/format";
 import { renderUsageText } from "@/usage-stats/text";
 import {
   describeUnpricedWarning,
@@ -29,9 +34,13 @@ const ClockIcon = withUnistyles(Clock, mutedIconColorMapping);
 export function TurnUsagePanel({
   panel,
   durationMs,
+  money,
+  units,
 }: {
   panel: TurnUsagePanelModel;
   durationMs: number;
+  money: UsageMoney;
+  units: UsageTokenUnits;
 }) {
   const { t } = useTranslation();
   const { totals } = panel;
@@ -77,7 +86,7 @@ export function TurnUsagePanel({
             style={totals.priced ? styles.numbers : styles.unpricedCost}
             testID="turn-usage-panel-cost"
           >
-            {formatSessionCost(totals.estimatedCost)}
+            {formatSessionCost(totals.estimatedCost, money)}
           </Text>
           <Text variant="caption" color="foregroundMuted" style={styles.costLabel}>
             {t("message.turnUsage.estimatedCost")}
@@ -95,13 +104,13 @@ export function TurnUsagePanel({
                 numberOfLines={1}
                 testID="turn-usage-panel-stat-value"
               >
-                {formatUsageTokensCompact(stat.value)}
+                {formatUsageTokens(stat.value, units)}
               </Text>
             </View>
           ))}
         </View>
       </View>
-      <TurnUsageModelList models={panel.models} />
+      <TurnUsageModelList models={panel.models} money={money} units={units} />
       <View style={styles.separator} />
       <View style={styles.footer}>
         {panel.unpricedModels.length > 0 ? <UnpricedWarning models={panel.unpricedModels} /> : null}
@@ -113,7 +122,15 @@ export function TurnUsagePanel({
   );
 }
 
-function TurnUsageModelList({ models }: { models: TurnUsageModels }) {
+function TurnUsageModelList({
+  models,
+  money,
+  units,
+}: {
+  models: TurnUsageModels;
+  money: UsageMoney;
+  units: UsageTokenUnits;
+}) {
   const { t } = useTranslation();
   if (models.kind === "none") return null;
   if (models.kind === "single") {
@@ -144,7 +161,7 @@ function TurnUsageModelList({ models }: { models: TurnUsageModels }) {
           {t("message.turnUsage.byModel")}
         </Text>
         {models.models.map((row) => (
-          <TurnUsageModelEntry key={row.model} row={row} />
+          <TurnUsageModelEntry key={row.model} row={row} money={money} units={units} />
         ))}
       </View>
     </>
@@ -166,17 +183,25 @@ function UnpricedWarning({ models }: { models: readonly string[] }) {
   );
 }
 
-function TurnUsageModelEntry({ row }: { row: TurnUsageModelRow }) {
+function TurnUsageModelEntry({
+  row,
+  money,
+  units,
+}: {
+  row: TurnUsageModelRow;
+  money: UsageMoney;
+  units: UsageTokenUnits;
+}) {
   const { t } = useTranslation();
   const amounts = [
-    `↑${formatUsageTokensCompact(row.input)}`,
-    t("message.turnUsage.amounts.cache", { tokens: formatUsageTokensCompact(row.cache) }),
-    `↓${formatUsageTokensCompact(row.output)}`,
+    `↑${formatUsageTokens(row.input, units)}`,
+    t("message.turnUsage.amounts.cache", { tokens: formatUsageTokens(row.cache, units) }),
+    `↓${formatUsageTokens(row.output, units)}`,
   ];
   if (row.reasoning > 0) {
     amounts.push(
       t("message.turnUsage.amounts.reasoning", {
-        tokens: formatUsageTokensCompact(row.reasoning),
+        tokens: formatUsageTokens(row.reasoning, units),
       }),
     );
   }
@@ -193,7 +218,7 @@ function TurnUsageModelEntry({ row }: { row: TurnUsageModelRow }) {
         </Text>
         {row.priced ? (
           <Text variant="caption" style={styles.numbers}>
-            {formatSessionCost(row.estimatedCost)}
+            {formatSessionCost(row.estimatedCost, money)}
           </Text>
         ) : (
           <Text variant="caption" color="statusWarning">

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { i18n } from "@/i18n/i18next";
-import type { UsagePreferences } from "./preferences";
+import { DEFAULT_USAGE_PREFERENCES, type UsagePreferences } from "./preferences";
 import {
   choosePinnedUsageLayout,
   resolvePinnedUsage,
@@ -50,7 +50,7 @@ function preferences(
   pinned: UsagePreferences["pins"],
   displayAs: UsagePreferences["displayAs"] = "used",
 ): UsagePreferences {
-  return { displayAs, pins: pinned, serverId: null };
+  return { ...DEFAULT_USAGE_PREFERENCES, displayAs, pins: pinned };
 }
 
 describe("choosePinnedUsageLayout", () => {

@@ -146,6 +146,15 @@ export class UsageStatsSession {
     }));
   }
 
+  async handleUsageExchangeRateGetRequest(
+    request: Extract<SessionInboundMessage, { type: "usage.exchange_rate.get.request" }>,
+  ): Promise<void> {
+    await this.respond(request, async () => ({
+      type: "usage.exchange_rate.get.response",
+      payload: { requestId: request.requestId, ...(await this.usageService.getExchangeRate()) },
+    }));
+  }
+
   async handleUsageAgentGetRequest(
     request: Extract<SessionInboundMessage, { type: "usage.agent.get.request" }>,
   ): Promise<void> {

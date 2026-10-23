@@ -3,7 +3,12 @@ import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { UsageCard } from "@/components/usage/usage-card";
-import { formatUsageShare, formatUsageTokensCompact } from "@/usage-stats/format";
+import {
+  formatUsageShare,
+  formatUsageTokens,
+  formatUsageTokensCompact,
+} from "@/usage-stats/format";
+import { useUsageTokenUnits } from "@/usage-stats/use-usage-money";
 import type { MergedUsageReport } from "@/usage-stats/merge";
 import { formatUsageDay } from "@/usage-stats/range-label";
 import { deriveUsageStats, type UsageTopModel } from "@/usage-stats/stats";
@@ -16,6 +21,7 @@ interface UsageStatsCardProps {
 export function UsageStatsCard({ report, today }: UsageStatsCardProps) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
+  const units = useUsageTokenUnits();
   const stats = useMemo(
     () =>
       deriveUsageStats({
@@ -32,17 +38,17 @@ export function UsageStatsCard({ report, today }: UsageStatsCardProps) {
       <View style={styles.tiles}>
         <UsageStatTile
           label={t("usage.stats.last7Days")}
-          value={formatUsageTokensCompact(stats.last7Days)}
+          value={formatUsageTokens(stats.last7Days, units)}
           testID="usage-stat-last-7-days"
         />
         <UsageStatTile
           label={t("usage.stats.last30Days")}
-          value={formatUsageTokensCompact(stats.last30Days)}
+          value={formatUsageTokens(stats.last30Days, units)}
           testID="usage-stat-last-30-days"
         />
         <UsageStatTile
           label={t("usage.stats.average")}
-          value={formatUsageTokensCompact(stats.avgPerActiveDay)}
+          value={formatUsageTokens(stats.avgPerActiveDay, units)}
           testID="usage-stat-average"
         />
         <UsageStatTile

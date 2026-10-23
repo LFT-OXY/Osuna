@@ -14,12 +14,14 @@ import { FormTextInput } from "@/components/ui/form-field";
 import { Text as UiText } from "@/components/ui/text";
 import { UsageCard } from "@/components/usage/usage-card";
 import { UsageHostFilter } from "@/components/usage/usage-host-filter";
+import { UsageOptionsMenu } from "@/components/usage/usage-options-menu";
 import { UsageSegmentedControl } from "@/components/usage/usage-segmented-control";
 import { useAppSettings } from "@/hooks/use-settings";
 import {
+  formatGroupedTokens,
   formatUsageCost,
   formatUsageShare,
-  formatUsageTokensCompact,
+  formatUsageTokens,
   formatGroupedNumber,
 } from "@/usage-stats/format";
 import type { UsageHostOption, UsageHostSelection } from "@/usage-stats/host-options";
@@ -39,6 +41,7 @@ import {
 import { describeUsageCustomTab, describeUsageRange } from "@/usage-stats/range-label";
 import { usageEndpointColors, usageSourceColor, usageSourceLabel } from "@/usage-stats/sources";
 import { totalUsageTokens, usageSourceKey } from "@/usage-stats/totals";
+import { useUsageMoney, useUsageTokenUnits } from "@/usage-stats/use-usage-money";
 
 /** `all` is the first source card, not a source, so it needs a key of its own. */
 export const ALL_USAGE_SOURCES = "all";
@@ -95,6 +98,8 @@ export function UsageOverviewCard(props: UsageOverviewCardProps) {
   });
   const rangeDescription = describeUsageRange(range, locale);
   const totalTokens = totalUsageTokens(props.report.summary.totals);
+  const money = useUsageMoney();
+  const units = useUsageTokenUnits();
   const unpricedModels = props.report.models.filter((model) => !model.priced).length;
   const breakdown: UsageBreakdown = props.endpoints ? props.breakdown : "sources";
   const endpointColors = useMemo(
@@ -133,11 +138,11 @@ export function UsageOverviewCard(props: UsageOverviewCardProps) {
       <View style={styles.hero}>
         <Text style={styles.heroLabel}>{t("usage.overview.tokenTotal")}</Text>
         <Text style={styles.heroValue} testID="usage-total-tokens">
-          {formatGroupedNumber(totalTokens, locale)}
+          {formatGroupedTokens({ value: totalTokens, locale, units })}
         </Text>
         <View style={styles.heroCostRow}>
           <Text style={styles.heroCost} testID="usage-total-cost">
-            {formatUsageCost(props.report.summary.estimatedCost)}
+            {formatUsageCost(props.report.summary.estimatedCost, money)}
           </Text>
           <Info size={16} color={styles.heroCost.color} />
         </View>
@@ -266,6 +271,7 @@ function UsageOverviewHeader({
         ) : null}
         <UsageBackfillPill backfill={backfill} />
         <UsageHostFilter options={hostOptions} selection={hostSelection} onSelect={onSelectHost} />
+        <UsageOptionsMenu />
         <UsageIconButton
           accessibilityLabel={t("usage.overview.refresh")}
           onPress={onRefresh}
@@ -649,6 +655,8 @@ function UsageEndpointCard({
   onSelect: (endpoint: UsageEndpointSelection | null) => void;
 }) {
   const { t, i18n } = useTranslation();
+  const money = useUsageMoney();
+  const units = useUsageTokenUnits();
   const label = endpoint.name ?? t("usage.overview.official");
   // 「（已删除）」写在余额那一行（删掉的接口不读余额）：名字整行都留给名字。
   const deletedMark = endpoint.deleted ? t("usage.overview.deletedEndpoint") : null;
@@ -688,7 +696,7 @@ function UsageEndpointCard({
       </View>
       <Text style={styles.sourceCardShare}>{share}</Text>
       <Text style={styles.endpointCardAmount} numberOfLines={1}>
-        {`${formatUsageTokensCompact(totalUsageTokens(endpoint.totals))} · ${formatUsageCost(endpoint.estimatedCost)}`}
+        {`${formatUsageTokens(totalUsageTokens(endpoint.totals), units)} · ${formatUsageCost(endpoint.estimatedCost, money)}`}
       </Text>
       {deletedMark ? (
         <UiText variant="caption" color="foregroundMuted" numberOfLines={1}>
@@ -792,6 +800,8 @@ function UsageModelList({
   locale: string;
 }) {
   const { t } = useTranslation();
+  const money = useUsageMoney();
+  const units = useUsageTokenUnits();
   const rows = useMemo(
     () =>
       selectedKey === ALL_USAGE_SOURCES
@@ -818,8 +828,8 @@ function UsageModelList({
               {model.priced ? null : (
                 <Text style={styles.modelUnpriced}>{t("usage.overview.unpriced")}</Text>
               )}
-              <Text style={styles.modelTokens}>{formatUsageTokensCompact(tokens)}</Text>
-              <Text style={styles.modelCost}>{formatUsageCost(model.estimatedCost)}</Text>
+              <Text style={styles.modelTokens}>{formatUsageTokens(tokens, units)}</Text>
+              <Text style={styles.modelCost}>{formatUsageCost(model.estimatedCost, money)}</Text>
               <Text style={styles.modelShare}>
                 {formatUsageShare(tokens / denominator, locale)}
               </Text>

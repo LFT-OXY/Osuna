@@ -1557,6 +1557,7 @@ export async function createPaseoDaemon(
     onUsageUpdated: (payload) => {
       wsServer?.broadcast(wrapSessionMessage({ type: "usage.updated", payload }));
     },
+    userAgent: `Osuna/${daemonVersion}`,
     endpointIdentities: () =>
       new Map(
         Object.entries(apiEndpointService.endpointSnapshots()).map(([id, snapshot]) => [

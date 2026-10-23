@@ -35,6 +35,14 @@ export interface UsageConfig {
      */
     snapshot?: PricingTable;
   };
+  /**
+   * Where the CNY rate comes from. A test points it at a fake rate server on
+   * loopback; the test daemon's default `fetch` refuses, so none reaches out.
+   */
+  exchangeRate?: {
+    url?: string;
+    fetch?: typeof globalThis.fetch;
+  };
 }
 
 /** The price settings as the usage service reads them, live, every time. */

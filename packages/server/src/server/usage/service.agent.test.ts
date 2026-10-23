@@ -85,6 +85,7 @@ async function startService(options: {
     agents: options.agents,
     onUsageUpdated: () => undefined,
     endpointIdentities: () => new Map(),
+    userAgent: "Osuna/test",
   });
   await service.start();
   await waitForBackfill(service);

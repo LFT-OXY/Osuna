@@ -1337,6 +1337,16 @@ magpie's internal/gui/assets/plugins/routing/client.js:
 
   packages/server/src/server/usage/recent-problems.ts
 
+The CNY rate (open.er-api.com's rates.CNY, a reply read up to 1 MB, the last
+rate kept when a fetch fails and none tried again for 10 minutes, 7.2 before any
+rate was ever fetched, an unreadable cache read as none) follows Get, getAt,
+fetchLive and readCache in magpie's internal/fx/fx.go; a cost converted with it
+follows fmtCost, and a token count in 万 / 亿 (two decimals for 亿, one for 万,
+trailing zeros dropped) follows fmtN, in magpie's internal/gui/assets/app.js:
+
+  packages/server/src/server/usage/exchange-rate.ts
+  packages/app/src/usage-stats/format.ts
+
 MIT License
 
 Copyright (c) 2026 yetone
