@@ -17,28 +17,6 @@ interface StoredBlobRecord {
   fileName: string | null;
 }
 
-// PR28-DEBUG: 临时诊断，合并前删除。
-function debugLog(message: string): void {
-  console.log(`[PR28-DEBUG] ${new Date().toISOString()} ${message}`);
-}
-
-function debugStack(): string {
-  return (new Error().stack ?? "")
-    .split("\n")
-    .slice(2, 7)
-    .map((line) => line.trim())
-    .join(" < ");
-}
-
-async function debugQuota(): Promise<string> {
-  try {
-    const estimate = await navigator.storage?.estimate?.();
-    return estimate ? `usage=${estimate.usage} quota=${estimate.quota}` : "estimate unavailable";
-  } catch (error) {
-    return `estimate failed ${String(error)}`;
-  }
-}
-
 const DB_NAME = "paseo-attachment-bytes";
 const STORE_NAME = "attachments";
 const DB_VERSION = 1;
@@ -162,12 +140,6 @@ export function createIndexedDbAttachmentStore(): AttachmentStore {
         await runTx(db, "readwrite", (store) =>
           store.put({ id, blob, createdAt, fileName } satisfies StoredBlobRecord),
         );
-        debugLog(`idb put ok id=${id} size=${blob.size} type=${mimeType}`);
-      } catch (error) {
-        debugLog(
-          `idb put FAILED id=${id} size=${blob.size} error=${String(error)} ${await debugQuota()}`,
-        );
-        throw error;
       } finally {
         db.close();
       }
@@ -196,27 +168,14 @@ export function createIndexedDbAttachmentStore(): AttachmentStore {
     async resolvePreviewUrl({ attachment }): Promise<string> {
       const db = await openAttachmentDb();
       try {
-        let blob: Blob;
-        try {
-          blob = await loadBlob(db, attachment.storageKey);
-        } catch (error) {
-          debugLog(
-            `idb get FAILED id=${attachment.storageKey} error=${String(error)} ${await debugQuota()}`,
-          );
-          throw error;
-        }
-        const url = URL.createObjectURL(blob);
-        debugLog(
-          `createObjectURL id=${attachment.storageKey} size=${blob.size} type=${blob.type} url=${url}`,
-        );
-        return url;
+        const blob = await loadBlob(db, attachment.storageKey);
+        return URL.createObjectURL(blob);
       } finally {
         db.close();
       }
     },
 
     async releasePreviewUrl({ url }): Promise<void> {
-      debugLog(`revokeObjectURL url=${url} stack=${debugStack()}`);
       URL.revokeObjectURL(url);
     },
 
@@ -230,7 +189,6 @@ export function createIndexedDbAttachmentStore(): AttachmentStore {
     },
 
     async garbageCollect({ referencedIds }): Promise<void> {
-      debugLog(`gc start referenced=[${Array.from(referencedIds).join(",")}]`);
       const db = await openAttachmentDb();
       try {
         await new Promise<void>((resolve, reject) => {
@@ -247,14 +205,12 @@ export function createIndexedDbAttachmentStore(): AttachmentStore {
           cursorRequest.addEventListener("success", () => {
             const cursor = cursorRequest.result;
             if (!cursor) {
-              debugLog("gc done");
               resolve();
               return;
             }
 
             const key = String(cursor.key);
             if (!referencedIds.has(key)) {
-              debugLog(`gc delete id=${key} (not referenced)`);
               cursor.delete();
             }
             cursor.continue();

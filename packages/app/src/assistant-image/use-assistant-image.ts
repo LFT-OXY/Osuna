@@ -387,21 +387,7 @@ export function useAssistantImage({
   const fileAcquisition = useMemo(() => {
     const port: AssistantImageFileAcquisitionPort | null = client
       ? {
-          readFile: async (cwd, path) => {
-            // PR28-DEBUG: 临时诊断，合并前删除。
-            try {
-              const file = await client.readFile(cwd, path);
-              console.log(
-                `[PR28-DEBUG] ${new Date().toISOString()} readFile ok path=${path} kind=${file.kind} mime=${file.mime} bytes=${file.bytes.byteLength} size=${file.size}`,
-              );
-              return file;
-            } catch (error) {
-              console.log(
-                `[PR28-DEBUG] ${new Date().toISOString()} readFile FAILED path=${path} error=${String(error)}`,
-              );
-              throw error;
-            }
-          },
+          readFile: async (cwd, path) => await client.readFile(cwd, path),
           persist: persistAttachmentFromBytes,
         }
       : null;
@@ -473,7 +459,6 @@ export function useAssistantImage({
   }, [cachedAspectRatio, dispatch, uri]);
 
   const handleImageError = useCallback(() => {
-    console.log(`[PR28-DEBUG] ${new Date().toISOString()} img onError src=${uri}`);
     if (uri) {
       dispatch({
         type: "failed",
@@ -500,9 +485,6 @@ export function useAssistantImage({
         ? setAssistantImageMetadata({ source, workspaceRoot, serverId }, dimensions)
         : null;
       const aspectRatio = metadata?.aspectRatio ?? cachedAspectRatio;
-      console.log(
-        `[PR28-DEBUG] ${new Date().toISOString()} img onLoad src=${uri} dims=${dimensions ? `${dimensions.width}x${dimensions.height}` : "none"} aspect=${aspectRatio}`,
-      );
       if (!aspectRatio) {
         dispatch({
           type: "failed",
@@ -527,9 +509,6 @@ export function useAssistantImage({
     fallbackMessage: t("message.attachments.imagePreviewLoadFailed"),
   });
   if (acquisitionFailure) {
-    console.log(
-      `[PR28-DEBUG] ${new Date().toISOString()} acquisition failure ${JSON.stringify(acquisitionFailure)}`,
-    );
     return acquisitionFailure;
   }
   const hasCurrentLifecycleUri = lifecycle.status !== "failed" && lifecycle.uri === uri;

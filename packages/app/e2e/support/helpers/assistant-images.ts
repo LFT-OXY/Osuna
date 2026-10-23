@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { deflateSync } from "node:zlib";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 import type { ArchiveTabAgent } from "./archive-tab";
 import { openWorkspaceWithAgents } from "./archive-tab";
 import { submitMessage } from "./composer";
@@ -160,37 +160,10 @@ export async function openExistingImageAgentTabs(
   await openWorkspaceWithAgents(page, [input.otherAgent, input.imageAgent]);
 }
 
-// PR28-DEBUG: 临时诊断，合并前删除。收集页面里 [PR28-DEBUG] 开头的控制台行，失败时整段附上。
-const debugLinesByPage = new WeakMap<Page, string[]>();
-
-function captureDebugLines(page: Page): void {
-  if (debugLinesByPage.has(page)) return;
-  const lines: string[] = [];
-  debugLinesByPage.set(page, lines);
-  page.on("console", (message) => {
-    const text = message.text();
-    if (text.includes("[PR28-DEBUG]")) lines.push(text);
-  });
-}
-
-async function withDebugLines<T>(page: Page, run: () => Promise<T>): Promise<T> {
-  try {
-    return await run();
-  } catch (error) {
-    const lines = (debugLinesByPage.get(page) ?? []).join("\n");
-    await test.info().attach("pr28-debug", { body: lines, contentType: "text/plain" });
-    if (error instanceof Error) {
-      error.message = `${error.message}\n\n[PR28-DEBUG lines]\n${lines}`;
-    }
-    throw error;
-  }
-}
-
 export async function openAssistantImageTimeline(
   page: Page,
   agent: ArchiveTabAgent,
 ): Promise<void> {
-  captureDebugLines(page);
   await openAgentRoute(page, { workspaceId: agent.workspaceId, agentId: agent.id });
 }
 
@@ -202,13 +175,6 @@ export async function expectAssistantImageNotMounted(
 }
 
 export async function userPagesUntilAssistantImageRenders(
-  page: Page,
-  image: AssistantImageFixture,
-): Promise<void> {
-  await withDebugLines(page, () => pageUntilAssistantImageRenders(page, image));
-}
-
-async function pageUntilAssistantImageRenders(
   page: Page,
   image: AssistantImageFixture,
 ): Promise<void> {
