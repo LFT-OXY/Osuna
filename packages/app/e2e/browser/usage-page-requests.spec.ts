@@ -350,6 +350,31 @@ test.describe("Usage page Requests tab", () => {
     await expect(page.getByTestId("usage-requests-export-retry")).toHaveCount(0);
   });
 
+  test("at phone width the footer keeps its height and the failure reads in the reserved line", async ({
+    page,
+  }) => {
+    writePagingSession();
+    await failRequestsExport(page, "usage ledger is unreadable", 1);
+    await openRequestsTab(page);
+    await expect(page.getByTestId("usage-requests-table")).toBeVisible({ timeout: 30_000 });
+    await page.setViewportSize({ width: 390, height: 844 });
+    // 换成手机布局后明细卡片重建，重新点开「请求」。
+    await page.getByTestId("usage-details-tab-requests").click();
+    await expect(page.getByTestId("usage-requests-table")).toBeVisible({ timeout: 30_000 });
+    const bar = page.getByTestId("usage-requests-export-bar");
+    await bar.scrollIntoViewIfNeeded();
+    const idleHeight = (await bar.boundingBox())?.height;
+
+    await page.getByTestId("usage-requests-export").click();
+    await expect(page.getByTestId("usage-requests-export-error")).toHaveText(
+      "Couldn't export requests",
+    );
+    expect((await bar.boundingBox())?.height).toBe(idleHeight);
+    await page.getByTestId("usage-requests-export-dismiss").click();
+    await expect(page.getByTestId("usage-requests-export-error")).toHaveCount(0);
+    expect((await bar.boundingBox())?.height).toBe(idleHeight);
+  });
+
   test("across hosts a host that fails is left out of the file and named beside the button", async ({
     page,
   }) => {
@@ -379,13 +404,25 @@ test.describe("Usage page Requests tab", () => {
         .poll(() => rangeAfterPickingModel(page, PAGING_MODEL), { timeout: 60_000 })
         .toBe(`1–100 of ${PAGING_CALLS}`);
 
+      // 手机宽度：按钮下常留一行，说明在那一行写全，底栏高度不变。
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.getByTestId("usage-details-tab-requests").click();
+      await expect
+        .poll(() => rangeAfterPickingModel(page, PAGING_MODEL), { timeout: 60_000 })
+        .toBe(`1–100 of ${PAGING_CALLS}`);
+      const bar = page.getByTestId("usage-requests-export-bar");
+      await bar.scrollIntoViewIfNeeded();
+      const idleHeight = (await bar.boundingBox())?.height;
       const [, ...rows] = await exportAndRead(page, "usage-requests-export");
       expect(rows).toHaveLength(PAGING_CALLS);
       const partial = page.getByTestId("usage-requests-export-partial");
-      await expect(partial).toContainText("Not included: Second box (error)");
-      await expect(page.getByTestId("usage-requests-export-partial-detail")).toHaveText(
-        " · Second box: usage ledger is unreadable",
+      await expect(partial).toHaveText("Not included: Second box (error)");
+      expect((await bar.boundingBox())?.height).toBe(idleHeight);
+      await partial.click();
+      await expect(page.getByTestId("usage-requests-export-partial-tooltip")).toContainText(
+        "Second box: usage ledger is unreadable",
       );
+      await page.keyboard.press("Escape");
       await expect(page.getByTestId("usage-requests-export-error")).toHaveCount(0);
 
       // 下一次导出两台都答了：说明消失。

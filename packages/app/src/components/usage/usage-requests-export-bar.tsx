@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { Button } from "@/components/ui/button";
+import { useIsCompactFormFactor } from "@/constants/layout";
 import { Text, type TextColor } from "@/components/ui/text";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type {
@@ -13,46 +14,82 @@ import type { UsageRequestsExportSkip } from "@/usage-stats/requests-export";
 
 type Translate = ReturnType<typeof useTranslation>["t"];
 
+/** What sits beside the button after an export: a failure, or the hosts a saved file left out. */
+interface ExportNoteContent {
+  color: TextColor;
+  sentence: string;
+  /** Every host and why, or what saving said; shown muted and in a tooltip. */
+  detail: string | null;
+  testID: string;
+  onRetry: (() => void) | null;
+}
+
 /**
- * Export CSV at the Requests tab's foot, one line high in every state so the
- * card never grows: the button keeps its width while it spins, and a failure
- * or the hosts a saved file left out sit beside it on the same line, cut with
- * an ellipsis, the full detail in a tooltip, until dismissed or exported again.
+ * Export CSV at the Requests tab's foot. Its height is the same in every state:
+ * the button keeps its width while it spins; on a wide layout a failure or the
+ * hosts a saved file left out sit beside it on one line, cut with an ellipsis;
+ * on a compact one a line below the button is always reserved and the note
+ * reads there in full. The full detail is in a tooltip. A note stays until
+ * dismissed or exported again.
  */
 export function UsageRequestsExportBar({ exporter }: { exporter: UsageRequestsExport }) {
   const { t } = useTranslation();
+  const isCompact = useIsCompactFormFactor();
   const { state, start, dismiss } = exporter;
+  let note: ExportNoteContent | null = null;
+  if (state.status === "failed") {
+    note = {
+      color: "statusDanger",
+      sentence: t("usage.requests.export.failed"),
+      detail: failureDetail(state.failure, t),
+      testID: "usage-requests-export-error",
+      onRetry: start,
+    };
+  } else if (state.status === "partial") {
+    note = {
+      color: "statusWarning",
+      sentence: t("usage.requests.export.notIncluded", {
+        hosts: state.skipped
+          .map((skip) =>
+            t("usage.requests.export.hostReason", {
+              host: skip.serverName,
+              reason: t(`usage.requests.export.${skip.reason.kind}`),
+            }),
+          )
+          .join(t("usage.requests.export.hostSeparator")),
+      }),
+      detail: skipsDetail(state.skipped, t, { named: true }),
+      testID: "usage-requests-export-partial",
+      onRetry: null,
+    };
+  }
+  const button = <ExportButton exporting={state.status === "exporting"} onPress={start} />;
+
+  if (isCompact) {
+    return (
+      <View style={styles.compactBar} testID="usage-requests-export-bar">
+        <View style={styles.bar}>
+          {button}
+          {note ? (
+            <View style={styles.compactActions}>
+              <NoteActions onRetry={note.onRetry} onDismiss={dismiss} />
+            </View>
+          ) : null}
+        </View>
+        <View style={styles.reservedLine}>
+          {note ? <NoteMessage note={note} inline={false} /> : null}
+        </View>
+      </View>
+    );
+  }
   return (
-    <View style={styles.bar}>
-      <ExportButton exporting={state.status === "exporting"} onPress={start} />
-      {state.status === "failed" ? (
-        <ExportNote
-          color="statusDanger"
-          sentence={t("usage.requests.export.failed")}
-          detail={failureDetail(state.failure, t)}
-          testID="usage-requests-export-error"
-          onDismiss={dismiss}
-          onRetry={start}
-        />
-      ) : null}
-      {state.status === "partial" ? (
-        <ExportNote
-          color="statusWarning"
-          sentence={t("usage.requests.export.notIncluded", {
-            hosts: state.skipped
-              .map((skip) =>
-                t("usage.requests.export.hostReason", {
-                  host: skip.serverName,
-                  reason: t(`usage.requests.export.${skip.reason.kind}`),
-                }),
-              )
-              .join(t("usage.requests.export.hostSeparator")),
-          })}
-          detail={errorsDetail(state.skipped)}
-          testID="usage-requests-export-partial"
-          onDismiss={dismiss}
-          onRetry={null}
-        />
+    <View style={styles.bar} testID="usage-requests-export-bar">
+      {button}
+      {note ? (
+        <View style={styles.note}>
+          <NoteMessage note={note} inline />
+          <NoteActions onRetry={note.onRetry} onDismiss={dismiss} />
+        </View>
       ) : null}
     </View>
   );
@@ -95,43 +132,51 @@ function ExportButton({ exporting, onPress }: { exporting: boolean; onPress: () 
   );
 }
 
-function ExportNote({
-  color,
-  sentence,
-  detail,
-  testID,
+/**
+ * The note's words. Inline it is one line with the detail muted after it; in
+ * the compact reserved line the sentence reads in full and the detail is in
+ * the tooltip, which opens on press there.
+ */
+function NoteMessage({ note, inline }: { note: ExportNoteContent; inline: boolean }) {
+  const { detail, testID } = note;
+  return (
+    <Tooltip enabledOnMobile enabledOnDesktop={detail !== null}>
+      <TooltipTrigger asChild>
+        <View style={inline ? styles.message : null}>
+          <Text
+            variant="caption"
+            color={note.color}
+            numberOfLines={inline ? 1 : undefined}
+            testID={testID}
+          >
+            {note.sentence}
+            {inline && detail !== null ? (
+              <Text variant="caption" color="foregroundMuted" testID={`${testID}-detail`}>
+                {` · ${detail}`}
+              </Text>
+            ) : null}
+          </Text>
+        </View>
+      </TooltipTrigger>
+      {detail === null ? null : (
+        <TooltipContent testID={`${testID}-tooltip`}>
+          <Text variant="caption">{detail}</Text>
+        </TooltipContent>
+      )}
+    </Tooltip>
+  );
+}
+
+function NoteActions({
   onRetry,
   onDismiss,
 }: {
-  color: TextColor;
-  sentence: string;
-  detail: string | null;
-  testID: string;
   onRetry: (() => void) | null;
   onDismiss: () => void;
 }) {
   const { t } = useTranslation();
   return (
-    <View style={styles.note}>
-      <Tooltip enabledOnMobile enabledOnDesktop={detail !== null}>
-        <TooltipTrigger asChild>
-          <View style={styles.message}>
-            <Text variant="caption" color={color} numberOfLines={1} testID={testID}>
-              {sentence}
-              {detail === null ? null : (
-                <Text variant="caption" color="foregroundMuted" testID={`${testID}-detail`}>
-                  {` · ${detail}`}
-                </Text>
-              )}
-            </Text>
-          </View>
-        </TooltipTrigger>
-        {detail === null ? null : (
-          <TooltipContent>
-            <Text variant="caption">{detail}</Text>
-          </TooltipContent>
-        )}
-      </Tooltip>
+    <>
       {onRetry ? (
         <Button variant="ghost" size="sm" onPress={onRetry} testID="usage-requests-export-retry">
           {t("common.actions.retry")}
@@ -145,30 +190,25 @@ function ExportNote({
         accessibilityLabel={t("common.actions.dismiss")}
         testID="usage-requests-export-dismiss"
       />
-    </View>
+    </>
   );
 }
 
 /** The raw words behind a failure: what saving said, or each host and why it gave nothing. */
 function failureDetail(failure: UsageRequestsExportFailure, t: Translate): string | null {
   if (failure.kind === "save") return failure.message;
-  return skipsDetail(failure.skipped, t);
+  return skipsDetail(failure.skipped, t, { named: failure.skipped.length > 1 });
 }
 
-/** What the hosts that answered with an error said; the offline ones are named in the note already. */
-function errorsDetail(skipped: readonly UsageRequestsExportSkip[]): string | null {
-  const lines: string[] = [];
-  for (const skip of skipped) {
-    if (skip.reason.kind === "error") lines.push(`${skip.serverName}: ${skip.reason.message}`);
-  }
-  return lines.length > 0 ? lines.join("; ") : null;
-}
-
-function skipsDetail(skipped: readonly UsageRequestsExportSkip[], t: Translate): string | null {
-  const single = skipped.length === 1;
+/** Every left-out host and why, offline ones too; `named: false` drops the name of a lone host's error. */
+function skipsDetail(
+  skipped: readonly UsageRequestsExportSkip[],
+  t: Translate,
+  { named }: { named: boolean },
+): string | null {
   const lines = skipped.map((skip) => {
     if (skip.reason.kind === "error") {
-      return single ? skip.reason.message : `${skip.serverName}: ${skip.reason.message}`;
+      return named ? `${skip.serverName}: ${skip.reason.message}` : skip.reason.message;
     }
     return t("usage.requests.export.hostReason", {
       host: skip.serverName,
@@ -192,6 +232,18 @@ const styles = StyleSheet.create((theme) => ({
     height: 0,
     overflow: "hidden",
     opacity: 0,
+  },
+  compactBar: {
+    gap: theme.spacing[1],
+  },
+  compactActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginLeft: "auto",
+  },
+  reservedLine: {
+    // 窄屏常留一行：说明出现、消失都不改变卡片高度。
+    minHeight: theme.typeScale.caption.lineHeight,
   },
   note: {
     flex: 1,
