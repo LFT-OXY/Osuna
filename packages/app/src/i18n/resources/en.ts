@@ -2793,7 +2793,7 @@ export const en = {
         hideKey: "Hide",
         apiKeyOptionalLabel: "API key (optional)",
         apiKeyLocalPlaceholder: "Optional for local servers",
-        keyRejected: "The upstream rejected this key (401 / 403)",
+        keyRejected: "The upstream rejected this key",
         balance: {
           url: "Balance URL",
           urlInfo:
@@ -2945,9 +2945,9 @@ export const en = {
         footerResource:
           "After saving, the endpoint's page opens and lists the resource's deployments as its models.",
         addressHint:
-          "Fill in the key, then press Auto-detect: Osuna tries each of the three request formats once and lists how each answered; Use these fills in the addresses that work.",
+          "Fill in the key, then press Auto-detect: Osuna tries each request format once and lists how each answered; Use these fills in the addresses that work.",
         addressHintKeyOptional:
-          "Press Auto-detect: Osuna tries each of the three request formats once and lists how each answered; Use these fills in the addresses that work. The key goes with each try only if you fill it in.",
+          "Press Auto-detect: Osuna tries each request format once and lists how each answered; Use these fills in the addresses that work. The key goes with each try only if you fill it in.",
         detect: "Auto-detect",
         detectModelPlaceholder: "Model to try (optional)",
         detected: {

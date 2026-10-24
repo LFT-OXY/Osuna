@@ -454,7 +454,7 @@ export interface ConnectionFormState {
   // 能点「逐个模型」；点了但表单里还没有模型时 eachNeedsModels 为真，提示先选模型。
   canDetectEach: boolean;
   eachNeedsModels: boolean;
-  // 上游拒绝了这把 key（401 / 403）；改 key 之前一直标红。
+  // 上游拒绝了这把 key（401 / 403，或 Gemini 的 400 key 无效）；改 key 之前一直标红。
   keyRejected: boolean;
   canDetect: boolean;
   catalogFetch: ConnectionCatalogFetch;
@@ -1292,7 +1292,7 @@ export function createConnectionFormModel(
       canFetchModels: canCheck && isAdding && !busy,
       tests,
       isTesting,
-      canTest: canCheck && testedUrlsOf(next).length > 0 && !isTesting && !next.submitting,
+      canTest: canCheck && !isTesting && !next.submitting,
     };
   }
 
@@ -1460,18 +1460,13 @@ export function createConnectionFormModel(
     return isMoved ? atOrigin(from.urls, origin) : from.urls;
   }
 
-  /** 拉模型、测试连接要问的地址：保存时会存的、像 http(s) 地址的那些，按 Anthropic → Chat → Responses。 */
+  /** 拉模型、测试连接要问的地址：保存时会存的、像 http(s) 地址的那些，按 Anthropic → Chat → Responses → Gemini。 */
   function checkedUrlsOf(from: Values): CheckedUrl[] {
     const urls = urlsToSave(from);
     return API_ENDPOINT_REQUEST_FORMATS.flatMap((format) => {
       const url = urls[format].trim();
       return url !== "" && isHttpUrl(url) ? [{ format, url }] : [];
     });
-  }
-
-  /** 测试连接问的地址：Gemini 地址的测试在工单 05（10-16-gemini-upstream）补上。 */
-  function testedUrlsOf(from: Values): CheckedUrl[] {
-    return checkedUrlsOf(from).filter((entry) => entry.format !== "gemini");
   }
 
   /**
@@ -2103,7 +2098,7 @@ export function createConnectionFormModel(
       abortPendingTest();
       const controller = new AbortController();
       pendingTest = controller;
-      const checked = testedUrlsOf(values);
+      const checked = checkedUrlsOf(values);
       const tests: FormatTests = {};
       for (const entry of checked) tests[entry.format] = { kind: "testing" };
       update({ tests });

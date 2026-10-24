@@ -4,12 +4,13 @@ import type {
   ApiEndpointError,
   ApiEndpointFormatDetection,
   ApiEndpointModelTestResult,
+  ApiEndpointRequestFormat,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { UsagePricingTimers } from "../usage/pricing/service.js";
 import { disabledMessage } from "./disabled-models.js";
 import type { CliHeaderSample } from "./store.js";
 import type { CliTestClient } from "./test-as.js";
-import { probeUpstreamFormat, type ProbedFormat } from "./upstream-detect.js";
+import { probeUpstreamFormat } from "./upstream-detect.js";
 import type { RequestExtras } from "./request-extras.js";
 
 /*
@@ -37,7 +38,7 @@ export interface ModelTestClock {
 }
 
 export interface ModelTestAttempt {
-  format: ProbedFormat;
+  format: ApiEndpointRequestFormat;
   baseUrl: string;
 }
 

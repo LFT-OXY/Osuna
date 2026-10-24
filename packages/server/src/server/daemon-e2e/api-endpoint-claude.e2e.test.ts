@@ -1792,6 +1792,47 @@ describe("Claude Code is told what the endpoint models can do", () => {
     await client.apiEndpointSetActive("claude", null);
     expect(await readFile(settingsPath, "utf8")).toBe(USER_SETTINGS);
   });
+
+  // 任务 10-16-gemini-upstream 工单 05：Gemini 清单的 inputTokenLimit 也进模型资料（magpie gemini_list.go）。
+  test("a Gemini base URL's list gives its models' context too", async () => {
+    await start(USER_SETTINGS);
+    upstream = createServer((request, response) => {
+      if (request.url !== "/gem/v1beta/models?pageSize=1000") {
+        response.writeHead(404).end();
+        return;
+      }
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          models: [
+            {
+              name: "models/gemini-relay-x",
+              supportedGenerationMethods: ["generateContent"],
+              inputTokenLimit: 1_050_000,
+              outputTokenLimit: 65_536,
+            },
+          ],
+        }),
+      );
+    });
+    await new Promise<void>((resolve) => upstream?.listen(0, "127.0.0.1", resolve));
+    const origin = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}`;
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Relay",
+      baseUrls: [{ format: "gemini", url: `${origin}/gem/v1beta` }],
+      apiKey: SECRET,
+      models: [{ id: "gemini-relay-x" }],
+      defaultModelId: "gemini-relay-x",
+    });
+    const endpointId = saved.endpoint?.id;
+    if (!endpointId) throw new Error(`Expected a saved endpoint: ${saved.error?.message}`);
+    await client.apiEndpointSetActive("claude", endpointId);
+
+    const switched = await settings();
+    expect(switched.model).toBe("gemini-relay-x[1m]");
+    expect(switched.modelPicker.options[0].model).toBe("relay/gemini-relay-x[1m]");
+  });
 });
 
 /** 假代理把一个请求转给中转站，原样答回。 */

@@ -2784,7 +2784,7 @@ export const es: TranslationResources = {
         hideKey: "Ocultar",
         apiKeyOptionalLabel: "Clave de API (opcional)",
         apiKeyLocalPlaceholder: "Opcional en servidores locales",
-        keyRejected: "El servidor rechazó esta clave (401 / 403)",
+        keyRejected: "El servidor rechazó esta clave",
         balance: {
           url: "URL de saldo",
           urlInfo:
@@ -2939,9 +2939,9 @@ export const es: TranslationResources = {
         footerResource:
           "Al guardar se abre la página del endpoint y lista las implementaciones del recurso como sus modelos.",
         addressHint:
-          "Escribe la clave y pulsa Detectar: Osuna prueba una vez cada uno de los tres formatos de solicitud y muestra cómo respondió cada uno; Usar estas rellena las direcciones que funcionan.",
+          "Escribe la clave y pulsa Detectar: Osuna prueba una vez cada formato de solicitud y muestra cómo respondió cada uno; Usar estas rellena las direcciones que funcionan.",
         addressHintKeyOptional:
-          "Pulsa Detectar: Osuna prueba una vez cada uno de los tres formatos de solicitud y muestra cómo respondió cada uno; Usar estas rellena las direcciones que funcionan. La clave solo se envía si la escribes.",
+          "Pulsa Detectar: Osuna prueba una vez cada formato de solicitud y muestra cómo respondió cada uno; Usar estas rellena las direcciones que funcionan. La clave solo se envía si la escribes.",
         detect: "Detectar",
         detectModelPlaceholder: "Modelo a probar (opcional)",
         detected: {

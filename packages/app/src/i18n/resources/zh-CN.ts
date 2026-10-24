@@ -2751,7 +2751,7 @@ export const zhCN: TranslationResources = {
         hideKey: "隐藏",
         apiKeyOptionalLabel: "API key（选填）",
         apiKeyLocalPlaceholder: "本机服务可以不填",
-        keyRejected: "上游拒绝了这把 key（401 / 403）",
+        keyRejected: "上游拒绝了这把 key",
         balance: {
           url: "余额查询地址",
           urlInfo:
@@ -2895,9 +2895,9 @@ export const zhCN: TranslationResources = {
         footerLocal: "保存后进入这个接口的详情页，已拉好上游模型供挑选。",
         footerResource: "保存后进入这个接口的详情页，把资源的部署列成模型。",
         addressHint:
-          "填好 key 后点「自动检测」，Osuna 会用三种请求格式各试一次，逐行列出结果；点「采用这些」把能用的地址填到下面。",
+          "填好 key 后点「自动检测」，Osuna 会用每种请求格式各试一次，逐行列出结果；点「采用这些」把能用的地址填到下面。",
         addressHintKeyOptional:
-          "点「自动检测」，Osuna 会用三种请求格式各试一次，逐行列出结果；点「采用这些」把能用的地址填到下面。填了 key 才会带上。",
+          "点「自动检测」，Osuna 会用每种请求格式各试一次，逐行列出结果；点「采用这些」把能用的地址填到下面。填了 key 才会带上。",
         detect: "自动检测",
         detectModelPlaceholder: "试用的模型（选填）",
         detected: {

@@ -432,12 +432,7 @@ const PI_START_THINKING = "medium";
 
 /** 挑默认模型时从 CLI 配置与接管记录里读的那些。 */
 type CliPickInput = Omit<DefaultModelPickInput, "state" | "provider">;
-import {
-  detectUpstreamFormats,
-  isProbedFormat,
-  pickProbeModel,
-  probeUpstreamFormat,
-} from "./upstream-detect.js";
+import { detectUpstreamFormats, pickProbeModel, probeUpstreamFormat } from "./upstream-detect.js";
 import { DETECT_EACH_DEFAULTS, detectEachModel, type DetectEachLimits } from "./detect-models.js";
 import {
   cachedCodexVersion,
@@ -502,7 +497,10 @@ import {
   type ListedModel,
   type UpstreamFailure,
   type UpstreamFailureCode,
+  type UpstreamModelsResult,
 } from "./upstream-models.js";
+import { fetchGeminiModels } from "./gemini-models.js";
+import { isKeyRejected } from "./gateway/failure.js";
 import {
   keepFailedFormats,
   mergeFormatLists,
@@ -4115,15 +4113,18 @@ export class ApiEndpointService {
     if (listsNoModels(place)) {
       models = planModelsOf(place, []);
     } else {
-      const result = await fetchUpstreamModels({
-        provider: format === null ? supported : providerWithListingHeaders(format),
+      const asked = {
         baseUrl,
         apiKey,
         templateId: place.templateId,
         extras: this.requestExtras(input),
         signal,
         timeoutMs: this.upstreamTimeoutMs,
-      });
+      };
+      const result =
+        format === null
+          ? await fetchUpstreamModels({ provider: supported, ...asked })
+          : await fetchModelsAt({ format, ...asked });
       if (!result.ok) throw requestErrorOf(result.error);
       models = planModelsOf(place, result.models);
     }
@@ -4152,18 +4153,18 @@ export class ApiEndpointService {
     if (listsNoModels(place)) {
       models = planModelsOf(place, []);
     } else {
-      const asked = new Map<string, ReturnType<typeof fetchUpstreamModels>>();
+      const asked = new Map<string, ReturnType<typeof fetchModelsAt>>();
       const lists: FormatList[] = [];
       const failed: ApiEndpointRequestFormat[] = [];
       let lastFailure: UpstreamFailure | null = null;
       for (const { format, url } of addresses) {
         const baseUrl = upstreamBaseUrl({ place, format, raw: url });
-        const listing = providerWithListingHeaders(format);
+        const listing = format === "gemini" ? "gemini" : providerWithListingHeaders(format);
         const key = `${listing} ${baseUrl}`;
         let pending = asked.get(key);
         if (!pending) {
-          pending = fetchUpstreamModels({
-            provider: listing,
+          pending = fetchModelsAt({
+            format,
             baseUrl,
             apiKey,
             templateId: place.templateId,
@@ -4926,24 +4927,12 @@ export class ApiEndpointService {
     return outcome.result;
   }
 
-  /** 按一种请求格式向一个地址发最小请求；上游回 401 / 403 时结论的 code 是 auth_failed。 */
+  /** 按一种请求格式向一个地址发最小请求；上游拒了 key（isKeyRejected）时结论的 code 是 auth_failed。 */
   private async testFormat(
     format: ApiEndpointRequestFormat,
     input: ApiEndpointTestConnectionInput,
     signal: AbortSignal,
   ): Promise<ApiEndpointTestConnectionResult> {
-    // Gemini 地址的测试在工单 05（10-16-gemini-upstream）补上。
-    if (!isProbedFormat(format)) {
-      return {
-        ok: false,
-        status: null,
-        durationMs: 0,
-        error: {
-          code: "upstream_error",
-          message: "Testing a Gemini base URL is not supported yet",
-        },
-      };
-    }
     const place = this.upstreamPlace(input);
     const { templateId } = place;
     const baseUrl = upstreamBaseUrl({ place, format, raw: input.baseUrl });
@@ -4976,8 +4965,8 @@ export class ApiEndpointService {
     }
     if (!modelId) {
       // 这家还没选模型也没拉过清单：先列一次（不花钱）再挑。
-      const listed = await fetchUpstreamModels({
-        provider: providerWithListingHeaders(format),
+      const listed = await fetchModelsAt({
+        format,
         baseUrl,
         apiKey,
         templateId,
@@ -4990,7 +4979,8 @@ export class ApiEndpointService {
           throw new ApiEndpointRequestError({ code: "cancelled", message: "Request cancelled" });
         }
         const status = listed.error.status ?? null;
-        const code = status === 401 || status === 403 ? "auth_failed" : listed.error.code;
+        const isRejected = status !== null && isKeyRejected(status, listed.error.message);
+        const code = isRejected ? "auth_failed" : listed.error.code;
         const error: ApiEndpointError = { code, message: listed.error.message };
         if (listed.error.params !== undefined) error.params = listed.error.params;
         return { ok: false, status, durationMs: elapsed(), error };
@@ -5067,7 +5057,7 @@ export class ApiEndpointService {
   }
 
   /**
-   * 自动检测：从一个地址推出三种格式各自的地址，各发一条最小请求。和拉取模型一样只读、不进串行队列。
+   * 自动检测：从一个地址推出每种格式各自的地址，各发一条最小请求。和拉取模型一样只读、不进串行队列。
    * 每种格式的结论（含失败）放在返回值里；请求本身不成立或被取消才抛 ApiEndpointRequestError。
    */
   async detectFormats(
@@ -7413,6 +7403,18 @@ function requireFormat(format: string): ApiEndpointRequestFormat {
   return known;
 }
 
+/** 列一种格式地址上的模型：Gemini 地址照 Gemini 的清单问（gemini-models.ts），别的按认证头对应的提供方问。 */
+function fetchModelsAt(
+  input: Omit<Parameters<typeof fetchUpstreamModels>[0], "provider"> & {
+    format: ApiEndpointRequestFormat;
+  },
+): Promise<UpstreamModelsResult> {
+  const { format, ...asked } = input;
+  // Gemini 的清单只有每页的时限（magpie FetchGemini）。
+  if (format === "gemini") return fetchGeminiModels(asked);
+  return fetchUpstreamModels({ provider: providerWithListingHeaders(format), ...asked });
+}
+
 /**
  * fetchUpstreamModels 按 provider 决定认证头：Anthropic 地址两种都带（照 claude），
  * OpenAI 两种只带 Bearer（照 codex）。
@@ -7492,9 +7494,7 @@ function testAttempts(input: { endpoint: StoredApiEndpoint; modelId: string }): 
   ];
   return ordered.flatMap((format) => {
     const url = endpoint.baseUrls.find((entry) => entry.format === format)?.url;
-    // Gemini 地址的测试在工单 05（10-16-gemini-upstream）补上。
-    if (url === undefined || !isProbedFormat(format)) return [];
-    return [{ format, baseUrl: url.replace(/\/+$/, "") }];
+    return url === undefined ? [] : [{ format, baseUrl: url.replace(/\/+$/, "") }];
   });
 }
 

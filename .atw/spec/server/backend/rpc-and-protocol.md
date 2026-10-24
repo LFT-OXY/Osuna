@@ -51,6 +51,9 @@ Config-shaped schemas that the daemon also persists live in leaf modules, not in
 - `keyHeadersAt` (`request-extras.ts`) picks the auth header per format (`KeyHeaders` `"googApiKey"` → `x-goog-api-key`).
 - Gateway translation (`gateway/translation/protocols.ts`): `upstreamProtocolOf(format)` → `{ build, decoder }` for every format; `protocolOf(format)` → the agent side (`parse`, `encoder`, `render`) and throws for an upstream-only format (Gemini: no agent speaks it, entrances pick the format by path).
 - `upstreamUrl({ baseUrl, format, model?, suffix?, query? })` (`gateway/upstream-call.ts`): a format whose model goes in the path (Gemini, `geminiPath` in `gemini-base-url.ts`, escaped like Go's `url.PathEscape`) needs `model` — the name actually sent, after **Upstream name**.
+- Detection, Test connection and Test models (`upstream-detect.ts`): `FORMAT_PROBES: Record<ApiEndpointRequestFormat, FormatProbe>`, `path(sentModel)` because Gemini's model is in the path; `suggestedBaseUrls(baseUrl)` gives every format's URL (magpie `DetectBase`); `pickProbeModel(ids, format)` per format.
+- Model lists: `fetchModelsAt({ format, ...asked })` (`service.ts`) is the one dispatch — Gemini goes to `fetchGeminiModels` (`gemini-models.ts`, no whole-fetch timeout, 8 s per page, ≤ 20 pages), others to `fetchUpstreamModels` with the provider whose headers fit the format.
+- Key refused: `isKeyRejected(status, body)` (`gateway/failure.ts`) — 401 / 403, or Gemini's 400 `API key not valid` / `API_KEY_INVALID`. Every "the key is wrong" decision outside the gateway's cooldown classes uses it (probe verdict, a listing that fails before a test, detection's listing).
 
 ### 3. Contracts
 - Exhaustive `Record`/`switch` sites fail typecheck and must each get the new value; lists that drive behaviour (`TRANSLATION_ORDER` in `routing.ts`, `TEMPLATE_MATCHED_FORMATS` in `import-apps.ts`, `CLI_TEST_POLICIES`) don't and must be read by hand.
@@ -59,12 +62,17 @@ Config-shaped schemas that the daemon also persists live in leaf modules, not in
 - A new `StreamEvent` kind must be counted where "the model said something" is decided: `ReplyTap.add` (opening) and `ReplyCollector.saidAnything` (whole replies). `image` (a picture Gemini drew) is content there, and every agent encoder drops it, as magpie's do.
 - An upstream-only format gets a module with `build` and a decoder only; don't write stub `parse`/`encoder`/`render`. The translated body for it carries no `model` (`translatedBody` skips `built.model` for Gemini) — the model is in the URL.
 - A decoder for a format with no end marker emits `stop` at its finish reason; `endedShort` (`broken-reply.ts`) counts `stop` as closed, so a stream cut before the finish reason is still a broken reply. Gemini (magpie `geminiEnds`): `usageMetadata` on a chunk that has a `candidates` key — even `candidates: []` — is not an end; a chunk with **no `candidates` key** (usage alone, a blocked prompt) emits `done` once, an end with no stop, which the empty-reply rules then judge. `promptFeedback.blockReason` in the filter reasons (`filteredBy`, `safety-filter.ts`: `SAFETY`, `PROHIBITED_CONTENT`, `BLOCKLIST`, `SPII`, `IMAGE_SAFETY`) emits `stop: "filter"`, so it is a refusal; `OTHER` is not, and lands as an empty reply.
-- Where only some formats are supported yet, narrow the type instead of adding a fake branch: `PROBED_FORMATS` / `ProbedFormat` in `upstream-detect.ts` makes every caller of `probeUpstreamFormat` filter (`isProbedFormat`).
+- Where only some formats are supported yet, narrow the type instead of adding a fake branch, and delete the narrowing in the ticket that lands the support. Gemini did this with `PROBED_FORMATS` / `isProbedFormat` in `upstream-detect.ts` during tickets 01–04; ticket 05 removed it and every caller went back to `API_ENDPOINT_REQUEST_FORMATS`.
+- Detection with no model to try asks both lists at once — the Anthropic root's (`claude` headers) and the Gemini URL's — and picks from their ids merged (magpie `fetchOne` asks every format's list). Both failing: if either refused the key (`isKeyRejected`), every format is `auth_failed` with that failure's status and message; otherwise every format is `models_list_failed` with the Anthropic list's reason.
+- A Gemini list that answers but names no model is a failure (magpie `FetchGemini`), so a merged refresh keeps that format's previous models; its code is `models_empty`, which the app shows as `settings.apiEndpoints.form.fetch.empty` through `modelsFetchErrorText` (`packages/app/src/api-endpoints/request-extras-copy.ts`), in the add dialog and on the endpoint page.
 - Client: the add dialog (`ConnectionFormOptions.canUseGemini`) and the endpoint page's Connection rows (`showsGemini`) are both gated by the flag; a host without it never shows the field or a "Not set" row.
 
 ### 4. Validation & Error Matrix
 - Two URLs of one format → `invalid_input` "Only one <format> base URL is allowed"; unknown format → `invalid_input`.
 - An old Osuna file reader meets the new value → it can't read `endpoints.json` (closed enum); documented in `docs/data-model.md`, no shim.
+- Gemini probe answers 2xx without `candidates` (a relay's web page) → `not_detected`, `code: "wrong_shape"`, `params.format: "gemini"` (G6, stricter than magpie).
+- Gemini probe or list answers 400 `API key not valid` → `auth_failed` (detection) / `code: "auth_failed"` (test connection).
+- Gemini list: 404 / 405 or not a model list → `models_unsupported`; other HTTP → `upstream_error` with `status`; empty → `models_empty`; a page over 8 s → `upstream_timeout`.
 
 ### 5. Good/Base/Bad Cases
 - Good: Gemini-only endpoint saves, is normalised (`relay.example` → `https://relay.example/v1beta`), listed, imported.
@@ -81,6 +89,8 @@ Config-shaped schemas that the daemon also persists live in leaf modules, not in
 - daemon e2e (`api-endpoint-gateway-gemini.e2e.test.ts`, describe "failures at a Gemini base URL", ticket 04): two Gemini-only relays with the same model; each failure checks which relay answered (`x-osuna-api-endpoint`), how often A was asked, and A's cooldown from `apiEndpointList` (model-only rests from `cooldowns.json`).
 - daemon e2e (same file): a signed call round-trips through Claude Code, Codex and Pi (second request carries `thoughtSignature`, the store directory has the file, the agent's id stays short); thinking per generation and `none`; mended history; `googleSearch` with the endpoint searching and its grounding coming back as the agent's search.
 - unit: `gemini-signatures.test.ts` (`unsignCalls` per agent, Chat `extra_content`), `translation/gemini.test.ts` (thinking level/budget table, tools, signatures, turn repair, decoder calls / text calls / image / grounding).
+- daemon e2e (ticket 05): `api-endpoint-detect.e2e.test.ts` describe "Detecting a Gemini base URL" (path, `x-goog-api-key` alone, magpie body, `/v1` → `/v1beta` only right after the host, wrong shape, 400 key, merged lists); `api-endpoint-test-connection.e2e.test.ts` (Gemini-only test, listing first, 400 → `auth_failed`); `api-endpoint-models.e2e.test.ts` describe "API endpoint model lists from a Gemini base URL" (pages, `models/` cut, non-chat dropped, merge, `models_empty`, failure keeps the list); `api-endpoint-test-models.e2e.test.ts` (pinned to Gemini); `api-endpoint-claude.e2e.test.ts` ("a Gemini base URL's list gives its models' context too": `inputTokenLimit` → `[1m]`).
+- browser (`settings-api-endpoints.spec.ts`): Gemini detection row ok / Key rejected, Gemini list states, Test connection, Each picked model's Gemini column and Use only this format = Gemini. The fake relay (`startFakeRelay`) takes `x-goog-api-key` like new-api and answers Gemini under `/good/v1beta` and `/empty/v1beta`.
 
 ### 7. Wrong vs Correct
 #### Wrong
@@ -91,7 +101,7 @@ const FORMAT_PROBES: Record<ApiEndpointRequestFormat, FormatProbe> = { ..., gemi
 ```ts
 export const PROBED_FORMATS = ["anthropic_messages", "openai_chat", "openai_responses"] as const;
 const FORMAT_PROBES: Record<ProbedFormat, FormatProbe> = { ... };
-// callers: if (!isProbedFormat(format)) return …; — removed when the probe lands
+// callers: if (!isProbedFormat(format)) return …; — removed when the probe lands (ticket 05 did)
 ```
 #### Wrong
 ```ts

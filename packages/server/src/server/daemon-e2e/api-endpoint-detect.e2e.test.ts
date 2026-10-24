@@ -57,7 +57,11 @@ async function startUpstream(): Promise<FakeUpstream> {
         body,
       });
       const keys = [`Bearer ${TYPED_KEY}`, `Bearer ${SAVED_KEY}`];
-      const authorized = keys.includes(request.headers.authorization ?? "");
+      const googKey = request.headers["x-goog-api-key"];
+      const authorized =
+        keys.includes(request.headers.authorization ?? "") ||
+        googKey === TYPED_KEY ||
+        googKey === SAVED_KEY;
       if (!authorized) {
         sendJson(response, 401, { error: { message: "Invalid API key", type: "invalid_request" } });
         return;
@@ -165,15 +169,25 @@ describe("API endpoint request format detection over the daemon RPC", () => {
         durationMs: expect.any(Number),
         modelId: "gpt-5",
       },
+      {
+        format: "gemini",
+        url: `${upstream.origin}/relay`,
+        status: "not_detected",
+        httpStatus: 404,
+        message: `POST ${upstream.origin}/relay/models/deepseek-chat:generateContent: HTTP 404: Not Found`,
+        durationMs: expect.any(Number),
+        modelId: "deepseek-chat",
+      },
     ]);
 
     // 先列一次模型挑人选，再每种格式各问一次：Anthropic 问 Claude 模型，Responses 问 OpenAI 模型，
-    // Chat 问第一个非 Claude 的模型。
+    // Chat 问第一个非 Claude 的模型，Gemini 没有名字带 gemini 的就问第一个。
     const posts = upstream.requests
       .filter((request) => request.method === "POST")
       .map((request) => ({ url: request.url, model: request.body.model }))
       .sort((a, b) => a.url.localeCompare(b.url));
     expect(posts).toEqual([
+      { url: "/relay/models/deepseek-chat:generateContent", model: undefined },
       { url: "/relay/v1/chat/completions", model: "deepseek-chat" },
       { url: "/relay/v1/messages", model: "claude-sonnet-4-5" },
       { url: "/relay/v1/responses", model: "gpt-5" },
@@ -194,6 +208,7 @@ describe("API endpoint request format detection over the daemon RPC", () => {
       { format: "anthropic_messages", url: `${upstream.origin}/relay`, status: "ok" },
       { format: "openai_chat", url: `${upstream.origin}/relay/v1`, status: "ok" },
       { format: "openai_responses", url: `${upstream.origin}/relay/v1`, status: "not_detected" },
+      { format: "gemini", url: `${upstream.origin}/relay/v1`, status: "not_detected" },
     ]);
   });
 
@@ -210,6 +225,7 @@ describe("API endpoint request format detection over the daemon RPC", () => {
       ["anthropic_messages", "auth_failed", 401],
       ["openai_chat", "auth_failed", 401],
       ["openai_responses", "auth_failed", 401],
+      ["gemini", "auth_failed", 401],
     ]);
     expect(detected.results[0]?.message).toContain("Invalid API key");
     expect(upstream.requests.filter((request) => request.method === "POST")).toEqual([]);
@@ -228,6 +244,7 @@ describe("API endpoint request format detection over the daemon RPC", () => {
       ["not_detected", null],
       ["not_detected", null],
       ["not_detected", null],
+      ["not_detected", null],
     ]);
     expect(detected.results.map((result) => result.message)).toEqual(
       detected.results.map(
@@ -237,7 +254,7 @@ describe("API endpoint request format detection over the daemon RPC", () => {
       ),
     );
     expect(detected.results.map((result) => result.code)).toEqual(
-      Array(3).fill("models_list_failed"),
+      Array(4).fill("models_list_failed"),
     );
     expect(detected.results[0]?.params?.detail).toContain("HTTP 404: nope");
     expect(upstream.requests.filter((request) => request.method === "POST")).toEqual([]);
@@ -259,6 +276,7 @@ describe("API endpoint request format detection over the daemon RPC", () => {
       [200, "wrong_shape", { format: "anthropic_messages" }],
       [200, "wrong_shape", { format: "openai_chat" }],
       [200, "wrong_shape", { format: "openai_responses" }],
+      [200, "wrong_shape", { format: "gemini" }],
     ]);
 
     const closed = createServer();
@@ -291,26 +309,31 @@ describe("API endpoint request format detection over the daemon RPC", () => {
       ["anthropic_messages", "ok", "my-model"],
       ["openai_chat", "ok", "my-model"],
       ["openai_responses", "not_detected", "my-model"],
+      ["gemini", "not_detected", "my-model"],
     ]);
     for (const result of detected.results) expect(result.durationMs).toBeGreaterThanOrEqual(0);
     // 指定了模型就不列清单。
     expect(upstream.requests.filter((request) => request.method === "GET")).toEqual([]);
     expect(
-      upstream.requests.filter((request) => request.method === "POST").map((r) => r.body.model),
-    ).toEqual(["my-model", "my-model", "my-model"]);
+      upstream.requests
+        .filter((request) => request.method === "POST")
+        .map((r) => r.body.model ?? r.url)
+        .sort(),
+    ).toEqual(["/relay/models/my-model:generateContent", "my-model", "my-model", "my-model"]);
   });
 
   test("the form's picked models are tried per format before the vendor's list", async () => {
     const detected = await client.apiEndpointDetectFormats({
       baseUrl: `${upstream.origin}/relay`,
       apiKey: TYPED_KEY,
-      modelIds: ["kimi-k2", "claude-opus-5", "gpt-6"],
+      modelIds: ["kimi-k2", "claude-opus-5", "gpt-6", "gemini-3-pro"],
     });
 
     expect(detected.results.map((result) => result.modelId)).toEqual([
       "claude-opus-5",
       "kimi-k2",
       "gpt-6",
+      "gemini-3-pro",
     ]);
     expect(upstream.requests.filter((request) => request.method === "GET")).toEqual([]);
   });
@@ -328,7 +351,7 @@ describe("API endpoint request format detection over the daemon RPC", () => {
 
     expect(detected.error).toBeNull();
     const posts = upstream.requests.filter((request) => request.method === "POST");
-    expect(posts).toHaveLength(3);
+    expect(posts).toHaveLength(4);
     for (const post of posts) {
       expect(post.headers["x-relay-team"]).toBe("typed");
       expect(String(post.body.prompt_cache_key)).toMatch(/^osuna-test-/);
@@ -341,9 +364,10 @@ describe("API endpoint request format detection over the daemon RPC", () => {
   test("detects with no key headers when there is no key", async () => {
     const noKey = await client.apiEndpointDetectFormats({ baseUrl: `${upstream.origin}/relay` });
 
-    // 这个假上游要 key：列模型就被 401 拒，三种格式都是 key 的问题。
+    // 这个假上游要 key：列模型就被 401 拒，每种格式都是 key 的问题。
     expect(noKey.error).toBeNull();
     expect(noKey.results.map((result) => result.status)).toEqual([
+      "auth_failed",
       "auth_failed",
       "auth_failed",
       "auth_failed",
@@ -352,6 +376,7 @@ describe("API endpoint request format detection over the daemon RPC", () => {
     for (const { headers } of upstream.requests) {
       expect(headers.authorization).toBeUndefined();
       expect(headers["x-api-key"]).toBeUndefined();
+      expect(headers["x-goog-api-key"]).toBeUndefined();
     }
   });
 
@@ -394,9 +419,24 @@ describe("API endpoint request format detection over the daemon RPC", () => {
       baseUrl: `${upstream.origin}/relay`,
     });
 
-    expect(detected.results.map((result) => result.status)).toEqual(["ok", "ok", "not_detected"]);
-    expect(upstream.requests.map((request) => request.headers.authorization)).toEqual(
-      upstream.requests.map(() => `Bearer ${SAVED_KEY}`),
+    expect(detected.results.map((result) => result.status)).toEqual([
+      "ok",
+      "ok",
+      "not_detected",
+      "not_detected",
+    ]);
+    // Gemini 的清单与对话请求只带 x-goog-api-key。
+    const geminiAsks = upstream.requests.filter((request) => "x-goog-api-key" in request.headers);
+    expect(geminiAsks.map((request) => request.url)).toEqual([
+      "/relay/models?pageSize=1000",
+      "/relay/models/deepseek-chat:generateContent",
+    ]);
+    expect(new Set(geminiAsks.map((request) => request.headers["x-goog-api-key"]))).toEqual(
+      new Set([SAVED_KEY]),
+    );
+    const others = upstream.requests.filter((request) => !geminiAsks.includes(request));
+    expect(others.map((request) => request.headers.authorization)).toEqual(
+      others.map(() => `Bearer ${SAVED_KEY}`),
     );
     expect(JSON.stringify(detected)).not.toContain(SAVED_KEY);
   });
@@ -435,7 +475,11 @@ const EACH_SERVES: Record<string, string[]> = {
   "/each/v1/chat/completions": ["gpt-both", "glm-chat"],
   "/each/v1/responses": ["gpt-both", "gpt-resp"],
   "/each/v1/messages": ["claude-only"],
+  gemini: ["gem-only"],
 };
+
+// Gemini 的模型名在路径里：/each/v1/models/<模型>:generateContent。
+const EACH_GEMINI_PATH = /^\/each\/v1\/models\/([^/]+):generateContent$/;
 
 interface EachUpstream {
   origin: string;
@@ -454,8 +498,10 @@ async function startEachUpstream(): Promise<EachUpstream> {
         model?: string;
         prompt_cache_key?: unknown;
       };
-      const model = body.model ?? "";
-      const requestPath = request.url ?? "";
+      const geminiModel = EACH_GEMINI_PATH.exec(request.url ?? "")?.[1];
+      const model =
+        geminiModel === undefined ? (body.model ?? "") : decodeURIComponent(geminiModel);
+      const requestPath = geminiModel === undefined ? (request.url ?? "") : "gemini";
       const team = request.headers["x-relay-team"];
       upstream.posts.push({ path: requestPath, model, team, session: body.prompt_cache_key });
       if (model.startsWith("slow-")) return;
@@ -471,7 +517,11 @@ async function startEachUpstream(): Promise<EachUpstream> {
           });
           return;
         }
-        if (requestPath.endsWith("/messages")) {
+        if (requestPath === "gemini") {
+          sendJson(response, 200, {
+            candidates: [{ content: { role: "model", parts: [{ text: "hi" }] } }],
+          });
+        } else if (requestPath.endsWith("/messages")) {
           sendJson(response, 200, { type: "message", content: [{ type: "text", text: "hi" }] });
         } else if (requestPath.endsWith("/responses")) {
           sendJson(response, 200, { object: "response", output: [] });
@@ -557,18 +607,28 @@ describe("Detecting each picked model on every request format", () => {
     const detected = await client.apiEndpointDetectFormats({
       baseUrl: `${upstream.origin}/each/v1`,
       apiKey: TYPED_KEY,
-      modelIds: ["gpt-both", "gpt-resp", " glm-chat", "claude-only", "gpt-both", "gpt-image-2", ""],
+      modelIds: [
+        "gpt-both",
+        "gpt-resp",
+        " glm-chat",
+        "claude-only",
+        "gpt-both",
+        "gpt-image-2",
+        "",
+        "gem-only",
+      ],
       eachModel: true,
     });
 
     expect(detected.error).toBeNull();
-    // 按 Anthropic、Chat、Responses。
+    // 按 Anthropic、Chat、Responses、Gemini。
     expect(okFlags(detected.models)).toEqual([
-      ["gpt-both", [false, true, true]],
-      ["gpt-resp", [false, false, true]],
-      ["glm-chat", [false, true, false]],
-      ["claude-only", [true, false, false]],
-      ["gpt-image-2", [false, false, false]],
+      ["gpt-both", [false, true, true, false]],
+      ["gpt-resp", [false, false, true, false]],
+      ["glm-chat", [false, true, false, false]],
+      ["claude-only", [true, false, false, false]],
+      ["gpt-image-2", [false, false, false, false]],
+      ["gem-only", [false, false, false, true]],
     ]);
     const gptResp = detected.models?.[1]?.results ?? [];
     expect(gptResp[1]).toMatchObject({
@@ -586,12 +646,16 @@ describe("Detecting each picked model on every request format", () => {
       [null, "image_model"],
       [null, "image_model"],
       [null, "image_model"],
+      [null, "image_model"],
     ]);
     expect(image[0]?.message).toContain("image model");
     // 上游给的失败没有 daemon 的原因码。
     expect(gptResp[1]?.code).toBeUndefined();
     expect(upstream.posts.some((post) => post.model === "gpt-image-2")).toBe(false);
-    expect(upstream.posts).toHaveLength(12);
+    expect(upstream.posts).toHaveLength(20);
+    expect(
+      upstream.posts.filter((post) => post.path === "gemini").map((post) => post.model),
+    ).toEqual(["gpt-both", "gpt-resp", "glm-chat", "claude-only", "gem-only"]);
     // 每种格式：第一个答上的模型。
     expect(
       detected.results.map(({ format, url, status, modelId }) => [format, url, status, modelId]),
@@ -599,6 +663,7 @@ describe("Detecting each picked model on every request format", () => {
       ["anthropic_messages", `${upstream.origin}/each`, "ok", "claude-only"],
       ["openai_chat", `${upstream.origin}/each/v1`, "ok", "gpt-both"],
       ["openai_responses", `${upstream.origin}/each/v1`, "ok", "gpt-both"],
+      ["gemini", `${upstream.origin}/each/v1`, "ok", "gem-only"],
     ]);
     expect((await client.apiEndpointList("claude")).endpoints).toEqual([]);
   });
@@ -625,7 +690,7 @@ describe("Detecting each picked model on every request format", () => {
     });
 
     expect(detected.error).toBeNull();
-    expect(upstream.posts).toHaveLength(3);
+    expect(upstream.posts).toHaveLength(4);
     for (const post of upstream.posts) {
       expect(post.team).toBe("team-each");
       expect(String(post.session)).toMatch(/^osuna-test-[0-9a-f]{12}$/);
@@ -643,7 +708,7 @@ describe("Detecting each picked model on every request format", () => {
     });
 
     expect(detected.models?.map((row) => row.modelId)).toEqual(many.slice(0, 30));
-    expect(upstream.posts).toHaveLength(90);
+    expect(upstream.posts).toHaveLength(120);
     expect(new Set(upstream.posts.map((post) => post.model))).toEqual(new Set(many.slice(0, 30)));
     expect(upstream.maxInFlight).toBeLessThanOrEqual(8);
     expect(upstream.maxInFlight).toBeGreaterThan(1);
@@ -658,7 +723,7 @@ describe("Detecting each picked model on every request format", () => {
       modelIds: ["glm-chat"],
       eachModel: true,
     });
-    expect(okFlags(each.models)).toEqual([["glm-chat", [false, true, false]]]);
+    expect(okFlags(each.models)).toEqual([["glm-chat", [false, true, false, false]]]);
 
     const single = await client.apiEndpointDetectFormats({
       baseUrl: `${upstream.origin}/each/v1`,
@@ -669,8 +734,9 @@ describe("Detecting each picked model on every request format", () => {
       ["glm-chat", "not_detected"],
       ["glm-chat", "ok"],
       ["glm-chat", "not_detected"],
+      ["glm-chat", "not_detected"],
     ]);
-    expect(upstream.posts.map((post) => post.model)).toEqual(Array(6).fill("glm-chat"));
+    expect(upstream.posts.map((post) => post.model)).toEqual(Array(8).fill("glm-chat"));
   });
 
   test("a model that answers on one format only is saved as Use only this format after the detection", async () => {
@@ -715,6 +781,45 @@ describe("Detecting each picked model on every request format", () => {
     ]);
   });
 
+  test("a model that answers on Gemini only is saved as Use only this format = Gemini", async () => {
+    const created = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Each relay",
+      baseUrls: [{ format: "openai_chat", url: `${upstream.origin}/each/v1` }],
+      apiKey: TYPED_KEY,
+      models: [{ id: "gpt-both" }, { id: "gem-only" }],
+    });
+    const endpointId = created.endpoint?.id ?? "";
+
+    const detected = await client.apiEndpointDetectFormats({
+      endpointId,
+      baseUrl: `${upstream.origin}/each/v1`,
+      modelIds: ["gpt-both", "gem-only"],
+      eachModel: true,
+    });
+    const onlyOne = singleFormatModels(detected.models);
+    expect(onlyOne).toEqual([["gem-only", "gemini"]]);
+    const answered = detected.results.filter((result) => result.status === "ok");
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      endpointId,
+      name: "Each relay",
+      baseUrls: answered.map(({ format, url }) => ({ format, url })),
+      models: [{ id: "gpt-both" }, { id: "gem-only" }],
+      modelSettings: {
+        models: Object.fromEntries(onlyOne.map(([id, format]) => [id, { format }])),
+      },
+    });
+    expect(saved.error).toBeNull();
+
+    const [endpoint] = (await client.apiEndpointList("claude")).endpoints;
+    expect(endpoint?.modelSettings).toEqual({ models: { "gem-only": { format: "gemini" } } });
+    expect(endpoint?.baseUrls).toContainEqual({
+      format: "gemini",
+      url: `${upstream.origin}/each/v1`,
+    });
+  });
+
   test("a format that does not answer in time says so", async () => {
     const pending = client.apiEndpointDetectFormats({
       baseUrl: `${upstream.origin}/each/v1`,
@@ -722,7 +827,7 @@ describe("Detecting each picked model on every request format", () => {
       modelIds: ["slow-a", "gpt-resp"],
       eachModel: true,
     });
-    await expect.poll(() => upstream.posts.length).toBe(6);
+    await expect.poll(() => upstream.posts.length).toBe(8);
     timers.fire(EACH_PROBE_TIMEOUT_MS);
     const detected = await pending;
 
@@ -736,8 +841,8 @@ describe("Detecting each picked model on every request format", () => {
         message: "No response within 30s",
       });
     }
-    expect(timedOut).toHaveLength(3);
-    expect(okFlags(detected.models)[1]).toEqual(["gpt-resp", [false, false, true]]);
+    expect(timedOut).toHaveLength(4);
+    expect(okFlags(detected.models)[1]).toEqual(["gpt-resp", [false, false, true, false]]);
   });
 
   test("when the detection runs out of time, what was asked says so and the rest is not asked", async () => {
@@ -755,9 +860,272 @@ describe("Detecting each picked model on every request format", () => {
 
     expect(detected.error).toBeNull();
     const codes = codesOf(detected.models);
-    expect(codes).toHaveLength(27);
+    expect(codes).toHaveLength(36);
     expect(codes.slice(0, 8)).toEqual(Array(8).fill("batch_timeout"));
-    expect(codes.slice(8)).toEqual(Array(19).fill("not_asked"));
+    expect(codes.slice(8)).toEqual(Array(28).fill("not_asked"));
     expect(upstream.posts).toHaveLength(8);
+  });
+});
+
+/*
+ * Gemini 地址的识别（任务 10-16-gemini-upstream 工单 05，照 magpie detect.go / test.go，MIT，见 THIRD_PARTY_NOTICES）：
+ * 假上游 /gem/v1beta 与 /both/v1beta 只认 x-goog-api-key，key 不对回 Google 的 400「API key not valid」；
+ * 列模型照 Gemini 的 models 分页。/both 另有一份 Bearer 认证的 OpenAI 式清单（列的不是 Gemini 模型）。
+ * 另起一个对任何地址都回 200 网页的「假 Gemini」。
+ */
+const GEMINI_KEY = "AIza-typed-secret";
+
+interface GeminiUpstream {
+  origin: string;
+  requests: {
+    method: string;
+    url: string;
+    headers: IncomingHttpHeaders;
+    body: Record<string, unknown>;
+  }[];
+}
+
+async function startGeminiUpstream(): Promise<GeminiUpstream> {
+  const upstream: GeminiUpstream = { origin: "", requests: [] };
+  const server = createServer((request, response) => {
+    const chunks: Buffer[] = [];
+    request.on("data", (chunk: Buffer) => chunks.push(chunk));
+    request.on("end", () => {
+      const text = Buffer.concat(chunks).toString("utf8");
+      const body = JSON.parse(text || "{}") as Record<string, unknown>;
+      const url = request.url ?? "";
+      upstream.requests.push({ method: request.method ?? "", url, headers: request.headers, body });
+      if (url === "/both/v1beta/v1/models") {
+        if (request.headers.authorization === `Bearer ${GEMINI_KEY}`) {
+          sendJson(response, 200, { data: [{ id: "claude-sonnet-4-5" }, { id: "gpt-5" }] });
+        } else {
+          sendJson(response, 401, { error: { message: "Invalid API key" } });
+        }
+        return;
+      }
+      const isGeminiRoute =
+        /^\/(gem|both)\/v1beta\/models\?/.test(url) ||
+        /^\/(gem|both)\/v1beta\/models\/[^/]+:generateContent$/.test(url);
+      if (!isGeminiRoute) {
+        response.writeHead(404, { "content-type": "text/plain" }).end("Not Found");
+        return;
+      }
+      if (request.headers["x-goog-api-key"] !== GEMINI_KEY) {
+        sendJson(response, 400, {
+          error: {
+            code: 400,
+            message: "API key not valid. Please pass a valid API key.",
+            status: "INVALID_ARGUMENT",
+            details: [
+              { "@type": "type.googleapis.com/google.rpc.ErrorInfo", reason: "API_KEY_INVALID" },
+            ],
+          },
+        });
+        return;
+      }
+      if (request.method === "GET" && /^\/(gem|both)\/v1beta\/models\?/.test(url)) {
+        sendJson(response, 200, {
+          models: [
+            { name: "models/text-embedding-004", supportedGenerationMethods: ["embedContent"] },
+            { name: "models/gemini-2.5-flash", supportedGenerationMethods: ["generateContent"] },
+          ],
+        });
+        return;
+      }
+      if (request.method === "POST" && url.includes(":generateContent")) {
+        sendJson(response, 200, {
+          candidates: [
+            { content: { role: "model", parts: [{ text: "h" }] }, finishReason: "STOP" },
+          ],
+        });
+        return;
+      }
+      response.writeHead(404, { "content-type": "text/plain" }).end("Not Found");
+    });
+  });
+  servers.push(server);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  upstream.origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  return upstream;
+}
+
+describe("Detecting a Gemini base URL", () => {
+  let daemon: TestPaseoDaemon;
+  let client: DaemonClient;
+  let upstream: GeminiUpstream;
+
+  beforeEach(async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-detect-gemini-"));
+    tempRoots.push(root);
+    upstream = await startGeminiUpstream();
+    daemon = await createTestPaseoDaemon({
+      apiEndpoints: {
+        env: {
+          CLAUDE_CONFIG_DIR: path.join(root, "claude"),
+          CODEX_HOME: path.join(root, "codex"),
+        },
+        homeDir: root,
+      },
+    });
+    client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.17.0" });
+    await client.connect();
+    await client.fetchAgents({ subscribe: {} });
+  });
+
+  afterEach(async () => {
+    await client?.close();
+    await daemon?.close();
+    await Promise.all(servers.splice(0).map(closeServer));
+    await Promise.all(
+      tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
+    );
+  });
+
+  test("asks Gemini's generateContent at …/v1beta with the key in x-goog-api-key, last of the four", async () => {
+    const detected = await client.apiEndpointDetectFormats({
+      baseUrl: `${upstream.origin}/gem/v1beta`,
+      apiKey: GEMINI_KEY,
+      modelIds: ["claude-sonnet-4-5", "gpt-5", "gemini-2.5-flash"],
+    });
+
+    expect(detected.error).toBeNull();
+    expect(detected.results.map(({ format, url }) => [format, url])).toEqual([
+      ["anthropic_messages", `${upstream.origin}/gem/v1beta`],
+      ["openai_chat", `${upstream.origin}/gem/v1beta`],
+      ["openai_responses", `${upstream.origin}/gem/v1beta`],
+      ["gemini", `${upstream.origin}/gem/v1beta`],
+    ]);
+    expect(detected.results[3]).toEqual({
+      format: "gemini",
+      url: `${upstream.origin}/gem/v1beta`,
+      status: "ok",
+      httpStatus: 200,
+      message: null,
+      durationMs: expect.any(Number),
+      modelId: "gemini-2.5-flash",
+    });
+    const asked = upstream.requests.filter((request) => request.url.includes(":generateContent"));
+    expect(asked).toHaveLength(1);
+    expect(asked[0]?.url).toBe("/gem/v1beta/models/gemini-2.5-flash:generateContent");
+    expect(asked[0]?.headers["x-goog-api-key"]).toBe(GEMINI_KEY);
+    expect(asked[0]?.headers.authorization).toBeUndefined();
+    expect(asked[0]?.headers["x-api-key"]).toBeUndefined();
+    expect(asked[0]?.body).toEqual({
+      contents: [{ role: "user", parts: [{ text: "hi" }] }],
+      generationConfig: { maxOutputTokens: 16 },
+    });
+  });
+
+  test("a bare host or a host's /v1 gets /v1beta, a deeper path is kept, and a Gemini method URL pasted whole is cut back to its base", async () => {
+    const bare = await client.apiEndpointDetectFormats({
+      baseUrl: upstream.origin,
+      apiKey: GEMINI_KEY,
+      modelId: "gemini-2.5-flash",
+    });
+    expect(bare.results[3]?.url).toBe(`${upstream.origin}/v1beta`);
+    const atV1 = await client.apiEndpointDetectFormats({
+      baseUrl: `${upstream.origin}/v1/`,
+      apiKey: GEMINI_KEY,
+      modelId: "gemini-2.5-flash",
+    });
+    expect(atV1.results[3]?.url).toBe(`${upstream.origin}/v1beta`);
+    const deeper = await client.apiEndpointDetectFormats({
+      baseUrl: `${upstream.origin}/gem/v1`,
+      apiKey: GEMINI_KEY,
+      modelId: "gemini-2.5-flash",
+    });
+    expect(deeper.results[3]?.url).toBe(`${upstream.origin}/gem/v1`);
+
+    const pasted = await client.apiEndpointDetectFormats({
+      baseUrl: `${upstream.origin}/gem/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse`,
+      apiKey: GEMINI_KEY,
+      modelId: "gemini-2.5-flash",
+    });
+    expect(pasted.results.map(({ format, url, status }) => [format, url, status])).toEqual([
+      ["anthropic_messages", `${upstream.origin}/gem/v1beta`, "not_detected"],
+      ["openai_chat", `${upstream.origin}/gem/v1beta`, "not_detected"],
+      ["openai_responses", `${upstream.origin}/gem/v1beta`, "not_detected"],
+      ["gemini", `${upstream.origin}/gem/v1beta`, "ok"],
+    ]);
+  });
+
+  test("a key Google turns away with a 400 says the key is invalid", async () => {
+    const detected = await client.apiEndpointDetectFormats({
+      baseUrl: `${upstream.origin}/gem/v1beta`,
+      apiKey: "AIza-wrong",
+      modelId: "gemini-2.5-flash",
+    });
+
+    const gemini = detected.results[3];
+    expect(gemini).toMatchObject({ format: "gemini", status: "auth_failed", httpStatus: 400 });
+    expect(gemini?.message).toContain("API key not valid");
+    expect(JSON.stringify(detected)).not.toContain("AIza-wrong");
+  });
+
+  test("with no model to try, Gemini's own list gives one when the other list can't be read", async () => {
+    const detected = await client.apiEndpointDetectFormats({
+      baseUrl: `${upstream.origin}/gem/v1beta`,
+      apiKey: GEMINI_KEY,
+    });
+
+    expect(detected.results[3]).toMatchObject({
+      format: "gemini",
+      status: "ok",
+      modelId: "gemini-2.5-flash",
+    });
+    const listings = upstream.requests.filter((request) => request.method === "GET");
+    expect(listings.map((request) => request.url)).toContain("/gem/v1beta/models?pageSize=1000");
+  });
+
+  test("with no model to try, both lists are asked and merged, so Gemini is asked a Gemini model", async () => {
+    const detected = await client.apiEndpointDetectFormats({
+      baseUrl: `${upstream.origin}/both/v1beta`,
+      apiKey: GEMINI_KEY,
+    });
+
+    expect(detected.results.map((result) => [result.format, result.modelId])).toEqual([
+      ["anthropic_messages", "claude-sonnet-4-5"],
+      ["openai_chat", "gpt-5"],
+      ["openai_responses", "gpt-5"],
+      ["gemini", "gemini-2.5-flash"],
+    ]);
+    expect(detected.results[3]?.status).toBe("ok");
+  });
+
+  test("with no model to try, a key Google's list turns away with a 400 marks every format as key rejected", async () => {
+    const detected = await client.apiEndpointDetectFormats({
+      baseUrl: `${upstream.origin}/gem/v1beta`,
+      apiKey: "AIza-wrong",
+    });
+
+    expect(detected.results.map(({ status, httpStatus }) => [status, httpStatus])).toEqual(
+      Array(4).fill(["auth_failed", 400]),
+    );
+    expect(detected.results[3]?.message).toContain("API key not valid");
+    expect(upstream.requests.filter((request) => request.method === "POST")).toEqual([]);
+    expect(JSON.stringify(detected)).not.toContain("AIza-wrong");
+  });
+
+  test("an address that answers any request with a web page is not taken for Gemini", async () => {
+    const page = createServer((_request, response) => {
+      response.writeHead(200, { "content-type": "text/html" }).end("<html>Welcome</html>");
+    });
+    servers.push(page);
+    await new Promise<void>((resolve) => page.listen(0, "127.0.0.1", resolve));
+    const pageOrigin = `http://127.0.0.1:${(page.address() as AddressInfo).port}`;
+
+    const detected = await client.apiEndpointDetectFormats({
+      baseUrl: `${pageOrigin}/v1beta`,
+      apiKey: GEMINI_KEY,
+      modelId: "gemini-2.5-flash",
+    });
+
+    expect(detected.results[3]).toMatchObject({
+      format: "gemini",
+      status: "not_detected",
+      httpStatus: 200,
+      code: "wrong_shape",
+      params: { format: "gemini" },
+    });
   });
 });

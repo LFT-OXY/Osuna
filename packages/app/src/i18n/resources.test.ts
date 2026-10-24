@@ -500,7 +500,7 @@ describe("translation resources", () => {
     expect(apiEndpoints.agent.useSwitch).toBe("使用第三方接口");
     expect(apiEndpoints.agent.defaultModel).toBe("默认模型");
     expect(apiEndpoints.form.addressHint).toBe(
-      "填好 key 后点「自动检测」，Osuna 会用三种请求格式各试一次，逐行列出结果；点「采用这些」把能用的地址填到下面。",
+      "填好 key 后点「自动检测」，Osuna 会用每种请求格式各试一次，逐行列出结果；点「采用这些」把能用的地址填到下面。",
     );
     expect(apiEndpoints.form.detected.useThese).toBe("采用这些");
     expect(apiEndpoints.form.fetch.button).toBe("拉取模型");

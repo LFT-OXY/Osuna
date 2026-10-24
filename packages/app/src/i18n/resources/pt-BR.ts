@@ -2768,7 +2768,7 @@ export const ptBR: TranslationResources = {
         hideKey: "Ocultar",
         apiKeyOptionalLabel: "Chave de API (opcional)",
         apiKeyLocalPlaceholder: "Opcional para servidores locais",
-        keyRejected: "O servidor recusou esta chave (401 / 403)",
+        keyRejected: "O servidor recusou esta chave",
         balance: {
           url: "URL do saldo",
           urlInfo:
@@ -2922,9 +2922,9 @@ export const ptBR: TranslationResources = {
         footerResource:
           "Depois de salvar, a página do endpoint abre e lista as implantações do recurso como seus modelos.",
         addressHint:
-          "Preencha a chave e toque em Detectar: o Osuna tenta uma vez cada um dos três formatos de solicitação e mostra como cada um respondeu; Usar estes preenche os endereços que funcionam.",
+          "Preencha a chave e toque em Detectar: o Osuna tenta uma vez cada formato de solicitação e mostra como cada um respondeu; Usar estes preenche os endereços que funcionam.",
         addressHintKeyOptional:
-          "Toque em Detectar: o Osuna tenta uma vez cada um dos três formatos de solicitação e mostra como cada um respondeu; Usar estes preenche os endereços que funcionam. A chave só é enviada se você preenchê-la.",
+          "Toque em Detectar: o Osuna tenta uma vez cada formato de solicitação e mostra como cada um respondeu; Usar estes preenche os endereços que funcionam. A chave só é enviada se você preenchê-la.",
         detect: "Detectar",
         detectModelPlaceholder: "Modelo para testar (opcional)",
         detected: {

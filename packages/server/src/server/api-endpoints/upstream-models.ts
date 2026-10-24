@@ -35,6 +35,8 @@ export type UpstreamFailureCode =
   | "upstream_unreachable"
   | "upstream_timeout"
   | "models_unsupported"
+  // 清单答上了但一个模型都没列（Gemini 清单照 magpie 算失败），界面按语言说。
+  | "models_empty"
   | "cancelled"
   // 这家的请求头发不出去（params.name）。
   | "invalid_header";

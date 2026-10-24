@@ -1,18 +1,14 @@
 // 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/provider/detect.go 的 DetectModels、
 // internal/catalog/catalog.go 的 ImagesAPI）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
-import type {
-  ApiEndpointFormatDetection,
-  ApiEndpointModelDetection,
+import {
+  API_ENDPOINT_REQUEST_FORMATS,
+  type ApiEndpointFormatDetection,
+  type ApiEndpointModelDetection,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { UsagePricingTimers } from "../usage/pricing/service.js";
 import { deadlineSignal, runPool } from "./model-tests.js";
-import {
-  PROBED_FORMATS,
-  modelsToAsk,
-  probeUpstreamFormat,
-  suggestedBaseUrls,
-} from "./upstream-detect.js";
+import { modelsToAsk, probeUpstreamFormat, suggestedBaseUrls } from "./upstream-detect.js";
 import type { RequestExtras } from "./request-extras.js";
 
 /*
@@ -119,7 +115,7 @@ export async function detectEachModel(input: {
     column: number;
     reason: CellReason;
   }): ApiEndpointFormatDetection => {
-    const format = PROBED_FORMATS[cell.column];
+    const format = API_ENDPOINT_REQUEST_FORMATS[cell.column];
     const reason = reasonFields(cell.reason);
     return {
       format,
@@ -135,7 +131,7 @@ export async function detectEachModel(input: {
     // 先记成没问，问到了再换成回答。
     let reason: CellReason = { code: "not_asked" };
     if (!isAskable) reason = { code: "image_model" };
-    const results = PROBED_FORMATS.map((_, column) => {
+    const results = API_ENDPOINT_REQUEST_FORMATS.map((_, column) => {
       if (isAskable) tasks.push({ row, column });
       return unanswered({ modelId, column, reason });
     });
@@ -153,7 +149,7 @@ export async function detectEachModel(input: {
       const row = models[task.row];
       if (!row) return;
       const { modelId } = row;
-      const format = PROBED_FORMATS[task.column];
+      const format = API_ENDPOINT_REQUEST_FORMATS[task.column];
       const deadline = deadlineSignal({ timers, ms: limits.probeTimeoutMs });
       const sentModel = input.sentNameOf(modelId);
       const probeSignal = AbortSignal.any([signal, deadline.signal]);
@@ -181,7 +177,7 @@ export async function detectEachModel(input: {
   });
   batch.clear();
   if (input.signal.aborted) return { kind: "cancelled" };
-  const results = PROBED_FORMATS.map((_, column) => {
+  const results = API_ENDPOINT_REQUEST_FORMATS.map((_, column) => {
     const answered = models.find((model) => model.results[column]?.status === "ok");
     return (answered ?? models[0]).results[column];
   });

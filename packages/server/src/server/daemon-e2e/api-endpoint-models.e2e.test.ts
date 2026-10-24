@@ -1172,3 +1172,188 @@ describe("API endpoint model lists merged across formats, refreshed daily, and f
     expect(refused.error?.code).toBe("invalid_input");
   });
 });
+
+/*
+ * Gemini 地址的模型清单（任务 10-16-gemini-upstream 工单 05，照 magpie internal/catalog/gemini_list.go，MIT，见 THIRD_PARTY_NOTICES）：
+ * 假上游 /gem/v1beta/models 分两页答（第二页带 pageToken），清单里混着向量模型；/empty/v1beta 一个都不列，/down/v1beta 回 500。
+ */
+interface GeminiListingUpstream {
+  origin: string;
+  requests: { url: string; headers: IncomingHttpHeaders }[];
+  // /gem 的第二页与 /multi/v1 的 Chat 清单答什么。
+  secondPage: unknown[];
+  chat: unknown[];
+}
+
+async function startGeminiListingUpstream(): Promise<GeminiListingUpstream> {
+  const upstream: GeminiListingUpstream = { origin: "", requests: [], secondPage: [], chat: [] };
+  const server = createServer((request, response) => {
+    const url = request.url ?? "";
+    upstream.requests.push({ url, headers: request.headers });
+    const send = (status: number, body: unknown) => {
+      response.writeHead(status, { "content-type": "application/json" });
+      response.end(JSON.stringify(body));
+    };
+    if (url === "/gem/v1beta/models?pageSize=1000") {
+      send(200, {
+        models: [
+          {
+            name: "models/gemini-2.5-pro",
+            displayName: "Gemini 2.5 Pro",
+            supportedGenerationMethods: ["generateContent", "countTokens"],
+            inputTokenLimit: 1_048_576,
+            outputTokenLimit: 65_536,
+          },
+          { name: "models/text-embedding-004", supportedGenerationMethods: ["embedContent"] },
+          { name: "models/imagen-4.0", supportedGenerationMethods: ["predict"] },
+        ],
+        nextPageToken: "page/2",
+      });
+      return;
+    }
+    if (url === "/gem/v1beta/models?pageSize=1000&pageToken=page%2F2") {
+      send(200, { models: upstream.secondPage });
+      return;
+    }
+    if (url === "/multi/v1/models") {
+      send(200, { data: upstream.chat });
+      return;
+    }
+    if (url.startsWith("/empty/v1beta/models?")) {
+      send(200, {});
+      return;
+    }
+    if (url.startsWith("/down/v1beta/models?")) {
+      send(500, { error: { message: "upstream is down" } });
+      return;
+    }
+    response.writeHead(404).end();
+  });
+  servers.push(server);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  upstream.origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  return upstream;
+}
+
+describe("API endpoint model lists from a Gemini base URL", () => {
+  let daemon: TestPaseoDaemon;
+  let client: DaemonClient;
+  let upstream: GeminiListingUpstream;
+
+  beforeEach(async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-gemini-list-"));
+    tempRoots.push(root);
+    upstream = await startGeminiListingUpstream();
+    upstream.secondPage = [{ name: "models/gemini-2.5-flash" }];
+    daemon = await createTestPaseoDaemon({
+      apiEndpoints: { env: { CLAUDE_CONFIG_DIR: path.join(root, "claude") }, homeDir: root },
+    });
+    client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.17.0" });
+    await client.connect();
+    await client.fetchAgents({ subscribe: {} });
+  });
+
+  afterEach(async () => {
+    await client?.close();
+    await daemon?.close();
+    await Promise.all(servers.splice(0).map(closeServer));
+    await Promise.all(
+      tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
+    );
+  });
+
+  test("lists every page, names without models/, only the models that chat, the key in x-goog-api-key alone", async () => {
+    const fetched = await client.apiEndpointFetchModels({
+      provider: "claude",
+      baseUrl: `${upstream.origin}/gem/v1beta`,
+      format: "gemini",
+      apiKey: TYPED_KEY,
+      preview: true,
+      baseUrls: [{ format: "gemini", url: `${upstream.origin}/gem/v1beta` }],
+    });
+
+    expect(fetched.error).toBeNull();
+    expect(fetched.models).toEqual([
+      { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
+      { id: "gemini-2.5-flash" },
+    ]);
+    expect(upstream.requests.map((request) => request.url)).toEqual([
+      "/gem/v1beta/models?pageSize=1000",
+      "/gem/v1beta/models?pageSize=1000&pageToken=page%2F2",
+    ]);
+    for (const { headers } of upstream.requests) {
+      expect(headers["x-goog-api-key"]).toBe(TYPED_KEY);
+      expect(headers.authorization).toBeUndefined();
+      expect(headers["x-api-key"]).toBeUndefined();
+    }
+  });
+
+  test("a Gemini list merges with another format's list by model id", async () => {
+    upstream.chat = [{ id: "gemini-2.5-pro" }, { id: "deepseek-chat" }];
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Both",
+      baseUrls: [
+        { format: "openai_chat", url: `${upstream.origin}/multi/v1` },
+        { format: "gemini", url: `${upstream.origin}/gem/v1beta` },
+      ],
+      apiKey: SAVED_KEY,
+      models: [],
+    });
+    expect(saved.error).toBeNull();
+
+    // 先列的格式在前；Gemini 清单补上 Chat 清单没给的显示名。
+    expect(saved.endpoint?.catalog?.models).toEqual([
+      { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
+      { id: "deepseek-chat" },
+      { id: "gemini-2.5-flash" },
+    ]);
+  });
+
+  test("a Gemini base URL that lists nothing, or fails, says so; a failed one keeps what it listed before", async () => {
+    const empty = await client.apiEndpointFetchModels({
+      provider: "claude",
+      baseUrl: `${upstream.origin}/empty/v1beta`,
+      format: "gemini",
+      apiKey: TYPED_KEY,
+      preview: true,
+      baseUrls: [{ format: "gemini", url: `${upstream.origin}/empty/v1beta` }],
+    });
+    expect(empty.models).toEqual([]);
+    expect(empty.error).toMatchObject({
+      code: "models_empty",
+      message: "no models listed · /models",
+    });
+
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Gemini",
+      baseUrls: [{ format: "gemini", url: `${upstream.origin}/gem/v1beta` }],
+      apiKey: SAVED_KEY,
+      models: [],
+    });
+    const endpointId = saved.endpoint?.id ?? "";
+    expect(saved.endpoint?.catalog?.models.map((model) => model.id)).toEqual([
+      "gemini-2.5-pro",
+      "gemini-2.5-flash",
+    ]);
+
+    const down = await client.apiEndpointFetchModels({
+      provider: "claude",
+      endpointId,
+      baseUrl: `${upstream.origin}/down/v1beta`,
+      format: "gemini",
+      baseUrls: [{ format: "gemini", url: `${upstream.origin}/down/v1beta` }],
+    });
+    expect(down.error).toMatchObject({
+      code: "upstream_error",
+      message: "HTTP 500: upstream is down · /models",
+    });
+    const [endpoint] = (await client.apiEndpointList("claude")).endpoints;
+    expect(endpoint?.catalog?.models.map((model) => model.id)).toEqual([
+      "gemini-2.5-pro",
+      "gemini-2.5-flash",
+    ]);
+    expect(JSON.stringify([empty, down])).not.toContain(SAVED_KEY);
+  });
+});

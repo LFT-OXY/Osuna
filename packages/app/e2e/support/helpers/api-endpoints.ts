@@ -49,6 +49,8 @@ export interface FakeRelay {
     authorization: string | undefined;
     // Azure 的 key 头。
     apiKey: string | undefined;
+    // Gemini 的 key 头。
+    googApiKey: string | undefined;
     model: string | undefined;
     // 表明是哪个 CLI 的头（按 Claude Code / Codex 的样子测时带的）。
     userAgent: string | undefined;
@@ -91,6 +93,9 @@ function send(response: ServerResponse, status: number, body: unknown) {
  * - 测试模型用：/good 上对话请求问 bad-* 回 404（模型不存在），问 slow-* 什么都不回；cc-only-* 只答 User-Agent 是
  *   Claude Code 的，codex-only-* 只答 originator 是 Codex 的（照只放行某 CLI 的分组），别的回 403。
  * - 逐个模型识别用：/good 上 chat-only-* 在 Anthropic 上回 400，只在 Chat 上答。
+ * - Gemini（任务 10-16-gemini-upstream 工单 05）：key 也认 x-goog-api-key（照 new-api）；/good/v1beta 列出 GEMINI_MODELS
+ *   （混着向量模型），generateContent 只答名字带 gemini 的，别的回 400；/empty/v1beta 一个都不列。
+ *   Gemini 路径上 x-goog-api-key 不对时照 Google 回 400「API key not valid」。
  * 除 /free 外，任何路径上 key 不对都回 401。
  */
 /** 假 new-api 的账户令牌（工单 06）。 */
@@ -164,10 +169,7 @@ export async function startFakeRelay(): Promise<FakeRelay> {
         answerNewApiAccount({ headers, response });
         return;
       }
-      if (!isFree && headers.authorization !== `Bearer ${RELAY_KEY}`) {
-        send(response, 401, { error: { message: "Invalid API key" } });
-        return;
-      }
+      if (!isFree && refusesKey({ url, headers, response })) return;
       const model = relay.requests.at(-1)?.model;
       const onAbandoned = () => {
         relay.abandoned += 1;
@@ -187,7 +189,7 @@ export async function startFakeRelay(): Promise<FakeRelay> {
         send(response, 200, { data: MANY_MODELS.map((id) => ({ id })) });
         return;
       }
-      if (answersGoodTurn({ url, relay, response })) return;
+      if (answersGoodTurn({ url, method: request.method, model, relay, response })) return;
       if (url === "/good/v1/chat/completions") {
         send(response, 200, { choices: [{ message: { role: "assistant", content: "hi" } }] });
         return;
@@ -217,15 +219,44 @@ export async function startFakeRelay(): Promise<FakeRelay> {
 }
 
 /**
- * 经中转站问的一轮对话：/good 的 Messages 与 /codex 的 Responses 回带编号与用量的整份回复（/paced 流式回），
+ * key 不对时回绝：Gemini 路径上带了 x-goog-api-key 的照 Google 回 400「API key not valid」，别的回 401。
+ * key 对（Bearer 或 x-goog-api-key）返回 false。
+ */
+function refusesKey(input: {
+  url: string;
+  headers: IncomingHttpHeaders;
+  response: ServerResponse;
+}): boolean {
+  const { headers, response } = input;
+  const googKey = headers["x-goog-api-key"];
+  if (headers.authorization === `Bearer ${RELAY_KEY}` || googKey === RELAY_KEY) return false;
+  if (googKey !== undefined && input.url.includes("/v1beta/")) {
+    send(response, 400, {
+      error: {
+        code: 400,
+        message: "API key not valid. Please pass a valid API key.",
+        status: "INVALID_ARGUMENT",
+      },
+    });
+    return true;
+  }
+  send(response, 401, { error: { message: "Invalid API key" } });
+  return true;
+}
+
+/**
+ * 经中转站问的一轮对话：/good 的 Messages 与 /codex 的 Responses 回带编号与用量的整份回复（/paced 流式回），Gemini 的见 answersGemini；
  * 这一条会记进账，用量页按接口分时看得到它（GOOD_REPLY_TOKENS、GOOD_RESPONSES_TOKENS）。返回 true 即已回。
  */
 function answersGoodTurn(input: {
   url: string;
+  method: string | undefined;
+  model: string | undefined;
   relay: Pick<FakeRelay, "requests">;
   response: ServerResponse;
 }): boolean {
   const { url, response } = input;
+  if (answersGemini(input)) return true;
   const count = input.relay.requests.length;
   if (url === "/paced/v1/messages") {
     streamPacedReply({ id: `msg_paced_${count}`, response });
@@ -255,6 +286,50 @@ function answersGoodTurn(input: {
       },
     ],
     usage: { input_tokens: 200, output_tokens: 40 },
+  });
+  return true;
+}
+
+/** /good/v1beta 的 Gemini 清单里能对话的模型。 */
+export const GEMINI_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash"];
+
+/** Gemini 的清单与 generateContent（/good/v1beta、/empty/v1beta）。返回 true 即已回。 */
+function answersGemini(input: {
+  url: string;
+  method: string | undefined;
+  model: string | undefined;
+  response: ServerResponse;
+}): boolean {
+  const { url, response } = input;
+  if (input.method === "GET" && url.startsWith("/empty/v1beta/models?")) {
+    send(response, 200, {});
+    return true;
+  }
+  if (input.method === "GET" && url === "/good/v1beta/models?pageSize=1000") {
+    send(response, 200, {
+      models: [
+        ...GEMINI_MODELS.map((id) => ({
+          name: `models/${id}`,
+          supportedGenerationMethods: ["generateContent"],
+          inputTokenLimit: 1_048_576,
+          outputTokenLimit: 65_536,
+        })),
+        { name: "models/text-embedding-004", supportedGenerationMethods: ["embedContent"] },
+      ],
+    });
+    return true;
+  }
+  if (input.method !== "POST" || !/^\/good\/v1beta\/models\/[^/]+:generateContent$/.test(url)) {
+    return false;
+  }
+  if (!input.model?.includes("gemini")) {
+    send(response, 400, {
+      error: { code: 400, message: `models/${input.model} is not found`, status: "NOT_FOUND" },
+    });
+    return true;
+  }
+  send(response, 200, {
+    candidates: [{ content: { role: "model", parts: [{ text: "hi" }] }, finishReason: "STOP" }],
   });
   return true;
 }
@@ -392,7 +467,9 @@ function recordOf(input: {
     url: request.url ?? "",
     authorization: headers.authorization,
     apiKey: typeof headers["api-key"] === "string" ? headers["api-key"] : undefined,
-    model: modelOf(text),
+    googApiKey:
+      typeof headers["x-goog-api-key"] === "string" ? headers["x-goog-api-key"] : undefined,
+    model: geminiModelOf(request.url ?? "") ?? modelOf(text),
     userAgent: headers["user-agent"],
     originator: typeof headers.originator === "string" ? headers.originator : undefined,
     stream: streamOf(text),
@@ -410,6 +487,12 @@ function streamOf(body: string): boolean {
     if (error instanceof SyntaxError) return false;
     throw error;
   }
+}
+
+/** Gemini 的模型名在路径里：…/models/<模型>:generateContent。 */
+function geminiModelOf(url: string): string | undefined {
+  const segment = /\/models\/([^/]+):generateContent$/.exec(url)?.[1];
+  return segment === undefined ? undefined : decodeURIComponent(segment);
 }
 
 function modelOf(body: string): string | undefined {

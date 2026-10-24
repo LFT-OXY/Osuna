@@ -2786,7 +2786,7 @@ export const fr: TranslationResources = {
         hideKey: "Masquer",
         apiKeyOptionalLabel: "Clé d'API (facultative)",
         apiKeyLocalPlaceholder: "Facultative pour les serveurs locaux",
-        keyRejected: "Le serveur a refusé cette clé (401 / 403)",
+        keyRejected: "Le serveur a refusé cette clé",
         balance: {
           url: "URL du solde",
           urlInfo:
@@ -2941,9 +2941,9 @@ export const fr: TranslationResources = {
         footerResource:
           "Après l'enregistrement, la page du point de terminaison s'ouvre et liste les déploiements de la ressource comme ses modèles.",
         addressHint:
-          "Saisissez la clé puis appuyez sur Détecter : Osuna essaie une fois chacun des trois formats de requête et affiche la réponse de chacun ; Utiliser celles-ci remplit les adresses qui fonctionnent.",
+          "Saisissez la clé puis appuyez sur Détecter : Osuna essaie une fois chaque format de requête et affiche la réponse de chacun ; Utiliser celles-ci remplit les adresses qui fonctionnent.",
         addressHintKeyOptional:
-          "Appuyez sur Détecter : Osuna essaie une fois chacun des trois formats de requête et affiche la réponse de chacun ; Utiliser celles-ci remplit les adresses qui fonctionnent. La clé n'est envoyée que si vous la saisissez.",
+          "Appuyez sur Détecter : Osuna essaie une fois chaque format de requête et affiche la réponse de chacun ; Utiliser celles-ci remplit les adresses qui fonctionnent. La clé n'est envoyée que si vous la saisissez.",
         detect: "Détecter",
         detectModelPlaceholder: "Modèle à essayer (facultatif)",
         detected: {

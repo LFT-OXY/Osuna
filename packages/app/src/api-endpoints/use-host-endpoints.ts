@@ -20,7 +20,11 @@ import { confirmDialog } from "@/utils/confirm-dialog";
 import { toErrorMessage } from "@/utils/error-messages";
 import { resolveProviderLabel } from "@/utils/provider-definitions";
 import { describeUnparsableFile } from "./config-unparsable-copy";
-import { localizedTestResult, requestExtrasErrorText } from "./request-extras-copy";
+import {
+  localizedTestResult,
+  modelsFetchErrorText,
+  requestExtrasErrorText,
+} from "./request-extras-copy";
 import { cooldownSettingsErrorText } from "./cooldown-settings-copy";
 import { priceMultiplierErrorText } from "./price-multiplier-copy";
 import type {
@@ -518,7 +522,7 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
         );
         if (signal.aborted || response.error?.code === "cancelled") return { status: "cancelled" };
         if (response.error) {
-          const message = requestExtrasErrorText(t, response.error) ?? response.error.message;
+          const message = modelsFetchErrorText(t, response.error) ?? response.error.message;
           return { status: "failed", message };
         }
         return { status: "done", models: response.models };

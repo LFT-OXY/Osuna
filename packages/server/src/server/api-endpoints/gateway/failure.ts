@@ -184,6 +184,11 @@ export function endpointFailure(status: number, body: string): FailureClass {
   return notTheKey ? "other" : "auth";
 }
 
+/** 上游拒了这把 key：401 / 403，或 Gemini 的 400 key 无效（识别、测试连接、拉模型共用）。 */
+export function isKeyRejected(status: number, rawBody: string): boolean {
+  return status === 401 || status === 403 || keyInvalid(status, rawBody);
+}
+
 /** Gemini 的 key 无效：400 且错误说 key 不对（API key not valid / API_KEY_INVALID）。 */
 function keyInvalid(status: number, rawBody: string): boolean {
   return status === 400 && W.keyInvalid.test(wordsOf(rawBody));

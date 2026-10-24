@@ -8,7 +8,6 @@ import type {
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { StoredApiEndpoint } from "./store.js";
 import { AZURE_TEMPLATE_ID, BEDROCK_TEMPLATE_ID, findTemplate } from "./templates.js";
-import type { ProbedFormat } from "./upstream-detect.js";
 
 /*
  * 「按 Claude Code / Codex 的样子测」（ADR 0013）：问那个 CLI 的请求去的格式，带中转站记下的它的请求头。
@@ -20,7 +19,7 @@ export type CliTestClient = "claude_code" | "codex";
 
 interface CliTestPolicy {
   // 先有哪种地址就走哪种（magpie clientProto）。
-  formats: ProbedFormat[];
+  formats: ApiEndpointRequestFormat[];
   // 没有样本时不测（Claude Code 的头从不自己编）；为 false 的用 ChatGPT 账号那套头。
   needsSample: boolean;
   // 只给中转服务（relay 分组的模板或「自定义」加的），厂商自己的 API 不冒充这个 CLI 去问。
@@ -78,7 +77,7 @@ export function needsCliSample(client: CliTestClient): boolean {
 export function cliTestAddress(input: {
   endpoint: StoredApiEndpoint;
   client: CliTestClient;
-}): { format: ProbedFormat; baseUrl: string } | null {
+}): { format: ApiEndpointRequestFormat; baseUrl: string } | null {
   const { baseUrls } = input.endpoint;
   for (const format of CLI_TEST_POLICIES[input.client].formats) {
     const url = baseUrls.find((entry) => entry.format === format)?.url;

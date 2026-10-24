@@ -521,7 +521,7 @@ describe("connection form: a Gemini base URL", () => {
     expect(state.canSubmit).toBe(false);
   });
 
-  it("Test connection doesn't ask a Gemini base URL yet, and has nothing to test with only one", () => {
+  it("Test connection asks a Gemini base URL too, even when it is the only one", () => {
     const fake = fakeDeps();
     const model = createConnectionFormModel(
       { mode: "create", templateId: null },
@@ -531,11 +531,14 @@ describe("connection form: a Gemini base URL", () => {
     model.setName("Gemini relay");
     model.setApiKey("g-key");
     model.setUrl("gemini", "https://relay.example/v1beta");
-    expect(model.getState().canTest).toBe(false);
+    expect(model.getState().canTest).toBe(true);
 
     model.setUrl("openai_chat", "https://relay.example/v1");
     model.testConnection();
-    expect(fake.tests.map((test) => test.request.format)).toEqual(["openai_chat"]);
+    expect(fake.tests.map((test) => [test.request.format, test.request.baseUrl])).toEqual([
+      ["openai_chat", "https://relay.example/v1"],
+      ["gemini", "https://relay.example/v1beta"],
+    ]);
   });
 
   it("opens a saved endpoint with its Gemini base URL in the Gemini field", () => {

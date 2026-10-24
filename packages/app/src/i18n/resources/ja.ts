@@ -2757,7 +2757,7 @@ export const ja: TranslationResources = {
         hideKey: "隠す",
         apiKeyOptionalLabel: "API キー（任意）",
         apiKeyLocalPlaceholder: "ローカルサーバーでは任意",
-        keyRejected: "上流がこのキーを拒否しました（401 / 403）",
+        keyRejected: "上流がこのキーを拒否しました",
         balance: {
           url: "残高照会 URL",
           urlInfo:
@@ -2912,9 +2912,9 @@ export const ja: TranslationResources = {
         footerResource:
           "保存すると、このエンドポイントのページが開き、リソースのデプロイがモデルとして一覧されます。",
         addressHint:
-          "キーを入力して「自動検出」を押すと、Osuna が 3 つのリクエスト形式をそれぞれ 1 回試し、結果を 1 行ずつ表示します。「これを使う」で使えるアドレスを下に入力します。",
+          "キーを入力して「自動検出」を押すと、Osuna が 各リクエスト形式を 1 回ずつ試し、結果を 1 行ずつ表示します。「これを使う」で使えるアドレスを下に入力します。",
         addressHintKeyOptional:
-          "「自動検出」を押すと、Osuna が 3 つのリクエスト形式をそれぞれ 1 回試し、結果を 1 行ずつ表示します。「これを使う」で使えるアドレスを下に入力します。キーは入力した場合だけ送ります。",
+          "「自動検出」を押すと、Osuna が 各リクエスト形式を 1 回ずつ試し、結果を 1 行ずつ表示します。「これを使う」で使えるアドレスを下に入力します。キーは入力した場合だけ送ります。",
         detect: "自動検出",
         detectModelPlaceholder: "試すモデル（任意）",
         detected: {

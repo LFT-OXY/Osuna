@@ -73,7 +73,10 @@ async function startUpstream(): Promise<FakeUpstream> {
         string,
         unknown
       >;
-      const model = typeof body.model === "string" ? body.model : "";
+      // Gemini 的模型名在路径里（…/models/<模型>:generateContent）。
+      const geminiModel = GEMINI_METHOD_PATH.exec(request.url ?? "")?.[1];
+      let model = typeof body.model === "string" ? body.model : "";
+      if (geminiModel !== undefined) model = decodeURIComponent(geminiModel);
       upstream.requests.push({
         path: request.url ?? "",
         model,
@@ -101,6 +104,8 @@ async function startUpstream(): Promise<FakeUpstream> {
   upstream.url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   return upstream;
 }
+
+const GEMINI_METHOD_PATH = /\/models\/([^/]+):generateContent$/;
 
 // 照 sub2api 一类只放行某 CLI 的分组的说法。
 const CLAUDE_CODE_ONLY = "This group only allows Claude Code clients";
@@ -160,6 +165,12 @@ function answer(input: {
   }
   if (url.endsWith("/responses")) {
     sendJson(response, 200, { object: "response", output: [] });
+    return;
+  }
+  if (GEMINI_METHOD_PATH.test(url)) {
+    sendJson(response, 200, {
+      candidates: [{ content: { role: "model", parts: [{ text: "hi" }] } }],
+    });
     return;
   }
   response.writeHead(404, { "content-type": "text/plain" }).end("Not Found");
@@ -394,6 +405,38 @@ describe("test models", () => {
       model: "responses-model",
       input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "hi" }] }],
       max_output_tokens: 16,
+    });
+  });
+
+  // 任务 10-16-gemini-upstream 工单 05：Gemini 地址也能测（magpie testOne 的 protos 含 Gemini）。
+  test("a model pinned to Gemini, or on a Gemini-only endpoint, is tested at the Gemini base URL", async () => {
+    const { client, upstream } = await start({
+      endpoint: (url) => ({
+        models: ["gem-pinned", "bad-gem"],
+        baseUrls: [
+          { format: "openai_chat", url: `${url}/c/v1` },
+          { format: "gemini", url: `${url}/g/v1beta` },
+        ],
+        modelSettings: {
+          models: { "gem-pinned": { format: "gemini" }, "bad-gem": { format: "gemini" } },
+        },
+      }),
+    });
+    const response = await client.apiEndpointTestModels({ endpointId: "ep_a" });
+
+    const results = byModel(response.results);
+    expect(results["gem-pinned"]).toMatchObject({ ok: true, format: "gemini", status: 200 });
+    expect(results["bad-gem"]).toMatchObject({ ok: false, format: "gemini", status: 404 });
+    expect(results["bad-gem"]?.error?.message).toContain("does not exist");
+    const pinned = upstream.requests.filter((request) => request.model === "gem-pinned");
+    expect(pinned.map((request) => request.path)).toEqual([
+      "/g/v1beta/models/gem-pinned:generateContent",
+    ]);
+    expect(pinned[0]?.headers["x-goog-api-key"]).toBe("sk-a");
+    expect(pinned[0]?.authorization).toBeUndefined();
+    expect(pinned[0]?.body).toEqual({
+      contents: [{ role: "user", parts: [{ text: "hi" }] }],
+      generationConfig: { maxOutputTokens: 16 },
     });
   });
 

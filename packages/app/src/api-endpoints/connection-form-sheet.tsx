@@ -1953,15 +1953,18 @@ const styles = StyleSheet.create((theme) => ({
     borderTopWidth: theme.borderWidth[1],
     borderTopColor: theme.colors.border,
   },
+  // 四种格式时一行放两格，免得格式名和原因被挤断。
   eachCells: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: theme.spacing[2],
   },
   eachCellsStacked: {
     gap: theme.spacing[1],
   },
   eachCell: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: "40%",
     minWidth: 0,
     gap: theme.spacing[0.5],
   },

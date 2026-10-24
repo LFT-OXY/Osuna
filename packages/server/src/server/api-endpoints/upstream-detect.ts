@@ -2,11 +2,15 @@
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import {
   API_ENDPOINT_DETECT_MAX_MODELS,
+  API_ENDPOINT_REQUEST_FORMATS,
   type ApiEndpointFormatDetection,
   type ApiEndpointRequestFormat,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { isClaudeModel } from "./gateway/routing.js";
-import { fetchUpstreamModels } from "./upstream-models.js";
+import { isKeyRejected } from "./gateway/failure.js";
+import { fetchGeminiModels } from "./gemini-models.js";
+import { geminiBaseUrl, geminiPath } from "./gemini-base-url.js";
+import { fetchUpstreamModels, type UpstreamFailure } from "./upstream-models.js";
 import {
   ANTHROPIC_VERSION,
   describeNetworkError,
@@ -35,7 +39,7 @@ import { asCliBody, type CliTestClient } from "./test-as.js";
  * 自动检测请求格式（照 magpie internal/provider/detect.go）：从用户填的一个地址推出每种格式的地址，
  * 每种格式各发一条最小对话请求，回应正常的就算这家支持。问哪个模型：用户填的试用模型每种格式都问它；
  * 没填时按格式从表单里已选的模型挑，也没有才向上游列一次模型挑人选（列模型不花钱）。
- * 列模型就被拒（401 / 403）时三种都算 key 无效，不再发对话请求。
+ * 列模型就被拒（401 / 403，或 Gemini 的 400 key 无效）时四种都算 key 无效，不再发对话请求。Gemini 照 magpie 排在最后。
  */
 
 export type DetectOutcome =
@@ -43,8 +47,8 @@ export type DetectOutcome =
   | { kind: "cancelled" };
 
 interface FormatProbe {
-  // 接在这种格式的地址后面。
-  path: string;
+  // 接在这种格式的地址后面（Gemini 的模型名在路径里）。
+  path(sentModel: string): string;
   // key 放哪（模板另有规定的除外）与这种格式另要的头。
   keys: KeyHeaders;
   headers: Record<string, string>;
@@ -53,18 +57,10 @@ interface FormatProbe {
   matches(body: unknown): boolean;
 }
 
-/** 能探测的格式：Gemini 的探测在工单 05（10-16-gemini-upstream）补上，在那之前检测、测试都不问 Gemini 地址。 */
-export const PROBED_FORMATS = ["anthropic_messages", "openai_chat", "openai_responses"] as const;
-export type ProbedFormat = (typeof PROBED_FORMATS)[number];
-
-export function isProbedFormat(format: ApiEndpointRequestFormat): format is ProbedFormat {
-  return (PROBED_FORMATS as readonly string[]).includes(format);
-}
-
-// 和中转站请求上游时一样：Anthropic 地址两种认证头都带，OpenAI 两种以 /v1 结尾。
-const FORMAT_PROBES: Record<ProbedFormat, FormatProbe> = {
+// 和中转站请求上游时一样：Anthropic 地址两种认证头都带，OpenAI 两种以 /v1 结尾，Gemini 只带 x-goog-api-key。
+const FORMAT_PROBES: Record<ApiEndpointRequestFormat, FormatProbe> = {
   anthropic_messages: {
-    path: "/v1/messages",
+    path: () => "/v1/messages",
     keys: "both",
     headers: { "anthropic-version": ANTHROPIC_VERSION },
     body: (modelId) => ({
@@ -75,7 +71,7 @@ const FORMAT_PROBES: Record<ProbedFormat, FormatProbe> = {
     matches: (body) => isRecord(body) && (body.type === "message" || Array.isArray(body.content)),
   },
   openai_chat: {
-    path: "/chat/completions",
+    path: () => "/chat/completions",
     keys: "bearer",
     headers: {},
     body: (modelId) => ({
@@ -86,7 +82,7 @@ const FORMAT_PROBES: Record<ProbedFormat, FormatProbe> = {
     matches: (body) => isRecord(body) && Array.isArray(body.choices),
   },
   openai_responses: {
-    path: "/responses",
+    path: () => "/responses",
     keys: "bearer",
     headers: {},
     // 不带 max_output_tokens：Codex 自己不发它，有的中转站会拒绝这个参数。
@@ -96,23 +92,44 @@ const FORMAT_PROBES: Record<ProbedFormat, FormatProbe> = {
     }),
     matches: (body) => isRecord(body) && (body.object === "response" || Array.isArray(body.output)),
   },
+  // 照 magpie tinyBody：非流式 generateContent，模型只在路径里；要回 candidates 才算（G6，magpie 只看 2xx）。
+  gemini: {
+    path: (sentModel) => geminiPath({ model: sentModel, stream: false }),
+    keys: "googApiKey",
+    headers: {},
+    body: () => ({
+      contents: [{ role: "user", parts: [{ text: "hi" }] }],
+      generationConfig: { maxOutputTokens: 16 },
+    }),
+    matches: (body) => isRecord(body) && Array.isArray(body.candidates),
+  },
 };
 
 const PASTED_ENDPOINT_SUFFIXES = ["/chat/completions", "/responses", "/v1/messages", "/messages"];
 const VERSION_SEGMENT = /\/v\d+[a-z]*$/i;
+// 整条粘进来的 Gemini 方法地址或模型清单（magpie detect.go 的 geminiMethod）。
+const PASTED_GEMINI_METHOD = /\/models(?:\/[^/?#]*)?(?:[?#].*)?$/;
 
 /**
- * 每种格式的建议地址：整段粘进来的接口地址先剪到 base；Anthropic 取不带 /v1 的根（CLI 自己拼 /v1/messages），
- * OpenAI 两种以版本段结尾，没有就补 /v1。
+ * 每种格式的建议地址（magpie DetectBase）：整段粘进来的接口地址先剪到 base；Anthropic 取不带 /v1 的根（CLI 自己拼 /v1/messages），
+ * OpenAI 两种以版本段结尾，没有就补 /v1；Gemini 主机后恰为 /v1 的改 /v1beta，其余照存 Gemini 地址的规则（geminiBaseUrl）。
  */
-export function suggestedBaseUrls(baseUrl: string): Record<ProbedFormat, string> {
+export function suggestedBaseUrls(baseUrl: string): Record<ApiEndpointRequestFormat, string> {
   let base = baseUrl.trim().replace(/\/+$/, "");
   for (const suffix of PASTED_ENDPOINT_SUFFIXES) {
     if (base.endsWith(suffix)) base = base.slice(0, -suffix.length);
   }
+  base = base.replace(PASTED_GEMINI_METHOD, "").replace(/\/+$/, "");
   const anthropic = base.replace(/\/v1$/, "");
   const openai = VERSION_SEGMENT.test(base) ? base : `${base}/v1`;
-  return { anthropic_messages: anthropic, openai_chat: openai, openai_responses: openai };
+  const isAtV1 = URL.canParse(base) && new URL(base).pathname.replace(/^\/+|\/+$/g, "") === "v1";
+  const gemini = isAtV1 ? `${base}beta` : geminiBaseUrl(base);
+  return {
+    anthropic_messages: anthropic,
+    openai_chat: openai,
+    openai_responses: openai,
+    gemini,
+  };
 }
 
 export async function detectUpstreamFormats(input: {
@@ -141,46 +158,72 @@ export async function detectUpstreamFormats(input: {
       modelFor: (format) => input.modelId ?? pickProbeModel(picked, format),
     });
   }
-  const listed = await fetchUpstreamModels({
-    // claude 的请求头两种认证都带，也认 Anthropic 的分页。
-    provider: "claude",
-    baseUrl: urls.anthropic_messages,
-    apiKey: input.apiKey,
-    // 自动检测只给「自定义」用。
-    templateId: undefined,
-    extras: input.extras,
-    signal: input.signal,
-    timeoutMs: input.modelsTimeoutMs,
-  });
-  if (!listed.ok) {
-    if (listed.error.code === "cancelled") return { kind: "cancelled" };
-    const httpStatus = listed.error.status ?? null;
-    const rejected = httpStatus === 401 || httpStatus === 403;
-    // 列模型就被拒：三种格式都是这把 key 的问题；其余失败是没有模型可问。
-    const rejectedOutcome: ListingOutcome = {
-      status: "auth_failed",
-      httpStatus,
-      message: listed.error.message,
-    };
-    const unlistedOutcome: ListingOutcome = {
-      status: "not_detected",
-      httpStatus: null,
-      message: `Could not list models to try: ${listed.error.message}`,
-      code: "models_list_failed",
-      params: { detail: listed.error.message },
-    };
-    const outcome = rejected ? rejectedOutcome : unlistedOutcome;
+  // 两份清单一起问、按 id 合并（magpie 的清单各格式都问，有一份答上就有模型可挑）：
+  // Anthropic 根上的那份（claude 的请求头两种认证都带，也认 Anthropic 的分页）与 Gemini 的那份。
+  const [listed, geminiListed] = await Promise.all([
+    fetchUpstreamModels({
+      provider: "claude",
+      baseUrl: urls.anthropic_messages,
+      apiKey: input.apiKey,
+      // 自动检测只给「自定义」用。
+      templateId: undefined,
+      extras: input.extras,
+      signal: input.signal,
+      timeoutMs: input.modelsTimeoutMs,
+    }),
+    fetchGeminiModels({
+      baseUrl: urls.gemini,
+      apiKey: input.apiKey,
+      extras: input.extras,
+      signal: input.signal,
+    }),
+  ]);
+  if (input.signal.aborted) return { kind: "cancelled" };
+  const modelIds = [
+    ...new Set([listed, geminiListed].flatMap((list) => (list.ok ? list.models : [])).map(idOf)),
+  ];
+  if (listed.ok || geminiListed.ok) {
+    return probeAll({ input, urls, modelFor: (format) => pickProbeModel(modelIds, format) });
+  }
+  if (listed.error.code === "cancelled") return { kind: "cancelled" };
+  const outcome = listingFailureOutcome([listed.error, geminiListed.error]);
+  return {
+    kind: "result",
+    results: API_ENDPOINT_REQUEST_FORMATS.map((format) => ({
+      format,
+      url: urls[format],
+      ...outcome,
+    })),
+  };
+}
+
+function idOf(model: { id: string }): string {
+  return model.id;
+}
+
+/**
+ * 两份清单都没列出来时每种格式的结论：哪一份是 key 被拒（401 / 403，或 Gemini 的 400 key 无效），
+ * 每种格式都是这把 key 的问题；其余失败是没有模型可问，原因取 Anthropic 根那一份的。
+ */
+function listingFailureOutcome(failures: [UpstreamFailure, UpstreamFailure]): ListingOutcome {
+  const rejected = failures.find(
+    (failure) => failure.status !== undefined && isKeyRejected(failure.status, failure.message),
+  );
+  if (rejected) {
     return {
-      kind: "result",
-      results: PROBED_FORMATS.map((format) => ({
-        format,
-        url: urls[format],
-        ...outcome,
-      })),
+      status: "auth_failed",
+      httpStatus: rejected.status ?? null,
+      message: rejected.message,
     };
   }
-  const modelIds = listed.models.map((model) => model.id);
-  return probeAll({ input, urls, modelFor: (format) => pickProbeModel(modelIds, format) });
+  const { message } = failures[0];
+  return {
+    status: "not_detected",
+    httpStatus: null,
+    message: `Could not list models to try: ${message}`,
+    code: "models_list_failed",
+    params: { detail: message },
+  };
 }
 
 type ListingOutcome = Pick<
@@ -204,12 +247,12 @@ async function probeAll(args: {
     sentNameOf: (modelId: string) => string;
     extras: RequestExtras;
   };
-  urls: Record<ProbedFormat, string>;
-  modelFor: (format: ProbedFormat) => string | null;
+  urls: Record<ApiEndpointRequestFormat, string>;
+  modelFor: (format: ApiEndpointRequestFormat) => string | null;
 }): Promise<DetectOutcome> {
   const { input, urls, modelFor } = args;
   const results = await Promise.all(
-    PROBED_FORMATS.map((format) => {
+    API_ENDPOINT_REQUEST_FORMATS.map((format) => {
       const modelId = modelFor(format);
       return probeUpstreamFormat({
         format,
@@ -231,7 +274,7 @@ async function probeAll(args: {
 
 /** 用一个模型向一种格式的地址发一条最小对话请求，回这种格式的检测结果。 */
 export async function probeUpstreamFormat(input: {
-  format: ProbedFormat;
+  format: ApiEndpointRequestFormat;
   baseUrl: string;
   // 没 key 的接口为 null，不带认证头。
   apiKey: string | null;
@@ -286,7 +329,7 @@ export async function probeUpstreamFormat(input: {
     });
   }
   const probe = FORMAT_PROBES[format];
-  const url = `${baseUrl}${probe.path}`;
+  const url = `${baseUrl}${probe.path(input.sentModel ?? input.modelId)}`;
   const request = probeRequest({ ...input, modelId: input.modelId, probe });
   const timeout = AbortSignal.timeout(input.timeoutMs);
   let status: number;
@@ -334,7 +377,8 @@ export async function probeUpstreamFormat(input: {
   }
   const detail = extractErrorDetail(text, secrets);
   const message = detail ? `${prefix}: ${detail}` : prefix;
-  return result(status === 401 || status === 403 ? "auth_failed" : "not_detected", status, message);
+  // Google 的 key 不对回 400「API key not valid」（G4）。
+  return result(isKeyRejected(status, text) ? "auth_failed" : "not_detected", status, message);
 }
 
 /** daemon 自己写的检测原因（ApiEndpointFormatDetectionSchema 的 code 与 params）。 */
@@ -492,13 +536,14 @@ const OPENAI_MODEL = /^(gpt|o1|o3|o4|codex)/i;
 
 /**
  * 给一种格式挑要问的模型（magpie 的 detectModel）：Anthropic 问 Claude 模型，Responses 问 OpenAI 模型，
- * Chat 问非 Claude 的；挑不到就取第一个。详情页按格式测试连接也用它挑。
+ * Gemini 问名字带 gemini 的，Chat 问非 Claude 的；挑不到就取第一个。详情页按格式测试连接也用它挑。
  */
 export function pickProbeModel(ids: string[], format: ApiEndpointRequestFormat): string | null {
   const madeFor = (id: string): boolean => {
     const bare = id.slice(id.lastIndexOf("/") + 1);
     if (format === "anthropic_messages") return isClaudeModel(id);
     if (format === "openai_responses") return OPENAI_MODEL.test(bare);
+    if (format === "gemini") return id.toLowerCase().includes("gemini");
     return !isClaudeModel(id);
   };
   return ids.find(madeFor) ?? ids[0] ?? null;

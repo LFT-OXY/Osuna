@@ -15,7 +15,7 @@ import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { useHostRuntimeClient } from "@/runtime/host-runtime";
 import { confirmDialog } from "@/utils/confirm-dialog";
 import { toErrorMessage } from "@/utils/error-messages";
-import { localizedTestResult, requestExtrasErrorText } from "./request-extras-copy";
+import { localizedTestResult, modelsFetchErrorText } from "./request-extras-copy";
 import { resolveProviderLabel } from "@/utils/provider-definitions";
 import { addManualModels, keepMappingWithin, type ModelSource } from "./internal/endpoint-models";
 import { previewAgentSettlements, type AgentSettlement } from "./internal/host-list";
@@ -192,7 +192,7 @@ export function useEndpointDetail(input: {
               setForgetState({ status: "idle" });
               return;
             }
-            failure = requestExtrasErrorText(t, response.error) ?? response.error.message;
+            failure = modelsFetchErrorText(t, response.error) ?? response.error.message;
           } catch (error) {
             failure = toErrorMessage(error);
           }
@@ -422,8 +422,7 @@ export function useEndpointDetail(input: {
 
   const testConnection = useCallback(() => {
     if (!client) return;
-    // Gemini 地址的测试在工单 05（10-16-gemini-upstream）补上。
-    const addresses = formatAddresses(endpoint).filter(({ format }) => format !== "gemini");
+    const addresses = formatAddresses(endpoint);
     setTestResults(
       Object.fromEntries(addresses.map((address) => [address.format, { kind: "testing" }])),
     );

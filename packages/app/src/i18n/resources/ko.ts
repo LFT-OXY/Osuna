@@ -2744,7 +2744,7 @@ export const ko: TranslationResources = {
         hideKey: "숨기기",
         apiKeyOptionalLabel: "API 키 (선택 사항)",
         apiKeyLocalPlaceholder: "로컬 서버는 선택 사항",
-        keyRejected: "업스트림이 이 키를 거부했습니다 (401 / 403)",
+        keyRejected: "업스트림이 이 키를 거부했습니다",
         balance: {
           url: "잔액 조회 URL",
           urlInfo:
@@ -2895,9 +2895,9 @@ export const ko: TranslationResources = {
         footerLocal: "저장하면 이 엔드포인트 페이지가 열리고, 가져온 모델 중에서 고를 수 있습니다.",
         footerResource: "저장하면 이 엔드포인트 페이지가 열리고 리소스의 배포가 모델로 나열됩니다.",
         addressHint:
-          "키를 입력한 뒤 자동 감지를 누르면 Osuna가 세 가지 요청 형식을 한 번씩 시도하고 결과를 한 줄씩 보여 줍니다. '이것 사용'을 누르면 작동하는 주소를 아래에 채웁니다.",
+          "키를 입력한 뒤 자동 감지를 누르면 Osuna가 각 요청 형식을 한 번씩 시도하고 결과를 한 줄씩 보여 줍니다. '이것 사용'을 누르면 작동하는 주소를 아래에 채웁니다.",
         addressHintKeyOptional:
-          "자동 감지를 누르면 Osuna가 세 가지 요청 형식을 한 번씩 시도하고 결과를 한 줄씩 보여 줍니다. '이것 사용'을 누르면 작동하는 주소를 아래에 채웁니다. 키는 입력한 경우에만 함께 보냅니다.",
+          "자동 감지를 누르면 Osuna가 각 요청 형식을 한 번씩 시도하고 결과를 한 줄씩 보여 줍니다. '이것 사용'을 누르면 작동하는 주소를 아래에 채웁니다. 키는 입력한 경우에만 함께 보냅니다.",
         detect: "자동 감지",
         detectModelPlaceholder: "시도할 모델(선택)",
         detected: {

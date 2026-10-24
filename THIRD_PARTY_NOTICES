@@ -477,9 +477,23 @@ internal/gui/assets/app.js and i18n.js:
   packages/app/src/i18n/resources/*.ts (settings.apiEndpoints.agent.issues.codexProxied*)
 
 Request-format auto-detection (each format's base URL, the model asked, the
-smallest request) follows magpie's internal/provider/detect.go and test.go:
+smallest request) follows magpie's internal/provider/detect.go and test.go;
+Gemini asked last, at …/v1beta (DetectBase), with a non-streamed
+generateContent and the key in x-goog-api-key (tinyBody, AuthHeaders), a
+model named gemini picked for it (detectModel), and a Gemini base URL tested
+and its models tested there (Test, testOne):
 
   packages/server/src/server/api-endpoints/upstream-detect.ts
+
+A Gemini base URL's model list (GET models a page at a time by nextPageToken,
+at most 20 pages of 8 seconds each, the key in x-goog-api-key, names without
+models/, only the models that serve generateContent, their input and output
+limits, none listed is a failure) and that list merged with the other
+formats' follow FetchGemini in magpie's internal/catalog/gemini_list.go and
+fetchOne in internal/provider/models.go:
+
+  packages/server/src/server/api-endpoints/gemini-models.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-models.e2e.test.ts
 
 Detecting each picked model (the first 30 picked models asked once on every
 format, eight requests at a time, each waiting 12 seconds and the whole
