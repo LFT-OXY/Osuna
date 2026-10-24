@@ -1,5 +1,5 @@
 // 开口前扣住帧与空回复的认法移植自 magpie（https://github.com/yetone/magpie，internal/gateway/fallback.go 的 holdWriter.scan、streamEvent、holdMost，gateway.go 的 emptyReply、repliesCounted、uncounted、answersNothing），
-// 复用的连接被掐时在新连接上重发照 upstream_transport.go 的 replayable，开口前的拒答照 fallback.go 的 holdWriter.settle、streamEvent 与 handBack
+// 复用的连接被掐时在新连接上重发照 upstream_transport.go 的 replayable，开口前的拒答照 fallback.go 的 holdWriter.settle、streamEvent 与 handBack，Gemini 的模型放进路径照 gateway.go 调 provider.GeminiPath 处
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import http, {
@@ -18,6 +18,7 @@ import {
   redactKey,
   type Secrets,
 } from "../upstream-http.js";
+import { geminiPath } from "../gemini-base-url.js";
 import { skipsCertificateCheck } from "../insecure-tls.js";
 import type { AgentError } from "./agent-errors.js";
 import { streamStatus } from "./failure.js";
@@ -52,7 +53,7 @@ const MAX_REPLAYS = 8;
 export const EMPTY_REPLY = "an empty reply (the model answered nothing; try again)";
 
 // Anthropic 地址按 Claude Code 的规则拼 /v1/messages；OpenAI 两种地址按 SDK 的规则以 /v1 结尾。
-// Gemini 的模型在路径里，拼法在工单 02（10-16-gemini-upstream）补上；在那之前中转站不会挑 Gemini 地址（routing.ts）。
+// Gemini 的模型在路径里（geminiPath），上游一律流式。
 const UPSTREAM_PATHS: Record<Exclude<ApiEndpointRequestFormat, "gemini">, string> = {
   anthropic_messages: "/v1/messages",
   openai_chat: "/chat/completions",
@@ -62,12 +63,17 @@ const UPSTREAM_PATHS: Record<Exclude<ApiEndpointRequestFormat, "gemini">, string
 export function upstreamUrl(input: {
   baseUrl: string;
   format: ApiEndpointRequestFormat;
+  // 发给上游的模型名：只有 Gemini 放进路径（必须给），别的格式在请求体里。
+  model?: string;
   // 接在格式路径后面，如 count_tokens 的 `/count_tokens`。
   suffix?: string;
   query?: string;
 }): URL {
-  if (input.format === "gemini") throw new Error("Gemini upstream URLs are not available yet");
   const base = input.baseUrl.trim().replace(/\/+$/, "");
+  if (input.format === "gemini") {
+    if (input.model === undefined) throw new Error("A Gemini upstream URL needs the model");
+    return new URL(`${base}${geminiPath({ model: input.model, stream: true })}`);
+  }
   return new URL(`${base}${UPSTREAM_PATHS[input.format]}${input.suffix ?? ""}${input.query ?? ""}`);
 }
 

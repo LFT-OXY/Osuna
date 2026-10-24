@@ -49,9 +49,13 @@ Config-shaped schemas that the daemon also persists live in leaf modules, not in
 - `server_info.features.<flag>` (`apiEndpointGemini`) gates the client.
 - `templateBaseUrl({ templateId, format, url })` (`templates.ts`) is the single per-format normalisation on save and import (`geminiBaseUrl` for Gemini).
 - `keyHeadersAt` (`request-extras.ts`) picks the auth header per format (`KeyHeaders` `"googApiKey"` → `x-goog-api-key`).
+- Gateway translation (`gateway/translation/protocols.ts`): `upstreamProtocolOf(format)` → `{ build, decoder }` for every format; `protocolOf(format)` → the agent side (`parse`, `encoder`, `render`) and throws for an upstream-only format (Gemini: no agent speaks it, entrances pick the format by path).
+- `upstreamUrl({ baseUrl, format, model?, suffix?, query? })` (`gateway/upstream-call.ts`): a format whose model goes in the path (Gemini, `geminiPath` in `gemini-base-url.ts`, escaped like Go's `url.PathEscape`) needs `model` — the name actually sent, after **Upstream name**.
 
 ### 3. Contracts
 - Exhaustive `Record`/`switch` sites fail typecheck and must each get the new value; lists that drive behaviour (`TRANSLATION_ORDER` in `routing.ts`, `TEMPLATE_MATCHED_FORMATS` in `import-apps.ts`, `CLI_TEST_POLICIES`) don't and must be read by hand.
+- An upstream-only format gets a module with `build` and a decoder only; don't write stub `parse`/`encoder`/`render`. The translated body for it carries no `model` (`translatedBody` skips `built.model` for Gemini) — the model is in the URL.
+- A decoder for a format with no end marker emits `stop` at its finish reason and never `done`; `endedShort` (`broken-reply.ts`) counts `stop` as closed, so a stream cut before the finish reason is still a broken reply. Gemini: a chunk with only `usageMetadata` is not an end.
 - Where only some formats are supported yet, narrow the type instead of adding a fake branch: `PROBED_FORMATS` / `ProbedFormat` in `upstream-detect.ts` makes every caller of `probeUpstreamFormat` filter (`isProbedFormat`).
 - Client: the add dialog (`ConnectionFormOptions.canUseGemini`) and the endpoint page's Connection rows (`showsGemini`) are both gated by the flag; a host without it never shows the field or a "Not set" row.
 
@@ -61,7 +65,7 @@ Config-shaped schemas that the daemon also persists live in leaf modules, not in
 
 ### 5. Good/Base/Bad Cases
 - Good: Gemini-only endpoint saves, is normalised (`relay.example` → `https://relay.example/v1beta`), listed, imported.
-- Base: endpoint with Chat + Gemini before the gateway speaks Gemini → gateway picks Chat.
+- Base: endpoint with Chat + Gemini → the gateway translates to Chat (Gemini is last in `TRANSLATION_ORDER`); only a Gemini URL, or the model pinned to Gemini, goes to Gemini.
 - Bad: a newer client with a format-less older Osuna client saving the same endpoint → whole-replace `baseUrls` drops the new format (accepted, G16).
 
 ### 6. Tests Required
@@ -69,6 +73,8 @@ Config-shaped schemas that the daemon also persists live in leaf modules, not in
 - daemon e2e (`api-endpoint-import.e2e.test.ts`): CC Switch / Alma / link carry the URL; same-host match says `added`.
 - app unit (`connection-form-model.test.ts`): field present only with the flag; save request carries it.
 - browser: a host with the flag hidden (`hideHostFeature`) shows no field and no row.
+- daemon e2e (`api-endpoint-gateway-gemini.e2e.test.ts`, not in `test:integration` — run locally): each entrance streamed and whole; upstream path, `x-goog-api-key` alone, body without `model`/`stream`; format choice; headers, extra body, upstream name; ledger row.
+- unit (`translation/gemini.test.ts`, `gemini-base-url.test.ts`): request shape, usage, finish reasons, usage-only chunk, error words, path escaping.
 
 ### 7. Wrong vs Correct
 #### Wrong

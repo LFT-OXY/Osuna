@@ -74,7 +74,7 @@ import {
 } from "./translation/ir.js";
 import { isGrokReply, wholeArgsFilter } from "./grok-integral.js";
 import { fenceFilter, unfencedReply } from "./translation/fence.js";
-import { protocolOf, type StreamDecoder } from "./translation/protocols.js";
+import { protocolOf, upstreamProtocolOf, type StreamDecoder } from "./translation/protocols.js";
 import { SseReader } from "./translation/sse.js";
 import { textCallFilter } from "./translation/text-calls.js";
 import { withSearchSourcesFor, withThinkingInline, withVendorRewrites } from "./vendor-rewrites.js";
@@ -144,7 +144,11 @@ export async function attemptTranslated(input: {
   sessionId: string;
 }): Promise<AttemptOutcome> {
   const { res, apiKey, to, refusals } = input;
-  const url = upstreamUrl({ baseUrl: input.baseUrl, format: to });
+  const sentModel = upstreamModelName({
+    settings: input.endpoint.modelSettings,
+    modelId: input.upstreamModel,
+  });
+  const url = upstreamUrl({ baseUrl: input.baseUrl, format: to, model: sentModel });
   const extras = storedRequestExtras(input.endpoint);
   const secrets = secretsOf({ apiKey, extras });
   // 这家的请求头发不出去：这一个请求当作连不上，照常换家。
@@ -193,10 +197,7 @@ export async function attemptTranslated(input: {
       from: input.from,
       to,
       model: input.upstreamModel,
-      sentModel: upstreamModelName({
-        settings: input.endpoint.modelSettings,
-        modelId: input.upstreamModel,
-      }),
+      sentModel,
       facts: input.facts,
       extraBody: extras.extraBody,
       session: input.sessionId,
@@ -477,8 +478,9 @@ export function translatedBody(input: TranslatedBodyInput): string {
   if (to === "openai_chat") request = withThinkingInline({ baseUrl, request });
   // 要回放推理的模型按原名或上游模型名认出一个就算（magpie）；请求体里的模型名总是上游模型名。
   const replayModel = replaysThinking(input.model) ? input.model : input.sentModel;
-  const built = protocolOf(to).build({ ...request, stream: true }, replayModel);
-  built.model = input.sentModel;
+  const built = upstreamProtocolOf(to).build({ ...request, stream: true }, replayModel);
+  // Gemini 的模型在地址里（upstreamUrl），请求体不带。
+  if (to !== "gemini") built.model = input.sentModel;
   let body = withoutRefusedFields({
     format: to,
     body: built,
@@ -693,7 +695,7 @@ async function readTry(input: {
   onData: (data: string) => void;
 }): Promise<TryEnd> {
   const { soFar } = input;
-  const decoder = protocolOf(input.to).decoder();
+  const decoder = upstreamProtocolOf(input.to).decoder();
   const calls = textCallFilter({
     tools: input.request.tools,
     emit: (event) => soFar.event(event),
@@ -734,7 +736,7 @@ async function wholeReply(input: {
 }): Promise<AnswerEnd> {
   const { res, endpoint } = input;
   const collector = new ReplyCollector();
-  const decoder = protocolOf(input.to).decoder();
+  const decoder = upstreamProtocolOf(input.to).decoder();
   const numbers = wholeNumbersFilter({
     requestedModel: input.requestedModel,
     upstreamModel: input.upstreamModel,

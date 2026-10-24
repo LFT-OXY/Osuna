@@ -14,7 +14,7 @@ import {
   type VendorError,
 } from "./translation/ir.js";
 import { ReplyClock, UNTIMED, type ReplyTimes } from "./reply-clock.js";
-import { protocolOf, type StreamDecoder } from "./translation/protocols.js";
+import { upstreamProtocolOf, type StreamDecoder } from "./translation/protocols.js";
 import { SseReader } from "./translation/sse.js";
 
 /** 回复里出现过的内容。 */
@@ -78,7 +78,7 @@ export class ReplyTap {
   private raw = "";
 
   constructor(input: { format: ApiEndpointRequestFormat; stream: boolean }) {
-    this.decoder = protocolOf(input.format).decoder();
+    this.decoder = upstreamProtocolOf(input.format).decoder();
     if (input.stream) {
       const clock = new ReplyClock({ upstream: input.format });
       this.clock = clock;

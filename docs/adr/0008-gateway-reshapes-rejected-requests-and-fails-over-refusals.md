@@ -47,6 +47,8 @@ Changed on 2026-10-19 (task `10-16-endpoint-management-ux`). Until then the gate
 - **Upstream name** replaces the model name sent to that endpoint. With a `*`, the `*` stands for the model's own id; without one, every model of that endpoint is sent under that one name. Model lists, the default model, usage and **Failover**'s same-model check still use the name agents pick.
 - **Use only this format** sends that model to that endpoint in one **Request format** only, translating when the CLI speaks another. When the endpoint no longer has a URL for that format, the setting no longer applies and **Model settings** says so.
 
+_Changed 2026-10-24 (task `10-16-gemini-upstream`): headers, extra body and upstream name apply to Gemini requests too, as in magpie. The extra body goes into the top level of the `generateContent` body, and the upstream name goes into the URL path, where Gemini takes the model. **Key header** does not apply: a Gemini URL always gets the key in `x-goog-api-key` alone, since Google reads a Bearer as an OAuth token._
+
 The connection test, format detection and **Test models** send the same headers and extra body, so a test fails or passes as real use would. Model listing sends the headers only, since it has no request body.
 
 ## Considered Options

@@ -1361,6 +1361,26 @@ taken from gemini_api_test.go; a Gemini CLI relay imported from CC Switch with
   packages/server/src/server/api-endpoints/gemini-base-url.ts
   packages/server/src/server/api-endpoints/gemini-base-url.test.ts
 
+A request translated to a Gemini base URL (turns as user and model, neighbours
+of one role joined, a systemInstruction with no role, the generation settings
+and a JSON answer, no model or stream in the body, the model in the path of
+streamGenerateContent?alt=sse) and Gemini's stream read back (the prompt count
+at the start, the whole count with the finish reason, the finish reasons, a
+chunk with only usage not ending the reply, an error told in its words)
+follow buildCodeAssistSent,
+codeAssistDecoder and stopFromGemini in magpie's internal/gateway/codeassist.go
+(the branch that is neither Antigravity nor Code Assist), buildGemini and
+geminiRequest in internal/gateway/gemini.go, streamErrorText in
+internal/gateway/upstream.go, GeminiPath in
+internal/provider/gemini_api.go, and Speaks in internal/provider/provider.go
+for Gemini coming last:
+
+  packages/server/src/server/api-endpoints/gateway/translation/gemini.ts
+  packages/server/src/server/api-endpoints/gateway/translation/gemini.test.ts
+  packages/server/src/server/api-endpoints/gateway/translation/protocols.ts
+  packages/server/src/server/api-endpoints/gateway/upstream-call.ts
+  packages/server/src/server/api-endpoints/gateway/routing.ts
+
 An endpoint's price multiplier (from 0 to 1000 in steps of 0.001; a save that
 leaves it out keeps it and null clears it; empty in the editor is the list
 price, a comma read as the decimal point; a table price scaled by it and a
