@@ -759,12 +759,35 @@ proxied, forwardHeaders, rebound, fromBrowser, ownHost and callerKeys in
 magpie's internal/gateway/lan.go, corsGuard, foreignPage and
 localhostSubdomain in internal/gateway/cors.go, agentOf in
 internal/gateway/gateway.go, AgentOf in internal/usage/usage.go and the UA
-fields in internal/agent/claude.go and codex.go. Its tests take cases from
-lan_rebind_test.go, cors_test.go and lan_test.go in internal/gateway and
-useragent_test.go in internal/agent:
+fields in internal/agent/claude.go, codex.go, omp.go and agents.go (piLike).
+Its tests take cases from lan_rebind_test.go, cors_test.go and lan_test.go in
+internal/gateway and useragent_test.go in internal/agent:
 
   packages/server/src/server/api-endpoints/gateway/callers.ts
   packages/server/src/server/api-endpoints/gateway/callers.test.ts
+
+The gateway's OpenAI Chat entrance for Pi and Oh My Pi follows handle and
+agentOf in magpie's internal/gateway/gateway.go: tools a message carries
+joined to the request's (liftMessageTools and chatToolKey in
+internal/gateway/message_tools.go, emptyContent in anthropic_shapes.go),
+developer messages sent as system to a Chat endpoint (developerAsSystem in
+gateway.go), reasoning on a passed-through Chat request's tool turns
+(withReasoningOnToolTurns in chattidy.go), the conversation named by
+x-session-affinity (sessionHeaders in gateway.go), a Chat stream's error and
+keepalive (streamFailure in gateway.go, chatEncoder's keepalive in chat.go) and
+a Grok reply's whole numbers in Chat (intTidy). Its tests take cases from
+message_tools_test.go, opencode_client_test.go and workbuddy_session_test.go
+in internal/gateway:
+
+  packages/server/src/server/api-endpoints/gateway/message-tools.ts
+  packages/server/src/server/api-endpoints/gateway/gateway.ts
+  packages/server/src/server/api-endpoints/gateway/passthrough.ts
+  packages/server/src/server/api-endpoints/gateway/affinity.ts
+  packages/server/src/server/api-endpoints/gateway/agent-errors.ts
+  packages/server/src/server/api-endpoints/gateway/keepalive.ts
+  packages/server/src/server/api-endpoints/gateway/grok-integral.ts
+  packages/server/src/server/api-endpoints/gateway/translation/chat.test.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-gateway-chat.e2e.test.ts
 
 The gateway's ChatGPT backend path (relaying a Codex signed in with ChatGPT to
 the ChatGPT backend as it came, an API key's requests to the OpenAI API, and

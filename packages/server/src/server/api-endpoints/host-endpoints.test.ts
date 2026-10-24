@@ -27,6 +27,8 @@ function state(endpoints: StoredApiEndpoint[]): ApiEndpointState {
     agents: {
       claude: { enabled: true, defaultModelId: "glm-4.6" },
       codex: { enabled: false, defaultModelId: null },
+      pi: { enabled: false, defaultModelId: null },
+      omp: { enabled: false, defaultModelId: null },
     },
   };
 }
@@ -127,6 +129,8 @@ describe("whose default model goes to an endpoint first", () => {
       agents: {
         claude: { enabled: true, defaultModelId: claude },
         codex: { enabled: true, defaultModelId: codex },
+        pi: { enabled: false, defaultModelId: null },
+        omp: { enabled: false, defaultModelId: null },
       },
     };
   }

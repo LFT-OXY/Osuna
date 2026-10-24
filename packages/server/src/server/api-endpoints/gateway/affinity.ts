@@ -90,6 +90,8 @@ const SESSION_HEADERS = [
   "thread_id",
   "session-id",
   "session_id",
+  // Pi 的 Chat 与 Anthropic、OMP 发的会话头（magpie sessionHeaders）。
+  "x-session-affinity",
   "x-client-request-id",
 ];
 
@@ -261,7 +263,7 @@ function responsesItem(input: {
  */
 export function turnOf(wire: AgentWire, body: unknown): { turn: number; within: boolean } {
   const request = isRecord(body) ? body : {};
-  const messages = wire === "anthropic" ? anthropicMessages(request) : responsesMessages(request);
+  const messages = turnMessagesOf(wire, request);
   let turn = 0;
   let within = false;
   let answered = false;
@@ -277,6 +279,37 @@ export function turnOf(wire: AgentWire, body: unknown): { turn: number; within: 
   }
   return { turn, within };
 }
+
+function turnMessagesOf(wire: AgentWire, request: Record<string, unknown>): TurnMessage[] {
+  if (wire === "anthropic") return anthropicMessages(request);
+  if (wire === "chat") return chatMessages(request);
+  return responsesMessages(request);
+}
+
+/** Chat 的 messages 照 magpie parseChat 归类：tool 消息是工具结果，图片与文件算用户说了话。 */
+function chatMessages(body: Record<string, unknown>): TurnMessage[] {
+  const messages = Array.isArray(body.messages) ? body.messages : [];
+  return messages.filter(isRecord).map((message): TurnMessage => {
+    if (message.role === "tool") return { role: "user", said: false, result: true };
+    if (message.role === "assistant") return { role: "assistant", said: false, result: false };
+    if (message.role !== "user") return { role: "other", said: false, result: false };
+    if (typeof message.content === "string") {
+      return userMessage([message.content], { media: false, result: false });
+    }
+    const parts = Array.isArray(message.content) ? message.content.filter(isRecord) : [];
+    return userMessage(
+      parts.flatMap((part) =>
+        part.type === "text" && typeof part.text === "string" ? [part.text] : [],
+      ),
+      {
+        media: parts.some((part) => CHAT_MEDIA_PARTS.has(String(part.type))),
+        result: false,
+      },
+    );
+  });
+}
+
+const CHAT_MEDIA_PARTS = new Set(["image_url", "file"]);
 
 /** 粘性要的那部分用量。 */
 export type StickUsage = Pick<Usage, "input" | "cacheRead" | "cacheWrite" | "cacheWrite1h">;

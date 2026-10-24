@@ -4,7 +4,7 @@ import {
   type ApiEndpointRequestFormat,
   type ApiEndpointTestConnectionResult,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
-import type { ApiEndpointProvider } from "./store.js";
+import type { CliConfigProvider } from "./store.js";
 import {
   ANTHROPIC_VERSION,
   describeNetworkError,
@@ -55,7 +55,7 @@ interface ProtocolSpec {
   matches(body: unknown): boolean;
 }
 
-const PROTOCOLS: Record<ApiEndpointProvider, ProtocolSpec> = {
+const PROTOCOLS: Record<CliConfigProvider, ProtocolSpec> = {
   claude: {
     // Claude Code 把 ANTHROPIC_BASE_URL 拼上 /v1/messages。
     path: "/v1/messages",
@@ -86,7 +86,7 @@ const PROTOCOLS: Record<ApiEndpointProvider, ProtocolSpec> = {
 };
 
 export async function testUpstreamConnection(input: {
-  provider: ApiEndpointProvider;
+  provider: CliConfigProvider;
   baseUrl: string;
   // 没 key 的接口为 null，不带认证头。
   apiKey: string | null;

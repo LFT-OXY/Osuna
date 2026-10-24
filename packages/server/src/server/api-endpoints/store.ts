@@ -59,8 +59,15 @@ import { ModelFactsSchema } from "./model-facts.js";
  * 不进 config.json，因为 get_daemon_config 会把 agents.providers 原样发给客户端。
  */
 
-export const API_ENDPOINT_PROVIDERS = ["claude", "codex"] as const;
+export const API_ENDPOINT_PROVIDERS = ["claude", "codex", "pi", "omp"] as const;
 export type ApiEndpointProvider = (typeof API_ENDPOINT_PROVIDERS)[number];
+
+// Osuna 改写其 CLI 配置、在设置与 RPC 里开放的提供方。Pi、OMP 已能经中转站认出、记账，配置改写还没接上。
+export const CLI_CONFIG_PROVIDERS = [
+  "claude",
+  "codex",
+] as const satisfies readonly ApiEndpointProvider[];
+export type CliConfigProvider = (typeof CLI_CONFIG_PROVIDERS)[number];
 
 // 存下的 key 头：两个都放（缺省）不存。
 const STORED_KEY_HEADERS = ["x-api-key", "bearer"] as const;
@@ -169,12 +176,15 @@ const EndpointsFileSchema = z.object({
   balanceAutoRefresh: z.boolean().optional(),
 });
 
+// v0.15.0 及以前只有这两个提供方。
+const LEGACY_PROVIDERS = ["claude", "codex"] as const;
+
 /** v0.15.0 及以前：接口按提供方各存一份，每个提供方一家「当前启用」。读时换算，写时升级。 */
 const LegacyEndpointsFileSchema = z.object({
   endpoints: z.array(
     z.object({
       id: z.string(),
-      provider: z.enum(API_ENDPOINT_PROVIDERS),
+      provider: z.enum(LEGACY_PROVIDERS),
       name: z.string(),
       baseUrl: z.string(),
       models: z.array(StoredModelSchema),
@@ -225,6 +235,11 @@ export function endpointNameDisplayOf(state: ApiEndpointState): ApiEndpointNameD
 }
 
 const OFFICIAL_AGENT: ApiEndpointAgentSettings = { enabled: false, defaultModelId: null };
+
+/** 每个 Agent 都没打开「使用第三方接口」。 */
+function officialAgents(): Record<ApiEndpointProvider, ApiEndpointAgentSettings> {
+  return { claude: OFFICIAL_AGENT, codex: OFFICIAL_AGENT, pi: OFFICIAL_AGENT, omp: OFFICIAL_AGENT };
+}
 
 /** endpoints.json 存在却读不懂；这时什么都不写，免得把用户的接口覆盖掉。 */
 export class ApiEndpointsFileUnparsableError extends Error {
@@ -294,6 +309,8 @@ export type GatewayTokens = GatewayTokensFile["tokens"];
 const CliRewritesFileSchema = z.object({
   claude: z.string().datetime().optional(),
   codex: z.string().datetime().optional(),
+  pi: z.string().datetime().optional(),
+  omp: z.string().datetime().optional(),
 });
 type CliRewritesFile = z.infer<typeof CliRewritesFileSchema>;
 
@@ -302,6 +319,8 @@ const CliStartReadSchema = z.object({ digest: z.string(), at: z.string().datetim
 const CliStartReadsFileSchema = z.object({
   claude: CliStartReadSchema.optional(),
   codex: CliStartReadSchema.optional(),
+  pi: CliStartReadSchema.optional(),
+  omp: CliStartReadSchema.optional(),
 });
 type CliStartReadsFile = z.infer<typeof CliStartReadsFileSchema>;
 
@@ -417,7 +436,7 @@ export class ApiEndpointStore {
       throw error;
     }
     if (content === null) {
-      return { endpoints: [], agents: { claude: OFFICIAL_AGENT, codex: OFFICIAL_AGENT } };
+      return { endpoints: [], agents: officialAgents() };
     }
     if (content.kind === "legacy") return upgradeLegacyFile(content.file);
     const {
@@ -433,6 +452,8 @@ export class ApiEndpointStore {
       agents: {
         claude: agents.claude ?? OFFICIAL_AGENT,
         codex: agents.codex ?? OFFICIAL_AGENT,
+        pi: agents.pi ?? OFFICIAL_AGENT,
+        omp: agents.omp ?? OFFICIAL_AGENT,
       },
       ...(longConversations === undefined ? {} : { longConversations }),
       ...(disabledModels === undefined ? {} : { disabledModels }),
@@ -809,8 +830,8 @@ function upgradeLegacyFile(file: LegacyEndpointsFile): ApiEndpointState {
       updatedAt: legacy.updatedAt,
     };
   });
-  const agents = { claude: OFFICIAL_AGENT, codex: OFFICIAL_AGENT };
-  for (const provider of API_ENDPOINT_PROVIDERS) {
+  const agents = officialAgents();
+  for (const provider of LEGACY_PROVIDERS) {
     const active = file.endpoints.find(
       (legacy) => legacy.provider === provider && legacy.id === file.active[provider],
     );

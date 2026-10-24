@@ -1,7 +1,8 @@
 // fitAnthropicBody、fitResponsesBody 与被拒重问移植自 magpie（https://github.com/yetone/magpie，internal/gateway/anthropic.go 的 thinkingOffUnlessAsked、withThinkingOnToolTurns、
 // adaptiveThinking、samplingAsTaken，responses.go 的 withReasoningText，codex_backend.go 的 withoutBareReasoning，gateway.go 的 passthrough 里按上游模型改的几处、
 // 直通重问与 attempt 里去掉拒收字段、画图工具的重问；按厂商的改写接在 forwardOnce 处，Grok 回复的整数接在直通回复的 intTidy 处；
-// 保活之后整份回复照流写出照 fallback.go 的 holdWriter.release 与 whole_stream.go 的 wholeAsStream；开口后断流在流尾补错误照 gateway.go 直通回复里的 apart 与 streamFailure）
+// 保活之后整份回复照流写出照 fallback.go 的 holdWriter.release 与 whole_stream.go 的 wholeAsStream；开口后断流在流尾补错误照 gateway.go 直通回复里的 apart 与 streamFailure；
+// 直通 Chat 时 developer 改 system 照 gateway.go 的 developerAsSystem，工具轮补推理照 chattidy.go 的 withReasoningOnToolTurns）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import type { IncomingHttpHeaders } from "node:http";
@@ -21,7 +22,8 @@ import {
   thinkingOffAsTaken,
   thinkingOnToolTurns,
 } from "./translation/anthropic.js";
-import { emptyUsage, replaysThinking } from "./translation/ir.js";
+import { NO_REASONING, emptyUsage, replaysThinking } from "./translation/ir.js";
+import { reasoningText } from "./translation/chat.js";
 import { replayedReasoningInput } from "./translation/responses.js";
 import { sendAgentError, type AgentWire } from "./agent-errors.js";
 import { ENDED_SHORT, brokenTail, connectionLost, endedShort } from "./broken-reply.js";
@@ -304,8 +306,7 @@ function replyTidy(input: {
 }): ReplyTidy | null {
   const { format, opened } = input;
   const conversation = input.pathSuffix === undefined;
-  // 直通只有 Agent 说的两种格式，Chat 不会来。
-  if (format === "openai_chat" || !conversation) return null;
+  if (!conversation) return null;
   const stream = isEventStream(opened.response, opened.held);
   const tidies: ReplyTidy[] = [];
   const sent = sentModelOf(input);
@@ -437,9 +438,10 @@ function endsLine(input: { chunk: Buffer; before: boolean }): boolean {
   return last === NEWLINE;
 }
 
-/** 直通只有 Agent 说的两种格式。 */
+/** 直通时上游的格式就是 Agent 说的格式。 */
 function wireOf(format: ApiEndpointRequestFormat): AgentWire {
-  return format === "anthropic_messages" ? "anthropic" : "openai";
+  if (format === "anthropic_messages") return "anthropic";
+  return format === "openai_chat" ? "chat" : "openai";
 }
 
 /** 读完了的事件流没说完（broken-reply.ts 的 endedShort）；整份回复与不读的回复（count_tokens）不算。 */
@@ -538,6 +540,7 @@ export function upstreamBody(input: PassthroughBodyInput): Buffer {
     if (input.refusals?.has("none")) text = noneAsLow(text);
     if (!searchesWebItself(input.endpoint, "openai_responses")) text = withoutWebSearchText(text);
   }
+  text = fitChatBody({ text, format: input.format, conversation, replays });
   // count_tokens 不带 refusals。
   const refusals = conversation ? input.refusals : undefined;
   if (refusals) text = withoutRefusedText({ text, format: input.format, refusals });
@@ -723,6 +726,54 @@ export function fitThinkingOff(input: { text: string; model: string; leftOn: boo
     if (fitted[key] !== body[key]) out = applyEdits(out, modify(out, [key], fitted[key], {}));
   }
   return out;
+}
+
+/**
+ * 直通给 Chat 上游的对话请求：developer 消息改成 system（Pi 给推理模型发 developer，OpenAI 收，DeepSeek 等别家整个请求拒收；
+ * system 人人都收）；要回放推理的模型，每个带工具调用、或跟在本轮工具结果后面的助手消息都要有 reasoning_content
+ * （DeepSeek 否则整个请求拒收，magpie #1462、#1822）：取它在别的字段里发回的推理，没有就用 NO_REASONING。只改 messages。
+ */
+function fitChatBody(input: {
+  text: string;
+  format: ApiEndpointRequestFormat;
+  // count_tokens 之类不是对话的请求不改。
+  conversation: boolean;
+  replays: boolean;
+}): string {
+  const { text } = input;
+  if (input.format !== "openai_chat" || !input.conversation) return text;
+  const body = parseJson(text);
+  if (!isRecord(body) || !Array.isArray(body.messages)) return text;
+  let afterTool = false;
+  let changed = false;
+  const messages: unknown[] = [];
+  for (const message of body.messages) {
+    const fitted = isRecord(message)
+      ? chatMessageFitted({ message, afterTool, replays: input.replays })
+      : null;
+    if (isRecord(message) && message.role === "tool") afterTool = true;
+    if (isRecord(message) && message.role === "user") afterTool = false;
+    if (fitted !== null) changed = true;
+    messages.push(fitted ?? message);
+  }
+  if (!changed) return text;
+  return applyEdits(text, modify(text, ["messages"], messages, {}));
+}
+
+/** 一条要改的消息改好的样子；不用改为 null。afterTool：前面是本轮的工具结果。 */
+function chatMessageFitted(input: {
+  message: Record<string, unknown>;
+  afterTool: boolean;
+  replays: boolean;
+}): Record<string, unknown> | null {
+  const { message } = input;
+  if (message.role === "developer") return Object.assign({}, message, { role: "system" });
+  const calls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
+  const isToolTurn = message.role === "assistant" && (calls.length > 0 || input.afterTool);
+  const hasOwn = typeof message.reasoning_content === "string";
+  if (!input.replays || !isToolTurn || hasOwn) return null;
+  const think = reasoningText(message);
+  return Object.assign({}, message, { reasoning_content: think === "" ? NO_REASONING : think });
 }
 
 /** 这家不收 effort none：Responses 请求的 none 改成 low。 */

@@ -2,7 +2,8 @@
 // 已下线模型的记下与恢复照 gateway.go 的 provider.Retire 与 routing.go 的 servedCandidate，对话太长时的跳过与换家照 gateway.go 对 roomy、tooLongUnsaid、withRoom 的调用，
 // 拒答换家与全都拒答时交出的照 gateway.go 的 refusals、handBack 与 failTo(refusedStatus)，
 // ChatGPT 后端路径按模型名分流（带斜杠的走接口、压缩拒绝、搜索回说明）照 codex_backend.go 的 codexBackend，「模型名:档位」照 gateway.go 的 askedAt，
-// Codex 的 Subagent 改到强制模型、spawn_agent 补上清单照 codexBackend 与 handle 对 codexSubagentPick、spawnAgentModels 的调用
+// Codex 的 Subagent 改到强制模型、spawn_agent 补上清单照 codexBackend 与 handle 对 codexSubagentPick、spawnAgentModels 的调用，
+// Chat 入口照 handle(provider.Chat) 与 agentOf（认不出时按 Pi 记照 Anthropic 入口按 Claude Code 记）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import http, { type IncomingHttpHeaders } from "node:http";
@@ -12,7 +13,7 @@ import type pino from "pino";
 import { applyEdits, modify } from "jsonc-parser";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { pinnedFormat } from "@getpaseo/protocol/api-endpoint/model-settings";
-import { AGENT_REQUEST_FORMAT, isDefaultModelChoice } from "../host-endpoints.js";
+import { isDefaultModelChoice } from "../host-endpoints.js";
 import {
   ApiEndpointStore,
   ApiEndpointsFileUnparsableError,
@@ -104,6 +105,7 @@ import { parseAnthropicRequest } from "./translation/anthropic.js";
 import { RequestShapeError, estimateInputTokens, type GatewayRequest } from "./translation/ir.js";
 import { protocolOf } from "./translation/protocols.js";
 import { decodeAgentBody, readAgentBody, readRawBody } from "./request-body.js";
+import { liftMessageTools } from "./message-tools.js";
 import { joinToolRuns, orphanedToolOutputs, pairToolItems } from "./translation/responses.js";
 import {
   ANSWERED_BY_HEADER,
@@ -126,7 +128,7 @@ import { GATEWAY_INFO_NAME } from "../gateway-reach.js";
 
 /*
  * 本机中转站：挂在 daemon 自己的 HTTP 监听上，替 CLI 把请求转给第三方接口。
- * Claude Code 的地址写到前缀为止，Codex 写到 `/v1`，两者落到同一组路径上。
+ * Claude Code 的地址写到前缀为止，Codex、Pi、OMP 写到 `/v1`，都落到同一组路径上。
  * 挂在 daemon 密码中间件与全局 JSON 解析之前：请求体自己读，不受 100 kb 上限。
  * 认调用方（callers.ts，ADR 0010）：本机回环来的、不带转发头的请求一律收，网页发来的拒收；
  * 口令只说明是哪个 Agent，对不上时按 User-Agent 认，再认不出按请求路径。
@@ -177,10 +179,14 @@ export interface ApiEndpointGatewayOverrides {
   cooldownsNow?: () => number;
 }
 
-/** 每种 Agent 自己说的请求格式，按请求路径认；口令与 User-Agent 都认不出是谁时，路径也说明是哪个 Agent。 */
+/**
+ * 三个入口各收一种请求格式，按请求路径认。Pi、OMP 按模型打三个入口中的任一个，所以认 Agent 靠口令与 User-Agent；
+ * 都认不出是谁时按路径记：Anthropic 入口是 Claude Code，Responses 是 Codex，Chat 是 Pi。
+ */
 const AGENT_PATHS = {
   "/v1/messages": { wire: "anthropic", format: "anthropic_messages", agent: "claude" },
   "/v1/responses": { wire: "openai", format: "openai_responses", agent: "codex" },
+  "/v1/chat/completions": { wire: "chat", format: "openai_chat", agent: "pi" },
 } as const;
 type AgentPath = (typeof AGENT_PATHS)[keyof typeof AGENT_PATHS];
 
@@ -817,15 +823,18 @@ function withoutAskedEffort(input: {
   };
 }
 
-/** 按 Agent 自己的格式把请求改成固定的档位：翻译时由 requestForModel 按每家的模型落定（直通在 askOnce 里另落定）。 */
+/**
+ * 按这次请求所在入口的格式把请求改成固定的档位（Pi 三个入口都会打，不能按 Agent 的默认格式）：
+ * 翻译时由 requestForModel 按每家的模型落定（直通在 askOnce 里另落定）。
+ */
 function withAgentEffort(input: {
   body: Buffer;
-  agent: ApiEndpointProvider;
+  format: ApiEndpointRequestFormat;
   fixedEffort: FixedEffort | null;
 }): Buffer {
   if (input.fixedEffort === null) return input.body;
   const text = withFixedEffort({
-    format: AGENT_REQUEST_FORMAT[input.agent],
+    format: input.format,
     text: input.body.toString("utf8"),
     effort: input.fixedEffort,
   });
@@ -1057,7 +1066,7 @@ async function handleAgentRequest(input: {
   const routed = await routeAgentRequest(input);
   if (!routed) return;
   const { model, candidates, fixedEffort } = routed;
-  const body = withAgentEffort({ body: routed.body, agent: input.agent, fixedEffort });
+  const body = withAgentEffort({ body: routed.body, format: input.format, fixedEffort });
   const parsed = body === routed.body ? routed.parsed : parseJson(body.toString("utf8"));
   const mended = mendedBody(input.format, body);
   // 翻译读的是修补过的请求，和直通发出去的一样。
@@ -1279,11 +1288,17 @@ function estimatedTokens(input: {
   return read.ok ? estimateInputTokens(read.request) : null;
 }
 
-/** Responses 请求直通前先修补工具往来（夹在一串里的项、没有调用的结果、没有结果的调用）；没什么可改时原样不动。 */
+/**
+ * 先修补再问：Responses 请求修补工具往来（夹在一串里的项、没有调用的结果、没有结果的调用）；
+ * Chat 请求把消息里带的工具并进请求的 tools（message-tools.ts），直通与翻译都用它。没什么可改时原样不动。
+ */
 function mendedBody(format: ApiEndpointRequestFormat, body: Buffer): Buffer {
-  if (format !== "openai_responses") return body;
+  if (format !== "openai_responses" && format !== "openai_chat") return body;
   const text = body.toString("utf8");
-  const mended = pairToolItems(orphanedToolOutputs(joinToolRuns(text)));
+  const mended =
+    format === "openai_chat"
+      ? liftMessageTools(text)
+      : pairToolItems(orphanedToolOutputs(joinToolRuns(text)));
   return mended === text ? body : Buffer.from(mended);
 }
 
@@ -1939,7 +1954,7 @@ function sendRest(input: {
 }
 
 function agentPath(path: string): AgentPath | null {
-  return path === "/v1/messages" || path === "/v1/responses" ? AGENT_PATHS[path] : null;
+  return Object.hasOwn(AGENT_PATHS, path) ? AGENT_PATHS[path as keyof typeof AGENT_PATHS] : null;
 }
 
 /** 认不出路径时（拒收、/v1/models）按请求头猜：带 anthropic-version 的是 Claude Code。 */

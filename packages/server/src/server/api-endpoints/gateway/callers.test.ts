@@ -7,7 +7,12 @@ import type { IncomingHttpHeaders } from "node:http";
 import { describe, expect, it } from "vitest";
 import { judgeCaller, type CallerVerdict } from "./callers.js";
 
-const TOKENS = { claude: "token-claude-0123456789", codex: "token-codex-0123456789" };
+const TOKENS = {
+  claude: "token-claude-0123456789",
+  codex: "token-codex-0123456789",
+  pi: "token-pi-0123456789",
+  omp: "token-omp-0123456789",
+};
 const LOOP = "127.0.0.1";
 const CHROME = {
   "user-agent": "Mozilla/5.0 (Macintosh) Chrome/140",
@@ -175,6 +180,14 @@ describe("which agent is calling", () => {
     ).toBe("codex");
   });
 
+  it("tells Pi and Oh My Pi apart by their own tokens, whatever User-Agent they send", () => {
+    expect(agentOf(judge({ authorization: `Bearer ${TOKENS.pi}` }))).toBe("pi");
+    expect(agentOf(judge({ "x-api-key": TOKENS.omp, "user-agent": "pi/1.4.0" }))).toBe("omp");
+    expect(agentOf(judge({ authorization: `Bearer ${TOKENS.pi}`, "user-agent": "omp/18" }))).toBe(
+      "pi",
+    );
+  });
+
   it("is told by its User-Agent when the token is not one of ours", () => {
     const chatGptToken = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ1c2VyIn0.c2lnbmF0dXJl";
     const claudeAiToken = "sk-ant-oat01-abcdefghijklmnop";
@@ -194,6 +207,10 @@ describe("which agent is calling", () => {
       [{ "user-agent": "Codex_VSCode/0.130.0" }, "codex"],
       [{ "user-agent": "acp-extension-codex/1.0" }, "codex"],
       [{ "user-agent": "codex" }, "codex"],
+      [{ "user-agent": "pi/1.4.0" }, "pi"],
+      [{ "user-agent": "omp/18.12.6" }, "omp"],
+      [{ "user-agent": "oh-my-pi/18.12.6" }, "omp"],
+      [{ "user-agent": "pi-desktop/1.0" }, null],
       [{ "user-agent": "curl/8.4.0" }, null],
       [{ "user-agent": "" }, null],
       [{}, null],

@@ -69,6 +69,7 @@ export abstract class JsonEventTidy implements ReplyTidy {
 const MODEL_PATHS: Readonly<Record<PassedReplyFormat, JSONPath[]>> = {
   anthropic_messages: [["message", "model"], ["model"]],
   openai_responses: [["response", "model"], ["model"]],
+  openai_chat: [["model"]],
 };
 
 /**

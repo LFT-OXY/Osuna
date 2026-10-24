@@ -1,10 +1,11 @@
-// 用例取自 magpie（https://github.com/yetone/magpie，internal/gateway 的 chat_tool_pairing_test.go、translate_stream_test.go、chat_inbound_reasoning_test.go、gemini_thought_tag_test.go）
+// 用例取自 magpie（https://github.com/yetone/magpie，internal/gateway 的 chat_tool_pairing_test.go、translate_stream_test.go、chat_inbound_reasoning_test.go、gemini_thought_tag_test.go、message_tools_test.go）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { describe, expect, test } from "vitest";
 import type { ModelFacts } from "../../model-facts.js";
 import { AnthropicEncoder, parseAnthropicRequest } from "./anthropic.js";
 import { ChatDecoder, buildChatRequest, parseChatRequest, usageFromChat } from "./chat.js";
+import { liftMessageTools } from "../message-tools.js";
 import {
   requestForModel,
   type Effort,
@@ -1137,5 +1138,49 @@ describe("Gemini's thoughts marked in a Chat stream's extra_content (magpie gemi
     ],
   ])("%s", (_name, parts, think, answer) => {
     expect(decoded(parts)).toEqual({ think, text: answer });
+  });
+});
+
+describe("a request Pi or Oh My Pi sends to the Chat entrance (magpie message_tools_test.go)", () => {
+  const read = { type: "function", function: { name: "read", parameters: {} } };
+  const grep = { type: "function", function: { name: "grep", parameters: {} } };
+
+  test("a developer message is part of the system prompt, like a system message", () => {
+    const parsed = parseChatRequest({
+      model: "kimi-k2",
+      messages: [
+        { role: "system", content: "You are Pi." },
+        { role: "developer", content: "Be brief." },
+        { role: "user", content: "hi" },
+      ],
+    });
+    expect(parsed.system).toBe("You are Pi.\n\nBe brief.");
+    expect(parsed.messages).toEqual([{ role: "user", parts: [{ kind: "text", text: "hi" }] }]);
+  });
+
+  test("tools a message carries join the request's, each name once; a message of tools alone is left out", () => {
+    const lifted = liftMessageTools(
+      JSON.stringify({
+        model: "kimi-k2",
+        tools: [read],
+        messages: [
+          { role: "user", content: "hi" },
+          { role: "developer", content: "", tools: [grep] },
+          { role: "system", content: "keep me", tools: [{ ...read, function: { name: "read" } }] },
+        ],
+      }),
+    );
+    const parsed = parseChatRequest(JSON.parse(lifted));
+    expect(parsed.tools.map((tool) => tool.name)).toEqual(["read", "grep"]);
+    expect(parsed.system).toBe("keep me");
+    expect(JSON.parse(lifted).messages).toEqual([
+      { role: "user", content: "hi" },
+      { role: "system", content: "keep me" },
+    ]);
+  });
+
+  test("a request whose messages carry no tools is left byte for byte", () => {
+    const sent = '{"model":"kimi-k2", "tools":[], "messages":[{"role":"user","content":"hi"}]}';
+    expect(liftMessageTools(sent)).toBe(sent);
   });
 });

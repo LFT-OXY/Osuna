@@ -24,6 +24,8 @@ import { hostOf } from "./model-facts.js";
 export const AGENT_REQUEST_FORMAT: Record<ApiEndpointProvider, ApiEndpointRequestFormat> = {
   claude: "anthropic_messages",
   codex: "openai_responses",
+  pi: "openai_chat",
+  omp: "openai_chat",
 };
 
 /**

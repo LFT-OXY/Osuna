@@ -226,11 +226,13 @@ import {
 } from "./host-endpoints.js";
 import {
   API_ENDPOINT_PROVIDERS,
+  CLI_CONFIG_PROVIDERS,
   ApiEndpointStore,
   ApiEndpointsFileUnparsableError,
   endpointNameDisplayOf,
   type ApiEndpointProvider,
   type ApiEndpointState,
+  type CliConfigProvider,
   type EndpointSnapshot,
   type GatewayTokens,
   type StoredAccessKey,
@@ -877,7 +879,7 @@ interface AgentIssue extends ApiEndpointAgentIssue {
  * 以及 ChatGPT 接法下 CC Switch 镜像表的地址，见 isCodexMirrorKey）。
  * 其余负责的键被改仍只算 modified_externally，不进提示区。
  */
-const ROUTING_KEYS: Record<ApiEndpointProvider, readonly string[]> = {
+const ROUTING_KEYS: Record<CliConfigProvider, readonly string[]> = {
   claude: ["env.ANTHROPIC_BASE_URL", "env.ANTHROPIC_AUTH_TOKEN"],
   codex: [
     "model_provider",
@@ -887,7 +889,12 @@ const ROUTING_KEYS: Record<ApiEndpointProvider, readonly string[]> = {
   ],
 };
 
-const AGENT_NAMES: Record<ApiEndpointProvider, string> = { claude: "Claude Code", codex: "Codex" };
+const AGENT_NAMES: Record<ApiEndpointProvider, string> = {
+  claude: "Claude Code",
+  codex: "Codex",
+  pi: "Pi",
+  omp: "Oh My Pi",
+};
 
 // 问登录 shell 的变量：云平台开关与代理变量一次问齐（magpie proc 的 shellVars 连同 ProxyVars），共用一分钟的答案。
 const LOGIN_SHELL_KEYS: readonly string[] = [...CLAUDE_CLOUD_SWITCH_KEYS, ...CODEX_PROXY_ENV_KEYS];
@@ -1161,11 +1168,11 @@ export class ApiEndpointService {
     await this.exclusive(() => this.followCliPicks());
     const state = this.readState();
     const enabled = state.agents[supported].enabled;
-    const statuses: Record<ApiEndpointProvider, ApiEndpointFileStatus> = {
+    const statuses: Record<CliConfigProvider, ApiEndpointFileStatus> = {
       claude: this.inspectClaude(state.agents.claude),
       codex: this.inspectCodex(state.agents.codex.enabled),
     };
-    for (const agentProvider of API_ENDPOINT_PROVIDERS) {
+    for (const agentProvider of CLI_CONFIG_PROVIDERS) {
       const replaced = this.modelReplacedIssue(state, agentProvider);
       if (replaced) statuses[agentProvider].issues.push(replaced);
     }
@@ -1177,7 +1184,7 @@ export class ApiEndpointService {
       statuses.claude.issues.push(...(await this.claudeBypassIssues()));
     }
     // 照 magpie：设置本身有问题时先说那个，没有问题再看 Codex 是不是被代理挡住，都没有才看是不是被绕过。
-    for (const agentProvider of API_ENDPOINT_PROVIDERS) {
+    for (const agentProvider of CLI_CONFIG_PROVIDERS) {
       const issues = statuses[agentProvider].issues;
       const isSettingsRight = issues.every((issue) => NOTICE_CODES.has(issue.code));
       const isChecked = state.agents[agentProvider].enabled && isSettingsRight;
@@ -1336,12 +1343,12 @@ export class ApiEndpointService {
       const tokens = nextGatewayTokens(state, current);
       if (!sameTokens(tokens, current)) this.store.writeGatewayTokens(tokens);
       if (url === null) {
-        if (API_ENDPOINT_PROVIDERS.some((provider) => state.agents[provider].enabled)) {
+        if (CLI_CONFIG_PROVIDERS.some((provider) => state.agents[provider].enabled)) {
           this.logger.warn("API endpoints are on, but the daemon listens on a socket");
         }
         return;
       }
-      for (const provider of API_ENDPOINT_PROVIDERS) {
+      for (const provider of CLI_CONFIG_PROVIDERS) {
         try {
           this.reconcileCli(state, provider, tokens, url);
         } catch (error) {
@@ -1366,7 +1373,7 @@ export class ApiEndpointService {
   /** 每个 Agent 回给客户端的设置（shownAgent）。 */
   private shownAgents(
     state: ApiEndpointState,
-  ): Record<ApiEndpointProvider, ApiEndpointAgentSettings> {
+  ): Record<CliConfigProvider, ApiEndpointAgentSettings> {
     return { claude: this.shownAgent(state, "claude"), codex: this.shownAgent(state, "codex") };
   }
 
@@ -2401,7 +2408,7 @@ export class ApiEndpointService {
    * 跟随默认模型的字段（模型提示、modelSettings 档位、Codex 模型目录）随之重写。写不成只记日志。
    */
   private async followCliPicks(): Promise<void> {
-    for (const provider of API_ENDPOINT_PROVIDERS) {
+    for (const provider of CLI_CONFIG_PROVIDERS) {
       try {
         await this.followCliPicksOf(provider);
       } catch (error) {
@@ -2748,7 +2755,7 @@ export class ApiEndpointService {
     });
     const settled = this.settleThinking({ previous, next: { ...proposed, agents } });
     const next = this.settleSubagentThinking(settled);
-    for (const provider of API_ENDPOINT_PROVIDERS) {
+    for (const provider of CLI_CONFIG_PROVIDERS) {
       if (!previous.agents[provider].enabled && next.agents[provider].enabled) {
         this.requireGateway();
       }
@@ -2760,7 +2767,7 @@ export class ApiEndpointService {
     // 打开总开关在上面已经拒绝，这里只放过关接口、删模型这类连带改动。
     const unreachable = (provider: ApiEndpointProvider) =>
       next.agents[provider].enabled && this.gatewayUrlFor(provider) === null;
-    const changed = API_ENDPOINT_PROVIDERS.filter(
+    const changed = CLI_CONFIG_PROVIDERS.filter(
       (provider) =>
         !unreachable(provider) &&
         (provider === options.rewrite ||
@@ -2829,7 +2836,7 @@ export class ApiEndpointService {
         multiplierBefore.get(endpoint.id) !== endpoint.priceMultiplier,
     );
     if (repriced) this.onPriceMultipliersChanged?.();
-    for (const provider of API_ENDPOINT_PROVIDERS) {
+    for (const provider of CLI_CONFIG_PROVIDERS) {
       if (agentFingerprint(previous, provider) !== agentFingerprint(next, provider)) {
         this.onActiveEndpointChanged(provider);
       }
@@ -3205,7 +3212,7 @@ export class ApiEndpointService {
       if (!state) return;
       this.rewriteCodexCatalog(state);
       this.rewriteClaudeHints(state);
-      for (const provider of API_ENDPOINT_PROVIDERS) {
+      for (const provider of CLI_CONFIG_PROVIDERS) {
         if (state.agents[provider].enabled) this.onActiveEndpointChanged(provider);
       }
     });
@@ -5250,11 +5257,11 @@ function listedFactsOf(endpoint: StoredApiEndpoint, modelId: string): ModelFacts
   return endpoint.catalog?.models.find((model) => model.id === modelId)?.facts;
 }
 
-function findProvider(provider: string): ApiEndpointProvider | undefined {
-  return API_ENDPOINT_PROVIDERS.find((candidate) => candidate === provider);
+function findProvider(provider: string): CliConfigProvider | undefined {
+  return CLI_CONFIG_PROVIDERS.find((candidate) => candidate === provider);
 }
 
-function requireProvider(provider: string): ApiEndpointProvider {
+function requireProvider(provider: string): CliConfigProvider {
   const supported = findProvider(provider);
   if (!supported) {
     throw new ApiEndpointRequestError({
@@ -6385,7 +6392,7 @@ function unparsableParams({ filePath, detail, reason }: UnparsableFile): Record<
 }
 
 function notThroughGatewayIssues(
-  provider: ApiEndpointProvider,
+  provider: CliConfigProvider,
   filePath: string,
   modifiedKeys: string[],
 ): AgentIssue[] {

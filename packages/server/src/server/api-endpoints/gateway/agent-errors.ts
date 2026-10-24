@@ -9,10 +9,10 @@ import { sseEvent } from "./translation/sse.js";
 
 /*
  * 中转站给 Agent 的报错一律按 Agent 自己的协议包装，CLI 才会把文字显示在对话里：
- * Anthropic 是 {"type":"error","error":{type,message}}，OpenAI 是 {"error":{message,type,code,param}}。
+ * Anthropic 是 {"type":"error","error":{type,message}}，OpenAI（Responses 与 Chat）是 {"error":{message,type,code,param}}。
  * 保活已经回了 200 与事件流的响应头时，状态码说不出了，改发流里的错误事件（magpie 的 streamFailure）：
  * Claude Code 收到 api_error（它会改发不流式的请求），Codex 收到 response.failed 加 server_error（它会重问整轮，
- * 原因带到最终报错里）。
+ * 原因带到最终报错里），Chat 的客户端（Pi、OMP）收到没有事件名的 {"error":{message,type:"api_error"}}。
  * 认得出是对话太长的，照 CLI 自己的 API 的说法交出，CLI 才会压缩对话再问（magpie writeErrorSaid、streamError）：
  * 400 invalid_request_error 带 context_length_exceeded，Anthropic 一侧文字里没有「prompt is too long」就补在前面；
  * 流里的错误事件带 context_length_exceeded 代码。
@@ -33,7 +33,8 @@ const REFUSED_CODE = "invalid_prompt";
 /** 流里错误事件的错误码：一般的失败、对话太长、拒答。 */
 export type StreamErrorCode = "server_error" | typeof TOO_LONG_CODE | typeof REFUSED_CODE;
 
-export type AgentWire = "anthropic" | "openai";
+// openai 是 Responses（Codex），chat 是 OpenAI Chat（Pi、OMP）。
+export type AgentWire = "anthropic" | "openai" | "chat";
 
 export interface AgentError {
   status: number;
@@ -117,6 +118,7 @@ export function sendRefusal(input: {
     sendStreamError({ res, wire, message, code: REFUSED_CODE });
     return;
   }
+  // Chat 一侧照 magpie 不带代码。
   const code = wire === "openai" ? REFUSED_CODE : null;
   const error = { status: REFUSED_STATUS, message, code };
   sendAgentError({ res, wire, error, headers: input.headers });
@@ -131,13 +133,20 @@ function sendStreamError(input: {
   input.res.end(streamErrorEvent(input));
 }
 
-/** 流里错误事件的原文：Anthropic 是 error 事件，OpenAI 是 response.failed（magpie 的 streamFailure）。 */
+/**
+ * 流里错误事件的原文：Anthropic 是 error 事件，OpenAI 是 response.failed，Chat 是只有 data 的 error
+ * （magpie 的 streamFailure 与 streamError 经 chatEncoder：只有对话太长时带代码）。
+ */
 export function streamErrorEvent(input: {
   wire: AgentWire;
   message: string;
   code: StreamErrorCode;
 }): string {
   const { message, code } = input;
+  if (input.wire === "chat") {
+    const failed = { message, type: "api_error", ...(code === TOO_LONG_CODE ? { code } : {}) };
+    return sseEvent(null, { error: failed });
+  }
   const event =
     input.wire === "anthropic"
       ? { type: "error", error: anthropicStreamError({ message, code }) }

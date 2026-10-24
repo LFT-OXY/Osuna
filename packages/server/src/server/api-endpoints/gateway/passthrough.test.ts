@@ -265,6 +265,41 @@ const claudeCodeTurn = (model: string) =>
   `"messages":[{"role":"user","content":[{"type":"text","text":"hi"}]}],"metadata":{"user_id":"u"},` +
   `"safeguards":{"dangerous_tool_use":{"enabled":true}}}`;
 
+describe("a Pi or Oh My Pi request passed through to a Chat endpoint (magpie developerAsSystem, withReasoningOnToolTurns)", () => {
+  const turns = [
+    { role: "developer", content: "be brief" },
+    { role: "user", content: "list files" },
+    {
+      role: "assistant",
+      content: null,
+      reasoning: "look first",
+      tool_calls: [{ id: "c1", type: "function", function: { name: "ls", arguments: "{}" } }],
+    },
+    { role: "tool", tool_call_id: "c1", content: "a b" },
+    { role: "assistant", content: "a, b" },
+    { role: "user", content: "thanks" },
+    { role: "assistant", content: "welcome" },
+  ];
+  const body = JSON.stringify({ model: "deepseek-v4", stream: true, messages: turns });
+
+  test("developer becomes system; nothing else changes for a model that doesn't replay its thinking", () => {
+    const sent = JSON.parse(passedThrough({ body, model: "kimi-k2", format: "openai_chat" }));
+    expect(sent.messages).toEqual([{ ...turns[0], role: "system" }, ...turns.slice(1)]);
+  });
+
+  test("DeepSeek: the call and the reply after its result carry reasoning; a reply to the user's words doesn't", () => {
+    const sent = JSON.parse(passedThrough({ body, model: "deepseek-v4", format: "openai_chat" }));
+    expect(
+      sent.messages.map((message: { reasoning_content?: string }) => message.reasoning_content),
+    ).toEqual([undefined, undefined, "look first", undefined, " ", undefined, undefined]);
+  });
+
+  test("a request with nothing to change goes byte for byte", () => {
+    const plain = '{"model":"kimi-k2", "messages":[{"role":"user","content":"hi"}]}';
+    expect(passedThrough({ body: plain, model: "kimi-k2", format: "openai_chat" })).toBe(plain);
+  });
+});
+
 describe("Claude Code's billing line and auto mode review passed through (magpie billing_line_test.go, automode.go)", () => {
   test("another vendor's model gets neither, every other byte as sent", () => {
     expect(

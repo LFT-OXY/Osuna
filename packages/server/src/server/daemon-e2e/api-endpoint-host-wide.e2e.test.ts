@@ -225,6 +225,8 @@ describe("old per-agent endpoints are read as host-wide endpoints", () => {
     expect(upgraded.agents).toEqual({
       claude: { enabled: true, defaultModelId: "a2" },
       codex: { enabled: true, defaultModelId: "d2" },
+      pi: { enabled: false, defaultModelId: null },
+      omp: { enabled: false, defaultModelId: null },
     });
     for (const endpoint of upgraded.endpoints) {
       expect(endpoint.provider).toBeUndefined();
