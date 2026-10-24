@@ -145,6 +145,7 @@ function detailElement(overrides: Partial<ProviderDetailSurfaceProps>) {
       extendsProvider={undefined}
       hostPlatform="darwin"
       hostSupportsApiEndpoints
+      hostSupportsPiApiEndpoints
       hostSupportsProviderVersions
       discoveredModels={[]}
       additionalModels={[]}
@@ -278,6 +279,19 @@ describe("ProviderDetailSurface", () => {
     renderDetail({
       provider: "opencode",
       entries: [entry({ provider: "opencode", label: "OpenCode" })],
+    });
+    expect(screen.queryByTestId("api-endpoints-slot")).toBeNull();
+  });
+
+  it("shows API endpoints on Pi's page only when the host supports them for Pi", () => {
+    renderDetail({ provider: "pi", entries: [entry({ provider: "pi", label: "Pi" })] });
+    expect(screen.getByTestId("api-endpoints-slot").textContent).toBe("Pi");
+    cleanup();
+
+    renderDetail({
+      provider: "pi",
+      entries: [entry({ provider: "pi", label: "Pi" })],
+      hostSupportsPiApiEndpoints: false,
     });
     expect(screen.queryByTestId("api-endpoints-slot")).toBeNull();
   });

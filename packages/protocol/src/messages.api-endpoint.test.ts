@@ -2064,6 +2064,20 @@ describe("API endpoint balance (apiEndpointBalance)", () => {
     expect(older.features?.apiEndpointBalance).toBeUndefined();
   });
 
+  it("parses a host that advertises apiEndpointPi, and an older one without it", () => {
+    const base = { status: "server_info" as const, serverId: "srv_1" };
+    const current = ServerInfoStatusPayloadSchema.parse({
+      ...base,
+      features: { gatewayLedger: true, apiEndpointPi: true },
+    });
+    expect(current.features?.apiEndpointPi).toBe(true);
+    const older = ServerInfoStatusPayloadSchema.parse({
+      ...base,
+      features: { gatewayLedger: true },
+    });
+    expect(older.features?.apiEndpointPi).toBeUndefined();
+  });
+
   it("parses a balance's parts and a failure's hint and console, and a reading from a daemon without them", () => {
     const withParts = {
       endpointId: "ep_1",

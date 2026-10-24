@@ -83,6 +83,16 @@ const PROTOCOLS: Record<CliConfigProvider, ProtocolSpec> = {
     }),
     matches: (body) => isRecord(body) && (body.object === "response" || Array.isArray(body.output)),
   },
+  pi: {
+    // base 和写进 Pi models.json 的一样以 /v1 结尾，Pi 默认说 Chat。
+    path: "/chat/completions",
+    format: "openai_chat",
+    keys: "bearer",
+    headers: {},
+    body: (modelId) => ({ model: modelId, messages: [{ role: "user", content: "ping" }] }),
+    matches: (body) =>
+      isRecord(body) && (body.object === "chat.completion" || Array.isArray(body.choices)),
+  },
 };
 
 export async function testUpstreamConnection(input: {

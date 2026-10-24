@@ -23,9 +23,11 @@ import type { UsageConfig, UsagePricingSettings } from "./config.js";
 import { resolveUsageLogRoots, type UsageLogRoots } from "./log-roots.js";
 import {
   UsagePricingService,
+  type ModelPricePerMillion,
   type UsagePricingModelRef,
   type UsagePricingRefreshOutcome,
 } from "./pricing/service.js";
+import { toPerMillion } from "./pricing/table.js";
 import { UsageProjectResolver } from "./project-attribution.js";
 import { UsageExchangeRates } from "./exchange-rate.js";
 import { buildAgentSummary, buildAgentTurns, type AgentReportInput } from "./agent-report.js";
@@ -404,6 +406,23 @@ export class UsageService {
     }
     const cursor = this.scanState.cursors[sessionCursorKey(cli, sessionId)];
     return cursor ? { providerId: cli, providerHandleId: cursor.path } : null;
+  }
+
+  /**
+   * A model's price per million tokens as the table or the user's own price has it, for agents that are told
+   * what a call costs (Pi's models.json); null when it is not priced.
+   */
+  pricePerMillion(model: string): ModelPricePerMillion | null {
+    const match = this.pricing.priceFor(model);
+    if (!match.priced) return null;
+    const { rates } = match;
+    return {
+      input: toPerMillion(rates.input),
+      output: toPerMillion(rates.output),
+      cacheRead: toPerMillion(rates.cachedInput),
+      cacheWrite: toPerMillion(rates.cacheWrite),
+      isOverride: match.priceSource === "override",
+    };
   }
 
   /** Every model the rows have ever carried, newest use first. */

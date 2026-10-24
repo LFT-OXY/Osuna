@@ -803,6 +803,19 @@ textcalls_whole_test.go and gemini_signature_test.go in internal/gateway:
   packages/server/src/server/api-endpoints/gateway/translation/chat.test.ts
   packages/server/src/server/daemon-e2e/api-endpoint-gateway-chat.e2e.test.ts
 
+Pi's models.json entry for each model (its API by model, thinking level map,
+context and output, prompt cache lifetimes and adaptive-thinking flag) follows
+piModelJSON, piThinkingLevels and piPromptCache in magpie's
+internal/agent/agents.go and magpieModels, allResponses and maxTokens in
+internal/agent/route.go; the user's own keys and compat values kept inside
+Osuna's provider follow piBlockKept in agents.go and theirsKept and mergeTheirs
+in internal/agent/sync.go. Its tests take cases from pi_thinking_test.go and
+pi_api_test.go in internal/agent:
+
+  packages/server/src/server/api-endpoints/pi-model-entries.ts
+  packages/server/src/server/api-endpoints/pi-model-entries.test.ts
+  packages/server/src/server/api-endpoints/pi-config-patch.ts
+
 The gateway's ChatGPT backend path (relaying a Codex signed in with ChatGPT to
 the ChatGPT backend as it came, an API key's requests to the OpenAI API, and
 426 to a WebSocket handshake) follows CodexPath, codexBackend, codexUpstream,

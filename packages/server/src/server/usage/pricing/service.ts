@@ -73,6 +73,18 @@ export interface UsagePricingRefreshOutcome {
   error: string | null;
 }
 
+/**
+ * A model's price per million tokens, in the columns an agent's model file takes (Pi's cost);
+ * isOverride is a price the user set, which an endpoint's multiplier does not scale.
+ */
+export interface ModelPricePerMillion {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  isOverride: boolean;
+}
+
 /** One model as the usage rows know it, for the price table listing. */
 export interface UsagePricingModelRef {
   model: string;

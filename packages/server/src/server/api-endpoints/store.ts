@@ -30,6 +30,7 @@ import {
 import { writePrivateFileAtomicSync } from "../private-files.js";
 import { ClaudeSettingsTakeoverSchema } from "./claude-settings-patch.js";
 import { CodexConfigTakeoverSchema } from "./codex-config-patch.js";
+import { PiModelsTakeoverSchema, PiSettingsTakeoverSchema } from "./pi-config-patch.js";
 import { readOptionalFile } from "./config-file.js";
 import { type DataFileSystem, LastGoodFile, NODE_DATA_FILE_SYSTEM } from "./last-good.js";
 import { ModelFactsSchema } from "./model-facts.js";
@@ -41,6 +42,7 @@ import { ModelFactsSchema } from "./model-facts.js";
  *   只有 daemon 读，RPC 只给打码（reveal_key、reveal_secret 除外）；
  * - takeover-claude.json：接管记录，含用户原先写在 settings.json 里的值（可能是别的 token）；
  * - takeover-codex.json：config.toml 的接管记录；
+ * - takeover-pi-models.json、takeover-pi-settings.json：Pi 的 models.json 与 settings.json 各一份接管记录；
  * - codex-models.json：Codex 的 model_catalog_json，Codex 总开关开着时才有；
  * - codex-agent-versions.json：ChatGPT 给 Codex 自带模型的多 Agent 版本，缓存顶替清单时放回（codex-agent-versions.ts）；
  * - models-dev.json：models.dev 模型资料的精简缓存（models-dev.ts），给 Claude Code 的模型提示与 Codex 的模型目录用；
@@ -63,10 +65,11 @@ import { ModelFactsSchema } from "./model-facts.js";
 export const API_ENDPOINT_PROVIDERS = ["claude", "codex", "pi", "omp"] as const;
 export type ApiEndpointProvider = (typeof API_ENDPOINT_PROVIDERS)[number];
 
-// Osuna 改写其 CLI 配置、在设置与 RPC 里开放的提供方。Pi、OMP 已能经中转站认出、记账，配置改写还没接上。
+// Osuna 改写其 CLI 配置、在设置与 RPC 里开放的提供方。OMP 已能经中转站认出、记账，配置改写还没接上。
 export const CLI_CONFIG_PROVIDERS = [
   "claude",
   "codex",
+  "pi",
 ] as const satisfies readonly ApiEndpointProvider[];
 export type CliConfigProvider = (typeof CLI_CONFIG_PROVIDERS)[number];
 
@@ -301,6 +304,20 @@ const CodexTakeoverFileSchema = z.object({
 });
 export type CodexTakeoverFile = z.infer<typeof CodexTakeoverFileSchema>;
 
+// Pi 的两份文件各一份；settings.json 那份另记再打开时放回的默认模型（模型写在它里面）。
+const PiModelsTakeoverFileSchema = z.object({
+  takeover: PiModelsTakeoverSchema.nullable(),
+  backup: z.object({ path: z.string().nullable() }).nullable(),
+});
+export type PiModelsTakeoverFile = z.infer<typeof PiModelsTakeoverFileSchema>;
+
+const PiSettingsTakeoverFileSchema = z.object({
+  takeover: PiSettingsTakeoverSchema.nullable(),
+  backup: z.object({ path: z.string().nullable() }).nullable(),
+  reconnect: DefaultModelReconnectSchema.optional(),
+});
+export type PiSettingsTakeoverFile = z.infer<typeof PiSettingsTakeoverFileSchema>;
+
 // 按 provider 存；发了就一直用，关掉总开关也不作废（ADR 0010）。没有条目即该 Agent 从没开过。
 const GatewayTokensFileSchema = z.object({ tokens: z.record(z.string(), z.string()) });
 type GatewayTokensFile = z.infer<typeof GatewayTokensFileSchema>;
@@ -416,6 +433,14 @@ export class ApiEndpointStore {
 
   writeCodexConfigBackup(bytes: Buffer | null, at: Date): string | null {
     return this.writeBackup({ bytes, at, prefix: "codex-config", extension: "toml" });
+  }
+
+  writePiModelsBackup(bytes: Buffer | null, at: Date): string | null {
+    return this.writeBackup({ bytes, at, prefix: "pi-models", extension: "json" });
+  }
+
+  writePiSettingsBackup(bytes: Buffer | null, at: Date): string | null {
+    return this.writeBackup({ bytes, at, prefix: "pi-settings", extension: "json" });
   }
 
   /** 收回一份没能记进接管记录的副本。 */
@@ -670,6 +695,26 @@ export class ApiEndpointStore {
 
   writeCodexTakeover(file: CodexTakeoverFile): void {
     this.writeJson("takeover-codex.json", CodexTakeoverFileSchema.parse(file));
+  }
+
+  readPiModelsTakeover(): PiModelsTakeoverFile {
+    const raw = this.readJson("takeover-pi-models.json");
+    return raw === null ? { takeover: null, backup: null } : PiModelsTakeoverFileSchema.parse(raw);
+  }
+
+  writePiModelsTakeover(file: PiModelsTakeoverFile): void {
+    this.writeJson("takeover-pi-models.json", PiModelsTakeoverFileSchema.parse(file));
+  }
+
+  readPiSettingsTakeover(): PiSettingsTakeoverFile {
+    const raw = this.readJson("takeover-pi-settings.json");
+    return raw === null
+      ? { takeover: null, backup: null }
+      : PiSettingsTakeoverFileSchema.parse(raw);
+  }
+
+  writePiSettingsTakeover(file: PiSettingsTakeoverFile): void {
+    this.writeJson("takeover-pi-settings.json", PiSettingsTakeoverFileSchema.parse(file));
   }
 
   get modelsDevPath(): string {

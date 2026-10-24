@@ -1063,6 +1063,8 @@ export async function createPaseoDaemon(
     // models.dev 是价格表之外的另一次主动下载，归同一个自动更新开关管（docs/usage.md）。
     isModelsDevAutoUpdate: () =>
       resolveUsagePricingSettings(daemonConfigStore.get().usage?.pricing).autoUpdate,
+    // usageService 在下面创建；只在改写 Pi 的配置时调用，那时 daemon 已经启动。
+    modelPricePerMillion: (model) => usageService.pricePerMillion(model),
     ...config.apiEndpoints,
   });
   function apiEndpointModelOverride(provider: AgentProvider): AgentModelDefinition[] | null {

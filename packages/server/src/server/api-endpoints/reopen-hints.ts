@@ -20,6 +20,9 @@ import {
 } from "./host-processes.js";
 import type { CliConfigProvider, CliStartRead } from "./store.js";
 
+/** 提示区列出要重开的副本的 CLI；Pi 还没接上（任务 10-16-pi-omp-endpoints 工单 03）。 */
+export type ReopenHintsProvider = Exclude<CliConfigProvider, "pi">;
+
 /*
  * 改完 CLI 配置后，还在用旧设置的副本（PRD 第 36 条）：CLI 启动时读的那部分最近一次变了之前启动的进程。
  * Codex 再分终端、编辑器扩展、桌面应用、别的应用自带的，因为重开一种不会结束另一种（macOS 上关掉 Codex 应用的
@@ -39,7 +42,7 @@ export interface StaleCopyGroup {
 }
 
 export interface FindStaleCopiesInput {
-  provider: CliConfigProvider;
+  provider: ReopenHintsProvider;
   processes: HostProcess[];
   changedAt: Date;
   // CLI 配置所在目录（CLAUDE_CONFIG_DIR 或 ~/.claude、CODEX_HOME 或 ~/.codex）。
@@ -49,7 +52,7 @@ export interface FindStaleCopiesInput {
 }
 
 /** CLI 的进程怎么认（magpie startsWith 给 pgrep -f 的式子，看整行命令）。 */
-const CLI_PATTERNS: Record<CliConfigProvider, RegExp> = {
+const CLI_PATTERNS: Record<ReopenHintsProvider, RegExp> = {
   claude: /(^|\/)claude( |$)/,
   codex: /(^|\/)codex( |$)/,
 };
@@ -160,7 +163,7 @@ function claudeCopyKind(commandLine: string): CopyKindOf {
   return { kind: "cli", app: null };
 }
 
-const COPY_KINDS: Record<CliConfigProvider, (commandLine: string) => CopyKindOf> = {
+const COPY_KINDS: Record<ReopenHintsProvider, (commandLine: string) => CopyKindOf> = {
   claude: claudeCopyKind,
   codex: codexCopyKind,
 };
@@ -410,7 +413,7 @@ const FIRST_LOOK_WAIT_MS = 3_000;
 // 多久再看一次后台 app-server 与在跑的副本（magpie codexDaemonEvery）。
 export const REOPEN_CHECK_EVERY_MS = 15_000;
 
-const AGENT_NAMES: Record<CliConfigProvider, string> = { claude: "Claude Code", codex: "Codex" };
+const AGENT_NAMES: Record<ReopenHintsProvider, string> = { claude: "Claude Code", codex: "Codex" };
 
 /** 读状态时一个 CLI 的情况：配置所在目录、启动时读的那部分最近一次变了的时刻、Osuna 里那之前启动的会话数。 */
 export interface ReopenHintsSubject {
@@ -419,7 +422,7 @@ export interface ReopenHintsSubject {
   osunaSessions: number;
 }
 
-export type ReopenHintsSubjects = Record<CliConfigProvider, ReopenHintsSubject>;
+export type ReopenHintsSubjects = Record<ReopenHintsProvider, ReopenHintsSubject>;
 
 export interface CliReopenHintsOptions {
   // 第一次要用时才造：真的实现在测试里一造就抛错。
@@ -631,7 +634,7 @@ export class CliReopenHints {
   }
 
   /** 两个 CLI 要重开的副本，用最近一次看到的；这次改动还没看过时等它看完（最多 FIRST_LOOK_WAIT_MS）。 */
-  async read(): Promise<Record<CliConfigProvider, ApiEndpointReopenHint[]>> {
+  async read(): Promise<Record<ReopenHintsProvider, ApiEndpointReopenHint[]>> {
     const subjects = this.options.subjects();
     const key = lookKey(subjects);
     const listedAt = this.seenFor(key)?.copiesListedAt ?? null;
@@ -655,7 +658,7 @@ export class CliReopenHints {
   }
 
   private hintsOf(input: {
-    provider: CliConfigProvider;
+    provider: ReopenHintsProvider;
     subject: ReopenHintsSubject;
     seen: ReopenLook | null;
   }): ApiEndpointReopenHint[] {

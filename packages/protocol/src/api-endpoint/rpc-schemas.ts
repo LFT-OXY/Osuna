@@ -34,6 +34,7 @@ export function apiEndpointHasModelMapping(provider: string): boolean {
 const TEST_PROTOCOL_NAMES: Readonly<Record<string, string>> = {
   claude: "Anthropic Messages",
   codex: "OpenAI Responses",
+  pi: "OpenAI Chat Completions",
 };
 
 export function apiEndpointProtocolName(provider: string): string {

@@ -4229,6 +4229,10 @@ export const ServerInfoStatusPayloadSchema = z
         // 与报告的 endpoints（按接口分，含「官方」）；usage.requests.list（请求列表）与 usage.requests.export（导出 CSV）；
         // provider.api_endpoint.recent_problems（接口页「最近异常」）；usage.exchange_rate.get（人民币显示用的汇率）。
         gatewayLedger: z.boolean().optional(),
+        // COMPAT(apiEndpointPi): added in v0.17.0, remove gate after 2027-04-24.
+        // 任务 10-16-pi-omp-endpoints：Pi 的「使用第三方接口」——set_agent_settings、preview_switch_off、keep_current_settings
+        // 收 provider "pi"，列表的 agents、agentIssues 带 pi；daemon 改写 Pi 的 models.json 与 settings.json。
+        apiEndpointPi: z.boolean().optional(),
         // COMPAT(providerVersions): added in v0.14.0, remove gate after 2027-04-01.
         // 快照带内置提供方的已装版本 version；daemon 支持 provider.version.check.* 与 provider.upgrade.*。
         providerVersions: z.boolean().optional(),

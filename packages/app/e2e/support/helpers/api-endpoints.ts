@@ -566,9 +566,9 @@ export async function seedApiEndpoint(
   return saved.endpoint.id;
 }
 
-/** 关掉两个 Agent 的总开关、删掉所有接口，让同一 worker 里的下一个用例从空开始。 */
+/** 关掉每个 Agent 的总开关、删掉所有接口，让同一 worker 里的下一个用例从空开始。 */
 export async function resetApiEndpoints(client: ApiEndpointSeedClient): Promise<void> {
-  for (const provider of ["claude", "codex"]) {
+  for (const provider of ["claude", "codex", "pi"]) {
     await client.apiEndpointSetAgentSettings({ provider, enabled: false });
   }
   // 「保留 claude.ai 登录」与默认思考档位关着也记着，不清掉会带进下一个用例。
@@ -607,12 +607,18 @@ export async function resetApiEndpoints(client: ApiEndpointSeedClient): Promise<
 
 /**
  * 开关关着时接管记录还留着上次关掉前的默认模型（reconnect），下次打开会挑它（ADR 0012 的 again）。
- * 开关都关着、没有接管时删掉这两份记录，下一个用例从没接过的样子开始。
+ * 开关都关着、没有接管时删掉这几份记录，下一个用例从没接过的样子开始。
  */
 async function forgetTakeovers(): Promise<void> {
   const home = process.env.E2E_PASEO_HOME;
   if (!home) throw new Error("E2E_PASEO_HOME is not set (expected from the Playwright worker).");
-  for (const name of ["takeover-claude.json", "takeover-codex.json"]) {
+  const names = [
+    "takeover-claude.json",
+    "takeover-codex.json",
+    "takeover-pi-models.json",
+    "takeover-pi-settings.json",
+  ];
+  for (const name of names) {
     const filePath = path.join(home, "api-endpoints", name);
     if (!existsSync(filePath)) continue;
     const text = await readFile(filePath, "utf8");
@@ -726,6 +732,11 @@ export async function openApiEndpointsPage(page: Page): Promise<void> {
 
 /** 从 server_info 去掉 apiEndpointManagement，模拟没有接口管理能力的旧主机。 */
 export async function hideManagementCapability(page: Page): Promise<void> {
+  await hideHostFeature(page, "apiEndpointManagement");
+}
+
+/** 从 server_info 去掉一项能力，模拟还没有它的旧主机。 */
+export async function hideHostFeature(page: Page, feature: string): Promise<void> {
   await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
     const server = ws.connectToServer();
     ws.onMessage((message) => server.send(message));
@@ -739,7 +750,7 @@ export async function hideManagementCapability(page: Page): Promise<void> {
       };
       const payload = envelope.message?.payload;
       if (payload?.status === "server_info" && payload.features) {
-        delete payload.features.apiEndpointManagement;
+        delete payload.features[feature];
       }
       ws.send(JSON.stringify(envelope));
     });

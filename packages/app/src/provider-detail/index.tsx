@@ -5,7 +5,7 @@ import { StyleSheet } from "react-native-unistyles";
 import { FileText, RotateCw } from "lucide-react-native";
 import type { AgentModelDefinition, ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
 import type { ProviderProfileModel } from "@getpaseo/protocol/provider-config";
-import { selectInheritedApiEndpoint, supportsApiEndpoints } from "@/api-endpoints";
+import { selectInheritedApiEndpoint, showsApiEndpointSettings } from "@/api-endpoints";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Text as UiText } from "@/components/ui/text";
@@ -40,6 +40,8 @@ export interface ProviderDetailSurfaceProps {
   extendsProvider: unknown;
   hostPlatform: string | undefined;
   hostSupportsApiEndpoints: boolean;
+  // COMPAT(apiEndpointPi): added in v0.17.0, remove gate after 2027-04-24. 主机声明了 Pi 的第三方接口。
+  hostSupportsPiApiEndpoints: boolean;
   hostSupportsProviderVersions: boolean;
   discoveredModels: AgentModelDefinition[];
   additionalModels: ProviderProfileModel[];
@@ -154,6 +156,7 @@ export function ProviderDetailSurface({
   extendsProvider,
   hostPlatform,
   hostSupportsApiEndpoints,
+  hostSupportsPiApiEndpoints,
   hostSupportsProviderVersions,
   discoveredModels,
   additionalModels,
@@ -187,7 +190,9 @@ export function ProviderDetailSurface({
     [extendsProvider, hostPlatform, provider],
   );
   // COMPAT(apiEndpoints): added in v0.13.0, remove gate after 2027-03-30.
-  const showApiEndpoints = hostSupportsApiEndpoints && supportsApiEndpoints(provider);
+  const showApiEndpoints =
+    hostSupportsApiEndpoints &&
+    showsApiEndpointSettings({ provider, hostSupportsPi: hostSupportsPiApiEndpoints });
   const providerSnapshotRefreshing = providerEntry?.status === "loading";
   const providerErrorMessage =
     providerEntry?.status === "error"
