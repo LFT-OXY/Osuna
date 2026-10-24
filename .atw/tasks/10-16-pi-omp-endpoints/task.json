@@ -22,5 +22,7 @@
   "parent": "10-16-magpie-osuna-gaps",
   "relatedFiles": [],
   "notes": "",
-  "meta": {}
+  "meta": {
+    "implementation_base_sha": "c918b90d55ccf1208069e10764d83a31f4d84ca6"
+  }
 }

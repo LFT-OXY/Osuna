@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 服务端「支持第三方接口的提供方」扩到 Claude Code、Codex、Pi、OMP：Pi、OMP 各有一个中转站口令（生成方式同现有两家）；按两家穷举的表都扩到四家；界面与协议的开放留给 02。
 - [ ] `POST /v1/chat/completions` 只收本机回环、不带转发头的请求，网页来的回 403；其他未知路径仍回 404。
