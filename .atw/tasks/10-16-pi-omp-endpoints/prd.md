@@ -284,17 +284,17 @@ Pi 和 OMP 像 Claude Code、Codex 一样用第三方接口：
 
 ## Acceptance Criteria
 
-- [ ] 内置中转站收 `POST /v1/chat/completions`：只收本机请求；Pi、OMP 的口令各自认得出；请求能翻译到 Anthropic、Responses、Chat 三种上游；流式回复含思考、工具调用和用量；失败会自动切换。
-- [ ] Pi 中途加的工具被提升到顶层；`developer` 角色在直转 Chat 时改成 `system`；带 `x-session-affinity` 的同一对话粘在同一家。
-- [ ] Pi 设置页打开开关后，临时目录里 Pi 的 `models.json` 有 `providers.osuna`，模型清单同 Codex，每个模型的格式、上下文、思考档位按本文规则；`settings.json` 的默认模型与思考档位正确；已有的 `enabledModels` 把默认模型放在最前。
-- [ ] OMP 两套配置各自打开、关掉互不影响；`models.yml`、`config.yml` 写法正确；9 个角色可设、可清空，带思考档位；不写 User-Agent。
-- [ ] 关掉开关前预览列出会改回的键；关掉后 Pi / OMP 配置回到原样，开着期间用户自改的键保留，用户原有的其他键与 YAML 写法不变；解析不了的文件不写并报出文件名。
-- [ ] 在 Pi / OMP 里把默认换成另一个 `osuna/` 模型，Osuna 的默认模型跟着变；换成接口以外的模型时出现与 Claude Code、Codex 相同的提示。
-- [ ] Pi / OMP 开着的对话出现在「要重开」提示里；Osuna 新对话的模型选择里出现 `osuna/` 模型。
-- [ ] 用量：经过中转站的 Pi / OMP 调用只算一次，按接口分开；`osuna` 条目对不上时被跳过；终端里直接跑的 Pi / OMP 调用记进账本。
-- [ ] 协议：新功能挂在 `server_info.features.*` 上，新字段可选；旧 daemon 下新 App 不显示 Pi / OMP 的第三方接口设置；官方 Paseo 手机 App 照常工作。
-- [ ] 界面验收（UI and Design 一节）逐条有截图；9 种语言的 i18n 测试通过。
-- [ ] 文档：`docs/glossary.md` 相关条目已核对；ADR 0004、0007、0010、0012、0014 在原文中补上 Pi / OMP；`docs/usage.md`、`docs/custom-providers.md` 已更新；`THIRD_PARTY_NOTICES` 覆盖新借鉴的 magpie 文件。
+- [x] 内置中转站收 `POST /v1/chat/completions`：只收本机请求；Pi、OMP 的口令各自认得出；请求能翻译到 Anthropic、Responses、Chat 三种上游；流式回复含思考、工具调用和用量；失败会自动切换。
+- [x] Pi 中途加的工具被提升到顶层；`developer` 角色在直转 Chat 时改成 `system`；带 `x-session-affinity` 的同一对话粘在同一家。
+- [x] Pi 设置页打开开关后，临时目录里 Pi 的 `models.json` 有 `providers.osuna`，模型清单同 Codex，每个模型的格式、上下文、思考档位按本文规则；`settings.json` 的默认模型与思考档位正确；已有的 `enabledModels` 把默认模型放在最前。
+- [x] OMP 两套配置各自打开、关掉互不影响；`models.yml`、`config.yml` 写法正确；9 个角色可设、可清空，带思考档位；不写 User-Agent。
+- [x] 关掉开关前预览列出会改回的键；关掉后 Pi / OMP 配置回到原样，开着期间用户自改的键保留，用户原有的其他键与 YAML 写法不变；解析不了的文件不写并报出文件名。
+- [x] 在 Pi / OMP 里把默认换成另一个 `osuna/` 模型，Osuna 的默认模型跟着变；换成接口以外的模型时出现与 Claude Code、Codex 相同的提示。
+- [x] Pi / OMP 开着的对话出现在「要重开」提示里；Osuna 新对话的模型选择里出现 `osuna/` 模型。
+- [x] 用量：经过中转站的 Pi / OMP 调用只算一次，按接口分开；`osuna` 条目对不上时被跳过；终端里直接跑的 Pi / OMP 调用记进账本。
+- [x] 协议：新功能挂在 `server_info.features.*` 上，新字段可选；旧 daemon 下新 App 不显示 Pi / OMP 的第三方接口设置；官方 Paseo 手机 App 照常工作。
+- [x] 界面验收（UI and Design 一节）逐条有截图；9 种语言的 i18n 测试通过。
+- [x] 文档：`docs/glossary.md` 相关条目已核对；ADR 0004、0007、0010、0012、0014 在原文中补上 Pi / OMP；`docs/usage.md`、`docs/custom-providers.md` 已更新；`THIRD_PARTY_NOTICES` 覆盖新借鉴的 magpie 文件。
 - [ ] typecheck、lint 通过；改到的测试文件本机通过；PR 的 CI 通过（已知常红的 Nix 两项除外）。
 
 ## Further Notes
@@ -308,3 +308,4 @@ Pi 和 OMP 像 Claude Code、Codex 一样用第三方接口：
 - **本机已有的 Pi / OMP 配置**：本机的 `~/.pi/agent`、`~/.omp/agent` 里已有用户的 `models.json` / `models.yml`，助手没有读过内容。界面验收用临时目录，涉及真实配置的验收由用户自己做或先取得同意。
 - **参考源码**：magpie `7597c132` 在 `/tmp/magpie-7597`，Pi 源码在 `/tmp/pi-mono-src`，OMP 源码在 `/tmp/omp-src`，都是只读的临时克隆。
 - **待另开工单**（工单 02 审查，用户 2026-10-24 决定）：设置页「已更新 just now」的相对时间来自全应用共用的英文时间工具，中文界面露出英文；不在本任务改，另开工单做时间文字本地化。
+- **验收时记下的后续事项**（2026-10-24，不在本任务改）：关开关预览弹窗中文标题「关闭 Oh My Pi 的第三方接口?」用了半角问号；以下只有代码、没有专门测试：`PI_CONFIG_DIR` 指定的 OMP 根目录、`PI_PROFILE` 指向的那套并入「默认」、命名配置按套随接口同步、advisor / commit 两个角色的写入。思考档位名（High、Off 等）用户决定保留英文。
