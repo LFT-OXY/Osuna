@@ -216,17 +216,17 @@
 
 ## Acceptance Criteria
 
-- [ ] 接口能存四种地址；只填 Gemini 地址的接口能保存、能用；地址按 A1 规范化；新客户端只在 `features.apiEndpointGemini` 存在时显示 Gemini 相关界面。
-- [ ] Claude Code、Codex、Pi / OMP 三个入口的请求经中转站发到 Gemini 地址：地址、认证头、请求体按本文规则；流式与整份回复都对，含文字、思考、工具调用（含并行）、图片、用量、结束原因。
-- [ ] 思考档位按代数发 level 或 budget；多轮工具调用的思考签名存盘并在下一轮带回，缺签名时按 skip 规则；Gemini 没给调用 id 时补的 id 两边一致。
-- [ ] 一家有几种地址时 Gemini 排最后；「只用这种格式 = Gemini」生效；「这家自己会联网搜索」对 Gemini 地址生效。
-- [ ] 判错：key 无效标「需要检查」并换家；`retryDelay` 作为恢复时间；额度、限流、空回复、中途断开、安全拦截、没有这个模型都按本文处理并自动切换。
-- [ ] 自动识别多 Gemini 一行，回成功网页的地址不被认成 Gemini；测试连接、逐个模型支持 Gemini；拉清单翻页拉全、去 `models/` 前缀、只留能对话的、带上下文与输出上限。
-- [ ] 导入 CC Switch、Alma、导入链接时收下 Gemini 地址；同一家不重复导入；「还不支持 Gemini」的提示不再出现。
-- [ ] Google Gemini 模板出现在模板清单里，地址是 Chat 兼容地址。
+- [x] 接口能存四种地址；只填 Gemini 地址的接口能保存、能用；地址按 A1 规范化；新客户端只在 `features.apiEndpointGemini` 存在时显示 Gemini 相关界面。
+- [x] Claude Code、Codex、Pi / OMP 三个入口的请求经中转站发到 Gemini 地址：地址、认证头、请求体按本文规则；流式与整份回复都对，含文字、思考、工具调用（含并行）、图片、用量、结束原因。
+- [x] 思考档位按代数发 level 或 budget；多轮工具调用的思考签名存盘并在下一轮带回，缺签名时按 skip 规则；Gemini 没给调用 id 时补的 id 两边一致。
+- [x] 一家有几种地址时 Gemini 排最后；「只用这种格式 = Gemini」生效；「这家自己会联网搜索」对 Gemini 地址生效。
+- [x] 判错：key 无效标「需要检查」并换家；`retryDelay` 作为恢复时间；额度、限流、空回复、中途断开、安全拦截、没有这个模型都按本文处理并自动切换。
+- [x] 自动识别多 Gemini 一行，回成功网页的地址不被认成 Gemini；测试连接、逐个模型支持 Gemini；拉清单翻页拉全、去 `models/` 前缀、只留能对话的、带上下文与输出上限。
+- [x] 导入 CC Switch、Alma、导入链接时收下 Gemini 地址；同一家不重复导入；「还不支持 Gemini」的提示不再出现。
+- [x] Google Gemini 模板出现在模板清单里，地址是 Chat 兼容地址。
 - [ ] 官方 Paseo 手机 App 与旧客户端照常工作；旧客户端保存带 Gemini 地址的接口时的行为已核实并写进 PR 说明。
-- [ ] 界面验收（UI and Design 一节）逐条有截图；9 种语言的 i18n 测试通过。
-- [ ] 文档：`docs/glossary.md` 相关条目已核对；ADR 0007、0008、0009、0013 加了修改说明；`docs/data-model.md` 写明 `gemini` 与回退风险；`THIRD_PARTY_NOTICES` 与借鉴文件的 MIT 声明齐全。
+- [x] 界面验收（UI and Design 一节）逐条有截图；9 种语言的 i18n 测试通过。
+- [x] 文档：`docs/glossary.md` 相关条目已核对；ADR 0007、0008、0009、0013 加了修改说明；`docs/data-model.md` 写明 `gemini` 与回退风险；`THIRD_PARTY_NOTICES` 与借鉴文件的 MIT 声明齐全。
 - [ ] typecheck、lint 通过；改到的测试文件本机通过；PR 的 CI 通过（已知常红的 Nix 两项除外）。
 
 ## Further Notes
