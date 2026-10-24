@@ -10,9 +10,13 @@ import {
   type ApiEndpointBalanceHint,
   type ApiEndpointBalanceItem,
   type ApiEndpointBalancePart,
+  type ApiEndpointBalanceReading,
   type ApiEndpointBalanceResets,
   type ApiEndpointBalanceWindow,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import { formatPct } from "@/usage/format";
+import type { UsageDisplayAs } from "@/usage/preferences";
+import { tightestWindow } from "./internal/balance-windows";
 
 /*
  * 余额读数按界面语言的说法：详情页「余额与套餐用量」与编辑窗口「查询余额」的结果共用。
@@ -166,4 +170,33 @@ export function failureTitle(input: {
   const status = input.failure?.status ?? null;
   if (status === null) return text;
   return input.t("settings.apiEndpoints.balance.withStatus", { text, status });
+}
+
+/**
+ * 一行写完的余额：和接口列表行上一样，有套餐窗口时写剩得最少的那个，否则写第一项金额（不换算货币）。
+ * 没读到、读到了却没有可写的为 null：用量页的接口卡片这时不出余额这一行。
+ */
+export function balanceSummaryText(input: {
+  t: TFunction;
+  reading: ApiEndpointBalanceReading;
+  displayAs: UsageDisplayAs;
+}): string | null {
+  const { t, reading, displayAs } = input;
+  if (reading.status !== "ok") return null;
+  const tightest = tightestWindow(reading.windows ?? []);
+  if (tightest !== null) {
+    const usedPct = tightest.usedPct ?? 0;
+    return t(
+      displayAs === "remaining"
+        ? "settings.apiEndpoints.balance.rowWindowLeft"
+        : "settings.apiEndpoints.balance.rowWindowUsed",
+      {
+        window: windowLabel({ t, window: tightest }),
+        percent: formatPct(displayAs === "remaining" ? 100 - usedPct : usedPct),
+      },
+    );
+  }
+  const first = reading.items[0];
+  if (!first) return null;
+  return t("settings.apiEndpoints.balance.rowAmount", { amount: first.text });
 }

@@ -16,6 +16,8 @@ interface CustomPriceGroupProps {
   models: readonly UsagePricingModel[];
   layout: PriceTableLayout;
   rows: PriceRowsState;
+  // 主机有价格倍率：说明一句自定义价格不乘它（照 magpie internal/gui/assets/app.js:10928–10929 价格框的说明）。
+  showsMultiplierNote: boolean;
   onEdit: (model: string) => void;
   onCancel: (model: string) => void;
   onChangeField: (model: string, field: PriceField, value: string) => void;
@@ -61,6 +63,16 @@ export function CustomPriceGroup(props: CustomPriceGroupProps) {
             <Text variant="caption" color="foregroundMuted" style={styles.intro}>
               {t("settings.host.priceTable.customGroup.intro")}
             </Text>
+            {props.showsMultiplierNote ? (
+              <Text
+                variant="caption"
+                color="foregroundMuted"
+                style={styles.note}
+                testID="price-table-custom-multiplier-note"
+              >
+                {t("settings.host.priceTable.customGroup.multiplierNote")}
+              </Text>
+            ) : null}
             <PriceTableHeader layout={layout} />
             {models.map((model) => {
               // 无价格数据的行一直开着输入框，没有草稿时从空的四格开始。
@@ -95,6 +107,10 @@ const styles = StyleSheet.create((theme) => ({
   intro: {
     paddingHorizontal: theme.spacing[4],
     paddingTop: theme.spacing[3],
+  },
+  note: {
+    paddingHorizontal: theme.spacing[4],
+    paddingTop: theme.spacing[1],
   },
   empty: {
     padding: theme.spacing[4],

@@ -78,6 +78,24 @@ describe("usage.report.get", () => {
     };
     expect(SessionOutboundMessageSchema.parse(message)).toEqual(message);
   });
+
+  it("parses the unknown project: its flag, with the placeholders older clients need", () => {
+    const unknownProject = {
+      rootPath: "",
+      displayName: "",
+      kind: "directory" as const,
+      unknown: true,
+      totals: EMPTY_TOTALS,
+      estimatedCost: 0,
+      sources: [],
+      cwds: [],
+    };
+    const message = {
+      type: "usage.report.get.response" as const,
+      payload: { requestId: "req-1", ...EMPTY_REPORT, projects: [unknownProject] },
+    };
+    expect(SessionOutboundMessageSchema.parse(message)).toEqual(message);
+  });
 });
 
 describe("usage.sessions.list", () => {
@@ -155,6 +173,105 @@ describe("usage.backfill.progress", () => {
       },
     };
     expect(SessionOutboundMessageSchema.parse(message)).toEqual(message);
+  });
+});
+
+describe("usage by endpoint (gateway ledger)", () => {
+  it("parses an endpoint filter, null being Official", () => {
+    const message = {
+      type: "usage.report.get.request" as const,
+      requestId: "req-4",
+      from: null,
+      to: null,
+      timezone: "UTC",
+      filters: { endpoints: ["ep_a", null] },
+    };
+    expect(SessionInboundMessageSchema.parse(message)).toEqual(message);
+  });
+
+  it("parses a report with endpoint groups, and one without them from an older daemon", () => {
+    const withEndpoints = {
+      type: "usage.report.get.response" as const,
+      payload: {
+        requestId: "req-4",
+        ...EMPTY_REPORT,
+        endpoints: [
+          {
+            endpointId: "ep_a",
+            name: "Relay A",
+            deleted: false,
+            totals: EMPTY_TOTALS,
+            estimatedCost: 0,
+            share: 0.5,
+          },
+          {
+            endpointId: null,
+            name: null,
+            deleted: false,
+            totals: EMPTY_TOTALS,
+            estimatedCost: 0,
+            share: 0.5,
+          },
+        ],
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(withEndpoints)).toEqual(withEndpoints);
+    const parsed = SessionOutboundMessageSchema.parse({
+      type: "usage.report.get.response",
+      payload: { requestId: "req-5", ...EMPTY_REPORT },
+    });
+    expect(parsed.type === "usage.report.get.response" && parsed.payload.endpoints).toBe(undefined);
+  });
+
+  it("parses a speed request and a report with speed groups as sums", () => {
+    const request = {
+      type: "usage.report.get.request" as const,
+      requestId: "req-6",
+      from: null,
+      to: null,
+      timezone: "UTC",
+      speed: { groupBy: "model_endpoint" as const },
+    };
+    expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+    const response = {
+      type: "usage.report.get.response" as const,
+      payload: {
+        requestId: "req-6",
+        ...EMPTY_REPORT,
+        speed: {
+          groupBy: "model_endpoint" as const,
+          groups: [
+            {
+              cli: null,
+              model: "kimi-k2",
+              endpoint: { endpointId: "ep_a", name: "Relay A", deleted: false },
+              tokens: 415,
+              ttftCount: 2,
+              ttftMs: 1500,
+              speedCount: 1,
+              speedOutput: 300,
+              speedMs: 3000,
+            },
+          ],
+        },
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+  });
+
+  it("parses the gatewayLedger flag, and its absence on an older daemon", () => {
+    const advertised = ServerInfoStatusPayloadSchema.parse({
+      status: "server_info",
+      serverId: "srv-1",
+      features: { gatewayLedger: true },
+    });
+    expect(advertised.features?.gatewayLedger).toBe(true);
+    const old = ServerInfoStatusPayloadSchema.parse({
+      status: "server_info",
+      serverId: "srv-1",
+      features: { usage: true },
+    });
+    expect(old.features?.gatewayLedger).toBeUndefined();
   });
 });
 

@@ -3,7 +3,7 @@
   "name": "gateway-ledger-usage",
   "title": "中转站记账与用量页融合",
   "description": "内置中转站自己记账并与用量页融合（块 7、16 中选中的部分）：去重、按接口分开、价格倍率、人民币与万/亿、速度统计、请求列表与 CSV、接口页记录",
-  "status": "discover",
+  "status": "completed",
   "dev_type": null,
   "scope": null,
   "package": "server",
@@ -11,8 +11,8 @@
   "creator": "oxy",
   "assignee": "oxy",
   "createdAt": "2026-10-16",
-  "completedAt": null,
-  "branch": null,
+  "completedAt": "2026-10-24",
+  "branch": "merge-gateway-accounting-usage-magpie-gaps-5",
   "base_branch": "main",
   "worktree_path": null,
   "commit": null,
@@ -22,5 +22,7 @@
   "parent": "10-16-magpie-osuna-gaps",
   "relatedFiles": [],
   "notes": "",
-  "meta": {}
+  "meta": {
+    "implementation_base_sha": "8a410011f848c4db137fcd24ac930e2ae9ce24df"
+  }
 }

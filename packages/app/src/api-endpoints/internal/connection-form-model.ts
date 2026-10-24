@@ -51,6 +51,7 @@ import {
   type QuotaRestMode,
 } from "./cooldown-settings-form";
 import type { CooldownSettingsProblem } from "@getpaseo/protocol/api-endpoint/cooldown-settings";
+import { priceMultiplierTextOf, readPriceMultiplierText } from "./price-multiplier-form";
 import {
   balanceFieldPlaceholder,
   balanceFieldsOf,
@@ -346,6 +347,8 @@ export interface ConnectionFormOptions {
   canSetRequestExtras: boolean;
   // 主机声明了 apiEndpointBalance：「高级」里有余额查询地址、方法、取值写法与「查询余额」。
   canSetBalance: boolean;
+  // 主机声明了 gatewayLedger：「高级」里有价格倍率。
+  canSetPriceMultiplier: boolean;
   // 主机给的模板清单；老主机没有，为空。
   templates: readonly ApiEndpointTemplate[];
 }
@@ -489,6 +492,10 @@ export interface ConnectionFormState {
   showsRestCap: boolean;
   // 哪一项不对（分钟数不是 0 到八天的整数、时刻读不懂）；挡住保存。
   cooldownProblem: CooldownSettingsProblem | null;
+  // 「高级」里的价格倍率（只在 canSetPriceMultiplier 时有）：框里的字，空即按原价；不是 0 到 1000、多于三位小数时挡住保存。
+  canSetPriceMultiplier: boolean;
+  priceMultiplierText: string;
+  priceMultiplierInvalid: boolean;
   // 「高级」里的余额设置（只在 canSetBalance 时有）：余额查询地址、方法、取值写法；占位是按地址给的默认写法。
   canSetBalance: boolean;
   balanceUrlText: string;
@@ -625,6 +632,7 @@ export interface ConnectionFormModel {
   setQuotaResetAt(value: string): void;
   setRestCap(value: string): void;
   setNoFailRest(value: boolean): void;
+  setPriceMultiplier(value: string): void;
   setBalanceUrl(value: string): void;
   setBalanceMethod(value: BalanceFields["balanceMethod"]): void;
   setBalanceField(value: string): void;
@@ -722,6 +730,7 @@ interface Values {
   quotaResetAtText: string;
   restCapText: string;
   noFailRest: boolean;
+  priceMultiplierText: string;
   balanceUrlText: string;
   balanceMethod: BalanceFields["balanceMethod"];
   balanceFieldText: string;
@@ -794,6 +803,7 @@ export function createConnectionFormModel(
     followsListWhenNew,
     canSetRequestExtras,
     canSetBalance,
+    canSetPriceMultiplier,
     templates,
   } = options;
   // 添加窗口（新建或复制）：能在保存前拉模型，「模型」框一直显示。
@@ -821,6 +831,7 @@ export function createConnectionFormModel(
   const serviceAddressWas = originOf(seededUrls);
   const seededIcon = keyOwner?.icon ?? null;
   const seededCooldown = cooldownFieldsOf(keyOwner?.cooldownSettings);
+  const seededPriceMultiplier = seededPriceMultiplierText(keyOwner, canSetPriceMultiplier);
   const seededBalance = balanceFieldsOf(keyOwner?.balance);
   const savedTokenMask = keyOwner?.balanceTokenMask ?? null;
   const savedAccessKeyMasks = accessKeyMasksOf(keyOwner);
@@ -836,6 +847,7 @@ export function createConnectionFormModel(
     keyOwner,
     isCustom: seededTemplate === null,
     hasCooldownSettings: hasCooldownSettings(seededCooldown),
+    hasPriceMultiplier: seededPriceMultiplier !== "",
     opensAdvanced: focus !== null || hasSeededBalance,
   });
   let values: Values = {
@@ -876,6 +888,7 @@ export function createConnectionFormModel(
     insecureTls: keyOwner?.insecureTls === true,
     isConfirmingInsecureTls: false,
     ...seededCooldown,
+    priceMultiplierText: seededPriceMultiplier,
     ...seededBalance,
     balanceCheck: { status: "idle" },
     balanceDetect: { status: "idle" },
@@ -896,6 +909,7 @@ export function createConnectionFormModel(
   let state = derive(values);
   const extrasAtOpen = extrasNow();
   const cooldownAtOpen = cooldownFieldsRead(seededCooldown);
+  const priceMultiplierAtOpen = readPriceMultiplierText(seededPriceMultiplier);
   const balanceAtOpen = balanceSettingsOf(seededBalance);
   const hasSeededExtras = !equal(extrasAtOpen, EMPTY_EXTRAS);
   // 当前这次换图标；再换一次或关掉表单后，旧请求晚到的结果不再生效。
@@ -931,6 +945,8 @@ export function createConnectionFormModel(
     });
     const extras = deriveExtras(next);
     const cooldown = deriveCooldown(next);
+    const priceMultiplierInvalid =
+      canSetPriceMultiplier && readPriceMultiplierText(next.priceMultiplierText).kind === "invalid";
     return {
       mode: seed.mode,
       template: next.template ? templateStateOf(next.template, next.regionId) : null,
@@ -971,11 +987,15 @@ export function createConnectionFormModel(
         serviceAddressInvalid,
         extras,
         cooldown,
+        priceMultiplierInvalid,
       }),
       submitting: next.submitting,
       submitError: next.submitError,
       ...extras,
       ...cooldown,
+      canSetPriceMultiplier,
+      priceMultiplierText: next.priceMultiplierText,
+      priceMultiplierInvalid,
       canSetBalance,
       balanceUrlText: next.balanceUrlText,
       balanceMethod: next.balanceMethod,
@@ -1091,11 +1111,13 @@ export function createConnectionFormModel(
     serviceAddressInvalid: boolean;
     extras: ExtrasState;
     cooldown: CooldownState;
+    priceMultiplierInvalid: boolean;
   }): boolean {
     // 发不出去的请求头只提示、不挡保存（magpie 照存）；读不通的附加请求体挡住，daemon 也会拒收。
     const hasExtrasProblem =
       input.extras.extraBodyProblem !== null ||
       input.cooldown.cooldownProblem !== null ||
+      input.priceMultiplierInvalid ||
       hasLoneShownTeamId(input.next) ||
       hasLoneShownAccessKey(input.next);
     const isFilled = input.next.name.trim() !== "" && input.hasKey && input.hasValidUrls;
@@ -1523,6 +1545,14 @@ export function createConnectionFormModel(
     return { cooldownSettings: now.value };
   }
 
+  /** 价格倍率只在改过时带上（清空发 null）；没改的省略，daemon 留着那家原来的（复制时由 daemon 拷）。老主机不带。 */
+  function savedPriceMultiplierRequest(): Pick<ConnectionSaveRequest, "priceMultiplier"> {
+    if (!canSetPriceMultiplier) return {};
+    const now = readPriceMultiplierText(values.priceMultiplierText);
+    if (now.kind === "invalid" || equal(now, priceMultiplierAtOpen)) return {};
+    return { priceMultiplier: now.value };
+  }
+
   /**
    * 余额设置只在改过时整份带上；没改的省略，daemon 留着那家原来的（复制时由 daemon 拷）。账户令牌打了或移除了才带。
    * 老主机不带。
@@ -1787,6 +1817,7 @@ export function createConnectionFormModel(
       ...savedExtrasRequest(),
       ...insecureTlsRequest(),
       ...savedCooldownRequest(),
+      ...savedPriceMultiplierRequest(),
       ...savedBalanceRequest(),
     };
   }
@@ -2199,6 +2230,9 @@ export function createConnectionFormModel(
     setNoFailRest(value) {
       update({ noFailRest: value });
     },
+    setPriceMultiplier(value) {
+      update({ priceMultiplierText: value });
+    },
     setBalanceUrl(value) {
       update(typedBalanceUrlPatch(value));
     },
@@ -2368,13 +2402,19 @@ export function createConnectionFormModel(
   };
 }
 
+/** 表单起步时价格倍率框里的字：编辑、复制时那家存的；主机不认价格倍率时空着（不显示、不发）。 */
+function seededPriceMultiplierText(keyOwner: ApiEndpoint | null, canSet: boolean): string {
+  return canSet ? priceMultiplierTextOf(keyOwner?.priceMultiplier) : "";
+}
+
 /**
- * 表单起步时的「高级」：编辑、复制时那家存的；「自定义」没有请求头时先放一行空的（照 magpie）。设了任一项（含冷却设置）就展开。
+ * 表单起步时的「高级」：编辑、复制时那家存的；「自定义」没有请求头时先放一行空的（照 magpie）。设了任一项（含冷却设置、价格倍率）就展开。
  */
 function seededRequestExtras(input: {
   keyOwner: ApiEndpoint | null;
   isCustom: boolean;
   hasCooldownSettings: boolean;
+  hasPriceMultiplier: boolean;
   // 填了余额查询地址，或从「填写余额查询地址」打开。
   opensAdvanced: boolean;
 }): Pick<Values, "isAdvancedOpen" | "headerRows" | "nextHeaderId" | "extraBodyText" | "keyHeader"> {
@@ -2387,6 +2427,7 @@ function seededRequestExtras(input: {
     extraBodyText !== "" ||
     keyHeader !== "both" ||
     input.hasCooldownSettings ||
+    input.hasPriceMultiplier ||
     input.opensAdvanced;
   const startsEmpty = input.isCustom && saved.length === 0;
   const headerRows = startsEmpty ? [{ id: 0, name: "", value: "", isJson: false }] : saved;

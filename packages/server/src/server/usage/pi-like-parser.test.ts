@@ -71,6 +71,35 @@ const PI_SESSION_TURNS: UsageTurnRowDraft[] = [
 ];
 
 describe("parsePiLikeChunk on a Pi transcript", () => {
+  test("names every reply for the Requests list, by session and entry id", () => {
+    const result = parse("pi", "pi-session.jsonl", { sessionId: PI_SESSION });
+    expect(result.calls).toEqual([
+      {
+        replyId: `${PI_SESSION}/aa000002`,
+        cli: "pi",
+        model: "claude-opus-5",
+        sessionId: PI_SESSION,
+        cwd: expect.any(String),
+        bucket: "2026-09-18T09:30:00.000Z",
+        at: "2026-09-18T09:30:20.000Z",
+        turnKey: "aa000001",
+        amounts: { input: 10, cachedInput: 400, cacheWrite: 50, output: 200, reasoning: 80 },
+      },
+      expect.objectContaining({
+        replyId: `${PI_SESSION}/aa000004`,
+        at: "2026-09-18T09:30:35.000Z",
+        turnKey: "aa000001",
+      }),
+      expect.objectContaining({
+        replyId: `${PI_SESSION}/aa000007`,
+        model: "gpt-6-astra",
+        bucket: "2026-09-18T09:45:00.000Z",
+        turnKey: "aa000006",
+        amounts: { input: 700, cachedInput: 0, cacheWrite: 0, output: 60, reasoning: 40 },
+      }),
+    ]);
+  });
+
   test("splits a session by the backend each turn routed to", () => {
     const bytes = fixture("pi", "pi-session.jsonl");
     const result = parsePiLikeChunk(

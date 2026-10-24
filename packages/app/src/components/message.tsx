@@ -576,6 +576,13 @@ const assistantTurnFooterStylesheet = StyleSheet.create((theme) => ({
     fontSize: STREAM_METADATA_FONT_SIZE,
     opacity: 0,
   },
+  labelSizerExtra: {
+    color: theme.colors.foregroundMuted,
+    fontSize: STREAM_METADATA_FONT_SIZE,
+    opacity: 0,
+    height: 0,
+    overflow: "hidden",
+  },
   labelOverlay: {
     position: "absolute",
     top: 0,
@@ -664,11 +671,17 @@ export const AssistantTurnFooter = memo(function AssistantTurnFooter({
           accessibilityLabel={canSwap ? `${durationLabel}, ended ${timestampLabel}` : primaryLabel}
         >
           <View style={assistantTurnFooterStylesheet.labelWrapper}>
-            {/* Sizer reserves space for whichever label is longer so the
-                container width is stable across hover transitions. */}
+            {/* Both labels sit invisible in the sizer so the wrapper takes the
+                wider one's rendered width (a CJK label is wider than its
+                length says) and stays stable across hover transitions. */}
             <Text style={assistantTurnFooterStylesheet.labelSizer} aria-hidden>
-              {primaryLabel.length >= timestampLabel.length ? primaryLabel : timestampLabel}
+              {primaryLabel}
             </Text>
+            {canSwap ? (
+              <Text style={assistantTurnFooterStylesheet.labelSizerExtra} aria-hidden>
+                {timestampLabel}
+              </Text>
+            ) : null}
             <Text style={assistantTurnFooterStylesheet.labelOverlay}>
               {showTimestamp ? timestampLabel : primaryLabel}
             </Text>

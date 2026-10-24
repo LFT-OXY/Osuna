@@ -8,7 +8,22 @@ export interface UsageProjectAttribution {
   rootPath: string;
   displayName: string;
   kind: UsageProjectKind;
+  /** Only `UNKNOWN_PROJECT` has it. */
+  unknown?: true;
 }
+
+/**
+ * Where a call only the gateway ledger knows is counted (its rows have cwd
+ * ""): no directory, no name. The wire still needs a string `rootPath` and a
+ * `kind` for older clients, so those are placeholders; `unknown` is what says
+ * it, and the client shows it as the unknown project.
+ */
+export const UNKNOWN_PROJECT: UsageProjectAttribution = {
+  rootPath: "",
+  displayName: "",
+  kind: "directory",
+  unknown: true,
+};
 
 /**
  * A bucket row only knows its cwd. Attribution goes registered project first,
@@ -25,14 +40,15 @@ export class UsageProjectResolver {
   }
 
   async resolveAll(cwds: Iterable<string>): Promise<Map<string, UsageProjectAttribution>> {
-    const pending = Array.from(cwds).filter((cwd) => !this.cache.has(cwd));
+    // 空 cwd 是只在账本里的调用：未知项目，不归任何目录（path.resolve("") 会落到 daemon 自己的目录）。
+    const pending = Array.from(cwds).filter((cwd) => cwd !== "" && !this.cache.has(cwd));
     const projects = pending.length > 0 ? await this.listProjects() : [];
     for (const cwd of pending) {
       this.cache.set(cwd, await this.resolve(cwd, projects));
     }
     const resolved = new Map<string, UsageProjectAttribution>();
     for (const cwd of cwds) {
-      const attribution = this.cache.get(cwd);
+      const attribution = cwd === "" ? UNKNOWN_PROJECT : this.cache.get(cwd);
       if (attribution) resolved.set(cwd, attribution);
     }
     return resolved;

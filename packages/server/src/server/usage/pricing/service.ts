@@ -1,3 +1,5 @@
+// 端点价格倍率的找价顺序（自定义价格照用不乘倍率，价格表价乘倍率）移植自 magpie（https://github.com/yetone/magpie，internal/provider/models.go 的 priceOf）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import { promises as fs } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { Logger } from "pino";
@@ -152,15 +154,20 @@ export class UsagePricingService {
     return match;
   }
 
-  /** Reasoning tokens are already counted inside output, so they are not billed. */
-  estimateCost(totals: UsageTokenTotals, model: string): number {
-    const { rates } = this.priceFor(model);
-    return (
+  /**
+   * Reasoning tokens are already counted inside output, so they are not billed.
+   * A table price is scaled by the endpoint's price multiplier; a price the
+   * user set for the model stands as set (magpie `priceOf`).
+   */
+  estimateCost(totals: UsageTokenTotals, model: string, multiplier = 1): number {
+    const match = this.priceFor(model);
+    const { rates } = match;
+    const cost =
       totals.input * rates.input +
       totals.cachedInput * rates.cachedInput +
       totals.cacheWrite * rates.cacheWrite +
-      totals.output * rates.output
-    );
+      totals.output * rates.output;
+    return match.priceSource === "override" ? cost : cost * multiplier;
   }
 
   /** Unpriced models first, then most recently used, so gaps are the top rows. */

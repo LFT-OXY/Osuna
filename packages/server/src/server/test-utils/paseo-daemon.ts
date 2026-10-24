@@ -234,6 +234,15 @@ async function prepareTestDaemonConfig(
       // No test daemon reaches out for a price table on its own; a suite about
       // the refresh schedule turns it back on.
       pricing: { autoUpdate: false, ...options.usage?.pricing },
+      // 绝不上网取汇率：关心汇率的用例自己传本机假汇率服务与真的 fetch。
+      exchangeRate: {
+        fetch: async (input) => {
+          throw new Error(
+            `The test daemon never fetches ${String(input)}: pass usage.exchangeRate`,
+          );
+        },
+        ...options.usage?.exchangeRate,
+      },
     },
     // 第三方接口会改写 CLI 配置文件；测试 daemon 默认指向临时目录，绝不碰真实的 ~/.claude 和 ~/.codex。
     apiEndpoints: {

@@ -11,6 +11,9 @@ export interface UsagePin {
   windowId: string;
 }
 
+/** What estimated costs are shown in. Never follows the UI language. */
+export type UsageCurrency = "usd" | "cny";
+
 /** Device-local. `pins` is in selection order. */
 export interface UsagePreferences {
   displayAs: UsageDisplayAs;
@@ -18,12 +21,17 @@ export interface UsagePreferences {
   pins: UsagePin[] | null;
   /** The host the user picked to show usage for; null until they pick one. */
   serverId: string | null;
+  currency: UsageCurrency;
+  /** Token counts in 万 / 亿; only a Chinese UI shows the switch or honours it. */
+  chineseUnits: boolean;
 }
 
 export const DEFAULT_USAGE_PREFERENCES: UsagePreferences = {
   displayAs: "used",
   pins: null,
   serverId: null,
+  currency: "usd",
+  chineseUnits: false,
 };
 
 const pinsSchema = z.array(z.object({ sourceId: z.string(), windowId: z.string() }));
@@ -36,10 +44,13 @@ export const UsagePreferencesSchema = z
     // Old [] meant defaults. Read it only when the new selection is absent.
     pinned: pinsSchema.optional().catch([]),
     serverId: z.string().nullable().catch(null),
+    currency: z.enum(["usd", "cny"]).catch("usd"),
+    chineseUnits: z.boolean().catch(false),
   })
-  .transform(({ displayAs, pins, pinned, serverId }): UsagePreferences => {
+  .transform(({ displayAs, pins, pinned, serverId, currency, chineseUnits }): UsagePreferences => {
     const legacyPins = pinned && pinned.length > 0 ? pinned : null;
-    return { displayAs, pins: pins === undefined ? legacyPins : pins, serverId };
+    const selected = pins === undefined ? legacyPins : pins;
+    return { displayAs, pins: selected, serverId, currency, chineseUnits };
   })
   .catch(DEFAULT_USAGE_PREFERENCES);
 
@@ -102,4 +113,18 @@ export function setUsageDisplayAs(
 
 export function setUsageHost(preferences: UsagePreferences, serverId: string): UsagePreferences {
   return { ...preferences, serverId };
+}
+
+export function setUsageCurrency(
+  preferences: UsagePreferences,
+  currency: UsageCurrency,
+): UsagePreferences {
+  return { ...preferences, currency };
+}
+
+export function setUsageChineseUnits(
+  preferences: UsagePreferences,
+  chineseUnits: boolean,
+): UsagePreferences {
+  return { ...preferences, chineseUnits };
 }

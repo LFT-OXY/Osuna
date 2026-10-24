@@ -9,7 +9,11 @@ import {
   UsagePricingTableInfoSchema,
   UsageReportFiltersSchema,
   UsageReportSchema,
+  UsageRequestFacetsSchema,
+  UsageRequestFiltersSchema,
+  UsageRequestRowSchema,
   UsageSessionRowSchema,
+  UsageSpeedGroupBySchema,
   UsageTrendGranularitySchema,
   UsageTrendStackBySchema,
 } from "./types.js";
@@ -31,6 +35,8 @@ export const UsageReportGetRequestSchema = z.object({
       stackBy: UsageTrendStackBySchema,
     })
     .optional(),
+  /** Ask for the Speed card's groups; a daemon without `features.gatewayLedger` ignores it. */
+  speed: z.object({ groupBy: UsageSpeedGroupBySchema }).optional(),
 });
 export type UsageReportGetRequest = z.infer<typeof UsageReportGetRequestSchema>;
 
@@ -65,6 +71,57 @@ export const UsageSessionsListResponseSchema = z.object({
   }),
 });
 export type UsageSessionsListResponse = z.infer<typeof UsageSessionsListResponseSchema>;
+
+/**
+ * The Requests list: the same window as the report, newest first, a page at a
+ * time. `total` is how many requests the filters keep, every page together.
+ */
+export const UsageRequestsListRequestSchema = z.object({
+  type: z.literal("usage.requests.list.request"),
+  requestId: z.string(),
+  from: z.string().nullable(),
+  to: z.string().nullable(),
+  timezone: z.string().min(1),
+  filters: UsageRequestFiltersSchema.optional(),
+  offset: z.number().int().nonnegative(),
+  limit: z.number().int().positive(),
+});
+export type UsageRequestsListRequest = z.infer<typeof UsageRequestsListRequestSchema>;
+
+export const UsageRequestsListResponseSchema = z.object({
+  type: z.literal("usage.requests.list.response"),
+  payload: z.object({
+    requestId: z.string(),
+    requests: z.array(UsageRequestRowSchema),
+    total: z.number().int().nonnegative(),
+    facets: UsageRequestFacetsSchema,
+  }),
+});
+export type UsageRequestsListResponse = z.infer<typeof UsageRequestsListResponseSchema>;
+
+/**
+ * Every request the Requests list's filters keep, all pages, as CSV text: the
+ * list's columns plus reasoning tokens, the failure, the tries, the reply id
+ * and the session. Costs are in USD whatever the client shows.
+ */
+export const UsageRequestsExportRequestSchema = z.object({
+  type: z.literal("usage.requests.export.request"),
+  requestId: z.string(),
+  from: z.string().nullable(),
+  to: z.string().nullable(),
+  timezone: z.string().min(1),
+  filters: UsageRequestFiltersSchema.optional(),
+});
+export type UsageRequestsExportRequest = z.infer<typeof UsageRequestsExportRequestSchema>;
+
+export const UsageRequestsExportResponseSchema = z.object({
+  type: z.literal("usage.requests.export.response"),
+  payload: z.object({
+    requestId: z.string(),
+    csv: z.string(),
+  }),
+});
+export type UsageRequestsExportResponse = z.infer<typeof UsageRequestsExportResponseSchema>;
 
 export const UsageBackfillProgressMessageSchema = z.object({
   type: z.literal("usage.backfill.progress"),
@@ -107,7 +164,36 @@ export const UsagePricingRefreshResponseSchema = z.object({
 export type UsagePricingRefreshResponse = z.infer<typeof UsagePricingRefreshResponseSchema>;
 
 /**
- * Sent when the table or the overrides changed; the client re-reads what it
+ * The dollar-to-yuan rate the CNY currency choice converts estimated costs with. The client asks
+ * only while CNY is chosen. The daemon answers at once with the rate it knows, never waiting on
+ * the network; when that is a day old it fetches one behind the answer (never while the price
+ * table's auto-update is off, not again within 10 minutes of a failure) and sends
+ * `usage.pricing.updated` once it lands. `fallback` is the fixed 7.2 used before any rate was
+ * ever fetched, with `fetchedAt: null`; `stale` says the rate is a day old or more. Only daemons
+ * that declare `features.gatewayLedger` know this request.
+ */
+export const UsageExchangeRateGetRequestSchema = z.object({
+  type: z.literal("usage.exchange_rate.get.request"),
+  requestId: z.string(),
+});
+export type UsageExchangeRateGetRequest = z.infer<typeof UsageExchangeRateGetRequestSchema>;
+
+export const UsageExchangeRateSchema = z.object({
+  cnyPerUsd: z.number(),
+  fetchedAt: z.string().nullable(),
+  fallback: z.boolean(),
+  stale: z.boolean(),
+});
+export type UsageExchangeRate = z.infer<typeof UsageExchangeRateSchema>;
+
+export const UsageExchangeRateGetResponseSchema = z.object({
+  type: z.literal("usage.exchange_rate.get.response"),
+  payload: UsageExchangeRateSchema.extend({ requestId: z.string() }),
+});
+export type UsageExchangeRateGetResponse = z.infer<typeof UsageExchangeRateGetResponseSchema>;
+
+/**
+ * Sent when the table, the overrides or the CNY exchange rate changed; the client re-reads what it
  * needs. It carries no payload — a correlated one would make it look like a
  * reply to the session's reply classifier.
  */

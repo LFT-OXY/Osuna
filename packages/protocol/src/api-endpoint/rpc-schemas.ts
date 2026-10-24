@@ -282,6 +282,8 @@ export const ApiEndpointSchema = z.object({
   ...ApiEndpointRequestExtrasSchema.shape,
   // 冷却设置（cooldown 是正在冷却的状态，这是用户设的时长）；设了才发，老 daemon 不发。
   cooldownSettings: ApiEndpointCooldownSettingsSchema.optional(),
+  // 价格倍率（price-multiplier.ts）：估算成本按「公开价 × 倍率」算，0 即免费；设了才发，老 daemon 不发。
+  priceMultiplier: z.number().optional(),
   // 余额设置；设了余额查询地址才发，老 daemon 不发。
   balance: ApiEndpointBalanceSettingsSchema.optional(),
   // 账户令牌的打码（同 apiKeyMask）；原文只在 daemon，经 reveal_secret 读回。没有令牌时不发，老 daemon 不发。
@@ -469,6 +471,9 @@ export type ApiEndpointListResponse = z.infer<typeof ApiEndpointListResponseSche
  * （API_ENDPOINT_COOLDOWN_MAX_MINUTES）的整数、时刻读不懂的拒收（invalid_cooldown_settings，params.field 为 quotaRestMinutes /
  * restCapMinutes / quotaResetAt，params.max）。老 daemon 忽略它。
  *
+ * priceMultiplier：价格倍率，null 清掉（按原价），省略即保留（复制时是原来那家的），老客户端保存不会清掉它。
+ * 不是 0 到 1000、多于三位小数的拒收（invalid_price_multiplier，params.max）。老 daemon 忽略它。
+ *
  * balance：余额设置，整份替换（没有余额查询地址即清掉），省略即保留（复制时是原来那家的），老客户端保存不会清掉它。
  * 方法不是 GET、POST 的拒收（invalid_balance_settings，params.field 为 method）。老 daemon 忽略它。
  *
@@ -502,6 +507,7 @@ export const ApiEndpointSaveRequestSchema = z.object({
   autoPick: z.array(z.string()).optional(),
   modelSettings: ApiEndpointModelSettingsSchema.optional(),
   cooldownSettings: ApiEndpointCooldownSettingsSchema.optional(),
+  priceMultiplier: z.number().nullable().optional(),
   balance: ApiEndpointBalanceSettingsSchema.optional(),
   balanceToken: z.string().optional(),
   accessKeyId: z.string().optional(),
@@ -1587,6 +1593,51 @@ export const ApiEndpointReadBalanceResponseSchema = z.object({
   }),
 });
 export type ApiEndpointReadBalanceResponse = z.infer<typeof ApiEndpointReadBalanceResponseSchema>;
+
+/**
+ * 接口的「最近异常」里的一行：这家出过事的一次请求（中转站账本的逐条记录）。at 是请求开始的时刻；requestedModel 是
+ * CLI 请求的模型，model 是问这家时用的模型；failure、reason、cooldownUntil 取这次请求里这家最后一次没答成的尝试（失败分类、上游原话、冷却到何时），
+ * 这家没有没答成的尝试（答了一半请求仍失败）时都为 null。switchedTo 是这家之后换到的那一家（endpointId null 即官方），
+ * 没换为 null；status 是整次请求的结果。
+ */
+export const ApiEndpointRecentProblemSchema = z.object({
+  id: z.string(),
+  at: z.string(),
+  requestedModel: z.string(),
+  model: z.string(),
+  failure: z.string().nullable(),
+  reason: z.string().nullable(),
+  cooldownUntil: z.string().nullable(),
+  switchedTo: z
+    .object({ endpointId: z.string().nullable(), endpointName: z.string().nullable() })
+    .nullable(),
+  status: z.enum(["ok", "failed", "cancelled"]),
+});
+export type ApiEndpointRecentProblem = z.infer<typeof ApiEndpointRecentProblemSchema>;
+
+/**
+ * 这家接口最近 20 次失败、被换走或导致冷却的请求，新的在前；读逐条记录，重启后还在，记录保留多久就能看多久。
+ * 只有声明了 gatewayLedger 的 daemon 认它；读不了时回 rpc_error。
+ */
+export const ApiEndpointRecentProblemsRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.recent_problems.request"),
+  requestId: z.string(),
+  endpointId: z.string(),
+});
+export type ApiEndpointRecentProblemsRequest = z.infer<
+  typeof ApiEndpointRecentProblemsRequestSchema
+>;
+
+export const ApiEndpointRecentProblemsResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.recent_problems.response"),
+  payload: z.object({
+    requestId: z.string(),
+    problems: z.array(ApiEndpointRecentProblemSchema),
+  }),
+});
+export type ApiEndpointRecentProblemsResponse = z.infer<
+  typeof ApiEndpointRecentProblemsResponseSchema
+>;
 
 /**
  * 查询余额（编辑窗口的「查询余额」，照 magpie 编辑器的 Check balance）：用表单里还没保存的值当场查一次，只读，

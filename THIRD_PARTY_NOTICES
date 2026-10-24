@@ -1272,6 +1272,100 @@ and renderImport in internal/gui/assets/app.js:
   packages/server/src/server/api-endpoints/import-link.test.ts
   packages/app/src/api-endpoints/import-link-sheet.tsx
 
+An endpoint's price multiplier (from 0 to 1000 in steps of 0.001; a save that
+leaves it out keeps it and null clears it; empty in the editor is the list
+price, a comma read as the decimal point; a table price scaled by it and a
+price the user set for a model left as set) follows PriceRate and PriceRateOK
+in magpie's internal/provider/provider.go and internal/provider/models.go, its
+use in priceOf there, priceRateOf in internal/gui/providers.go, and decimalOf
+and priceRateOfDraft in internal/gui/assets/app.js:
+
+  packages/protocol/src/api-endpoint/price-multiplier.ts
+  packages/server/src/server/usage/pricing/service.ts
+  packages/server/src/server/api-endpoints/service.ts
+  packages/app/src/api-endpoints/internal/price-multiplier-form.ts
+
+The gateway's usage rows for Codex's ChatGPT models (only /responses recorded,
+the ask to ChatGPT as the one try, streamed or not told by the reply's
+Content-Type and else by the request, a failure kept with its status and words,
+a reply cut short booked as far as it came) follow codexUpstreamOn in magpie's
+internal/gateway/codex_backend.go:
+
+  packages/server/src/server/api-endpoints/gateway/chatgpt-ledger.ts
+
+Matching a gateway ledger row to the CLI log's reply by the reply id, the
+session taken from the log, follows
+codexResponseMatches and codexIdentityRow in magpie's
+internal/usage/codex_identity.go:
+
+  packages/server/src/server/usage/call-merge.ts
+
+The per-request usage records' retention (finished days gzipped, a later
+append joining as a gzip member of its own, a .gz cut short written anew from
+its whole lines, 30 days and 200 MB in all counted compressed, checked on a
+write at most once an hour, whole days going oldest first and today staying)
+follows historyDays, historyBytes, saveRoute, pruneHistory, gzipFile, gzRoutes
+and historyFiles in magpie's internal/gateway/history.go; the Requests list (newest first, 100 to a page,
+failed as LostRequest and switched as RetriedRequest, a search over several
+fields ignoring case, filter choices from the whole period) follows QueryPage in
+internal/usage/request_page.go, Filter.keepsRecord and SourceOf in
+internal/usage/ledger.go, and LostRequest and RetriedRequest in
+internal/usage/usage.go; a duration or a wait for the first token is written
+as ledTook in internal/gui/assets/app.js:
+
+  packages/server/src/server/usage/store.ts
+  packages/server/src/server/usage/request-files.ts
+  packages/server/src/server/usage/requests.ts
+  packages/app/src/usage-stats/requests.ts
+
+A reply's output speed and time to first token (the 100 ms window floor, the
+10,000 tokens a second ceiling, a reply held and let go at once told by its
+flow and by an answer 20 times faster than its reasoning, an answer timed from
+its first text, paced visible reasoning timed from its start, sealed reasoning
+telling none) follow DecodeWindow, DecodeOf and Record.Decode in magpie's
+internal/usage/usage.go, and how the gateway times them (first content and
+first text, the flow as the middle 80% of content bytes scaled to the whole,
+the 8 MB and 65,536-mark limits, hidesReasoning and reasoningMs) follows
+firstToken, flowMs, flowFor, hidesReasoning, reasoningMs and timingKind in
+internal/gateway/ttft.go; a group's speed weighted by tokens and its mean wait
+follow Totals.addFrom, MeanTTFT and Speed in internal/usage/usage.go, and the
+Speed card's order (fastest first, then more tokens) follows ledSpeed, ledTTFT
+and ledCategories in internal/gui/assets/app.js:
+
+  packages/server/src/server/usage/speed.ts
+  packages/server/src/server/usage/report.ts
+  packages/server/src/server/api-endpoints/gateway/reply-clock.ts
+  packages/app/src/usage-stats/speed.ts
+
+The Requests CSV export (snake_case headers, RFC 3339 times with their offset,
+the cost in USD to six decimals and empty when unpriced, empty cells for a time
+or a count there is none of, encoding/csv quoting) follows CSVHeader and
+WriteCSV in magpie's internal/usage/ledger.go; the file's name follows csvStamp
+in internal/gui/usage.go:
+
+  packages/server/src/server/usage/requests-csv.ts
+  packages/app/src/usage-stats/requests-export.ts
+
+An endpoint's Recent problems (a request counts when one of the endpoint's
+tries did not answer or the request ended failed on it, as magpie's moved and
+bad routes, a try the agent cancelled left out as renderActs leaves it out;
+newest first) follows outcome, failedRoute, tryOk, allListed and renderActs in
+magpie's internal/gui/assets/plugins/routing/client.js:
+
+  packages/server/src/server/usage/recent-problems.ts
+
+The CNY rate (the known rate answered at once and a day-old one fetched behind
+it, open.er-api.com's rates.CNY, a reply read up to 1 MB, the last rate kept
+when a fetch fails and none tried again for 10 minutes, 7.2 before any rate was
+ever fetched, an unreadable cache read as none) follows Soon, getAt, fetchLive
+and readCache in magpie's internal/fx/fx.go; converting a USD cost to CNY by
+multiplying it by that rate follows fmtCost, and a token count in 万 / 亿 (two
+decimals for 亿, one for 万, trailing zeros dropped) follows fmtN, in magpie's
+internal/gui/assets/app.js:
+
+  packages/server/src/server/usage/exchange-rate.ts
+  packages/app/src/usage-stats/format.ts
+
 MIT License
 
 Copyright (c) 2026 yetone

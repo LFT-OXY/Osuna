@@ -26,20 +26,37 @@ import {
 
 interface FieldProps {
   label: string;
+  /** 换下缺省的浅色标签文字（如对话框某一区的标签用主前景色）；不给就用 label 画缺省样式。 */
+  labelElement?: ReactNode;
   children: ReactNode;
   trailing?: ReactNode;
   hint?: string;
   error?: string | null;
+  /** 说明与报错那一行留两行高、报错最多两行：长说明在窄窗口折成两行时，换成报错下面不跳。 */
+  reservesTwoLines?: boolean;
   testID?: string;
 }
 
-export function Field({ label, children, trailing, hint, error, testID }: FieldProps) {
+export function Field({
+  label,
+  labelElement,
+  children,
+  trailing,
+  hint,
+  error,
+  reservesTwoLines,
+  testID,
+}: FieldProps) {
   const hintTestID = useMemo(() => (testID ? `${testID}-hint` : undefined), [testID]);
   const errorTestID = useMemo(() => (testID ? `${testID}-error` : undefined), [testID]);
   const subtext = useMemo(() => {
     if (error) {
       return (
-        <Text numberOfLines={1} style={styles.errorText} testID={errorTestID}>
+        <Text
+          numberOfLines={reservesTwoLines ? 2 : 1}
+          style={styles.errorText}
+          testID={errorTestID}
+        >
           {error}
         </Text>
       );
@@ -52,16 +69,16 @@ export function Field({ label, children, trailing, hint, error, testID }: FieldP
       );
     }
     return null;
-  }, [error, hint, errorTestID, hintTestID]);
+  }, [error, hint, reservesTwoLines, errorTestID, hintTestID]);
 
   return (
     <View style={styles.container} testID={testID}>
       <View style={styles.header}>
-        <Text style={styles.label}>{label}</Text>
+        {labelElement ?? <Text style={styles.label}>{label}</Text>}
         {trailing}
       </View>
       {children}
-      {subtext}
+      {reservesTwoLines ? <View style={styles.twoLineSubtext}>{subtext}</View> : subtext}
     </View>
   );
 }
@@ -264,6 +281,9 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.palette.red[300],
     fontSize: theme.fontSize.sm,
     lineHeight: Math.round(theme.fontSize.sm * 1.4),
+  },
+  twoLineSubtext: {
+    minHeight: 2 * Math.round(theme.fontSize.sm * 1.4),
   },
 }));
 

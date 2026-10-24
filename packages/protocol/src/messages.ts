@@ -74,6 +74,10 @@ import {
   UsageReportGetResponseSchema,
   UsageSessionsListRequestSchema,
   UsageSessionsListResponseSchema,
+  UsageRequestsListRequestSchema,
+  UsageRequestsListResponseSchema,
+  UsageRequestsExportRequestSchema,
+  UsageRequestsExportResponseSchema,
   UsageBackfillProgressMessageSchema,
   UsageUpdatedMessageSchema,
   UsagePricingListRequestSchema,
@@ -81,6 +85,8 @@ import {
   UsagePricingRefreshRequestSchema,
   UsagePricingRefreshResponseSchema,
   UsagePricingUpdatedMessageSchema,
+  UsageExchangeRateGetRequestSchema,
+  UsageExchangeRateGetResponseSchema,
 } from "./usage/rpc-schemas.js";
 import { UsagePricingOverrideSchema } from "./usage/types.js";
 import {
@@ -130,6 +136,8 @@ import {
   ApiEndpointVendorStatusResponseSchema,
   ApiEndpointReadBalanceRequestSchema,
   ApiEndpointReadBalanceResponseSchema,
+  ApiEndpointRecentProblemsRequestSchema,
+  ApiEndpointRecentProblemsResponseSchema,
   ApiEndpointSetBalanceAutoRefreshRequestSchema,
   ApiEndpointSetBalanceAutoRefreshResponseSchema,
   ApiEndpointCheckBalanceRequestSchema,
@@ -3782,8 +3790,11 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   LoopStopRequestSchema,
   UsageReportGetRequestSchema,
   UsageSessionsListRequestSchema,
+  UsageRequestsListRequestSchema,
+  UsageRequestsExportRequestSchema,
   UsagePricingListRequestSchema,
   UsagePricingRefreshRequestSchema,
+  UsageExchangeRateGetRequestSchema,
   UsageAgentGetRequestSchema,
   UsageAgentTurnsListRequestSchema,
   ApiEndpointListRequestSchema,
@@ -3802,6 +3813,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ApiEndpointForgetCatalogRequestSchema,
   ApiEndpointVendorStatusRequestSchema,
   ApiEndpointReadBalanceRequestSchema,
+  ApiEndpointRecentProblemsRequestSchema,
   ApiEndpointSetBalanceAutoRefreshRequestSchema,
   ApiEndpointCheckBalanceRequestSchema,
   ApiEndpointDetectBalanceUrlRequestSchema,
@@ -4212,6 +4224,11 @@ export const ServerInfoStatusPayloadSchema = z
         // COMPAT(planUsageResets): added in v0.17.0, remove gate after 2027-04-22.
         // 任务 10-16-endpoint-balance：usage.reset.consume（套餐用量卡片上「用掉一次重置」），报告带 consumesResets。
         planUsageResets: z.boolean().optional(),
+        // COMPAT(gatewayLedger): added in v0.17.0, remove gate after 2027-04-23.
+        // 任务 10-16-gateway-ledger-usage：中转站记账并与 CLI 会话记录合并；usage.report.get 的 filters.endpoints
+        // 与报告的 endpoints（按接口分，含「官方」）；usage.requests.list（请求列表）与 usage.requests.export（导出 CSV）；
+        // provider.api_endpoint.recent_problems（接口页「最近异常」）；usage.exchange_rate.get（人民币显示用的汇率）。
+        gatewayLedger: z.boolean().optional(),
         // COMPAT(providerVersions): added in v0.14.0, remove gate after 2027-04-01.
         // 快照带内置提供方的已装版本 version；daemon 支持 provider.version.check.* 与 provider.upgrade.*。
         providerVersions: z.boolean().optional(),
@@ -7638,11 +7655,14 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   DaemonUpdateResponseSchema,
   UsageReportGetResponseSchema,
   UsageSessionsListResponseSchema,
+  UsageRequestsListResponseSchema,
+  UsageRequestsExportResponseSchema,
   UsageBackfillProgressMessageSchema,
   UsageUpdatedMessageSchema,
   UsagePricingListResponseSchema,
   UsagePricingRefreshResponseSchema,
   UsagePricingUpdatedMessageSchema,
+  UsageExchangeRateGetResponseSchema,
   UsageAgentGetResponseSchema,
   UsageAgentTurnsListResponseSchema,
   ApiEndpointListResponseSchema,
@@ -7661,6 +7681,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ApiEndpointForgetCatalogResponseSchema,
   ApiEndpointVendorStatusResponseSchema,
   ApiEndpointReadBalanceResponseSchema,
+  ApiEndpointRecentProblemsResponseSchema,
   ApiEndpointSetBalanceAutoRefreshResponseSchema,
   ApiEndpointCheckBalanceResponseSchema,
   ApiEndpointDetectBalanceUrlResponseSchema,

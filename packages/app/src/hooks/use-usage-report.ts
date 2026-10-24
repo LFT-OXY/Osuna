@@ -1,4 +1,4 @@
-import type { UsageBackfill } from "@getpaseo/protocol/usage/types";
+import type { UsageBackfill, UsageSpeedGroupBy } from "@getpaseo/protocol/usage/types";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFetchQuery } from "@/data/query";
@@ -9,7 +9,9 @@ import {
   type UsageHostError,
   type UsageHostInput,
 } from "@/usage-stats/aggregated-usage";
+import { usageRequestsQueryBaseKey } from "@/usage-stats/aggregated-requests";
 import { usageSessionsQueryBaseKey } from "@/usage-stats/aggregated-sessions";
+import { usageExchangeRateQueryBaseKey } from "@/usage-stats/use-usage-money";
 import {
   EMPTY_USAGE_REPORT,
   mergeUsageBackfill,
@@ -19,6 +21,7 @@ import type { UsageRange } from "@/usage-stats/period";
 
 /** A burst of `usage.updated` after one turn should cost one refetch, not five. */
 const USAGE_UPDATED_DEBOUNCE_MS = 400;
+const NO_SERVERS: readonly string[] = [];
 
 export type UsageReportLoadState =
   | { status: "connecting" }
@@ -29,6 +32,12 @@ export interface UseUsageReportInput {
   hosts: readonly UsageHostInput[];
   range: UsageRange;
   timezone: string;
+  /** Only these API endpoints' usage (`null` is Official); see `fetchUsageReport`. */
+  endpoints?: readonly (string | null)[];
+  /** Ask for the Speed card's groups, grouped so; see `fetchUsageReport`. */
+  speedGroupBy?: UsageSpeedGroupBy;
+  /** False keeps the query and its live events idle. */
+  enabled?: boolean;
 }
 
 export interface UseUsageReportResult {
@@ -46,6 +55,8 @@ export function usageReportQueryKey(input: {
   serverIds: readonly string[];
   range: UsageRange;
   timezone: string;
+  endpoints?: readonly (string | null)[];
+  speedGroupBy?: UsageSpeedGroupBy;
 }) {
   return [
     ...usageQueryBaseKey,
@@ -53,12 +64,15 @@ export function usageReportQueryKey(input: {
     input.range.from ?? "all",
     input.range.to ?? "all",
     input.timezone,
+    input.endpoints ? input.endpoints.map((id) => id ?? "").join("|") : "any-endpoint",
+    input.speedGroupBy ?? "no-speed",
   ] as const;
 }
 
 export function useUsageReport(input: UseUsageReportInput): UseUsageReportResult {
   const runtime = getHostRuntimeStore();
   const hosts = input.hosts;
+  const enabled = input.enabled ?? true;
   const serverIds = useMemo(() => hosts.map((host) => host.serverId), [hosts]);
   const connectionStatuses = useHostRuntimeConnectionStatuses(serverIds);
   const connectionStatusKey = useMemo(
@@ -72,6 +86,8 @@ export function useUsageReport(input: UseUsageReportInput): UseUsageReportResult
         serverIds,
         range: input.range,
         timezone: input.timezone,
+        endpoints: input.endpoints,
+        speedGroupBy: input.speedGroupBy,
       }),
       connectionStatusKey,
     ],
@@ -81,7 +97,10 @@ export function useUsageReport(input: UseUsageReportInput): UseUsageReportResult
         runtime,
         range: input.range,
         timezone: input.timezone,
+        endpoints: input.endpoints,
+        speedGroupBy: input.speedGroupBy,
       }),
+    enabled,
     dataShape: "list",
     staleTimeMs: 5_000,
   });
@@ -89,12 +108,18 @@ export function useUsageReport(input: UseUsageReportInput): UseUsageReportResult
   const queryClient = useQueryClient();
   const refetch = useCallback(() => {
     void query.refetch();
-    // An expanded day lists the same rows the report just recounted, so it goes
-    // stale with it; the card refetches whichever days are open.
+    // An expanded day and the Requests tab list the rows the report just recounted, so they go
+    // stale with it; the card refetches whatever it shows.
     void queryClient.invalidateQueries({ queryKey: usageSessionsQueryBaseKey });
+    void queryClient.invalidateQueries({ queryKey: usageRequestsQueryBaseKey });
+    // usage.pricing.updated 也报「汇率取到了」：人民币显示的成本跟着重读。
+    void queryClient.invalidateQueries({ queryKey: usageExchangeRateQueryBaseKey });
   }, [query, queryClient]);
 
-  const liveBackfill = useUsageLiveEvents({ serverIds, onUsageUpdated: refetch });
+  const liveBackfill = useUsageLiveEvents({
+    serverIds: enabled ? serverIds : NO_SERVERS,
+    onUsageUpdated: refetch,
+  });
 
   let loadState: UsageReportLoadState;
   if (query.data?.status === "connecting") {

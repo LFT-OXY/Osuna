@@ -1,7 +1,9 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { WebSocket } from "ws";
 import type { UsagePricingModel, UsageReport } from "@getpaseo/protocol/usage/types";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
@@ -505,5 +507,253 @@ describe("custom prices", () => {
       ["claude-opus-5", false, null],
       ["claude-fable-5-1", true, "table"],
     ]);
+  });
+});
+
+/**
+ * Stands in for open.er-api.com on loopback. It records every request so a test
+ * can assert how often the daemon asked and what it sent.
+ */
+class FakeRateServer {
+  readonly requests: { method: string; url: string; headers: IncomingHttpHeaders }[] = [];
+  reply: { status: number; body: string } = rateReply(7.12);
+  private constructor(private readonly server: Server) {}
+
+  static async start(): Promise<FakeRateServer> {
+    let fake: FakeRateServer | null = null;
+    const server = createServer((request, response) => {
+      fake?.requests.push({
+        method: request.method ?? "",
+        url: request.url ?? "",
+        headers: request.headers,
+      });
+      const reply = fake?.reply ?? { status: 500, body: "" };
+      response.writeHead(reply.status, { "content-type": "application/json" });
+      response.end(reply.body);
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    fake = new FakeRateServer(server);
+    return fake;
+  }
+
+  get url(): string {
+    const { port } = this.server.address() as AddressInfo;
+    return `http://127.0.0.1:${port}/v6/latest/USD`;
+  }
+
+  async close(): Promise<void> {
+    await new Promise<void>((resolve) => this.server.close(() => resolve()));
+  }
+}
+
+function rateReply(cny: number): { status: number; body: string } {
+  return {
+    status: 200,
+    body: JSON.stringify({ result: "success", base_code: "USD", rates: { USD: 1, CNY: cny } }),
+  };
+}
+
+const RATE_VERSION = "0.17.0-test";
+const HOUR = 60 * 60 * 1000;
+const RATE_START = Date.parse("2026-10-23T08:00:00.000Z");
+
+describe("exchange rate", () => {
+  let rates: FakeRateServer;
+  let homeRoot: string;
+  let nowMs = RATE_START;
+  const daemons: TestPaseoDaemon[] = [];
+  const clients: DaemonClient[] = [];
+
+  async function start(options: { autoUpdate: boolean }): Promise<DaemonClient> {
+    const daemon = await createTestPaseoDaemon({
+      paseoHomeRoot: homeRoot,
+      cleanup: false,
+      daemonVersion: RATE_VERSION,
+      usage: {
+        roots: { claude: [await emptyRoot()], codex: [], pi: [], omp: [] },
+        now: () => nowMs,
+        pricing: { autoUpdate: options.autoUpdate, overrides: [] },
+        exchangeRate: { url: rates.url, fetch: globalThis.fetch },
+      },
+    });
+    daemons.push(daemon);
+    const client = await connect(daemon);
+    clients.push(client);
+    return client;
+  }
+
+  async function stopAll(): Promise<void> {
+    for (const client of clients.splice(0)) await client.close();
+    for (const daemon of daemons.splice(0)) await daemon.close();
+  }
+
+  async function rateOf(client: DaemonClient) {
+    const { requestId: _requestId, ...rate } = await client.usageExchangeRateGet();
+    return rate;
+  }
+
+  /** The broadcast that tells clients a fetched rate landed and they should ask again. */
+  function nextRateLanding(client: DaemonClient): Promise<void> {
+    return new Promise<void>((resolve) => {
+      client.on("usage.pricing.updated", () => resolve());
+    });
+  }
+
+  /** Asks once, which answers at once and fetches behind it, then waits for the rate to land. */
+  async function fetchBehind(client: DaemonClient): Promise<void> {
+    const landed = nextRateLanding(client);
+    await rateOf(client);
+    await landed;
+  }
+
+  /** Nothing should be sent; give a fetch that was wrongly started the time to reach the server. */
+  async function expectNoFetchBeyond(count: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(rates.requests).toHaveLength(count);
+  }
+
+  beforeEach(async () => {
+    nowMs = RATE_START;
+    rates = await FakeRateServer.start();
+    homeRoot = await mkdtemp(path.join(os.tmpdir(), "paseo-exchange-rate-home-"));
+    tempRoots.push(homeRoot);
+  });
+
+  afterEach(async () => {
+    await stopAll();
+    await rates.close();
+  });
+
+  // magpie's page never waits on the network: fx.Soon answers what it knows and
+  // fetches behind it (internal/fx/fx.go:132-157, internal/gui/api.go:333-344).
+  test("answers 7.2 at once, fetches behind it as Osuna with no credentials, and tells clients", async () => {
+    const client = await start({ autoUpdate: true });
+    const landed = nextRateLanding(client);
+
+    expect(await rateOf(client)).toEqual({
+      cnyPerUsd: 7.2,
+      fetchedAt: null,
+      fallback: true,
+      stale: true,
+    });
+    await landed;
+    expect(await rateOf(client)).toEqual({
+      cnyPerUsd: 7.12,
+      fetchedAt: "2026-10-23T08:00:00.000Z",
+      fallback: false,
+      stale: false,
+    });
+    expect(rates.requests).toHaveLength(1);
+    const [sent] = rates.requests;
+    expect(sent?.method).toBe("GET");
+    expect(sent?.url).toBe("/v6/latest/USD");
+    expect(sent?.headers["user-agent"]).toBe(`Osuna/${RATE_VERSION}`);
+    expect(sent?.headers.authorization).toBeUndefined();
+    expect(sent?.headers.cookie).toBeUndefined();
+
+    const cachePath = path.join(homeRoot, ".paseo", "usage", "exchange-rate.json");
+    expect(JSON.parse(await readFile(cachePath, "utf8"))).toEqual({
+      cnyPerUsd: 7.12,
+      fetchedAt: "2026-10-23T08:00:00.000Z",
+    });
+    if (process.platform !== "win32") expect((await stat(cachePath)).mode & 0o777).toBe(0o600);
+  });
+
+  test("answers from the cache for a day, across a restart, then refreshes it behind the answer", async () => {
+    let client = await start({ autoUpdate: true });
+    await fetchBehind(client);
+
+    nowMs = RATE_START + 23 * HOUR;
+    await stopAll();
+    client = await start({ autoUpdate: true });
+    rates.reply = rateReply(7.3);
+    const cached = {
+      cnyPerUsd: 7.12,
+      fetchedAt: "2026-10-23T08:00:00.000Z",
+      fallback: false,
+      stale: false,
+    };
+    expect(await rateOf(client)).toEqual(cached);
+    await expectNoFetchBeyond(1);
+
+    nowMs = RATE_START + 24 * HOUR;
+    const landed = nextRateLanding(client);
+    expect(await rateOf(client)).toEqual({ ...cached, stale: true });
+    await landed;
+    expect(await rateOf(client)).toEqual({
+      cnyPerUsd: 7.3,
+      fetchedAt: "2026-10-24T08:00:00.000Z",
+      fallback: false,
+      stale: false,
+    });
+    expect(rates.requests).toHaveLength(2);
+  });
+
+  test("keeps the last rate when a fetch fails, and waits ten minutes before trying again", async () => {
+    const client = await start({ autoUpdate: true });
+    await fetchBehind(client);
+
+    nowMs = RATE_START + 25 * HOUR;
+    rates.reply = { status: 503, body: "busy" };
+    const lastRate = {
+      cnyPerUsd: 7.12,
+      fetchedAt: "2026-10-23T08:00:00.000Z",
+      fallback: false,
+      stale: true,
+    };
+    expect(await rateOf(client)).toEqual(lastRate);
+    await expect.poll(() => rates.requests.length).toBe(2);
+    await expectNoFetchBeyond(2);
+    expect(await rateOf(client)).toEqual(lastRate);
+
+    rates.reply = rateReply(7.3);
+    nowMs += 9 * 60 * 1000;
+    expect(await rateOf(client)).toEqual(lastRate);
+    await expectNoFetchBeyond(2);
+
+    nowMs += 60 * 1000;
+    await fetchBehind(client);
+    expect((await rateOf(client)).cnyPerUsd).toBe(7.3);
+    expect(rates.requests).toHaveLength(3);
+  });
+
+  test("answers 7.2 as the fallback when no rate was ever fetched", async () => {
+    rates.reply = { status: 200, body: JSON.stringify({ result: "error", rates: {} }) };
+    const client = await start({ autoUpdate: true });
+    const fallback = { cnyPerUsd: 7.2, fetchedAt: null, fallback: true, stale: true };
+
+    expect(await rateOf(client)).toEqual(fallback);
+    await expect.poll(() => rates.requests.length).toBe(1);
+    expect(await rateOf(client)).toEqual(fallback);
+    await expectNoFetchBeyond(1);
+  });
+
+  test("sends nothing while the price table's auto-update is off", async () => {
+    let client = await start({ autoUpdate: false });
+    expect(await rateOf(client)).toEqual({
+      cnyPerUsd: 7.2,
+      fetchedAt: null,
+      fallback: true,
+      stale: true,
+    });
+    await expectNoFetchBeyond(0);
+
+    await client.patchDaemonConfig({ usage: { pricing: { autoUpdate: true } } });
+    await fetchBehind(client);
+    expect(rates.requests).toHaveLength(1);
+
+    nowMs = RATE_START + 48 * HOUR;
+    await client.patchDaemonConfig({ usage: { pricing: { autoUpdate: false } } });
+    expect(await rateOf(client)).toEqual({
+      cnyPerUsd: 7.12,
+      fetchedAt: "2026-10-23T08:00:00.000Z",
+      fallback: false,
+      stale: true,
+    });
+    await expectNoFetchBeyond(1);
+    await stopAll();
+    client = await start({ autoUpdate: false });
+    expect((await rateOf(client)).cnyPerUsd).toBe(7.12);
+    await expectNoFetchBeyond(1);
   });
 });

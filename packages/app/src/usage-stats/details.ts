@@ -15,8 +15,11 @@ export interface UsageHostsView {
   timezone: string;
 }
 
-/** The three tabs of the data details card, in the order they are shown. */
-export const USAGE_DETAILS_TABS = ["daily", "monthly", "projects"] as const;
+/**
+ * The tabs of the data details card, in the order they are shown. Requests is
+ * there only while a counted host keeps the gateway ledger.
+ */
+export const USAGE_DETAILS_TABS = ["daily", "monthly", "projects", "requests"] as const;
 export type UsageDetailsTab = (typeof USAGE_DETAILS_TABS)[number];
 
 export const USAGE_PROJECT_LIMITS = [3, 6, 10] as const;
@@ -26,6 +29,14 @@ export interface TopUsageProjects {
   projects: MergedUsageProject[];
   /** The largest project's tokens, which every bar is drawn against. */
   maxTokens: number;
+}
+
+/**
+ * The row of gateway requests no CLI log names (ADR 0014). Its `rootPath` and
+ * `kind` are placeholders the wire keeps for older clients; only the flag says it.
+ */
+export function isUnknownUsageProject(project: Pick<MergedUsageProject, "unknown">): boolean {
+  return project.unknown === true;
 }
 
 /**

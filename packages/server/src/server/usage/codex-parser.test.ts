@@ -151,6 +151,47 @@ describe("parseCodexChunk", () => {
     expect(aggregate([...first.rows, ...second.rows])).toEqual(SESSION_ROWS);
   });
 
+  test("every usage record is told by its response_id, once, at its turn; token_count names none", () => {
+    expect(parse("codex-session.jsonl").calls).toEqual([
+      {
+        replyId: "resp_1",
+        cli: "codex",
+        model: "gpt-5.6-luna",
+        sessionId: THREAD,
+        cwd: "/work/demo",
+        bucket: "2026-09-18T09:30:00.000Z",
+        at: "2026-09-18T09:30:20.000Z",
+        turnKey: "turn-1",
+        amounts: { input: 200, cachedInput: 1000, cacheWrite: 300, output: 250, reasoning: 60 },
+      },
+      {
+        replyId: "resp_2",
+        cli: "codex",
+        model: "gpt-5.6-luna",
+        sessionId: THREAD,
+        cwd: "/work/demo",
+        bucket: "2026-09-18T09:30:00.000Z",
+        at: "2026-09-18T09:30:40.000Z",
+        turnKey: "turn-1",
+        amounts: { input: 100, cachedInput: 1400, cacheWrite: 0, output: 100, reasoning: 20 },
+      },
+      {
+        replyId: "resp_3",
+        cli: "codex",
+        model: "gpt-6-astra",
+        sessionId: THREAD,
+        cwd: "/work/demo/sub",
+        bucket: "2026-09-18T09:45:00.000Z",
+        at: "2026-09-18T09:46:10.000Z",
+        turnKey: "turn-2",
+        amounts: { input: 500, cachedInput: 0, cacheWrite: 0, output: 40, reasoning: 0 },
+      },
+    ]);
+    expect(parse("codex-token-count.jsonl", "019fd6e0-2c31-7a04-9c65-12b7d8e4a5f3").calls).toEqual(
+      [],
+    );
+  });
+
   test("an older rollout falls back to token_count and never diffs the running total", () => {
     expect(parse("codex-token-count.jsonl", "019fd6e0-2c31-7a04-9c65-12b7d8e4a5f3").rows).toEqual([
       {

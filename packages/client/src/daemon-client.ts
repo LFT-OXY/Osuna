@@ -638,6 +638,14 @@ type UsageSessionsListPayload = Extract<
   SessionOutboundMessage,
   { type: "usage.sessions.list.response" }
 >["payload"];
+type UsageRequestsListPayload = Extract<
+  SessionOutboundMessage,
+  { type: "usage.requests.list.response" }
+>["payload"];
+type UsageRequestsExportPayload = Extract<
+  SessionOutboundMessage,
+  { type: "usage.requests.export.response" }
+>["payload"];
 type UsagePricingListPayload = Extract<
   SessionOutboundMessage,
   { type: "usage.pricing.list.response" }
@@ -645,6 +653,10 @@ type UsagePricingListPayload = Extract<
 type UsagePricingRefreshPayload = Extract<
   SessionOutboundMessage,
   { type: "usage.pricing.refresh.response" }
+>["payload"];
+type UsageExchangeRateGetPayload = Extract<
+  SessionOutboundMessage,
+  { type: "usage.exchange_rate.get.response" }
 >["payload"];
 type UsageAgentGetPayload = Extract<
   SessionOutboundMessage,
@@ -721,6 +733,10 @@ type ApiEndpointVendorStatusPayload = Extract<
 type ApiEndpointReadBalancePayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.read_balance.response" }
+>["payload"];
+type ApiEndpointRecentProblemsPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.recent_problems.response" }
 >["payload"];
 type ApiEndpointCheckBalancePayload = Extract<
   SessionOutboundMessage,
@@ -891,6 +907,8 @@ export interface UsageReportOptions {
   timezone: string;
   filters?: Extract<SessionInboundMessage, { type: "usage.report.get.request" }>["filters"];
   trend?: Extract<SessionInboundMessage, { type: "usage.report.get.request" }>["trend"];
+  /** Ask for the Speed card's groups (`features.gatewayLedger`). */
+  speed?: Extract<SessionInboundMessage, { type: "usage.report.get.request" }>["speed"];
   requestId?: string;
 }
 
@@ -902,6 +920,19 @@ export interface UsageSessionsListOptions {
   filters?: Extract<SessionInboundMessage, { type: "usage.sessions.list.request" }>["filters"];
   requestId?: string;
 }
+
+export interface UsageRequestsListOptions {
+  /** Client-local `YYYY-MM-DD` bounds; `from: null` asks for all time. */
+  from: string | null;
+  to: string | null;
+  timezone: string;
+  filters?: Extract<SessionInboundMessage, { type: "usage.requests.list.request" }>["filters"];
+  offset: number;
+  limit: number;
+  requestId?: string;
+}
+
+export type UsageRequestsExportOptions = Omit<UsageRequestsListOptions, "offset" | "limit">;
 
 type ScheduleCreatePayload = Extract<
   SessionOutboundMessage,
@@ -6487,6 +6518,7 @@ export class DaemonClient {
         timezone: options.timezone,
         ...(options.filters ? { filters: options.filters } : {}),
         ...(options.trend ? { trend: options.trend } : {}),
+        ...(options.speed ? { speed: options.speed } : {}),
       },
       responseType: "usage.report.get.response",
     });
@@ -6503,6 +6535,38 @@ export class DaemonClient {
         ...(options.filters ? { filters: options.filters } : {}),
       },
       responseType: "usage.sessions.list.response",
+    });
+  }
+
+  async usageRequestsList(options: UsageRequestsListOptions): Promise<UsageRequestsListPayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId: options.requestId,
+      message: {
+        type: "usage.requests.list.request",
+        from: options.from,
+        to: options.to,
+        timezone: options.timezone,
+        ...(options.filters ? { filters: options.filters } : {}),
+        offset: options.offset,
+        limit: options.limit,
+      },
+      responseType: "usage.requests.list.response",
+    });
+  }
+
+  async usageRequestsExport(
+    options: UsageRequestsExportOptions,
+  ): Promise<UsageRequestsExportPayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId: options.requestId,
+      message: {
+        type: "usage.requests.export.request",
+        from: options.from,
+        to: options.to,
+        timezone: options.timezone,
+        ...(options.filters ? { filters: options.filters } : {}),
+      },
+      responseType: "usage.requests.export.response",
     });
   }
 
@@ -6538,6 +6602,15 @@ export class DaemonClient {
       requestId,
       message: { type: "usage.pricing.refresh.request" },
       responseType: "usage.pricing.refresh.response",
+    });
+  }
+
+  /** 人民币显示用的汇率（1 美元合多少元）。只在选了人民币时问；只有声明了 gatewayLedger 的 daemon 认。 */
+  async usageExchangeRateGet(requestId?: string): Promise<UsageExchangeRateGetPayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "usage.exchange_rate.get.request" },
+      responseType: "usage.exchange_rate.get.response",
     });
   }
 
@@ -6731,6 +6804,17 @@ export class DaemonClient {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId,
       message: { type: "provider.api_endpoint.read_balance.request", ...options },
+    });
+  }
+
+  /** 这家接口最近 20 次失败、被换走或导致冷却的请求，新的在前。只有声明了 gatewayLedger 的 daemon 认。 */
+  async apiEndpointRecentProblems(
+    endpointId: string,
+    requestId?: string,
+  ): Promise<ApiEndpointRecentProblemsPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.recent_problems.request", endpointId },
     });
   }
 

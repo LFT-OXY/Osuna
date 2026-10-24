@@ -855,6 +855,9 @@ export class ChatEncoder {
   usage(): Usage {
     return this.collector.usage();
   }
+  replyId(): string {
+    return this.id;
+  }
 
   private start(id: string): void {
     if (this.started) return;

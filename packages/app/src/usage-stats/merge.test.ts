@@ -1,4 +1,8 @@
-import type { UsageReport, UsageTokenTotals } from "@getpaseo/protocol/usage/types";
+import type {
+  UsageEndpointBreakdown,
+  UsageReport,
+  UsageTokenTotals,
+} from "@getpaseo/protocol/usage/types";
 import { describe, expect, it } from "vitest";
 import { mergeUsageBackfill, mergeUsageReports } from "./merge";
 
@@ -353,5 +357,141 @@ describe("mergeUsageBackfill", () => {
     expect(
       mergeUsageBackfill([{ state: "idle", filesTotal: 0, filesDone: 0, startedAt: null }]),
     ).toEqual({ state: "idle", filesTotal: 0, filesDone: 0, startedAt: null });
+  });
+});
+
+function memberId(member: { endpointId: string | null }): string | null {
+  return member.endpointId;
+}
+
+describe("mergeUsageReports endpoints", () => {
+  const group = (
+    endpointId: string | null,
+    name: string | null,
+    input: number,
+    deleted = false,
+  ): UsageEndpointBreakdown => ({
+    endpointId,
+    name,
+    deleted,
+    totals: totals(input, 0),
+    estimatedCost: input / 100,
+    share: 1,
+  });
+
+  it("adds Official across hosts and keeps each endpoint, sharing over the sum", () => {
+    const merged = mergeUsageReports([
+      {
+        serverId: "a",
+        report: report({ endpoints: [group("ep_a", "Relay A", 30), group(null, null, 10)] }),
+      },
+      { serverId: "b", report: report({ endpoints: [group(null, null, 60)] }) },
+    ]);
+
+    expect(merged.endpoints).toEqual([
+      {
+        key: null,
+        name: null,
+        deleted: false,
+        totals: totals(70, 0),
+        estimatedCost: 0.7,
+        share: 0.7,
+        members: [
+          { serverId: "a", endpointId: null, deleted: false },
+          { serverId: "b", endpointId: null, deleted: false },
+        ],
+      },
+      {
+        key: "name:Relay A",
+        name: "Relay A",
+        deleted: false,
+        totals: totals(30, 0),
+        estimatedCost: 0.3,
+        share: 0.3,
+        members: [{ serverId: "a", endpointId: "ep_a", deleted: false }],
+      },
+    ]);
+  });
+
+  it("puts endpoints of one name on different hosts on one card", () => {
+    const merged = mergeUsageReports([
+      { serverId: "a", report: report({ endpoints: [group("ep_a", "Relay", 30)] }) },
+      { serverId: "b", report: report({ endpoints: [group("ep_b", "Relay", 10)] }) },
+    ]);
+
+    expect(merged.endpoints).toEqual([
+      {
+        key: "name:Relay",
+        name: "Relay",
+        deleted: false,
+        totals: totals(40, 0),
+        estimatedCost: 0.4,
+        share: 1,
+        members: [
+          { serverId: "a", endpointId: "ep_a", deleted: false },
+          { serverId: "b", endpointId: "ep_b", deleted: false },
+        ],
+      },
+    ]);
+  });
+
+  it("puts a deleted endpoint on one host with a live one of its name on another, as live", () => {
+    const merged = mergeUsageReports([
+      { serverId: "a", report: report({ endpoints: [group("ep_a", "Relay", 30, true)] }) },
+      { serverId: "b", report: report({ endpoints: [group("ep_b", "Relay", 10)] }) },
+    ]);
+
+    expect(
+      merged.endpoints?.map((endpoint) => [
+        endpoint.key,
+        endpoint.deleted,
+        endpoint.members.map(memberId),
+      ]),
+    ).toEqual([["name:Relay", false, ["ep_a", "ep_b"]]]);
+  });
+
+  it("gives every endpoint of a name its own card once a host has two live ones of it", () => {
+    const merged = mergeUsageReports([
+      {
+        serverId: "a",
+        report: report({ endpoints: [group("ep_1", "Relay", 30), group("ep_2", "Relay", 20)] }),
+      },
+      { serverId: "b", report: report({ endpoints: [group("ep_3", "Relay", 40)] }) },
+      { serverId: "c", report: report({ endpoints: [group("ep_4", "Other", 5)] }) },
+      { serverId: "d", report: report({ endpoints: [group("ep_5", "Other", 5)] }) },
+    ]);
+
+    expect(
+      merged.endpoints?.map((endpoint) => [endpoint.name, endpoint.members.map(memberId)]),
+    ).toEqual([
+      ["Relay", ["ep_3"]],
+      ["Relay", ["ep_1"]],
+      ["Relay", ["ep_2"]],
+      ["Other", ["ep_4", "ep_5"]],
+    ]);
+  });
+
+  it("joins a host's live endpoint to the name's card and keeps its deleted one of that name apart", () => {
+    const merged = mergeUsageReports([
+      {
+        serverId: "a",
+        report: report({
+          endpoints: [group("ep_1", "Relay", 30, true), group("ep_2", "Relay", 20)],
+        }),
+      },
+      { serverId: "b", report: report({ endpoints: [group("ep_3", "Relay", 40)] }) },
+    ]);
+
+    expect(
+      merged.endpoints?.map((endpoint) => [endpoint.deleted, endpoint.members.map(memberId)]),
+    ).toEqual([
+      [false, ["ep_2", "ep_3"]],
+      [true, ["ep_1"]],
+    ]);
+  });
+
+  it("has no endpoints when no host reports them", () => {
+    const merged = mergeUsageReports([{ serverId: "a", report: report({}) }]);
+    expect(merged.endpoints).toBeUndefined();
   });
 });

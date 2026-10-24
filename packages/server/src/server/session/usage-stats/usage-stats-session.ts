@@ -51,6 +51,7 @@ export class UsageStatsSession {
         timezone: request.timezone,
         filters: request.filters,
         trend: request.trend,
+        speed: request.speed,
       });
       return {
         type: "usage.report.get.response",
@@ -76,6 +77,57 @@ export class UsageStatsSession {
     }));
   }
 
+  async handleUsageRequestsListRequest(
+    request: Extract<SessionInboundMessage, { type: "usage.requests.list.request" }>,
+  ): Promise<void> {
+    await this.respond(request, async () => ({
+      type: "usage.requests.list.response",
+      payload: {
+        requestId: request.requestId,
+        ...(await this.usageService.listRequests({
+          from: request.from,
+          to: request.to,
+          timezone: request.timezone,
+          filters: request.filters,
+          offset: request.offset,
+          limit: request.limit,
+        })),
+      },
+    }));
+  }
+
+  async handleUsageRequestsExportRequest(
+    request: Extract<SessionInboundMessage, { type: "usage.requests.export.request" }>,
+  ): Promise<void> {
+    await this.respond(request, async () => ({
+      type: "usage.requests.export.response",
+      payload: {
+        requestId: request.requestId,
+        csv: await this.usageService.exportRequests({
+          from: request.from,
+          to: request.to,
+          timezone: request.timezone,
+          filters: request.filters,
+        }),
+      },
+    }));
+  }
+
+  async handleRecentProblemsRequest(
+    request: Extract<
+      SessionInboundMessage,
+      { type: "provider.api_endpoint.recent_problems.request" }
+    >,
+  ): Promise<void> {
+    await this.respond(request, async () => ({
+      type: "provider.api_endpoint.recent_problems.response",
+      payload: {
+        requestId: request.requestId,
+        problems: this.usageService.listRecentProblems(request.endpointId),
+      },
+    }));
+  }
+
   async handleUsagePricingListRequest(
     request: Extract<SessionInboundMessage, { type: "usage.pricing.list.request" }>,
   ): Promise<void> {
@@ -91,6 +143,15 @@ export class UsageStatsSession {
     await this.respond(request, async () => ({
       type: "usage.pricing.refresh.response",
       payload: { requestId: request.requestId, ...(await this.usageService.refreshPricing()) },
+    }));
+  }
+
+  async handleUsageExchangeRateGetRequest(
+    request: Extract<SessionInboundMessage, { type: "usage.exchange_rate.get.request" }>,
+  ): Promise<void> {
+    await this.respond(request, async () => ({
+      type: "usage.exchange_rate.get.response",
+      payload: { requestId: request.requestId, ...this.usageService.getExchangeRate() },
     }));
   }
 

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_USAGE_PREFERENCES,
   isUsagePinned,
+  setUsageChineseUnits,
+  setUsageCurrency,
   setUsageDisplayAs,
   setUsageHost,
   toggleUsagePin,
@@ -31,7 +33,7 @@ describe("usage preferences", () => {
   it("unpins a pinned window and keeps the others in order", () => {
     const three = [codexWeekly, claudeFiveHour, { sourceId: "claude", windowId: "weekly" }];
     const unpinned = toggleUsagePin({
-      preferences: { displayAs: "used", pins: three, serverId: null },
+      preferences: { ...DEFAULT_USAGE_PREFERENCES, pins: three },
       pin: claudeFiveHour,
       reports: [],
     });
@@ -40,12 +42,12 @@ describe("usage preferences", () => {
   });
 
   it("switches between used and remaining without touching pins", () => {
-    const preferences = { displayAs: "used" as const, pins: [codexWeekly], serverId: null };
+    const preferences = { ...DEFAULT_USAGE_PREFERENCES, pins: [codexWeekly] };
 
     expect(setUsageDisplayAs(preferences, "remaining")).toEqual({
+      ...DEFAULT_USAGE_PREFERENCES,
       displayAs: "remaining",
       pins: [codexWeekly],
-      serverId: null,
     });
   });
 
@@ -54,12 +56,42 @@ describe("usage preferences", () => {
       displayAs: "used",
       pins: [codexWeekly],
       serverId: "server",
+      currency: "usd",
+      chineseUnits: false,
     });
   });
 
   it("reads preferences saved before hosts could be picked as no pick", () => {
     expect(UsagePreferencesSchema.parse({ displayAs: "remaining", pinned: [codexWeekly] })).toEqual(
-      { displayAs: "remaining", pins: [codexWeekly], serverId: null },
+      {
+        displayAs: "remaining",
+        pins: [codexWeekly],
+        serverId: null,
+        currency: "usd",
+        chineseUnits: false,
+      },
+    );
+  });
+
+  it("defaults to USD and K / M / B, and keeps the device's choice of currency and units", () => {
+    expect(DEFAULT_USAGE_PREFERENCES.currency).toBe("usd");
+    expect(DEFAULT_USAGE_PREFERENCES.chineseUnits).toBe(false);
+    const chosen = setUsageChineseUnits(
+      setUsageCurrency({ ...DEFAULT_USAGE_PREFERENCES, pins: [codexWeekly] }, "cny"),
+      true,
+    );
+    expect(UsagePreferencesSchema.parse(JSON.parse(JSON.stringify(chosen)))).toEqual({
+      displayAs: "used",
+      pins: [codexWeekly],
+      serverId: null,
+      currency: "cny",
+      chineseUnits: true,
+    });
+  });
+
+  it("reads an unknown currency as USD", () => {
+    expect(UsagePreferencesSchema.parse({ displayAs: "used", currency: "eur" }).currency).toBe(
+      "usd",
     );
   });
 });
@@ -125,6 +157,12 @@ it("reads old selections without losing display or host and preserves an explici
   ] as const) {
     expect(
       UsagePreferencesSchema.parse({ displayAs: "remaining", serverId: "host", ...input }),
-    ).toEqual({ displayAs: "remaining", serverId: "host", pins });
+    ).toEqual({
+      displayAs: "remaining",
+      serverId: "host",
+      pins,
+      currency: "usd",
+      chineseUnits: false,
+    });
   }
 });

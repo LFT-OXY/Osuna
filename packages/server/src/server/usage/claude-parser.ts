@@ -266,6 +266,20 @@ function pushUsage(
     at: input.at,
     amounts,
   });
+  // 回复编号是账本对上这次调用的依据；没有编号的回复只算会话记录里的数。
+  if (message.id) {
+    input.sink.calls.push({
+      replyId: message.id,
+      cli: "claude",
+      model: message.model,
+      sessionId: input.sessionId,
+      cwd: message.cwd,
+      bucket: message.bucket,
+      at: input.at,
+      turnKey: attachment?.turnKey ?? null,
+      amounts,
+    });
+  }
 }
 
 function readUsageColumns(usage: Record<string, unknown>): UsageTokenColumns {

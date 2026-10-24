@@ -1,5 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 import { gotoAppShell } from "./app";
+import { daemonWsRoutePattern } from "./daemon-port";
 
 export async function openUsagePage(page: Page): Promise<void> {
   await gotoAppShell(page);
@@ -38,4 +39,26 @@ export async function waitForUsageTotal(page: Page, expected: string): Promise<v
 export async function openUsageHostFilter(page: Page): Promise<void> {
   await page.getByTestId("usage-host-filter-trigger").click();
   await expect(page.getByTestId("usage-host-filter-menu")).toBeVisible({ timeout: 10_000 });
+}
+
+/** 从 server_info 去掉 gatewayLedger，模拟没有中转站账本的旧 daemon。在打开页面之前调用。 */
+export async function hideGatewayLedger(page: Page): Promise<void> {
+  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((message) => server.send(message));
+    server.onMessage((message) => {
+      if (typeof message !== "string" || !message.includes('"server_info"')) {
+        ws.send(message);
+        return;
+      }
+      const envelope = JSON.parse(message) as {
+        message?: { payload?: { status?: unknown; features?: Record<string, unknown> } };
+      };
+      const payload = envelope.message?.payload;
+      if (payload?.status === "server_info" && payload.features) {
+        delete payload.features.gatewayLedger;
+      }
+      ws.send(JSON.stringify(envelope));
+    });
+  });
 }

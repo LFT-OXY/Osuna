@@ -15,6 +15,7 @@ import type pino from "pino";
 import { withListTag } from "../codex-models-cache.js";
 import { isRecord, parseJson } from "../upstream-http.js";
 import { sendAgentError } from "./agent-errors.js";
+import type { ChatGptLedgerWatch } from "./chatgpt-ledger.js";
 import { readLimited } from "./upstream-call.js";
 
 /*
@@ -210,8 +211,10 @@ export function relayToChatGpt(input: {
   // 发给 ChatGPT 的请求头；缺省是 Codex 的请求头去掉逐跳头与 Host。
   headers?: IncomingHttpHeaders;
   listTag: () => string;
+  // ChatGPT 自带模型的对话：记进中转站账本（接口记为官方）。别的路径不记。
+  watch?: ChatGptLedgerWatch;
 }): void {
-  const { req, res } = input;
+  const { req, res, watch } = input;
   const signIn = { url: req.url, authorization: req.headers.authorization };
   const isToOpenAiApi = isForOpenAiApi(signIn);
   const target = new URL(chatgptTarget({ ...signIn, bases: input.bases }));
@@ -220,15 +223,19 @@ export function relayToChatGpt(input: {
     method: req.method,
     headers: input.headers ?? relayedHeaders(req.headers),
   });
-  // Codex 先断开（用户中断）：不再等 ChatGPT。
+  // Codex 先断开（用户中断）：不再等 ChatGPT。还没回复时照 magpie 当作连不上 ChatGPT（请求的 context 被取消），
+  // 账本经下面的 error 记这一次失败（codex_backend.go 的 client.Do 出错与 codexUnreached）。
   const abandon = () => {
-    if (!res.writableFinished) upstream.destroy();
+    if (!res.writableFinished) upstream.destroy(new Error("context canceled"));
   };
   res.once("close", abandon);
+  watch?.watchGone(res);
   upstream.once("response", (reply) => {
     // ChatGPT 自己的 401、403 原样回；只有 OpenAI API 拒收 API key 的 401 照 magpie 改写成说明。
     if (isToOpenAiApi && reply.statusCode === 401) {
-      void sendApiKeyRefused({ res, reply });
+      void sendApiKeyRefused({ res, reply }).then((message) =>
+        watch?.failed({ status: 401, message }),
+      );
       return;
     }
     const headers = relayedHeaders(reply.headers);
@@ -237,6 +244,7 @@ export function relayToChatGpt(input: {
       headers["x-models-etag"] = withListTag(modelsEtag, input.listTag());
     }
     res.writeHead(reply.statusCode ?? 502, headers);
+    watch?.replied(reply);
     reply.pipe(res);
     reply.once("error", () => res.destroy());
     reply.once("aborted", () => res.destroy());
@@ -249,14 +257,9 @@ export function relayToChatGpt(input: {
     }
     const reason = error instanceof Error && "code" in error ? String(error.code) : error.message;
     input.logger.warn({ err: error, host: target.host }, "ChatGPT backend unreachable");
-    sendAgentError({
-      res,
-      wire: "openai",
-      error: {
-        status: 502,
-        message: `ChatGPT can't be reached (${reason}). Codex's own models go to ChatGPT with Codex's own sign-in through Osuna's API endpoint gateway: let this computer reach ${target.host}, or pick an endpoint model (<endpoint>/<model>) in Codex`,
-      },
-    });
+    const message = `ChatGPT can't be reached (${reason}). Codex's own models go to ChatGPT with Codex's own sign-in through Osuna's API endpoint gateway: let this computer reach ${target.host}, or pick an endpoint model (<endpoint>/<model>) in Codex`;
+    watch?.failed({ status: 502, message });
+    sendAgentError({ res, wire: "openai", error: { status: 502, message } });
   });
   if (input.body === undefined) {
     req.pipe(upstream);
@@ -265,11 +268,13 @@ export function relayToChatGpt(input: {
   }
 }
 
-async function sendApiKeyRefused(input: { res: Response; reply: IncomingMessage }): Promise<void> {
+/** 返回交给 Codex 的说法。 */
+async function sendApiKeyRefused(input: {
+  res: Response;
+  reply: IncomingMessage;
+}): Promise<string> {
   const body = await readLimited({ stream: input.reply, first: null });
-  sendAgentError({
-    res: input.res,
-    wire: "openai",
-    error: { status: 401, message: apiKeyRefusedMessage(body) },
-  });
+  const message = apiKeyRefusedMessage(body);
+  sendAgentError({ res: input.res, wire: "openai", error: { status: 401, message } });
+  return message;
 }

@@ -1,12 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatGroupedTokens,
   formatSessionCost,
   formatTokenArrows,
   formatUsageCost,
   formatUsageShare,
+  formatUsageTokens,
   formatUsageTokensCompact,
   formatGroupedNumber,
+  USD_MONEY,
 } from "./format";
+
+const CNY_AT_7_12 = { currency: "cny", cnyPerUsd: 7.12 } as const;
 import { totalUsageTokens, usageSourceKey } from "./totals";
 import { usageBackendLabel, usageSourceColor, usageSourceLabel } from "./sources";
 
@@ -34,35 +39,81 @@ describe("formatUsageTokensCompact", () => {
   });
 });
 
+describe("formatUsageTokens in 万 / 亿", () => {
+  it("writes 万 with one decimal and 亿 with two, dropping trailing zeros", () => {
+    expect(formatUsageTokens(9_999, "wanYi")).toBe("9999");
+    expect(formatUsageTokens(12_000, "wanYi")).toBe("1.2 万");
+    expect(formatUsageTokens(50_000, "wanYi")).toBe("5 万");
+    expect(formatUsageTokens(681_234, "wanYi")).toBe("68.1 万");
+    expect(formatUsageTokens(80_000_000, "wanYi")).toBe("8000 万");
+    expect(formatUsageTokens(340_000_000, "wanYi")).toBe("3.4 亿");
+    expect(formatUsageTokens(133_456_789, "wanYi")).toBe("1.33 亿");
+    expect(formatUsageTokens(1_540_000_000, "wanYi")).toBe("15.4 亿");
+  });
+
+  it("keeps K / M / B otherwise", () => {
+    expect(formatUsageTokens(12_000, "kmb")).toBe("12.0K");
+    expect(formatUsageTokens(340_000_000, "kmb")).toBe("340.0M");
+  });
+});
+
+describe("formatGroupedTokens", () => {
+  it("groups digits in K / M / B and abbreviates in 万 / 亿", () => {
+    expect(formatGroupedTokens({ value: 1_234_567, locale: "zh-CN", units: "kmb" })).toBe(
+      "1,234,567",
+    );
+    expect(formatGroupedTokens({ value: 1_234_567, locale: "zh-CN", units: "wanYi" })).toBe(
+      "123.5 万",
+    );
+  });
+});
+
 describe("formatUsageCost", () => {
   it("always shows two decimals", () => {
-    expect(formatUsageCost(0)).toBe("$0.00");
-    expect(formatUsageCost(0.174)).toBe("$0.17");
-    expect(formatUsageCost(1234.5)).toBe("$1234.50");
+    expect(formatUsageCost(0, USD_MONEY)).toBe("$0.00");
+    expect(formatUsageCost(0.174, USD_MONEY)).toBe("$0.17");
+    expect(formatUsageCost(1234.5, USD_MONEY)).toBe("$1234.50");
+  });
+
+  it("converts to yuan at the rate", () => {
+    expect(formatUsageCost(10, CNY_AT_7_12)).toBe("¥71.20");
+    expect(formatUsageCost(0, CNY_AT_7_12)).toBe("¥0.00");
   });
 });
 
 describe("formatTokenArrows", () => {
   it("reads as uncached input in, output out", () => {
-    expect(formatTokenArrows(14_300, 4_600)).toBe("↑14.3K ↓4.6K");
-    expect(formatTokenArrows(0, 0)).toBe("↑0 ↓0");
+    expect(formatTokenArrows({ input: 14_300, output: 4_600, units: "kmb" })).toBe("↑14.3K ↓4.6K");
+    expect(formatTokenArrows({ input: 0, output: 0, units: "kmb" })).toBe("↑0 ↓0");
+  });
+
+  it("uses 万 / 亿 when asked", () => {
+    expect(formatTokenArrows({ input: 143_000, output: 4_600, units: "wanYi" })).toBe(
+      "↑14.3 万 ↓4600",
+    );
   });
 });
 
 describe("formatSessionCost", () => {
   it("keeps four decimals under a cent so a real cost is never $0.00", () => {
-    expect(formatSessionCost(0.0004)).toBe("$0.0004");
-    expect(formatSessionCost(0.0099)).toBe("$0.0099");
+    expect(formatSessionCost(0.0004, USD_MONEY)).toBe("$0.0004");
+    expect(formatSessionCost(0.0099, USD_MONEY)).toBe("$0.0099");
   });
 
   it("shows two decimals from a cent up", () => {
-    expect(formatSessionCost(0.01)).toBe("$0.01");
-    expect(formatSessionCost(0.174)).toBe("$0.17");
+    expect(formatSessionCost(0.01, USD_MONEY)).toBe("$0.01");
+    expect(formatSessionCost(0.174, USD_MONEY)).toBe("$0.17");
   });
 
   it("reads an unpriced turn as zero rather than blank", () => {
-    expect(formatSessionCost(0)).toBe("$0.00");
-    expect(formatSessionCost(Number.NaN)).toBe("$0.00");
+    expect(formatSessionCost(0, USD_MONEY)).toBe("$0.00");
+    expect(formatSessionCost(Number.NaN, USD_MONEY)).toBe("$0.00");
+    expect(formatSessionCost(0, CNY_AT_7_12)).toBe("¥0.00");
+  });
+
+  it("converts to yuan before picking the decimals", () => {
+    expect(formatSessionCost(0.0005, CNY_AT_7_12)).toBe("¥0.0036");
+    expect(formatSessionCost(0.174, CNY_AT_7_12)).toBe("¥1.24");
   });
 });
 

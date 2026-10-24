@@ -14,9 +14,11 @@ import { StyleSheet } from "react-native-unistyles";
 import { ScrollView } from "@/components/ui/scroll-view";
 import { UsageCard } from "@/components/usage/usage-card";
 import { UsageSegmentedControl } from "@/components/usage/usage-segmented-control";
+import { UsageRequestsTable } from "@/components/usage/usage-requests-table";
 import { UsageSessionList } from "@/components/usage/usage-session-list";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import {
+  isUnknownUsageProject,
   topUsageProjects,
   USAGE_DETAILS_TABS,
   USAGE_PROJECT_LIMITS,
@@ -26,13 +28,19 @@ import {
 } from "@/usage-stats/details";
 import {
   formatGroupedNumber,
+  formatGroupedTokens,
   formatUsageCost,
-  formatUsageTokensCompact,
+  formatUsageTokens,
+  type UsageTokenUnits,
 } from "@/usage-stats/format";
+import type { UsageHostInput } from "@/usage-stats/aggregated-usage";
 import type { MergedUsageProject, MergedUsageReport } from "@/usage-stats/merge";
+import type { UsageRange } from "@/usage-stats/period";
 import { formatUsageDay, formatUsageMonth } from "@/usage-stats/range-label";
+import type { UsageRequestsEndpointIntent } from "@/usage-stats/requests";
 import { usageSourceColor, usageSourceLabel } from "@/usage-stats/sources";
 import { totalUsageTokens } from "@/usage-stats/totals";
+import { useUsageMoney, useUsageTokenUnits } from "@/usage-stats/use-usage-money";
 
 /**
  * Column floors, each including the gap on its left. Full widths hold a
@@ -99,6 +107,7 @@ interface TableLayout {
   number: StyleProp<TextStyle>;
   small: StyleProp<TextStyle>;
   formatTokens: (value: number) => string;
+  formatCost: (value: number) => string;
 }
 
 function tableStyle(kind: UsageTableKind, isCondensed: boolean): StyleProp<ViewStyle> {
@@ -110,6 +119,8 @@ function tableStyle(kind: UsageTableKind, isCondensed: boolean): StyleProp<ViewS
 function useTableLayout(kind: UsageTableKind, locale: string) {
   const fullWidth = tableMinWidth(FULL_COLUMNS, NUMBER_COLUMNS[kind]);
   const [isCondensed, setIsCondensed] = useState(false);
+  const money = useUsageMoney();
+  const units = useUsageTokenUnits();
   const onLayout = useCallback(
     (event: LayoutChangeEvent) => {
       const { width } = event.nativeEvent.layout;
@@ -126,7 +137,8 @@ function useTableLayout(kind: UsageTableKind, locale: string) {
         first: styles.firstColumn,
         number: styles.numberColumn,
         small: styles.smallColumn,
-        formatTokens: (value) => formatGroupedNumber(value, locale),
+        formatTokens: (value) => formatGroupedTokens({ value, locale, units }),
+        formatCost: (value) => formatUsageCost(value, money),
       };
     }
     return {
@@ -134,18 +146,34 @@ function useTableLayout(kind: UsageTableKind, locale: string) {
       first: [styles.firstColumn, styles.firstColumnCondensed],
       number: [styles.numberColumn, styles.numberColumnCondensed],
       small: styles.smallColumn,
-      formatTokens: formatUsageTokensCompact,
+      formatTokens: (value) => formatUsageTokens(value, units),
+      formatCost: (value) => formatUsageCost(value, money),
     };
-  }, [isCondensed, kind, locale]);
+  }, [isCondensed, kind, locale, money, units]);
   return { layout, onLayout };
+}
+
+/** What the Requests tab lists: the hosts that keep the gateway ledger, over the page's range. */
+export interface UsageDetailsRequests {
+  hosts: readonly UsageHostInput[];
+  range: UsageRange;
 }
 
 interface UsageDetailsCardProps {
   report: MergedUsageReport;
   hosts: UsageHostsView;
+  /** Null hides the Requests tab: no counted host keeps the gateway ledger. */
+  requests: UsageDetailsRequests | null;
+  /** Opens on the Requests tab with this endpoint chosen; null opens on Daily. */
+  requestsIntent: UsageRequestsEndpointIntent | null;
 }
 
-export function UsageDetailsCard({ report, hosts }: UsageDetailsCardProps) {
+export function UsageDetailsCard({
+  report,
+  hosts,
+  requests,
+  requestsIntent,
+}: UsageDetailsCardProps) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
   const isCompact = useIsCompactFormFactor();
@@ -159,7 +187,9 @@ export function UsageDetailsCard({ report, hosts }: UsageDetailsCardProps) {
     }),
     [viewportHeight],
   );
-  const [tab, setTab] = useState<UsageDetailsTab>("daily");
+  const [chosenTab, setTab] = useState<UsageDetailsTab>(requestsIntent ? "requests" : "daily");
+  // 主机换成没有账本的那几台时，请求标签不在了，回到每日。
+  const tab = chosenTab === "requests" && !requests ? "daily" : chosenTab;
   const [projectLimit, setProjectLimit] = useState<UsageProjectLimit>(10);
   const [openDays, setOpenDays] = useState<ReadonlySet<string>>(EMPTY_KEYS);
   const [openProjects, setOpenProjects] = useState<ReadonlySet<string>>(EMPTY_KEYS);
@@ -172,12 +202,14 @@ export function UsageDetailsCard({ report, hosts }: UsageDetailsCardProps) {
 
   const tabOptions = useMemo(
     () =>
-      USAGE_DETAILS_TABS.map((value) => ({
-        value,
-        label: t(`usage.details.tabs.${value}`),
-        testID: `usage-details-tab-${value}`,
-      })),
-    [t],
+      USAGE_DETAILS_TABS.filter((value) => value !== "requests" || requests !== null).map(
+        (value) => ({
+          value,
+          label: t(`usage.details.tabs.${value}`),
+          testID: `usage-details-tab-${value}`,
+        }),
+      ),
+    [requests, t],
   );
   const limitOptions = useMemo(
     () =>
@@ -230,6 +262,16 @@ export function UsageDetailsCard({ report, hosts }: UsageDetailsCardProps) {
     );
   } else if (tab === "monthly") {
     body = <UsageMonthlyTable report={report} locale={locale} />;
+  } else if (tab === "requests" && requests) {
+    body = (
+      <UsageRequestsTable
+        hosts={requests.hosts}
+        range={requests.range}
+        timezone={hosts.timezone}
+        hostLabels={hosts.isMultiHost ? hosts.labels : null}
+        endpointIntent={requestsIntent}
+      />
+    );
   } else {
     body = (
       <UsageProjectsList
@@ -366,7 +408,7 @@ function UsageDayRow({
         </Text>
       ))}
       <Text style={[styles.cell, layout.small]}>{formatGroupedNumber(sessionCount, locale)}</Text>
-      <Text style={[styles.cell, layout.number]}>{formatUsageCost(estimatedCost)}</Text>
+      <Text style={[styles.cell, layout.number]}>{layout.formatCost(estimatedCost)}</Text>
     </Pressable>
   );
 }
@@ -412,7 +454,9 @@ function UsageMonthlyTable({ report, locale }: { report: MergedUsageReport; loca
             <Text style={[styles.cell, layout.small]}>
               {formatGroupedNumber(month.sessionCount, locale)}
             </Text>
-            <Text style={[styles.cell, layout.number]}>{formatUsageCost(month.estimatedCost)}</Text>
+            <Text style={[styles.cell, layout.number]}>
+              {layout.formatCost(month.estimatedCost)}
+            </Text>
           </View>
         ))}
       </View>
@@ -434,6 +478,8 @@ function UsageProjectsList({
   onToggleProject: (key: string) => void;
 }) {
   const top = useMemo(() => topUsageProjects(projects, limit), [limit, projects]);
+  const money = useUsageMoney();
+  const units = useUsageTokenUnits();
 
   if (top.projects.length === 0) return <UsageDetailsEmpty testID="usage-details-projects-empty" />;
 
@@ -447,11 +493,12 @@ function UsageProjectsList({
               projectKey={key}
               project={project}
               maxTokens={top.maxTokens}
+              units={units}
               hostLabel={hosts.isMultiHost ? (hosts.labels.get(project.serverId) ?? null) : null}
               isOpen={openProjects.has(key)}
               onToggle={onToggleProject}
             />
-            {openProjects.has(key) ? (
+            {openProjects.has(key) && !isUnknownUsageProject(project) ? (
               <View style={styles.cwds} testID={`usage-details-cwds-${key}`}>
                 {project.cwds.map((cwd) => (
                   <View key={cwd.cwd} style={styles.cwdRow}>
@@ -459,7 +506,7 @@ function UsageProjectsList({
                       {cwd.cwd}
                     </Text>
                     <Text style={styles.cwdAmount}>
-                      {`${formatUsageTokensCompact(totalUsageTokens(cwd.totals))} · ${formatUsageCost(cwd.estimatedCost)}`}
+                      {`${formatUsageTokens(totalUsageTokens(cwd.totals), units)} · ${formatUsageCost(cwd.estimatedCost, money)}`}
                     </Text>
                   </View>
                 ))}
@@ -476,6 +523,7 @@ function UsageProjectRow({
   projectKey,
   project,
   maxTokens,
+  units,
   hostLabel,
   isOpen,
   onToggle,
@@ -483,6 +531,7 @@ function UsageProjectRow({
   projectKey: string;
   project: MergedUsageProject;
   maxTokens: number;
+  units: UsageTokenUnits;
   hostLabel: string | null;
   isOpen: boolean;
   onToggle: (key: string) => void;
@@ -492,25 +541,31 @@ function UsageProjectRow({
   const accessibilityState = useMemo(() => ({ expanded: isOpen }), [isOpen]);
   const tokens = totalUsageTokens(project.totals);
   const width = maxTokens > 0 ? Math.max(2, (tokens / maxTokens) * 100) : 2;
+  // 只在账本里的中转站请求：没有目录可展开，路径处写一句它是什么。
+  const isUnknown = isUnknownUsageProject(project);
+  const name = isUnknown ? t("usage.details.unknownProject") : project.displayName;
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityState={accessibilityState}
+      disabled={isUnknown}
       onPress={handlePress}
       style={styles.projectRow}
       testID={`usage-details-project-${projectKey}`}
     >
       <View style={styles.avatar}>
-        <Text style={styles.avatarLetter}>{(project.displayName.at(0) ?? "?").toUpperCase()}</Text>
+        <Text style={styles.avatarLetter}>
+          {isUnknown ? "?" : (project.displayName.at(0) ?? "?").toUpperCase()}
+        </Text>
       </View>
       <View style={styles.projectBody}>
         <View style={styles.projectTitle}>
           <Text style={styles.projectName} numberOfLines={1}>
-            {project.displayName}
+            {name}
           </Text>
           {hostLabel ? <Text style={styles.projectBadge}>{hostLabel}</Text> : null}
-          {project.kind === "git" ? null : (
+          {project.kind === "git" || isUnknown ? null : (
             <Text style={styles.projectBadge}>
               {t(`usage.details.projectKind.${project.kind}`)}
             </Text>
@@ -525,12 +580,12 @@ function UsageProjectRow({
             />
           ))}
           <Text style={styles.projectPath} numberOfLines={1}>
-            {project.rootPath}
+            {isUnknown ? t("usage.details.unknownProjectHint") : project.rootPath}
           </Text>
         </View>
       </View>
       <View style={styles.projectAmount}>
-        <Text style={styles.projectTokens}>{formatUsageTokensCompact(tokens)}</Text>
+        <Text style={styles.projectTokens}>{formatUsageTokens(tokens, units)}</Text>
         <View style={styles.projectTrack}>
           <View style={[styles.projectBar, { width: `${width}%` }]} />
         </View>

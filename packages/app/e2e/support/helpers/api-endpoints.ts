@@ -34,6 +34,12 @@ import { openSettingsHost, openSettingsHostSection } from "./settings";
 
 export const RELAY_KEY = "sk-e2e-relay";
 
+/** /good 上一次 Anthropic 对话回的用量：输入 120、输出 30。 */
+export const GOOD_REPLY_TOKENS = 150;
+
+/** /codex 上一次 Responses 对话回的用量：输入 200、输出 40。 */
+export const GOOD_RESPONSES_TOKENS = 240;
+
 export interface FakeRelay {
   origin: string;
   // 收到的请求，按到达顺序；只记路径、认证头与请求体里的模型名。
@@ -75,6 +81,8 @@ function send(response: ServerResponse, status: number, body: unknown) {
  * - /broke：Anthropic 对话回 402 欠费（中转站让它冷却 30 分钟）。
  * - /reject：Anthropic 对话回 401（中转站把它标成需要检查）。
  * - /free：像不要 key 的本机服务，谁来都答，其余同 /good。
+ * - /codex：Responses 对话回带用量的整份回复（Codex 经中转站的用量用），其余路径 404。
+ * - /paced：Anthropic 对话流式回，文字分 11 段、每段隔 40ms 写完，输出 PACED_OUTPUT_TOKENS 个 token（速度卡片用）。
  * - /balance/usage：余额查询地址，回 {"data":{"left":7.5}}（key 不对时照样 401）。
  * - /api/user/self：new-api 的账户余额，只认 RELAY_ACCOUNT_TOKEN（原样作 Authorization）；没有 New-Api-User 时照 new-api
  *   回 success:false，有时回 quota 6000000（$12.00）。
@@ -179,10 +187,7 @@ export async function startFakeRelay(): Promise<FakeRelay> {
         send(response, 200, { data: MANY_MODELS.map((id) => ({ id })) });
         return;
       }
-      if (url === "/good/v1/messages") {
-        send(response, 200, { type: "message", content: [{ type: "text", text: "hi" }] });
-        return;
-      }
+      if (answersGoodTurn({ url, relay, response })) return;
       if (url === "/good/v1/chat/completions") {
         send(response, 200, { choices: [{ message: { role: "assistant", content: "hi" } }] });
         return;
@@ -209,6 +214,86 @@ export async function startFakeRelay(): Promise<FakeRelay> {
         server.close(() => resolve());
       }),
   });
+}
+
+/**
+ * 经中转站问的一轮对话：/good 的 Messages 与 /codex 的 Responses 回带编号与用量的整份回复（/paced 流式回），
+ * 这一条会记进账，用量页按接口分时看得到它（GOOD_REPLY_TOKENS、GOOD_RESPONSES_TOKENS）。返回 true 即已回。
+ */
+function answersGoodTurn(input: {
+  url: string;
+  relay: Pick<FakeRelay, "requests">;
+  response: ServerResponse;
+}): boolean {
+  const { url, response } = input;
+  const count = input.relay.requests.length;
+  if (url === "/paced/v1/messages") {
+    streamPacedReply({ id: `msg_paced_${count}`, response });
+    return true;
+  }
+  if (url === "/good/v1/messages") {
+    send(response, 200, {
+      id: `msg_relay_${count}`,
+      type: "message",
+      content: [{ type: "text", text: "hi" }],
+      usage: { input_tokens: 120, output_tokens: 30 },
+    });
+    return true;
+  }
+  // /good 的 Responses 照旧 404（检测用例靠它判“没有”），Codex 的用量走 /codex。
+  if (url !== "/codex/v1/responses") return false;
+  send(response, 200, {
+    id: `resp_relay_${count}`,
+    object: "response",
+    status: "completed",
+    output: [
+      {
+        type: "message",
+        id: "msg_1",
+        role: "assistant",
+        content: [{ type: "output_text", text: "hi" }],
+      },
+    ],
+    usage: { input_tokens: 200, output_tokens: 40 },
+  });
+  return true;
+}
+
+/** /paced 一轮回的输出 token。 */
+export const PACED_OUTPUT_TOKENS = 100;
+
+/** /paced 的流式回复：首字之后约 400ms 匀速写完，中转站算得出速度与首字等待。 */
+function streamPacedReply(input: { id: string; response: ServerResponse }): void {
+  const { response } = input;
+  response.writeHead(200, { "content-type": "text/event-stream" });
+  const write = (event: Record<string, unknown>) =>
+    response.write(`event: ${String(event.type)}\ndata: ${JSON.stringify(event)}\n\n`);
+  write({
+    type: "message_start",
+    message: {
+      id: input.id,
+      type: "message",
+      role: "assistant",
+      content: [],
+      usage: { input_tokens: 120, output_tokens: 0 },
+    },
+  });
+  write({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } });
+  let sent = 0;
+  const timer = setInterval(() => {
+    write({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "hi " } });
+    sent += 1;
+    if (sent < 11) return;
+    clearInterval(timer);
+    write({ type: "content_block_stop", index: 0 });
+    write({
+      type: "message_delta",
+      delta: { stop_reason: "end_turn" },
+      usage: { output_tokens: PACED_OUTPUT_TOKENS },
+    });
+    write({ type: "message_stop" });
+    response.end();
+  }, 40);
 }
 
 export const CLAUDE_CODE_ONLY = "This group only allows Claude Code clients";
@@ -571,9 +656,12 @@ export async function setCliHeaderSamples(
 
 /**
  * 像 Claude Code 那样经 daemon 中转站发一条对话，让选中这个模型的接口按上游的回复进入冷却或需要检查。
- * 调用前 Claude Code 的总开关要开着（口令从 gateway-tokens.json 读）。
+ * 调用前 Claude Code 的总开关要开着（口令从 gateway-tokens.json 读）。`stream` 要流式回复（默认整份）。
  */
-export async function sendThroughGateway(model: string): Promise<number> {
+export async function sendThroughGateway(
+  model: string,
+  options: { stream?: boolean } = {},
+): Promise<number> {
   const home = process.env.E2E_PASEO_HOME;
   if (!home) throw new Error("E2E_PASEO_HOME is not set (expected from the Playwright worker).");
   const tokens = JSON.parse(
@@ -594,6 +682,31 @@ export async function sendThroughGateway(model: string): Promise<number> {
         model,
         max_tokens: 16,
         messages: [{ role: "user", content: "hi" }],
+        ...(options.stream ? { stream: true } : {}),
+      }),
+    },
+  );
+  await response.text();
+  return response.status;
+}
+
+/** 像 Codex（API key 接法）那样经中转站问一次 Responses，不流式；返回状态码。 */
+export async function sendCodexThroughGateway(model: string): Promise<number> {
+  const home = process.env.E2E_PASEO_HOME;
+  if (!home) throw new Error("E2E_PASEO_HOME is not set (expected from the Playwright worker).");
+  const tokens = JSON.parse(
+    await readFile(path.join(home, "api-endpoints", "gateway-tokens.json"), "utf8"),
+  ) as { tokens: Record<string, string> };
+  const token = tokens.tokens.codex;
+  if (!token) throw new Error("Codex has no gateway token; turn its switch on first.");
+  const response = await fetch(
+    `http://127.0.0.1:${getE2EDaemonPort()}/api-endpoint-gateway/v1/responses`,
+    {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        model,
+        input: [{ role: "user", content: [{ type: "input_text", text: "hi" }] }],
       }),
     },
   );

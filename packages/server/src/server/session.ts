@@ -3185,8 +3185,12 @@ export class Session {
         return;
       case "usage.report.get.request":
       case "usage.sessions.list.request":
+      case "usage.requests.list.request":
+      case "usage.requests.export.request":
+      case "provider.api_endpoint.recent_problems.request":
       case "usage.pricing.list.request":
       case "usage.pricing.refresh.request":
+      case "usage.exchange_rate.get.request":
       case "usage.agent.get.request":
       case "usage.agent.turns.list.request":
         await this.handleUsageRequest(msg);
@@ -3215,8 +3219,12 @@ export class Session {
         type:
           | "usage.report.get.request"
           | "usage.sessions.list.request"
+          | "usage.requests.list.request"
+          | "usage.requests.export.request"
+          | "provider.api_endpoint.recent_problems.request"
           | "usage.pricing.list.request"
           | "usage.pricing.refresh.request"
+          | "usage.exchange_rate.get.request"
           | "usage.agent.get.request"
           | "usage.agent.turns.list.request";
       }
@@ -3239,12 +3247,28 @@ export class Session {
       await usageStatsSession.handleUsageSessionsListRequest(msg);
       return;
     }
+    if (msg.type === "usage.requests.list.request") {
+      await usageStatsSession.handleUsageRequestsListRequest(msg);
+      return;
+    }
+    if (msg.type === "usage.requests.export.request") {
+      await usageStatsSession.handleUsageRequestsExportRequest(msg);
+      return;
+    }
+    if (msg.type === "provider.api_endpoint.recent_problems.request") {
+      await usageStatsSession.handleRecentProblemsRequest(msg);
+      return;
+    }
     if (msg.type === "usage.pricing.list.request") {
       await usageStatsSession.handleUsagePricingListRequest(msg);
       return;
     }
     if (msg.type === "usage.pricing.refresh.request") {
       await usageStatsSession.handleUsagePricingRefreshRequest(msg);
+      return;
+    }
+    if (msg.type === "usage.exchange_rate.get.request") {
+      await usageStatsSession.handleUsageExchangeRateGetRequest(msg);
       return;
     }
     if (msg.type === "usage.agent.get.request") {

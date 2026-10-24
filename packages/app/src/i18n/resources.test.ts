@@ -72,7 +72,13 @@ function findLineBreakMismatches(resource: unknown): string[] {
 
 // zh-CN 中有意与英文相同的值，只收 docs/i18n.md 列出的保留类别
 const zhCNEnglishAllowlist = {
-  coreTerms: ["workspace.tabs.fallback.agent", "workspace.tabs.toasts.agentIdCopiedLabel"],
+  coreTerms: [
+    "workspace.tabs.fallback.agent",
+    "workspace.tabs.toasts.agentIdCopiedLabel",
+    "usage.requests.filters.agent",
+    "usage.requests.columns.agent",
+    "usage.speed.groupBy.agent",
+  ],
   abbreviations: [
     "desktop.daemon.status.pid",
     "desktop.updates.callout.downloadProgress",

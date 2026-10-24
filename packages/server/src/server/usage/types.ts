@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { UsageCliSchema, type UsageTokenTotals } from "@getpaseo/protocol/usage/types";
+import {
+  UsageCliSchema,
+  type UsageCli,
+  type UsageTokenTotals,
+} from "@getpaseo/protocol/usage/types";
 
 /** UTC bucket width. Fifteen minutes keeps a year of rows in the thousands. */
 export const USAGE_BUCKET_MS = 15 * 60 * 1000;
@@ -24,8 +28,44 @@ export const USAGE_BUCKET_ROW_SCHEMA = z.object({
   reasoning: z.number().int(),
   turns: z.number().int(),
   durationMs: z.number().int(),
+  /**
+   * The API endpoint the gateway ledger says answered. Absent is Official: a
+   * call that went through no endpoint, and every row written before the
+   * ledger existed. Part of the key.
+   */
+  endpointId: z.string().optional(),
+  /**
+   * Requests the agent got an error for (the gateway ledger's failed and
+   * cancelled rows), magpie's `Totals.Errors`: they carry no tokens but still
+   * count, so a group of only failed requests is listed. Absent is none.
+   */
+  errors: z.number().int().optional(),
+  /**
+   * What the group's speed is summed from (usage/speed.ts, magpie's
+   * `Totals.Timed`, `TTFT`, `DecodeN`, `DecodeOut`, `DecodeMs`): of the
+   * answered gateway requests whose first content was timed, how many and
+   * their waits in ms; of those that told a speed, how many, their tokens and
+   * their windows in ms. Kept here, not read off the per-request records, so
+   * a speed outlives their 30 days. Increments like the token columns: the
+   * move to the log's project takes them back from the unknown project.
+   * Absent is none, as on every row written before they were.
+   */
+  ttftCount: z.number().int().optional(),
+  ttftMs: z.number().int().optional(),
+  speedCount: z.number().int().optional(),
+  speedOutput: z.number().int().optional(),
+  speedMs: z.number().int().optional(),
 });
 export type UsageBucketRow = z.infer<typeof USAGE_BUCKET_ROW_SCHEMA>;
+
+/** The bucket columns a speed is summed from. */
+export const SPEED_COLUMNS = [
+  "ttftCount",
+  "ttftMs",
+  "speedCount",
+  "speedOutput",
+  "speedMs",
+] as const satisfies readonly (keyof UsageBucketRow)[];
 
 /**
  * One turn's usage, split by the model that produced it. Like a bucket row it
@@ -50,6 +90,8 @@ export const USAGE_TURN_ROW_SCHEMA = z.object({
   userMessageIds: z.array(z.string()),
   /** Paseo's own turn id, stamped by the parse a finished turn triggered. */
   turnId: z.string().optional(),
+  /** Same as a bucket row's: the endpoint the ledger says answered, absent for Official. */
+  endpointId: z.string().optional(),
 });
 export type UsageTurnRow = z.infer<typeof USAGE_TURN_ROW_SCHEMA>;
 
@@ -65,10 +107,10 @@ export interface UsageTurnRowDraft extends Omit<UsageTurnRow, "turnKey"> {
   attachAt: string | null;
 }
 
-/** The five fields that identify a turn row. */
+/** The fields that identify a turn row. */
 export type UsageTurnKey = Pick<
   UsageTurnRow,
-  "cli" | "backend" | "sessionId" | "turnKey" | "model"
+  "cli" | "backend" | "sessionId" | "turnKey" | "model" | "endpointId"
 >;
 
 /**
@@ -214,16 +256,37 @@ export const USAGE_SCAN_STATE_SCHEMA = z.object({
 });
 export type UsageScanState = z.infer<typeof USAGE_SCAN_STATE_SCHEMA>;
 
-/** The six fields that identify a bucket row. */
+/** The fields that identify a bucket row. */
 export type UsageBucketKey = Pick<
   UsageBucketRow,
-  "cli" | "backend" | "model" | "sessionId" | "cwd" | "bucket"
+  "cli" | "backend" | "model" | "sessionId" | "cwd" | "bucket" | "endpointId"
 >;
+
+/**
+ * What one log line contributed to one reply, keyed by the reply's id, which is
+ * how the gateway ledger finds the same call. `amounts` is the delta the line
+ * added to the bucket row at this key, so the deltas of one reply sum to the
+ * deduplicated reply. Claude, Codex, Pi and OMP emit these: the ledger merges
+ * with them, and the Requests list shows the ones it does not as direct calls.
+ */
+export interface UsageCallDelta {
+  replyId: string;
+  cli: UsageCli;
+  model: string;
+  sessionId: string;
+  cwd: string;
+  bucket: string;
+  at: string;
+  /** The turn the reply ran in; null when its tokens are in the bucket rows alone. */
+  turnKey: string | null;
+  amounts: UsageTokenTotals;
+}
 
 export interface UsageParseResult {
   rows: UsageBucketRow[];
   /** Turn rows a subagent file cannot key yet; the scanner resolves them. */
   turnRows: UsageTurnRowDraft[];
+  calls: UsageCallDelta[];
   state: UsageParserState;
   consumedBytes: number;
   /** Entry timestamps seen in this slice, for the cursor's session span. */
@@ -251,9 +314,15 @@ export function toBucketStart(timestampMs: number): string {
 export const KEY_SEPARATOR = "\u0000";
 
 export function bucketRowKey(row: UsageBucketKey): string {
-  return [row.cli, row.backend ?? "", row.model, row.sessionId, row.cwd, row.bucket].join(
-    KEY_SEPARATOR,
-  );
+  return [
+    row.cli,
+    row.backend ?? "",
+    row.model,
+    row.sessionId,
+    row.cwd,
+    row.bucket,
+    row.endpointId ?? "",
+  ].join(KEY_SEPARATOR);
 }
 
 /** Identifies one model as a report or the price table groups it. */
@@ -267,7 +336,14 @@ export function rowMonth(timestamp: string): string {
 }
 
 export function turnRowKey(row: UsageTurnKey): string {
-  return [row.cli, row.backend ?? "", row.sessionId, row.turnKey, row.model].join(KEY_SEPARATOR);
+  return [
+    row.cli,
+    row.backend ?? "",
+    row.sessionId,
+    row.turnKey,
+    row.model,
+    row.endpointId ?? "",
+  ].join(KEY_SEPARATOR);
 }
 
 /** Identifies the turn a row belongs to, across the models it ran. */
@@ -302,7 +378,26 @@ export function emptyBucketRow(key: UsageBucketKey): UsageBucketRow {
     reasoning: 0,
     turns: 0,
     durationMs: 0,
+    ...(key.endpointId === undefined ? {} : { endpointId: key.endpointId }),
   };
+}
+
+/**
+ * A row whose increments cancelled out: a reply split across lines, or an
+ * Official call the gateway ledger moved to its endpoint. It counts nothing.
+ */
+export function carriesNothing(row: UsageBucketRow): boolean {
+  return (
+    row.input === 0 &&
+    row.cachedInput === 0 &&
+    row.cacheWrite === 0 &&
+    row.output === 0 &&
+    row.reasoning === 0 &&
+    row.turns === 0 &&
+    row.durationMs === 0 &&
+    (row.errors ?? 0) === 0 &&
+    SPEED_COLUMNS.every((column) => (row[column] ?? 0) === 0)
+  );
 }
 
 export function addBucketRow(target: UsageBucketRow, source: UsageBucketRow): void {
@@ -313,6 +408,11 @@ export function addBucketRow(target: UsageBucketRow, source: UsageBucketRow): vo
   target.reasoning += source.reasoning;
   target.turns += source.turns;
   target.durationMs += source.durationMs;
+  if (source.errors !== undefined) target.errors = (target.errors ?? 0) + source.errors;
+  for (const column of SPEED_COLUMNS) {
+    const value = source[column];
+    if (value !== undefined) target[column] = (target[column] ?? 0) + value;
+  }
 }
 
 /** Sum `row` into the map's entry for its key, cloning it on first sight. */
@@ -329,7 +429,7 @@ export function mergeBucketRow(into: Map<string, UsageBucketRow>, row: UsageBuck
 /** What a turn row carries beyond its key, which a draft carries too. */
 export type UsageTurnAmounts = Omit<
   UsageTurnRow,
-  "cli" | "backend" | "sessionId" | "turnKey" | "model"
+  "cli" | "backend" | "sessionId" | "turnKey" | "model" | "endpointId"
 >;
 
 /**
@@ -358,4 +458,15 @@ export function mergeTurnRow(into: Map<string, UsageTurnRow>, row: UsageTurnRow)
     return;
   }
   into.set(key, { ...row, userMessageIds: [...row.userMessageIds] });
+}
+
+/**
+ * What usage shows for an endpoint id: the last name it had, whether it has
+ * been deleted, and its price multiplier (absent is the list price). A deleted
+ * endpoint keeps the multiplier it had when it was deleted.
+ */
+export interface UsageEndpointIdentity {
+  name: string;
+  deleted: boolean;
+  priceMultiplier?: number;
 }

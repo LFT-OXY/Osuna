@@ -23,9 +23,10 @@ import type { AgentError } from "./agent-errors.js";
 import { streamStatus } from "./failure.js";
 import { notApiDetail, notApiReply, saysNothingYet, type NotApiReply } from "./not-api-reply.js";
 import { zhipuRefusal } from "./zhipu-envelope.js";
+import type { ReplyTimes } from "./reply-clock.js";
 import { ReplyTap, type TappedReply } from "./reply-tap.js";
 import { REFUSED_STATUS, errorRefusal, replyRefusal } from "./safety-filter.js";
-import type { Usage } from "./translation/ir.js";
+import type { StopReason, Usage } from "./translation/ir.js";
 
 /*
  * 向一家接口发出请求、等它开口：直通与翻译共用。开口是回复里出现第一段真内容（文字、思考或工具调用），
@@ -103,10 +104,22 @@ export type HandBack = () => Promise<AttemptOutcome>;
  * 不算这家答成功，也不怪它）、上游断流、Agent 先走了。
  */
 export type AnswerEnd =
-  | { kind: "complete"; usage: Usage }
-  | { kind: "refused" }
+  | { kind: "complete"; usage: Usage; reply: DeliveredReply }
+  | { kind: "refused"; reply: DeliveredReply }
+  // 以报错形式交给 Agent 的拒答：没有回复可记，told 是交给 Agent 的说法。
+  | { kind: "refused_as_error"; told: string }
   | { kind: "broken"; message: string }
   | { kind: "gone" };
+
+/**
+ * 交给 Agent 的回复里中转站账本要记的：写给 Agent 的回复编号、用量、上游说的结束原因，以及它的计时
+ * （reply-clock.ts：首个内容与首段文字发给 Agent 的时刻、内容流动的时长、可见推理的起点）。不含任何内容本身。
+ */
+export interface DeliveredReply extends ReplyTimes {
+  id: string;
+  usage: Usage;
+  stop: StopReason | null;
+}
 
 export type AttemptOutcome =
   | { kind: "answered"; finished: Promise<AnswerEnd> }

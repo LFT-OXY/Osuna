@@ -1,4 +1,6 @@
+import { writeFile } from "node:fs/promises";
 import { dialog, ipcMain, BrowserWindow } from "electron";
+import { SaveTextOptionsSchema } from "./save-text-options.js";
 
 interface AskOptions {
   title?: string;
@@ -79,5 +81,20 @@ export function registerDialogHandlers(): void {
 
     if (result.canceled) return null;
     return options?.multiple ? result.filePaths : (result.filePaths[0] ?? null);
+  });
+
+  // 渲染进程在沙箱里写不了文件：选好位置后由主进程写入，取消则回 null。
+  ipcMain.handle("paseo:dialog:saveText", async (event, payload: unknown) => {
+    // 这是第一个写盘的 IPC：先校验，不合格直接拒绝。
+    const options = SaveTextOptionsSchema.parse(payload);
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const result = await dialog.showSaveDialog(win ?? BrowserWindow.getFocusedWindow()!, {
+      title: options.title,
+      defaultPath: options.defaultPath,
+      filters: options.filters,
+    });
+    if (result.canceled || !result.filePath) return null;
+    await writeFile(result.filePath, options.contents, "utf8");
+    return result.filePath;
   });
 }

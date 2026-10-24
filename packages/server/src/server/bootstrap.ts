@@ -285,7 +285,11 @@ function createAgentMcpBaseUrl(listenTarget: ListenTarget | null): string | null
 /** 中转站冷却的失败接口；测试可注入时钟。 */
 function createCooldowns(input: { config: PaseoDaemonConfig; logger: Logger }): EndpointCooldowns {
   const overrides = input.config.apiEndpoints ?? {};
-  return new EndpointCooldowns({ logger: input.logger, now: overrides.cooldownsNow });
+  return new EndpointCooldowns({
+    filePath: path.join(input.config.paseoHome, "api-endpoints", "cooldowns.json"),
+    logger: input.logger,
+    now: overrides.cooldownsNow,
+  });
 }
 
 /** 已下线模型的记录；测试可注入时钟与到期定时器。 */
@@ -823,6 +827,8 @@ export async function createPaseoDaemon(
       sightings: apiEndpointSightings,
       // apiEndpointService 在下面创建；只在 daemon 启动后收到请求时才记。
       noteCliVersion: (headers) => apiEndpointService.noteCliVersion(headers),
+      // usageService 在下面创建；它在读完盘上的记录之前收到的账先排着。
+      ledger: { record: (row) => usageService.recordGatewayCall(row) },
       daemonVersion,
       overrides: config.apiEndpoints,
     }),
@@ -1038,6 +1044,10 @@ export async function createPaseoDaemon(
     retiredModels: apiEndpointRetiredModels,
     sightings: apiEndpointSightings,
     daemonVersion,
+    // 估算成本读时现算：倍率一改，用量页、会话列表与每轮花费都要重读（同改价格表）。
+    onPriceMultipliersChanged: () => {
+      wsServer?.broadcast(wrapSessionMessage({ type: "usage.pricing.updated" }));
+    },
     onActiveEndpointChanged: (provider) => {
       void providerSnapshotManager
         .refreshSettingsSnapshot({ providers: [provider] })
@@ -1547,6 +1557,20 @@ export async function createPaseoDaemon(
     onUsageUpdated: (payload) => {
       wsServer?.broadcast(wrapSessionMessage({ type: "usage.updated", payload }));
     },
+    userAgent: `Osuna/${daemonVersion}`,
+    endpointIdentities: () =>
+      new Map(
+        Object.entries(apiEndpointService.endpointSnapshots()).map(([id, snapshot]) => [
+          id,
+          {
+            name: snapshot.name,
+            deleted: snapshot.deleted === true,
+            ...(snapshot.priceMultiplier === undefined
+              ? {}
+              : { priceMultiplier: snapshot.priceMultiplier }),
+          },
+        ]),
+      ),
   });
   daemonConfigStore.onChange(() => usageService.applyPricingConfig());
   logger.info({ elapsed: elapsed() }, "Loading persisted agent registry");

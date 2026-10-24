@@ -6,6 +6,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
 import { i18n } from "@/i18n/i18next";
 import type { TurnUsageModelRow, TurnUsagePanelModel } from "@/usage-stats/turn-usage";
+import { USD_MONEY } from "@/usage-stats/format";
 import { TURN_USAGE_PANEL_WIDTH, TurnUsagePanel } from "./turn-usage-panel";
 
 // App sources compile against the classic JSX runtime, which expects React on the global.
@@ -114,7 +115,7 @@ function mountPanel(panel: TurnUsagePanelModel, triggerLeft: number): void {
             <Text>· ↑14.3K ↓4.6K · $0.17</Text>
           </Pressable>
         </TooltipTrigger>
-        <TurnUsagePanel panel={panel} durationMs={132_000} />
+        <TurnUsagePanel panel={panel} durationMs={132_000} money={USD_MONEY} units="kmb" />
       </Tooltip>,
     ),
   );

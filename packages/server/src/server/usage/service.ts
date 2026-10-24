@@ -1,8 +1,10 @@
 import { promises as fs, type Dirent } from "node:fs";
+import type { ApiEndpointRecentProblem } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { FileHandle } from "node:fs/promises";
 import path from "node:path";
 import { setImmediate as yieldToEventLoop } from "node:timers/promises";
 import type { Logger } from "pino";
+import type { UsageExchangeRate } from "@getpaseo/protocol/usage/rpc-schemas";
 import type {
   UsageAgentSummary,
   UsageAgentTurn,
@@ -25,8 +27,21 @@ import {
   type UsagePricingRefreshOutcome,
 } from "./pricing/service.js";
 import { UsageProjectResolver } from "./project-attribution.js";
+import { UsageExchangeRates } from "./exchange-rate.js";
 import { buildAgentSummary, buildAgentTurns, type AgentReportInput } from "./agent-report.js";
+import { UsageCallMerge } from "./call-merge.js";
+import type { GatewayLedgerRow } from "./ledger.js";
 import { buildUsageReport, type UsageReportPricing, type UsageReportRequest } from "./report.js";
+import {
+  buildAllUsageRequests,
+  buildUsageRequests,
+  type UsageRequestsQuery,
+  type UsageRequestsRequest,
+  type UsageRequestsResult,
+  type UsageRequestsSource,
+} from "./requests.js";
+import { writeUsageRequestsCsv } from "./requests-csv.js";
+import { buildRecentProblems } from "./recent-problems.js";
 import { buildUsageSessionChains } from "./session-chains.js";
 import {
   buildUsageSessions,
@@ -35,7 +50,13 @@ import {
 } from "./sessions.js";
 import { locateSessionFile } from "./session-files.js";
 import { USAGE_SOURCE_ADAPTERS, sessionCursorKey, type UsageSourceAdapter } from "./sources.js";
-import { UsageStore, type UsageRowSet } from "./store.js";
+import {
+  REQUEST_RETENTION_BYTES,
+  REQUEST_RETENTION_DAYS,
+  UsageStore,
+  emptyRowSet,
+  type UsageRowSet,
+} from "./store.js";
 import { UsageTurnIndex, resolveTurnRows } from "./turn-rows.js";
 import {
   emptyScanState,
@@ -43,6 +64,8 @@ import {
   mergeBucketRow,
   modelRowKey,
   type UsageBucketRow,
+  type UsageEndpointIdentity,
+  type UsageCallDelta,
   type UsageParserState,
   type UsageScanCursor,
   type UsageScanState,
@@ -70,6 +93,8 @@ const FLUSH_EVERY_FILES = 20;
 const FLUSH_EVERY_MS = 500;
 const PROGRESS_INTERVAL_MS = 1000;
 const READ_CHUNK_BYTES = 1024 * 1024;
+/** Per-request records are pruned at most this often, on a write (magpie's saveRoute). */
+const REQUEST_PRUNE_EVERY_MS = 60 * 60 * 1000;
 
 export interface UsageServiceOptions {
   paseoHome: string;
@@ -82,6 +107,10 @@ export interface UsageServiceOptions {
   onPricingUpdated: () => void;
   agents: UsageAgentBridge;
   onUsageUpdated: (event: { cli: UsageCli; sessionId: string; agentId?: string }) => void;
+  /** Each endpoint's last name and whether it was deleted, as the endpoint store keeps them. */
+  endpointIdentities: () => ReadonlyMap<string, UsageEndpointIdentity>;
+  /** Osuna's own identity (`Osuna/<daemon version>`) on the requests the daemon makes itself. */
+  userAgent: string;
 }
 
 /** A file a finished turn asked for, ahead of whatever the scan queued. */
@@ -122,10 +151,18 @@ export class UsageService {
   private readonly now: () => number;
   private readonly pricing: UsagePricingService;
   private readonly getPricingConfig: () => UsagePricingSettings;
+  private readonly exchangeRates: UsageExchangeRates;
 
   private roots: UsageLogRoots = { claude: [], codex: [], pi: [], omp: [] };
   private rows = new Map<string, UsageBucketRow>();
   private readonly turns = new UsageTurnIndex();
+  /** The gateway ledger and the log replies it merges with (ADR 0014). */
+  private readonly merge = new UsageCallMerge();
+  /** Settles once `start` has loaded what is on disk; ledger rows wait for it. */
+  private readonly loaded: Promise<void>;
+  private markLoaded: () => void = () => undefined;
+  /** Ledger rows are merged and written one at a time, in the order they ended. */
+  private ledgerWrites: Promise<void> = Promise.resolve();
   /** Subagent rows whose parent turn had not grown far enough to cover them. */
   private pendingTurnDrafts: UsageTurnRowDraft[] = [];
   private scanState: UsageScanState = emptyScanState();
@@ -136,11 +173,13 @@ export class UsageService {
     startedAt: null,
   };
   private lastError: string | null = null;
+  private lastRequestPruneAt = Number.NEGATIVE_INFINITY;
   private compressedLogged = false;
   private timer: NodeJS.Timeout | null = null;
   private round: Promise<void> | null = null;
   private disposed = false;
   private readonly agents: UsageAgentBridge;
+  private readonly endpointIdentities: () => ReadonlyMap<string, UsageEndpointIdentity>;
   private readonly onUsageUpdated: (event: {
     cli: UsageCli;
     sessionId: string;
@@ -170,6 +209,10 @@ export class UsageService {
     this.getPricingConfig = options.getPricingConfig;
     this.agents = options.agents;
     this.onUsageUpdated = options.onUsageUpdated;
+    this.endpointIdentities = options.endpointIdentities;
+    this.loaded = new Promise((resolve) => {
+      this.markLoaded = resolve;
+    });
     const pricingConfig = options.getPricingConfig();
     this.pricing = new UsagePricingService({
       store: this.store,
@@ -182,6 +225,17 @@ export class UsageService {
       snapshot: options.config?.pricing?.snapshot,
       onUpdated: options.onPricingUpdated,
     });
+    this.exchangeRates = new UsageExchangeRates({
+      filePath: path.join(options.paseoHome, "usage", "exchange-rate.json"),
+      logger: this.logger,
+      now: this.now,
+      userAgent: options.userAgent,
+      autoUpdate: () => options.getPricingConfig().autoUpdate,
+      url: options.config?.exchangeRate?.url,
+      fetch: options.config?.exchangeRate?.fetch,
+      // 汇率换了，人民币显示的成本也换了：沿用价格变了的那条通知，客户端照常重读。
+      onUpdated: options.onPricingUpdated,
+    });
   }
 
   /** Loads what is already on disk, then starts the backfill round in the background. */
@@ -190,7 +244,9 @@ export class UsageService {
     const stored = await this.store.loadRows();
     this.applyRows(stored.buckets);
     this.turns.addAll(stored.turns);
+    this.merge.load(stored.requests);
     this.scanState = await this.store.loadScanState();
+    this.markLoaded();
     await this.pricing.start();
     this.unsubscribeTurns = this.agents.subscribeTurnEnd((event) => {
       void this.onAgentTurnEnded(event);
@@ -206,6 +262,7 @@ export class UsageService {
   async dispose(): Promise<void> {
     this.disposed = true;
     this.pricing.dispose();
+    await this.exchangeRates.dispose();
     this.unsubscribeTurns?.();
     this.unsubscribeTurns = null;
     for (const timer of this.retryTimers) clearTimeout(timer);
@@ -215,22 +272,76 @@ export class UsageService {
       this.timer = null;
     }
     await this.round?.catch(() => undefined);
+    // 正在写的账本行写完再走：不然 daemon 关掉之后它还会在 PASEO_HOME 下建出 usage 目录。
+    // 还在等 start 读盘的行放行，它们看到 disposed 就不写了。
+    this.markLoaded();
+    await this.ledgerWrites;
+  }
+
+  /**
+   * A request the gateway carried, merged with the log reply it answered
+   * whichever of the two arrives first. It waits for `start` to load the
+   * stored records, so a row written while the daemon is starting is not lost.
+   */
+  recordGatewayCall(row: GatewayLedgerRow): void {
+    const write = this.ledgerWrites.then(() => this.mergeGatewayCall(row));
+    this.ledgerWrites = write.catch((error: unknown) => {
+      this.logger.error({ err: error }, "Failed to record a gateway request");
+    });
+  }
+
+  private async mergeGatewayCall(row: GatewayLedgerRow): Promise<void> {
+    await this.loaded;
+    if (this.disposed) return;
+    const merged = this.merge.addLedgerRow(row);
+    this.applyRows(merged.buckets);
+    this.turns.addAll(merged.turns);
+    await this.store.appendRows({
+      buckets: merged.buckets,
+      turns: merged.turns,
+      requests: merged.records,
+    });
+    await this.pruneRequests();
+    // 已读过这次回复时，挪到接口那边的修正由扫描的下一次落盘带上。
+    if (this.merge.hasUnsettled()) this.startRound({ backfill: false, discover: false });
+    // 回填期间不发 usage.updated，与扫描的节奏一致：回填完成时页面整页重读。
+    if (this.backfill.state === "running") return;
+    const sessionId = row.sessionId ?? "";
+    const agentId = sessionId
+      ? await this.agents.findAgentIdForSession(row.agent, sessionId)
+      : null;
+    this.onUsageUpdated({ cli: row.agent, sessionId, ...(agentId ? { agentId } : {}) });
   }
 
   async getReport(request: UsageReportRequest): Promise<UsageReport> {
     const rows = Array.from(this.rows.values());
     const attributions = await this.projects.resolveAll(new Set(rows.map((row) => row.cwd)));
     const chains = buildUsageSessionChains(this.scanState);
+    const endpointIdentities = this.currentEndpointIdentities();
     return buildUsageReport({
       rows,
       request,
       projects: attributions,
-      pricing: this.reportPricing(),
+      endpointIdentities,
+      pricing: this.reportPricing(endpointIdentities),
       canonicalSessionId: (cli, sessionId) => chains.canonical(cli, sessionId),
       backfill: this.backfill,
       error: this.lastError,
       now: this.now(),
     });
+  }
+
+  /**
+   * The endpoint store's names. An id the store doesn't know is in no endpoint
+   * and in no snapshot (deleted before snapshots existed, or the file was lost):
+   * it is deleted, under the newest name the ledger recorded.
+   */
+  private currentEndpointIdentities(): Map<string, UsageEndpointIdentity> {
+    const identities = new Map<string, UsageEndpointIdentity>();
+    for (const [id, name] of this.merge.endpointNames())
+      identities.set(id, { name, deleted: true });
+    for (const [id, identity] of this.endpointIdentities()) identities.set(id, identity);
+    return identities;
   }
 
   /** One row per session and local day, for the page's daily detail table. */
@@ -247,6 +358,39 @@ export class UsageService {
       handleOf: (cli, sessionId) => this.sessionHandle(cli, sessionId),
       owners: await this.agents.listSessionOwners(),
     });
+  }
+
+  /** One page of the Requests list: the ledger rows and the log's replies, merged (ADR 0014). */
+  async listRequests(request: UsageRequestsRequest): Promise<UsageRequestsResult> {
+    return buildUsageRequests({ ...(await this.requestsSource()), request });
+  }
+
+  /** Every request the list's filters keep, all pages, as CSV text with costs in USD. */
+  async exportRequests(request: UsageRequestsQuery): Promise<string> {
+    const rows = buildAllUsageRequests({ ...(await this.requestsSource()), request });
+    return writeUsageRequestsCsv(rows, request.timezone);
+  }
+
+  /** An endpoint's Recent problems: its latest failed, switched-away or cooled-down requests. */
+  listRecentProblems(endpointId: string): ApiEndpointRecentProblem[] {
+    return buildRecentProblems({
+      endpointId,
+      calls: this.merge.listCalls(),
+      endpointIdentities: this.currentEndpointIdentities(),
+    });
+  }
+
+  private async requestsSource(): Promise<UsageRequestsSource> {
+    const calls = this.merge.listCalls();
+    const cwds = new Set<string>();
+    for (const call of calls) if (call.cli) cwds.add(call.cli.cwd);
+    const endpointIdentities = this.currentEndpointIdentities();
+    return {
+      calls,
+      projects: await this.projects.resolveAll(cwds),
+      endpointIdentities,
+      pricing: this.reportPricing(endpointIdentities),
+    };
   }
 
   /**
@@ -305,12 +449,29 @@ export class UsageService {
     };
   }
 
-  private reportPricing(): UsageReportPricing {
+  /** An endpoint's rows cost its multiplier times the list price, read now, so a change reprices history. */
+  private reportPricing(
+    endpointIdentities: ReadonlyMap<
+      string,
+      UsageEndpointIdentity
+    > = this.currentEndpointIdentities(),
+  ): UsageReportPricing {
     return {
-      estimateCost: (totals: UsageTokenTotals, model: string) =>
-        this.pricing.estimateCost(totals, model),
+      estimateCost: (totals: UsageTokenTotals, model: string, endpointId?: string) => {
+        const multiplier =
+          endpointId === undefined ? 1 : (endpointIdentities.get(endpointId)?.priceMultiplier ?? 1);
+        return this.pricing.estimateCost(totals, model, multiplier);
+      },
       isPriced: (model: string) => this.pricing.priceFor(model).priced,
     };
+  }
+
+  /**
+   * The CNY rate known now, never waited for. A day-old one is fetched behind the answer
+   * while the price table auto-updates, and `usage.pricing.updated` tells clients it landed.
+   */
+  getExchangeRate(): UsageExchangeRate {
+    return this.exchangeRates.get();
   }
 
   refreshPricing(): Promise<UsagePricingRefreshOutcome> {
@@ -333,8 +494,11 @@ export class UsageService {
       if (this.round !== round) return;
       this.round = null;
       // A turn that ended while this round was settling would otherwise wait
-      // for the next 60-second tick, which is not what "targeted" means.
-      if (this.targeted.size > 0) this.startRound({ backfill: false, discover: false });
+      // for the next 60-second tick, which is not what "targeted" means. A
+      // ledger row that came in after the last flush has the same claim.
+      if (this.targeted.size > 0 || this.merge.hasUnsettled()) {
+        this.startRound({ backfill: false, discover: false });
+      }
     });
   }
 
@@ -359,19 +523,35 @@ export class UsageService {
       this.onBackfillProgress(this.backfill);
     }
 
-    let pendingRows: UsageRowSet = { buckets: [], turns: [] };
+    let pendingRows: UsageRowSet = emptyRowSet();
     let filesSinceFlush = 0;
     let lastFlushAt = this.now();
     let lastProgressAt = 0;
     let cursorDirty = false;
 
     const flush = async (): Promise<void> => {
+      // 账本行对上了已读的回复：在这一批里挪到接口那边，和回复本身一起落盘（UsageCallMerge.settle）。
+      if (this.merge.hasUnsettled()) {
+        const settled = this.merge.settle();
+        this.applyRows(settled.buckets);
+        this.turns.addAll(settled.turns);
+        pendingRows.buckets.push(...settled.buckets);
+        pendingRows.turns.push(...settled.turns);
+        pendingRows.requests.push(...settled.records);
+        cursorDirty = true;
+      }
       if (!cursorDirty) return;
-      if (pendingRows.buckets.length > 0 || pendingRows.turns.length > 0) {
+      if (
+        pendingRows.buckets.length > 0 ||
+        pendingRows.turns.length > 0 ||
+        pendingRows.requests.length > 0
+      ) {
         // Rows before the cursor: a crash between the two recounts at most one
         // batch, where the other order would lose it for good.
+        const wroteRequests = pendingRows.requests.length > 0;
         await this.store.appendRows(pendingRows);
-        pendingRows = { buckets: [], turns: [] };
+        pendingRows = emptyRowSet();
+        if (wroteRequests) await this.pruneRequests();
       }
       await this.store.saveScanState(this.scanState);
       cursorDirty = false;
@@ -478,11 +658,12 @@ export class UsageService {
       handle = await fs.open(file.filePath, "r");
     } catch (error) {
       // The CLI can delete or roll a transcript between readdir and open.
-      if (isMissingPathError(error)) return { buckets: [], turns: [] };
+      if (isMissingPathError(error)) return emptyRowSet();
       throw error;
     }
 
-    const rows: UsageRowSet = { buckets: [], turns: [] };
+    const rows: UsageRowSet = emptyRowSet();
+    const calls: UsageCallDelta[] = [];
     let state = cursor.parser;
     let position = cursor.offset;
     let firstAt = cursor.firstAt;
@@ -501,6 +682,7 @@ export class UsageService {
             : Buffer.from(buffer.subarray(0, bytesRead));
         const result = file.adapter.parse(chunk, state);
         rows.buckets.push(...result.rows);
+        calls.push(...result.calls);
         // Main-thread files are read first, so a subagent draft usually finds
         // its turn right here; one whose parent turn is still short waits.
         const resolved = resolveTurnRows(result.turnRows, this.turns);
@@ -516,6 +698,10 @@ export class UsageService {
     } finally {
       await handle.close();
     }
+    const merged = this.merge.addCliDeltas(calls);
+    rows.buckets.push(...merged.buckets);
+    rows.turns.push(...merged.turns);
+    rows.requests.push(...merged.records);
 
     this.scanState = {
       ...this.scanState,
@@ -693,7 +879,7 @@ export class UsageService {
   private settleIdleTurns(discovered: DiscoveredFile[]): UsageRowSet {
     const cutoff = this.now() - IDLE_TURN_SETTLE_MS;
     const byKey = new Map(discovered.map((file) => [file.cursorKey, file]));
-    const rows: UsageRowSet = { buckets: [], turns: [] };
+    const rows: UsageRowSet = emptyRowSet();
     for (const [cursorKey, cursor] of Object.entries(this.scanState.cursors)) {
       const file = byKey.get(cursorKey);
       if (!file || file.mtimeMs > cutoff) continue;
@@ -737,6 +923,25 @@ export class UsageService {
     return resolved.rows;
   }
 
+  /**
+   * Per-request records keep 30 days and 200 MB, the oldest day going first;
+   * checked after a write, at most once an hour. Memory forgets the same days,
+   * so the list and the merge end where a restart would load them from.
+   */
+  private async pruneRequests(): Promise<void> {
+    const now = this.now();
+    if (now - this.lastRequestPruneAt <= REQUEST_PRUNE_EVERY_MS) return;
+    this.lastRequestPruneAt = now;
+    const removed = await this.store.pruneRequests({
+      now,
+      days: REQUEST_RETENTION_DAYS,
+      maxBytes: this.config?.requests?.maxBytes ?? REQUEST_RETENTION_BYTES,
+    });
+    if (removed.size === 0) return;
+    this.merge.prune(removed);
+    this.logger.info({ days: Array.from(removed) }, "Pruned per-request usage records");
+  }
+
   private applyRows(rows: UsageBucketRow[]): void {
     for (const row of rows) mergeBucketRow(this.rows, row);
   }
@@ -757,6 +962,7 @@ function takeUnconsumed(
 function appendRowSet(target: UsageRowSet, source: UsageRowSet): void {
   target.buckets.push(...source.buckets);
   target.turns.push(...source.turns);
+  target.requests.push(...source.requests);
 }
 
 /**

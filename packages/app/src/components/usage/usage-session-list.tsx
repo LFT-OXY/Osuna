@@ -8,12 +8,16 @@ import { useUsageSessions } from "@/hooks/use-usage-sessions";
 import type { UsageHostsView } from "@/usage-stats/details";
 import {
   formatGroupedNumber,
+  formatGroupedTokens,
   formatUsageCost,
-  formatUsageTokensCompact,
+  formatUsageTokens,
+  type UsageMoney,
+  type UsageTokenUnits,
 } from "@/usage-stats/format";
 import type { MergedUsageSession } from "@/usage-stats/sessions";
 import { usageSourceColor, usageSourceLabel } from "@/usage-stats/sources";
 import { totalUsageTokens } from "@/usage-stats/totals";
+import { useUsageMoney, useUsageTokenUnits } from "@/usage-stats/use-usage-money";
 import { toErrorMessage } from "@/utils/error-messages";
 import { formatDuration } from "@/utils/time";
 
@@ -31,6 +35,8 @@ export function UsageSessionList({ day, hosts }: UsageSessionListProps) {
     timezone: hosts.timezone,
   });
   const open = useOpenUsageSession();
+  const money = useUsageMoney();
+  const units = useUsageTokenUnits();
 
   if (isPending) {
     return (
@@ -81,6 +87,8 @@ export function UsageSessionList({ day, hosts }: UsageSessionListProps) {
           session={session}
           hostLabel={hosts.isMultiHost ? (hosts.labels.get(session.serverId) ?? null) : null}
           locale={i18n.language}
+          money={money}
+          units={units}
           isOpening={open.pendingKey === session.key}
           onOpen={open.open}
         />
@@ -98,12 +106,16 @@ function UsageSessionRow({
   session,
   hostLabel,
   locale,
+  money,
+  units,
   isOpening,
   onOpen,
 }: {
   session: MergedUsageSession;
   hostLabel: string | null;
   locale: string;
+  money: UsageMoney;
+  units: UsageTokenUnits;
   isOpening: boolean;
   onOpen: (session: MergedUsageSession) => void;
 }) {
@@ -140,20 +152,20 @@ function UsageSessionRow({
         </View>
         <Text style={styles.rowBreakdown}>
           {t("usage.sessionRow.breakdown", {
-            input: formatGroupedNumber(uncachedInput, locale),
-            output: formatGroupedNumber(session.totals.output, locale),
-            cache: formatGroupedNumber(cached, locale),
+            input: formatGroupedTokens({ value: uncachedInput, locale, units }),
+            output: formatGroupedTokens({ value: session.totals.output, locale, units }),
+            cache: formatGroupedTokens({ value: cached, locale, units }),
           })}
         </Text>
       </View>
       <View style={styles.rowStats}>
         <UsageSessionStat
           label={t("usage.columns.tokens")}
-          value={formatUsageTokensCompact(totalUsageTokens(session.totals))}
+          value={formatUsageTokens(totalUsageTokens(session.totals), units)}
         />
         <UsageSessionStat
           label={t("usage.columns.cost")}
-          value={formatUsageCost(session.estimatedCost)}
+          value={formatUsageCost(session.estimatedCost, money)}
         />
         <UsageSessionStat
           label={t("usage.columns.turns")}

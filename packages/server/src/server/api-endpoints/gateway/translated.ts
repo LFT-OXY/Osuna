@@ -83,6 +83,7 @@ import { withTemplateTranslatedRewrites } from "./template-rewrites.js";
 import { servedFormats } from "../templates.js";
 import { refusedAfterOpening } from "./safety-filter.js";
 import { isWholeReply } from "./whole-stream.js";
+import { ReplyClock, UNTIMED } from "./reply-clock.js";
 import {
   ANSWERED_BY_HEADER,
   isEventStream,
@@ -93,6 +94,7 @@ import {
   failedBySelf,
   upstreamUrl,
   type AnswerEnd,
+  type DeliveredReply,
   type AttemptOutcome,
   type FailedAttempt,
   type OpenedUpstream,
@@ -594,7 +596,14 @@ async function streamReply(input: {
     write: (text) => res.write(text),
     request: input.request,
   });
-  const fence = fenceFilter({ request: input.request, emit: (event) => encoder.event(event) });
+  const delivery = new ReplyClock({ upstream: input.to });
+  const fence = fenceFilter({
+    request: input.request,
+    emit: (event) => {
+      delivery.saw(event);
+      encoder.event(event);
+    },
+  });
   const numbers = wholeNumbersFilter({
     requestedModel: input.requestedModel,
     upstreamModel: input.upstreamModel,
@@ -609,16 +618,28 @@ async function streamReply(input: {
   };
   let reply = input.reply;
   while (true) {
-    const tried = await readTry({ ...input, reply, soFar });
+    const tried = await readTry({
+      ...input,
+      reply,
+      soFar,
+      onData: (data) => delivery.sawRaw(data),
+    });
     if (tried.kind === "gone") return tried;
     if (tried.kind === "ended") {
       flush();
       encoder.finish();
       res.end();
       const { stop } = tried.read.finish();
+      const usage = encoder.usage();
+      const delivered: DeliveredReply = {
+        id: encoder.replyId(),
+        usage,
+        stop,
+        ...delivery.times({ reasoning: usage.reasoning }),
+      };
       const refused = refusedAfterOpening({ stop, error: tried.read.error });
-      if (refused) return { kind: "refused" };
-      return { kind: "complete", usage: encoder.usage() };
+      if (refused) return { kind: "refused", reply: delivered };
+      return { kind: "complete", usage: delivered.usage, reply: delivered };
     }
     const resumed = await input.goOn(soFar);
     if (resumed.kind === "gone") return resumed;
@@ -668,6 +689,8 @@ async function readTry(input: {
   request: GatewayRequest;
   reply: UpstreamReply;
   soFar: ReplySoFar;
+  // 上游每个事件的原文（计时看推理是否被封存）。
+  onData: (data: string) => void;
 }): Promise<TryEnd> {
   const { soFar } = input;
   const decoder = protocolOf(input.to).decoder();
@@ -683,7 +706,13 @@ async function readTry(input: {
     ending.add(event);
     calls.event(event);
   };
-  const end = await decodeReply({ res: input.res, reply: input.reply, decoder, emit });
+  const end = await decodeReply({
+    res: input.res,
+    reply: input.reply,
+    decoder,
+    emit,
+    onData: input.onData,
+  });
   if (end.kind === "gone") return end;
   const broken = brokenReason({ end, format: input.to, ending });
   if (broken !== null) return { kind: "broken", reason: broken, release: () => calls.end() };
@@ -737,7 +766,7 @@ async function wholeReply(input: {
     if (refusedAfterThinking) {
       const message = `${endpoint.name}: ${failure.message}`;
       sendRefusal({ res, wire: input.wire, message, headers });
-      return { kind: "refused" };
+      return { kind: "refused_as_error", told: message };
     }
     sendAgentError({
       res,
@@ -748,15 +777,21 @@ async function wholeReply(input: {
     return { kind: "broken", message: failure.message };
   }
   const reply = unfencedReply({ reply: collector.finish(), request: input.request });
-  res
-    .status(200)
-    .set(headers)
-    .json(
-      protocolOf(input.from).render(reply, { model: input.requestedModel, request: input.request }),
-    );
+  const rendered = protocolOf(input.from).render(reply, {
+    model: input.requestedModel,
+    request: input.request,
+  });
+  res.status(200).set(headers).json(rendered);
+  // 整份回复一次交出，不记首字（magpie 对不流式的回复也不记）。
+  const delivered: DeliveredReply = {
+    id: typeof rendered.id === "string" ? rendered.id : "",
+    usage: reply.usage,
+    stop: reply.stop,
+    ...UNTIMED,
+  };
   const refused = refusedAfterOpening({ stop: reply.stop, error: collector.error });
-  if (refused) return { kind: "refused" };
-  return { kind: "complete", usage: reply.usage };
+  if (refused) return { kind: "refused", reply: delivered };
+  return { kind: "complete", usage: reply.usage, reply: delivered };
 }
 
 /** 开口后上游断了的原因：连接中断，或流读完了却没说完；说完了为 null。 */
@@ -802,13 +837,17 @@ async function decodeReply(input: {
   reply: UpstreamReply;
   decoder: StreamDecoder;
   emit: EmitEvent;
+  onData?: (data: string) => void;
 }): Promise<StreamEnd> {
   const { reply, decoder, emit } = input;
   if (reply.kind === "whole") {
     decoder.whole(reply.body, emit);
     return { kind: "ended" };
   }
-  const reader = new SseReader((data) => decoder.decode(data, emit));
+  const reader = new SseReader((data) => {
+    input.onData?.(data);
+    decoder.decode(data, emit);
+  });
   const end = await readStream({ ...reply, res: input.res, onText: (text) => reader.feed(text) });
   if (end.kind !== "ended") return end;
   reader.end();

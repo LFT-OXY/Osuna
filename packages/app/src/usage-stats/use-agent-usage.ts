@@ -6,6 +6,7 @@ import { skipToken, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { useReplicaQuery } from "@/data/query";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
+import { usageExchangeRateQueryBaseKey } from "./use-usage-money";
 
 export type AgentUsageSummaryPayload = UsageAgentGetResponse["payload"];
 export type AgentUsageTurnsPayload = UsageAgentTurnsListResponse["payload"];
@@ -95,6 +96,8 @@ export function useAgentUsageEvents(scope: AgentUsageScope | null): void {
       update: (message) => {
         if (message.type === "usage.pricing.updated") {
           invalidate();
+          // 也可能是汇率取到了：每轮花费的人民币跟着重读。
+          void queryClient.invalidateQueries({ queryKey: usageExchangeRateQueryBaseKey });
           return;
         }
         // A session that backs no agent still broadcasts; only this agent's own

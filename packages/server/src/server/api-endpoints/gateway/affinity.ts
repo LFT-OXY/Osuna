@@ -99,13 +99,20 @@ function conversationItems(request: Record<string, unknown>): unknown[] {
   return Array.isArray(request.input) ? request.input : [];
 }
 
-/** 一段对话的标识：Agent 自己发的会话头；没有就取对话第一条用户消息的摘要，之后每个请求都会重复它。 */
-export function conversationId(headers: IncomingHttpHeaders, body: unknown): string {
+/** Agent 自己发的会话头；没发为 null。 */
+export function sessionHeaderOf(headers: IncomingHttpHeaders): string | null {
   for (const name of SESSION_HEADERS) {
     const value = headers[name];
     const first = (Array.isArray(value) ? value[0] : value)?.trim();
     if (first) return first;
   }
+  return null;
+}
+
+/** 一段对话的标识：Agent 自己发的会话头；没有就取对话第一条用户消息的摘要，之后每个请求都会重复它。 */
+export function conversationId(headers: IncomingHttpHeaders, body: unknown): string {
+  const header = sessionHeaderOf(headers);
+  if (header) return header;
   const request = isRecord(body) ? body : {};
   const items = conversationItems(request);
   const first =

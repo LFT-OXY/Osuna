@@ -213,6 +213,7 @@ const KEY_REQUIRED = {
   followsListWhenNew: false,
   canSetRequestExtras: false,
   canSetBalance: false,
+  canSetPriceMultiplier: false,
   templates: [],
 };
 const KEY_OPTIONAL = {
@@ -224,6 +225,7 @@ const KEY_OPTIONAL = {
   followsListWhenNew: true,
   canSetRequestExtras: true,
   canSetBalance: false,
+  canSetPriceMultiplier: false,
   templates: [],
 };
 // 主机还声明了 apiEndpointBalance：「高级」里有余额设置与「查询余额」。
@@ -2823,6 +2825,85 @@ describe("connection form: cooldown settings", () => {
     older.setQuotaRest("60");
     await older.submit();
     expect(fake.saves[1]).not.toHaveProperty("cooldownSettings");
+  });
+});
+
+// 主机还声明了 gatewayLedger：「高级」里有价格倍率。
+const WITH_MULTIPLIER = { ...KEY_OPTIONAL, canSetPriceMultiplier: true };
+
+describe("connection form: price multiplier", () => {
+  it("opens with none set empty and folded, and a save that leaves it alone leaves it out", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "edit", endpoint: SAVED_ENDPOINT },
+      fake.deps,
+      WITH_MULTIPLIER,
+    );
+    expect(model.getState()).toMatchObject({
+      canSetPriceMultiplier: true,
+      isAdvancedOpen: false,
+      priceMultiplierText: "",
+      priceMultiplierInvalid: false,
+    });
+    await model.submit();
+    expect(fake.saves[0]).not.toHaveProperty("priceMultiplier");
+  });
+
+  it("opens an endpoint with one set unfolded, saves what was typed, a comma as the decimal point, and emptied clears it", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "edit", endpoint: { ...SAVED_ENDPOINT, priceMultiplier: 0 } },
+      fake.deps,
+      WITH_MULTIPLIER,
+    );
+    expect(model.getState()).toMatchObject({ isAdvancedOpen: true, priceMultiplierText: "0" });
+    model.setPriceMultiplier(" 0,85 ");
+    await model.submit();
+    expect(fake.saves[0]?.priceMultiplier).toBe(0.85);
+    model.setPriceMultiplier("");
+    await model.submit();
+    expect(fake.saves[1]?.priceMultiplier).toBeNull();
+  });
+
+  it("says on the spot when it is not 0 to 1000 with at most three decimals, and holds the save", () => {
+    const { deps } = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "edit", endpoint: SAVED_ENDPOINT },
+      deps,
+      WITH_MULTIPLIER,
+    );
+    for (const typed of ["1000.5", "-1", "0.1234", "abc", "1e2"]) {
+      model.setPriceMultiplier(typed);
+      expect(model.getState()).toMatchObject({ priceMultiplierInvalid: true, canSubmit: false });
+    }
+    for (const typed of ["1000", "0", ".5", "0.125"]) {
+      model.setPriceMultiplier(typed);
+      expect(model.getState()).toMatchObject({ priceMultiplierInvalid: false, canSubmit: true });
+    }
+  });
+
+  it("a copy carries the original's multiplier without sending it, and a host without the ledger gets none", async () => {
+    const fake = fakeDeps();
+    const source = { ...SAVED_ENDPOINT, priceMultiplier: 1.5 };
+    const copy = createConnectionFormModel(
+      { mode: "duplicate", source, name: "Relay 2" },
+      fake.deps,
+      WITH_MULTIPLIER,
+    );
+    expect(copy.getState().priceMultiplierText).toBe("1.5");
+    await copy.submit();
+    expect(fake.saves[0]).not.toHaveProperty("priceMultiplier");
+
+    const older = createConnectionFormModel(
+      { mode: "edit", endpoint: source },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    expect(older.getState()).toMatchObject({ canSetPriceMultiplier: false, isAdvancedOpen: false });
+    older.setPriceMultiplier("abc");
+    expect(older.getState().canSubmit).toBe(true);
+    await older.submit();
+    expect(fake.saves[1]).not.toHaveProperty("priceMultiplier");
   });
 });
 

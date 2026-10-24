@@ -13,8 +13,10 @@ export interface UsageConfig {
   roots?: UsageLogRoots;
   /** Overrides the constant and `PASEO_USAGE_SCAN_INTERVAL_MS`. */
   scanIntervalMs?: number;
-  /** Clock for bucket-to-local-day resolution, backfill stamps and idle settling. */
+  /** Clock for bucket-to-local-day resolution, backfill stamps, idle settling and pruning. */
   now?: () => number;
+  /** Overrides the 200 MB the per-request records may take, so a test need not write that much. */
+  requests?: { maxBytes?: number };
   /**
    * Price table wiring, so the usage section stays the single injection point
    * for this feature. `autoUpdate` and `overrides` are the startup values that
@@ -32,6 +34,14 @@ export interface UsageConfig {
      * refreshed for a release.
      */
     snapshot?: PricingTable;
+  };
+  /**
+   * Where the CNY rate comes from. A test points it at a fake rate server on
+   * loopback; the test daemon's default `fetch` refuses, so none reaches out.
+   */
+  exchangeRate?: {
+    url?: string;
+    fetch?: typeof globalThis.fetch;
   };
 }
 

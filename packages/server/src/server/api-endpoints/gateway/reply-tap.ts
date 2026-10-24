@@ -13,6 +13,7 @@ import {
   type Usage,
   type VendorError,
 } from "./translation/ir.js";
+import { ReplyClock, UNTIMED, type ReplyTimes } from "./reply-clock.js";
 import { protocolOf, type StreamDecoder } from "./translation/protocols.js";
 import { SseReader } from "./translation/sse.js";
 
@@ -37,6 +38,11 @@ export interface TappedReply {
     raw: string;
   } | null;
   usage: Usage;
+  // 上游给的回复编号（Anthropic 的 message.id 等）；没给为空。
+  id: string;
+  // 读到第一个内容（文字、思考或工具调用）与第一段文字的时刻；没有为 null。
+  firstContentAt: number | null;
+  firstTextAt: number | null;
 }
 
 // 整份回复最多攒这么多来读（magpie sniff.go 的上限），再大的不读。
@@ -60,8 +66,13 @@ export class ReplyTap {
     ended: false,
     error: null,
     usage: emptyUsage(),
+    id: "",
+    firstContentAt: null,
+    firstTextAt: null,
   };
   private readonly decoder: StreamDecoder;
+  // 只给流式回复计时：整份回复一次交出，不记首字（magpie 同样）。
+  private readonly clock: ReplyClock | null;
   private reading: Reading;
   // 正在解码的那个事件的原文。
   private raw = "";
@@ -69,12 +80,19 @@ export class ReplyTap {
   constructor(input: { format: ApiEndpointRequestFormat; stream: boolean }) {
     this.decoder = protocolOf(input.format).decoder();
     if (input.stream) {
+      const clock = new ReplyClock({ upstream: input.format });
+      this.clock = clock;
       const events = new SseReader((data) => {
         this.raw = data;
-        this.decoder.decode(data, (event) => this.add(event));
+        clock.sawRaw(data);
+        this.decoder.decode(data, (event) => {
+          clock.saw(event);
+          this.add(event);
+        });
       });
       this.reading = { kind: "stream", events, utf8: new StringDecoder("utf8") };
     } else {
+      this.clock = null;
       this.reading = { kind: "whole", chunks: [], bytes: 0 };
     }
   }
@@ -99,7 +117,10 @@ export class ReplyTap {
   end(): TappedReply {
     const { reading } = this;
     this.reading = { kind: "none" };
-    const add = (event: StreamEvent) => this.add(event);
+    const add = (event: StreamEvent) => {
+      this.clock?.saw(event);
+      this.add(event);
+    };
     if (reading.kind === "stream") {
       reading.events.feed(reading.utf8.end());
       reading.events.end();
@@ -112,9 +133,18 @@ export class ReplyTap {
     return this.reply;
   }
 
+  /** 回复的计时（reply-clock.ts）；整份回复没有。notBefore 见 ReplyClock.times。 */
+  times(input: { notBefore?: number | null } = {}): ReplyTimes {
+    if (this.clock === null) return UNTIMED;
+    return this.clock.times({ reasoning: this.reply.usage.reasoning, notBefore: input.notBefore });
+  }
+
   private add(event: StreamEvent): void {
     switch (event.kind) {
       case "start":
+        if (event.id !== "") this.reply.id = event.id;
+        addUsage(this.reply.usage, event.usage);
+        return;
       case "usage":
         addUsage(this.reply.usage, event.usage);
         return;
@@ -149,6 +179,9 @@ export class ReplyTap {
   }
 
   private addContent(content: ReplyContent): void {
+    const now = Date.now();
+    this.reply.firstContentAt ??= now;
+    if (content === "text") this.reply.firstTextAt ??= now;
     if (!this.reply.content.includes(content)) this.reply.content.push(content);
   }
 }

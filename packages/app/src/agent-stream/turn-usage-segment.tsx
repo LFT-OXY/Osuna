@@ -5,11 +5,7 @@ import { StyleSheet } from "react-native-unistyles";
 import { STREAM_METADATA_FONT_SIZE } from "@/components/message";
 import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAgentUsageScope } from "@/usage-stats/agent-scope";
-import {
-  formatSessionCost,
-  formatTokenArrows,
-  formatUsageTokensCompact,
-} from "@/usage-stats/format";
+import { formatSessionCost, formatTokenArrows, formatUsageTokens } from "@/usage-stats/format";
 import {
   buildTurnUsagePanel,
   isTurnUsagePending,
@@ -18,6 +14,7 @@ import {
   type TurnUsageIdentity,
 } from "@/usage-stats/turn-usage";
 import { useAgentUsageTurns, type AgentUsageScope } from "@/usage-stats/use-agent-usage";
+import { useUsageMoney, useUsageTokenUnits } from "@/usage-stats/use-usage-money";
 import { TurnUsagePanel } from "./turn-usage-panel";
 
 /** The one place hover styles a Pressable: the segment tints its own background. */
@@ -48,6 +45,8 @@ function ScopedTurnUsageSegment({
   const { t } = useTranslation();
   const [isTooltipOpen, setIsTooltipOpen] = useState(false);
   const { payload } = useAgentUsageTurns(scope);
+  const money = useUsageMoney();
+  const units = useUsageTokenUnits();
   const turn = useMemo(
     () => (payload ? matchTurnUsage(payload.turns, { turnId, userMessageId }) : null),
     [payload, turnId, userMessageId],
@@ -60,8 +59,8 @@ function ScopedTurnUsageSegment({
   }
 
   const segment = summarizeTurnUsage(turn);
-  const tokenText = formatTokenArrows(segment.input, segment.output);
-  const costText = formatSessionCost(segment.estimatedCost);
+  const tokenText = formatTokenArrows({ input: segment.input, output: segment.output, units });
+  const costText = formatSessionCost(segment.estimatedCost, money);
 
   return (
     <Tooltip
@@ -77,8 +76,8 @@ function ScopedTurnUsageSegment({
           testID="turn-usage-segment"
           accessibilityRole="button"
           accessibilityLabel={t("message.turnUsage.accessibility", {
-            input: formatUsageTokensCompact(segment.input),
-            output: formatUsageTokensCompact(segment.output),
+            input: formatUsageTokens(segment.input, units),
+            output: formatUsageTokens(segment.output, units),
             cost: costText,
           })}
         >
@@ -86,7 +85,12 @@ function ScopedTurnUsageSegment({
           <Text style={segment.priced ? styles.segmentText : styles.unpricedCost}>{costText}</Text>
         </Pressable>
       </TooltipTrigger>
-      <TurnUsagePanel panel={buildTurnUsagePanel(turn)} durationMs={turn.durationMs} />
+      <TurnUsagePanel
+        panel={buildTurnUsagePanel(turn)}
+        durationMs={turn.durationMs}
+        money={money}
+        units={units}
+      />
     </Tooltip>
   );
 }

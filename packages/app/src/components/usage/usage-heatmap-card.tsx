@@ -7,7 +7,8 @@ import { ScrollView } from "@/components/ui/scroll-view";
 import { UsageCard } from "@/components/usage/usage-card";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { isWeb } from "@/constants/platform";
-import { formatGroupedNumber } from "@/usage-stats/format";
+import { formatGroupedTokens } from "@/usage-stats/format";
+import { useUsageTokenUnits } from "@/usage-stats/use-usage-money";
 import {
   buildUsageHeatmap,
   formatUsageMonthLabel,
@@ -60,13 +61,14 @@ export function UsageHeatmapCard({ heatmapDays, today, timezone }: UsageHeatmapC
     () => <Text style={styles.timezone}>{timezoneLabel}</Text>,
     [timezoneLabel],
   );
+  const units = useUsageTokenUnits();
   const describeCell = useCallback(
     (cell: UsageHeatmapCell) =>
       t("usage.heatmap.cell", {
         day: formatUsageDay(cell.day, locale),
-        tokens: formatGroupedNumber(cell.tokens, locale),
+        tokens: formatGroupedTokens({ value: cell.tokens, locale, units }),
       }),
-    [locale, t],
+    [locale, t, units],
   );
   // Every cell carries its own accessible name, and the pointer crossing the
   // grid re-renders the card on each square. Building 182 of them per hover

@@ -185,6 +185,8 @@ async function start(
     claudeDefaultModel?: string;
     // 已下线模型记录用的时钟，测试拿它快进一周。
     retiredModelsNow?: () => number;
+    // 冷却用的时钟，测试拿它快进到冷却结束。
+    cooldownsNow?: () => number;
     // 已下线记录的到期定时器，测试拿它在快进后手动到点。
     retiredModelsTimers?: { schedule: (handler: () => void, ms: number) => () => void };
     // 中转站收的请求体上限，测试用小的，不必真造 64 MB。
@@ -291,6 +293,7 @@ async function start(
         ...(options.keepAliveQuietMs ? { gatewayKeepAliveQuietMs: options.keepAliveQuietMs } : {}),
         ...(options.bodyLimitBytes ? { gatewayBodyLimitBytes: options.bodyLimitBytes } : {}),
         ...(options.retiredModelsNow ? { retiredModelsNow: options.retiredModelsNow } : {}),
+        ...(options.cooldownsNow ? { cooldownsNow: options.cooldownsNow } : {}),
         ...(options.retiredModelsTimers
           ? { retiredModelsTimers: options.retiredModelsTimers }
           : {}),
@@ -3762,7 +3765,12 @@ type StartOptions = NonNullable<Parameters<typeof start>[0]>;
 async function twoRelays(
   options: Pick<
     StartOptions,
-    "headerTimeoutMs" | "keepAliveMs" | "keepAliveQuietMs" | "modelsDev" | "catalogB"
+    | "headerTimeoutMs"
+    | "keepAliveMs"
+    | "keepAliveQuietMs"
+    | "modelsDev"
+    | "catalogB"
+    | "cooldownsNow"
   > = {},
 ) {
   const upstreamA = await startUpstream();
@@ -4085,15 +4093,85 @@ describe("switching to another endpoint when one fails", () => {
     expect(await cooldownOf(client, "ep_a")).toBeNull();
   });
 
-  test("cooldowns live in memory only: a restarted daemon starts with none", async () => {
+  test("a cooldown survives a restart: the restarted gateway still skips the endpoint, and takes it back when the time is up", async () => {
+    let now = Date.parse("2026-10-20T08:00:00Z");
+    const { upstreamA, ask, daemon, restart } = await twoRelays({ cooldownsNow: () => now });
+    upstreamA.respond = (_request, res) => failWith(res, { status: 402, message: "no credit" });
+    await (await ask()).text();
+    expect(await cooldownOf(await connectTo(daemon), "ep_a")).toEqual({
+      state: "cooling_down",
+      reason: "credit",
+      until: "2026-10-20T08:30:00.000Z",
+    });
+
+    const next = await restart();
+    const askNext = () =>
+      fetch(
+        `${next.gateway}/v1/messages`,
+        claudeRequest({
+          model: "kimi-k2",
+          stream: true,
+          max_tokens: 32,
+          messages: [{ role: "user", content: "hi" }],
+        }),
+      );
+    const client = await connectTo(next.daemon);
+    upstreamA.respond = (_request, res) => streamReply(res, { text: "from A" });
+
+    expect(await cooldownOf(client, "ep_a")).toEqual({
+      state: "cooling_down",
+      reason: "credit",
+      until: "2026-10-20T08:30:00.000Z",
+    });
+    const skipped = await askNext();
+    expect(skipped.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    await skipped.text();
+    expect(upstreamA.requests).toHaveLength(1);
+
+    now += 31 * 60_000;
+    expect(await cooldownOf(client, "ep_a")).toBeNull();
+    const back = await askNext();
+    expect(back.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
+    expect(await back.text()).toContain("from A");
+  });
+
+  test("Resume now clears the saved cooldown: a restarted daemon does not cool the endpoint again", async () => {
     const { upstreamA, ask, daemon, restart } = await twoRelays();
     upstreamA.respond = (_request, res) => failWith(res, { status: 402, message: "no credit" });
     await (await ask()).text();
-    expect(await cooldownOf(await connectTo(daemon), "ep_a")).toMatchObject({ reason: "credit" });
+    await (
+      await connectTo(daemon)
+    ).apiEndpointSetEndpointState({
+      endpointId: "ep_a",
+      clearCooldown: true,
+    });
 
     const next = await restart();
 
     expect(await cooldownOf(await connectTo(next.daemon), "ep_a")).toBeNull();
+  });
+
+  test("an unreadable cooldown file counts as no cooldowns, and the daemon starts as usual", async () => {
+    const { upstreamA, ask, endpointsDir, restart } = await twoRelays();
+    upstreamA.respond = (_request, res) => failWith(res, { status: 402, message: "no credit" });
+    await (await ask()).text();
+    await writeFile(path.join(endpointsDir, "cooldowns.json"), "{ not json");
+    upstreamA.respond = (_request, res) => streamReply(res, { text: "from A" });
+
+    const next = await restart();
+
+    expect(await cooldownOf(await connectTo(next.daemon), "ep_a")).toBeNull();
+    const response = await fetch(
+      `${next.gateway}/v1/messages`,
+      claudeRequest({
+        model: "kimi-k2",
+        stream: true,
+        max_tokens: 32,
+        messages: [{ role: "user", content: "hi" }],
+      }),
+    );
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
+    expect(await response.text()).toContain("from A");
   });
 
   test("the log has one line per switch and per cooldown, with the endpoint name and never a key", async () => {
@@ -6119,6 +6197,7 @@ describe("a model its vendor says is retired", () => {
       upstreamB,
       retiredModelsNow: () => now,
       retiredModelsTimers: timers,
+      cooldownsNow: () => now,
     });
     const askKimi = (gateway: string) =>
       fetch(
@@ -6132,7 +6211,7 @@ describe("a model its vendor says is retired", () => {
     await (await askKimi(harness.gateway)).text();
     upstreamA.respond = (_request, res) => streamReply(res, { text: "from A" });
 
-    // 冷却只在内存里，重启后没有了；还绕开 A 的只有已下线记录。
+    // 重启后已下线记录（和这次的冷却）仍绕开 A。
     const next = await harness.restart();
     const restarted = { ...harness, ...next };
     const skipped = await askKimi(next.gateway);

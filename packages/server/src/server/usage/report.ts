@@ -1,8 +1,11 @@
+// 速度卡的分组与排序（先按速度、再按 token）照 magpie（https://github.com/yetone/magpie，internal/gui/assets/app.js 的 ledCategories）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import type {
   UsageAmount,
   UsageBackfill,
   UsageCli,
   UsageDayBreakdown,
+  UsageEndpointBreakdown,
   UsageHeatmapDay,
   UsageModelBreakdown,
   UsageMonthBreakdown,
@@ -11,6 +14,9 @@ import type {
   UsageReportFilters,
   UsageSourceBreakdown,
   UsageSourceRef,
+  UsageSpeed,
+  UsageSpeedGroup,
+  UsageSpeedGroupBy,
   UsageTokenTotals,
   UsageTrend,
   UsageTrendGranularity,
@@ -23,7 +29,17 @@ import {
   type LocalTimeResolver,
 } from "./local-time.js";
 import type { UsageProjectAttribution } from "./project-attribution.js";
-import { addTotals, emptyTotals, modelRowKey, type UsageBucketRow } from "./types.js";
+import { groupOutputSpeed } from "./speed.js";
+import {
+  KEY_SEPARATOR,
+  SPEED_COLUMNS,
+  addTotals,
+  carriesNothing,
+  emptyTotals,
+  modelRowKey,
+  type UsageBucketRow,
+  type UsageEndpointIdentity,
+} from "./types.js";
 
 const HEATMAP_DAYS = 182;
 const PROJECT_LIMIT = 200;
@@ -34,14 +50,16 @@ export interface UsageReportRequest {
   timezone: string;
   filters?: UsageReportFilters;
   trend?: { granularity?: UsageTrendGranularity; stackBy: UsageTrendStackBy };
+  speed?: { groupBy: UsageSpeedGroupBy };
 }
 
 /**
- * What one model costs and whether the table knows it. The report asks per
- * model, not per row, because the answer is memoized behind this port.
+ * What one model costs and whether the table knows it. The price is memoized
+ * per model behind this port; `endpointId` scales it by that endpoint's price
+ * multiplier, and an Official row (no endpoint) is not scaled.
  */
 export interface UsageReportPricing {
-  estimateCost(totals: UsageTokenTotals, model: string): number;
+  estimateCost(totals: UsageTokenTotals, model: string, endpointId?: string): number;
   isPriced(model: string): boolean;
 }
 
@@ -49,6 +67,8 @@ export interface BuildUsageReportInput {
   rows: UsageBucketRow[];
   request: UsageReportRequest;
   projects: Map<string, UsageProjectAttribution>;
+  /** The last name of each endpoint the rows name, and whether it has been deleted. */
+  endpointIdentities: ReadonlyMap<string, UsageEndpointIdentity>;
   pricing: UsageReportPricing;
   /**
    * The id a session is counted under. A Claude resume chain is one session in
@@ -73,10 +93,11 @@ export function buildUsageReport(input: BuildUsageReportInput): UsageReport {
   const today = local.day(input.now);
   const filtered: PricedRow[] = [];
   for (const row of input.rows) {
+    if (carriesNothing(row)) continue;
     if (!matchesUsageFilters(row, request.filters, input.projects)) continue;
     filtered.push({
       ...row,
-      cost: input.pricing.estimateCost(row, row.model),
+      cost: input.pricing.estimateCost(row, row.model, row.endpointId),
       canonicalSessionId: input.canonicalSessionId(row.cli, row.sessionId),
     });
   }
@@ -101,6 +122,16 @@ export function buildUsageReport(input: BuildUsageReportInput): UsageReport {
     months: buildMonths(inRange, local),
     heatmapDays: buildHeatmap(filtered, local, today),
     projects: buildProjects(inRange, input.projects),
+    endpoints: buildEndpoints(inRange, input.endpointIdentities),
+    ...(request.speed
+      ? {
+          speed: buildSpeed({
+            rows: inRange,
+            groupBy: request.speed.groupBy,
+            identities: input.endpointIdentities,
+          }),
+        }
+      : {}),
     backfill: input.backfill,
     error: input.error,
   };
@@ -116,7 +147,8 @@ function buildSummary(
   const sessions = new Set<string>();
   for (const row of inRange) {
     addRow(amount, row);
-    sessions.add(row.canonicalSessionId);
+    // 只在账本里的调用没有会话。
+    if (row.sessionId !== "") sessions.add(row.canonicalSessionId);
   }
   return {
     totals: amount.totals,
@@ -189,18 +221,22 @@ function buildModels(rows: PricedRow[], pricing: UsageReportPricing): UsageModel
     }
     addRow(entry.amount, row);
   }
-  return Array.from(byModel.values())
-    .map(
-      (entry): UsageModelBreakdown => ({
-        model: entry.model,
-        cli: entry.cli,
-        backend: entry.backend,
-        totals: entry.amount.totals,
-        estimatedCost: entry.amount.estimatedCost,
-        priced: pricing.isPriced(entry.model),
-      }),
-    )
-    .sort(byTokensDescending);
+  return (
+    Array.from(byModel.values())
+      .map(
+        (entry): UsageModelBreakdown => ({
+          model: entry.model,
+          cli: entry.cli,
+          backend: entry.backend,
+          totals: entry.amount.totals,
+          estimatedCost: entry.amount.estimatedCost,
+          priced: pricing.isPriced(entry.model),
+        }),
+      )
+      // 同上：调用都被账本挪到接口那边后，只剩轮次的模型不成一行。
+      .filter((entry) => hasTokens(entry.totals))
+      .sort(byTokensDescending)
+  );
 }
 
 function buildTrend(
@@ -279,7 +315,7 @@ function groupByPeriod(
       periods.set(key, bucket);
     }
     addRow(bucket.amount, row);
-    bucket.sessions.add(row.canonicalSessionId);
+    if (row.sessionId !== "") bucket.sessions.add(row.canonicalSessionId);
     bucket.turns += row.turns;
   }
   return Array.from(periods.entries()).sort(([a], [b]) => compareKeys(a, b));
@@ -354,6 +390,7 @@ function buildProjects(
       rootPath: entry.attribution.rootPath,
       displayName: entry.attribution.displayName,
       kind: entry.attribution.kind,
+      unknown: entry.attribution.unknown,
       totals: entry.amount.totals,
       estimatedCost: entry.amount.estimatedCost,
       sources: Array.from(entry.sources.values())
@@ -371,6 +408,126 @@ function buildProjects(
     .slice(0, PROJECT_LIMIT);
 }
 
+/**
+ * One group per endpoint the range ran through, and Official for the calls that
+ * went through none. The turn a call ran in stays counted on the log's own row,
+ * so a group left with turns and no tokens — every call of it moved to an
+ * endpoint — is not one.
+ */
+function buildEndpoints(
+  rows: PricedRow[],
+  identities: ReadonlyMap<string, UsageEndpointIdentity>,
+): UsageEndpointBreakdown[] {
+  const byEndpoint = new Map<string | null, UsageAmount>();
+  for (const row of rows) {
+    const endpointId = row.endpointId ?? null;
+    let amount = byEndpoint.get(endpointId);
+    if (!amount) {
+      amount = emptyAmount();
+      byEndpoint.set(endpointId, amount);
+    }
+    addRow(amount, row);
+  }
+  const grandTotal = Array.from(byEndpoint.values()).reduce(
+    (total, amount) => total + billableTokens(amount.totals),
+    0,
+  );
+  return Array.from(byEndpoint, ([endpointId, amount]) => {
+    const identity = endpointId === null ? null : identities.get(endpointId);
+    return {
+      endpointId,
+      name: endpointId === null ? null : (identity?.name ?? endpointId),
+      deleted: identity?.deleted ?? false,
+      totals: amount.totals,
+      estimatedCost: amount.estimatedCost,
+      share: grandTotal > 0 ? billableTokens(amount.totals) / grandTotal : 0,
+    };
+  })
+    .filter((group) => hasTokens(group.totals))
+    .sort(byTokensDescending);
+}
+
+/**
+ * The Speed card's groups: the bucket rows' speed sums added up by the chosen
+ * grouping, the fastest first and, at the same speed, the one of more tokens
+ * (magpie's ledCategories). A group none of whose requests was timed is not
+ * one: only gateway requests that streamed carry timing.
+ */
+function buildSpeed(input: {
+  rows: PricedRow[];
+  groupBy: UsageSpeedGroupBy;
+  identities: ReadonlyMap<string, UsageEndpointIdentity>;
+}): UsageSpeed {
+  const { rows, groupBy, identities } = input;
+  const groups = new Map<string, UsageSpeedGroup>();
+  for (const row of rows) {
+    const key = speedKeyOf(row, groupBy);
+    let group = groups.get(key);
+    if (!group) {
+      group = emptySpeedGroup({ row, groupBy, identities });
+      groups.set(key, group);
+    }
+    group.tokens += billableTokens(row);
+    for (const column of SPEED_COLUMNS) group[column] += row[column] ?? 0;
+  }
+  return {
+    groupBy,
+    groups: Array.from(groups.values())
+      .filter((group) => group.ttftCount > 0 || group.speedCount > 0)
+      .sort(
+        (a, b) => (groupOutputSpeed(b) ?? 0) - (groupOutputSpeed(a) ?? 0) || b.tokens - a.tokens,
+      ),
+  };
+}
+
+function speedKeyOf(row: UsageBucketRow, groupBy: UsageSpeedGroupBy): string {
+  const endpointId = row.endpointId ?? "";
+  switch (groupBy) {
+    case "endpoint":
+      return endpointId;
+    case "model":
+      return row.model;
+    case "model_endpoint":
+      return `${row.model}${KEY_SEPARATOR}${endpointId}`;
+    case "agent":
+      return row.cli;
+  }
+}
+
+function emptySpeedGroup(input: {
+  row: UsageBucketRow;
+  groupBy: UsageSpeedGroupBy;
+  identities: ReadonlyMap<string, UsageEndpointIdentity>;
+}): UsageSpeedGroup {
+  const { row, groupBy, identities } = input;
+  const byAgent = groupBy === "agent";
+  const byEndpoint = groupBy === "endpoint" || groupBy === "model_endpoint";
+  const byModel = groupBy === "model" || groupBy === "model_endpoint";
+  const cli = byAgent ? row.cli : null;
+  const model = byModel ? row.model : null;
+  const endpoint = byEndpoint ? speedEndpointOf(row.endpointId ?? null, identities) : null;
+  return {
+    cli,
+    model,
+    endpoint,
+    tokens: 0,
+    ttftCount: 0,
+    ttftMs: 0,
+    speedCount: 0,
+    speedOutput: 0,
+    speedMs: 0,
+  };
+}
+
+function speedEndpointOf(
+  endpointId: string | null,
+  identities: ReadonlyMap<string, UsageEndpointIdentity>,
+): NonNullable<UsageSpeedGroup["endpoint"]> {
+  if (endpointId === null) return { endpointId, name: null, deleted: false };
+  const identity = identities.get(endpointId);
+  return { endpointId, name: identity?.name ?? endpointId, deleted: identity?.deleted ?? false };
+}
+
 /** The same source / model / project narrowing the session listing applies. */
 export function matchesUsageFilters(
   row: UsageBucketRow,
@@ -385,6 +542,7 @@ export function matchesUsageFilters(
     return false;
   }
   if (filters.models && !filters.models.includes(row.model)) return false;
+  if (filters.endpoints && !filters.endpoints.includes(row.endpointId ?? null)) return false;
   if (filters.projects) {
     const attribution = attributions.get(row.cwd);
     if (!attribution || !filters.projects.includes(attribution.rootPath)) return false;
@@ -420,6 +578,10 @@ function compareKeys(a: string, b: string): number {
 
 function sourceKey(row: UsageBucketRow): string {
   return row.backend ? `${row.cli}:${row.backend}` : row.cli;
+}
+
+function hasTokens(totals: UsageTokenTotals): boolean {
+  return billableTokens(totals) !== 0 || totals.reasoning !== 0;
 }
 
 function billableTokens(totals: UsageTokenTotals): number {

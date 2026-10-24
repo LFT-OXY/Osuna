@@ -55,6 +55,12 @@ export const UsageReportFiltersSchema = z.object({
   sources: z.array(UsageSourceRefSchema).optional(),
   models: z.array(z.string()).optional(),
   projects: z.array(z.string()).optional(),
+  /**
+   * API endpoint ids the gateway ledger attributed the usage to; `null` is
+   * Official, every call that went through no endpoint. A daemon without
+   * `features.gatewayLedger` ignores it.
+   */
+  endpoints: z.array(z.string().nullable()).optional(),
 });
 export type UsageReportFilters = z.infer<typeof UsageReportFiltersSchema>;
 
@@ -76,6 +82,61 @@ export const UsageSourceBreakdownSchema = z.object({
   share: z.number(),
 });
 export type UsageSourceBreakdown = z.infer<typeof UsageSourceBreakdownSchema>;
+
+/**
+ * One API endpoint's share of the range, or Official (`endpointId: null`, no
+ * name) for the calls that went through none. Endpoint usage comes from the
+ * gateway ledger merged with the CLI logs.
+ */
+export const UsageEndpointBreakdownSchema = z.object({
+  endpointId: z.string().nullable(),
+  name: z.string().nullable(),
+  deleted: z.boolean(),
+  totals: UsageTokenTotalsSchema,
+  estimatedCost: z.number(),
+  share: z.number(),
+});
+export type UsageEndpointBreakdown = z.infer<typeof UsageEndpointBreakdownSchema>;
+
+/** How the Speed card groups the gateway's requests. */
+export const UsageSpeedGroupBySchema = z.enum(["endpoint", "model", "model_endpoint", "agent"]);
+export type UsageSpeedGroupBy = z.infer<typeof UsageSpeedGroupBySchema>;
+
+/** The endpoint a speed group is of; `endpointId: null` is Official. */
+export const UsageSpeedEndpointSchema = z.object({
+  endpointId: z.string().nullable(),
+  name: z.string().nullable(),
+  deleted: z.boolean(),
+});
+export type UsageSpeedEndpoint = z.infer<typeof UsageSpeedEndpointSchema>;
+
+/**
+ * One group's speed, as sums so groups from several hosts add up: of the
+ * answered gateway requests whose first content was timed, how many and their
+ * waits in ms (the mean is `ttftMs / ttftCount`); of those that told a speed,
+ * how many, their output tokens and their windows in ms (the speed is
+ * `speedOutput / speedMs`, weighted by tokens). `cli`, `model` and `endpoint`
+ * are the fields the grouping is by, null for the others. `tokens` is what the
+ * group's calls billed, which orders groups of the same speed.
+ */
+export const UsageSpeedGroupSchema = z.object({
+  cli: UsageCliSchema.nullable(),
+  model: z.string().nullable(),
+  endpoint: UsageSpeedEndpointSchema.nullable(),
+  tokens: z.number().int(),
+  ttftCount: z.number().int(),
+  ttftMs: z.number().int(),
+  speedCount: z.number().int(),
+  speedOutput: z.number().int(),
+  speedMs: z.number().int(),
+});
+export type UsageSpeedGroup = z.infer<typeof UsageSpeedGroupSchema>;
+
+export const UsageSpeedSchema = z.object({
+  groupBy: UsageSpeedGroupBySchema,
+  groups: z.array(UsageSpeedGroupSchema),
+});
+export type UsageSpeed = z.infer<typeof UsageSpeedSchema>;
 
 export const UsageModelBreakdownSchema = z.object({
   model: z.string(),
@@ -139,6 +200,12 @@ export const UsageProjectRefSchema = z.object({
 export type UsageProjectRef = z.infer<typeof UsageProjectRefSchema>;
 
 export const UsageProjectBreakdownSchema = UsageProjectRefSchema.extend({
+  /**
+   * The gateway requests no CLI log names (ADR 0014): no directory and no name.
+   * `rootPath` is "" and `kind` "directory" only because older clients require
+   * both; read this flag, not them.
+   */
+  unknown: z.boolean().optional(),
   totals: UsageTokenTotalsSchema,
   estimatedCost: z.number(),
   /** Which CLIs and backends ran here, largest first; the row wears their marks. */
@@ -156,6 +223,10 @@ export const UsageReportSchema = z.object({
   months: z.array(UsageMonthBreakdownSchema),
   heatmapDays: z.array(UsageHeatmapDaySchema),
   projects: z.array(UsageProjectBreakdownSchema),
+  // 没有中转站账本的 daemon 不给（能力位 gatewayLedger）。
+  endpoints: z.array(UsageEndpointBreakdownSchema).optional(),
+  // 只在请求要了速度时给；没有中转站账本的 daemon 不给（能力位 gatewayLedger）。
+  speed: UsageSpeedSchema.optional(),
   backfill: UsageBackfillSchema,
   error: z.string().nullable(),
 });
@@ -290,3 +361,85 @@ export const UsageAgentSummarySchema = z.object({
   complete: z.boolean(),
 });
 export type UsageAgentSummary = z.infer<typeof UsageAgentSummarySchema>;
+
+/** One try inside a gateway request: which endpoint (`null` is Official), how it ended, and the cooldown it caused. */
+export const UsageRequestAttemptSchema = z.object({
+  endpointId: z.string().nullable(),
+  endpointName: z.string().nullable(),
+  model: z.string(),
+  startedAt: z.string(),
+  durationMs: z.number().int().nonnegative(),
+  result: z.enum(["answered", "failed", "refused"]),
+  failure: z.string().nullable(),
+  reason: z.string().nullable(),
+  cooldownUntil: z.string().nullable(),
+  reasked: z.boolean(),
+});
+export type UsageRequestAttempt = z.infer<typeof UsageRequestAttemptSchema>;
+
+/**
+ * One request in the Requests list. `through: "gateway"` is a request the gateway
+ * carried (its ledger row, merged with the log's reply when there is one);
+ * `"direct"` is a reply only the CLI log has, with no timing and no tries.
+ * `endpointId` null is Official, or, for a request no one answered, the endpoint
+ * it last tried is named instead. `outputSpeed` is tokens a second, null when the
+ * reply tells none.
+ */
+export const UsageRequestRowSchema = z.object({
+  id: z.string(),
+  at: z.string(),
+  cli: UsageCliSchema,
+  model: z.string(),
+  through: z.enum(["gateway", "direct"]),
+  endpointId: z.string().nullable(),
+  endpointName: z.string().nullable(),
+  endpointDeleted: z.boolean(),
+  totals: UsageTokenTotalsSchema,
+  estimatedCost: z.number(),
+  priced: z.boolean(),
+  durationMs: z.number().int().nonnegative().nullable(),
+  ttftMs: z.number().int().nonnegative().nullable(),
+  outputSpeed: z.number().nonnegative().nullable(),
+  status: z.enum(["ok", "failed", "cancelled"]),
+  error: z.string().nullable(),
+  attempts: z.array(UsageRequestAttemptSchema),
+  replyId: z.string().nullable(),
+  sessionId: z.string().nullable(),
+  project: UsageProjectRefSchema.nullable(),
+});
+export type UsageRequestRow = z.infer<typeof UsageRequestRowSchema>;
+
+/**
+ * `failed` is a request the agent got an error for (failed or cancelled);
+ * `switched` one answered after the gateway moved on from another endpoint.
+ */
+export const UsageRequestStatusFilterSchema = z.enum(["all", "failed", "switched"]);
+export type UsageRequestStatusFilter = z.infer<typeof UsageRequestStatusFilterSchema>;
+
+export const UsageRequestThroughFilterSchema = z.enum(["all", "gateway", "direct"]);
+export type UsageRequestThroughFilter = z.infer<typeof UsageRequestThroughFilterSchema>;
+
+/** Every list is "any of"; an absent list keeps all. `endpoints` takes `null` for Official. */
+export const UsageRequestFiltersSchema = z.object({
+  status: UsageRequestStatusFilterSchema.optional(),
+  through: UsageRequestThroughFilterSchema.optional(),
+  clis: z.array(UsageCliSchema).optional(),
+  endpoints: z.array(z.string().nullable()).optional(),
+  models: z.array(z.string()).optional(),
+  search: z.string().optional(),
+});
+export type UsageRequestFilters = z.infer<typeof UsageRequestFiltersSchema>;
+
+/** What the period holds, whatever the filters keep: what the filter menus offer. */
+export const UsageRequestFacetsSchema = z.object({
+  clis: z.array(UsageCliSchema),
+  endpoints: z.array(
+    z.object({
+      endpointId: z.string().nullable(),
+      name: z.string().nullable(),
+      deleted: z.boolean(),
+    }),
+  ),
+  models: z.array(z.string()),
+});
+export type UsageRequestFacets = z.infer<typeof UsageRequestFacetsSchema>;

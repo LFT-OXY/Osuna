@@ -49,6 +49,10 @@ that says what readers do when it is missing.
 
 A save from an old client (the official Paseo app) omits every field it doesn't know, and it must not clear them (endpoint-management-ux ticket 02, prd 47). `buildEndpoint` in `server/api-endpoints/service.ts` starts from the stored endpoint and replaces only the fields the request carried, so a new field survives an old save with no extra code — **if** it is declared in `StoredApiEndpointSchema` (`store.ts`). That schema is a plain `z.object`: an undeclared key is stripped on read, so it is gone before `buildEndpoint` ever sees it. Each new field: optional in the store schema and in the wire schema, then add it to "a save in the old shape keeps the fields that client does not know" in `api-endpoint-host-wide.e2e.test.ts`: written, saved without it, still there. A field the request may resend with a different meaning (like `modelMapping`) goes in the destructure that drops it from `kept`.
 
+### A file several writers update keeps the fields each write doesn't own
+
+`api-endpoints/endpoint-snapshots.json` (id → last name, price multiplier, deleted) is written on every endpoint save and at startup. `recordEndpointSnapshots` (`api-endpoints/store.ts`) spreads the stored entry and overwrites only what it mirrors from the live endpoint (`name`, `priceMultiplier`) and `deleted`; a gone endpoint keeps its entry as stored, which is how a deleted endpoint stays priced at its last multiplier. A field a later writer adds must survive the same way. Cover it with a store test that renames, deletes and clears, and reads the file back (`api-endpoints/store.test.ts`).
+
 ### Removing a field from the agent record
 
 `STORED_AGENT_SCHEMA` (`agent-storage.ts`) is a plain `z.object`, so a key it no longer declares is stripped on read and disappears on the next write. Removing a field needs no migration: drop it from the schema, from `ManagedAgentBase`, from `toStoredAgentRecord`, and from every `registerSession` caller. The daemon E2E for the removal writes the old key into a record file and checks the agent still resumes (`apiEndpointId`, removed in api-endpoint-auto-switch ticket 11; see [RPC and Protocol](./rpc-and-protocol.md#scenario-retiring-a-timeline-notice-the-daemon-used-to-add)).
@@ -105,6 +109,62 @@ The buffer is memory only, so state it in the docs: a restart inside the window
 loses those rows. That is a deliberate trade against persisting a second
 unresolved-row file.
 
+### A statistic that must outlive pruned records lives as sums in bucket rows
+
+Per-request records (`usage/requests/`) are pruned at 30 days / 200 MB, but the
+"All" period still has to show output speed and time to first token. So the
+15-minute bucket rows carry optional sums (`ttftCount`, `ttftMs`, `speedCount`,
+`speedOutput`, `speedMs`), added when the ledger row lands and moved with the
+tokens when it merges (`server/usage/call-merge.ts`); the report divides at read
+time (`server/usage/speed.ts`). Store sums, never averages: sums add across
+buckets, groups and hosts.
+
+Rows written before the columns existed have none, and there is no migration to
+backfill them. A merge must not subtract sums that were never added: gate the
+correction on the source row carrying the field (the `speedOf` check). Say in
+`docs/usage.md` which records the statistic starts from.
+
+### Gotcha: compressing day files where a later record overrides an earlier one
+
+`usage/requests/` keeps one file per UTC day; finished days become
+`YYYY-MM-DD.jsonl.gz`, and lines appended afterwards land in a plain sibling
+that the next prune folds in as a new gzip member (`server/usage/request-files.ts`,
+ported from magpie `history.go`). Two rules that differ from a plain log:
+
+- Read `.gz` first, then the plain sibling, as one day — records are applied in
+  order and a later one wins, so the order is the contract.
+- When folding, skip the plain segment only if the whole segment already sits
+  at the end of the `.gz` (a crash after the rename, before the delete). Don't
+  dedupe line by line as magpie does: a repeated line can be the later, winning
+  version.
+
+Prune counts compressed bytes against the 200 MB cap, and runs on the same
+write queue as appends so nothing is compressed mid-write.
+
+### Gotcha: a correction row must land in the same batch as the rows it corrects
+
+Gateway ledger rows (`usage/requests/YYYY-MM-DD.jsonl`) are written the moment a
+request ends, but the scan's transcript rows only reach disk on `flush` (every 20
+files or 500ms). A correction derived from both — "move these tokens from no
+project to this endpoint" — written eagerly next to the ledger row survives a
+hard kill that the transcript rows it pairs with don't. The rescan then applies
+the correction a second time: official and unknown-project go negative, the
+endpoint counts twice. A graceful-stop restart test never sees this.
+
+The rule, as `UsageCallMerge` (`server/usage/call-merge.ts`) does it:
+
+- The eager write only adds what is true on its own: the ledger row counts under
+  no project.
+- The move happens in `settle()`, which `UsageService` calls inside the scan
+  batch (`service.ts`, before `flush`), so the move, the transcript rows and a
+  `{ kind: "merged" }` record land in one append.
+- On load, a `merged` record marks the call settled; a ledger row without one
+  goes back to the awaiting set and is settled by the next round.
+
+Test it with a unit test that loads state from what was on disk at the kill
+point and re-runs the scan (`call-merge.test.ts`), not only with a daemon
+restart.
+
 ### Wiring a runtime-safe `config.json` field
 
 A field users can change while the daemon runs needs five edits, and missing any one of them fails quietly rather than loudly (`features.usage.pricing.*` is the worked example):
@@ -148,6 +208,29 @@ ticket 04) is the same kind of cache: unreadable means empty, a failed write
 only warns. It holds no key: each entry carries a digest of the settings it was
 read with and is dropped when they no longer match. Contract:
 rpc-and-protocol.md, "the last balance reading".
+
+`usage/exchange-rate.json` (`UsageExchangeRates`, `server/usage/exchange-rate.ts`,
+gateway-ledger-usage ticket 10) caches a value fetched from the network. The RPC
+never waits on that fetch: it answers at once with the cached rate (or the
+documented default 7.2, flagged), and a stale cache kicks one background fetch
+guarded by an in-flight lock, honouring the refetch interval, the failure
+back-off and the auto-update switch. When the new value lands the daemon emits
+`usage.pricing.updated` and clients re-read. `dispose()` awaits the in-flight
+fetch and then stops writing. This is magpie's `fx.Soon`; a request that blocks
+for the 15-second timeout shows the user stale defaults for no reason.
+
+`api-endpoints/cooldowns.json` (`EndpointCooldowns`, gateway-ledger-usage
+ticket 07) is a cache too: losing it costs one more failed request to that
+endpoint, never a wrong state, so no `.bak`. Two rules beyond the list above:
+
+- Persist the outcome, not the counter. Each rest's `until`, class and the
+  redacted upstream text are stored; the consecutive-failure count that drives
+  rate-limit doubling is stripped on save and restored as 0, so backoff starts
+  over after a restart (`failures > 0` gates the doubling in `rateRest`).
+- Derive the TS unions from the Zod enums the file uses (`RestBySchema`,
+  `RestWhySchema` in `gateway/cooldown.ts`). A hand-written parallel union lets a
+  new value compile, then makes the write-side `parse` throw and the next read
+  drop the whole file.
 
 ### State files keep a last good copy (`.bak` / `.bad-<time>`)
 

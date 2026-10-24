@@ -1,8 +1,10 @@
 # Usage
 
 The daemon reads the session logs the local CLIs already write, turns them into
-token counts, and prices them. Nothing is sent anywhere; the one exception is
-the price table, below.
+token counts, and prices them. Requests that went through the **Gateway** are
+also in its own ledger, which says which API endpoint answered; the two are
+merged so a call counts once ([The gateway ledger](#the-gateway-ledger)).
+Nothing is sent anywhere; the one exception is the price table, below.
 
 Subscription limits are a different thing, **Plan usage**. Its data comes from
 [usage sources](plugins.md#usage-sources). Read
@@ -50,6 +52,203 @@ the session that spawned it, and recent days are what people look at.
 
 [data-model.md](data-model.md#7-usage) holds the row formats, the cursor fields,
 and what a rewritten file costs.
+
+## The gateway ledger
+
+The gateway writes one row per Claude Code or Codex request it carried, when the
+request ends ([ADR 0014](adr/0014-gateway-ledger-merges-with-cli-logs.md)): the
+endpoint and model that answered, the six token columns, the duration, the time
+to first content, the stop reason, every try with its outcome, and the id of the
+reply the CLI got back. No prompt, reply text, tool arguments or body is
+written. On the translated path the id is the one the gateway wrote back to the
+CLI, so it is the one the CLI logs. Writing the row changes no byte sent to the
+endpoint or to the CLI.
+
+Codex's ChatGPT models, which the gateway relays to ChatGPT when Codex signs in
+with ChatGPT, get a row too, under **Official** and never at an endpoint's
+multiplier, with the ask to ChatGPT as its one try. Only `/responses` is
+recorded, as in magpie; compaction and search are not. A ChatGPT reply that
+breaks off after it began, or that Codex leaves, is booked as far as it came,
+not as a failure; Codex leaving before ChatGPT answers is booked as ChatGPT not
+reached (`context canceled`), not as cancelled. Both are what magpie's
+`codexUpstreamOn` does.
+
+A request no one answered is a row of 0 tokens: every endpoint failed, or the
+agent went away first. The first is `failed`, the second `cancelled` with a
+`canceled` try, magpie's words. When every endpoint was resting and the gateway
+handed back the stored error without asking, the resting endpoint it named is
+the request's one try, 0 ms long, with its cooldown, as magpie keeps a try for
+it. Each try keeps its endpoint, result, failure class, the vendor's words (key
+masked, cut to 200 characters) and the cooldown it caused, so a failure, a
+refusal (result `refused`) and a re-ask without a refused field (`reasked`)
+read apart. The row's `error` is the text the agent was sent. These rows add no
+tokens, but count as an error under the unknown project at the endpoint last
+tried, as magpie counts failed calls in its groups, so the unknown project is
+listed even when every request in the period failed.
+
+The ledger and the CLI log meet on that id (Claude `message.id`, the
+`response_id` of Codex's `token_usage_record`; a rollout old enough to have only
+`token_count` names none, so its calls stay Official):
+
+- **Both have the call**: one row. Tokens and endpoint come from the ledger;
+  project, session and turn from the log, since the gateway cannot tell which
+  project or Osuna session a request belongs to. Claude Code's split lines of
+  one reply are deduplicated first, as before, and the merge pairs the
+  deduplicated reply.
+- **Only the ledger**: counted under no project and no session, at the time the
+  request started. The project split shows these as the unknown project.
+- **Only the log**: a direct call, counted as **Official**. Every call from
+  before the ledger existed is in this group too, including ones that went
+  through the gateway: there is no way back to which endpoint answered them.
+
+The merge is the same whichever side reaches disk first and whether the daemon
+restarts in between, a hard kill included. Rows are increments, so nothing is
+rewritten: a ledger row lands at once under no project, and the move to the
+log's project and the endpoint (Official gives back what the log counted, the
+unknown project what the ledger counted there) is written only in the scan
+batch that also writes the log's reply, with a `merged` record marking it done.
+A batch the kill threw away was never moved, so the next scan moves it; a moved
+one is marked and is not moved twice. Log lines that correct a reply after the
+move are taken back from Official as they come. The turn a call ran in stays
+counted on the log's row, which is why an Official group can be left holding
+turns and no tokens; the report leaves such a group and model out. A reply of
+any age merges, as magpie merges over the whole period it reads.
+
+Pi and OMP follow the same rule once they go through the gateway: a log entry
+matched by its reply id merges as above; one that matches no ledger row and
+whose provider is the gateway Osuna writes into their config is skipped, and
+only the ledger counts it, as magpie's `calls_pi.go` does.
+
+### Two layers: summaries and per-request records
+
+Usage is kept twice. The 15-minute bucket and turn rows are the summaries: every
+total, split, cost and speed on the page reads them, and they are kept forever. The
+per-request records under `usage/requests/` are the ledger rows, the CLI log
+replies (Claude Code, Codex, Pi and OMP; Pi and OMP name a reply by session and
+entry id) and the `merged` markers. They back the Requests tab and an endpoint's
+Recent problems, and they are what
+a restart reloads to carry on merging.
+
+The records keep 30 days and 200 MB, as magpie keeps its routing history. After
+a write, at most once an hour, the daemon gzips every day that is over, then
+deletes the days older than 30 days (today counts as one) and the oldest days
+until the rest fit 200 MB, counted compressed; a day goes whole and today always
+stays. A late record for a gzipped day (a log line correcting an old reply) goes
+to that day's plain file again and joins the `.gz` as a gzip member of its own
+at the next prune; until then the two read as one day. Memory forgets the same days, so the list
+and the merge end where a restart would load them. A `merged` marker sits in the
+file of its ledger row (both stamped with the request's start), so the two go
+together and a pruned day never moves a call twice. What pruning gives up: a log
+line that corrects a reply after its ledger row is gone counts at Official, and
+so does a reply first scanned after its ledger row was pruned. Summaries never
+change.
+
+### The Requests tab
+
+`usage.requests.list` lists the records newest first, a page of 100 at a time
+(magpie's request page), with the total the filters keep and the choices the
+period offers whatever the filters keep. A call both sides have is one row with
+the log's model, session and project and the ledger's tokens, timing and tries;
+a reply only the log has is a direct row at Official with no timing and no
+tries. Status follows magpie: failed is a request the agent got an error for
+(failed or cancelled), named after its last try's failure class; switched is one
+answered after more than one try. A request no one answered is listed at the
+endpoint it last tried. The search looks in the model, the endpoint names, the
+session, the project, the error and the tries' reasons, ignoring case. A row's
+output speed is the one the Speed card sums ([Speed](#speed)). The client asks each counted host
+for its newest `offset + limit` rows and merges them, so a page across hosts is
+exact.
+
+Export CSV (`usage.requests.export`) writes every row the filters keep, all
+pages, in magpie's CSV shape: snake_case headers, RFC 3339 times with the
+client's offset, the cost in USD with six decimals whatever currency the page
+shows (empty for an unpriced model), and Go's `encoding/csv` quoting. Headers
+and values are fixed English whatever the UI language, as in magpie (the
+endpoint column says `Official` for a direct row). The file has the list's
+columns plus reasoning tokens, the failure class and message, the tries, the
+reply id and the session; a direct row leaves timing and tries empty.
+
+Across hosts the client merges the files of the hosts that answer, newest
+first. A host that is offline or answers with an error is left out, and a note
+beside the button names each one and why until it is dismissed or the next
+export starts; only when no host answers is nothing saved. Desktop saves through
+a save dialog (the main process parses the IPC payload before writing), the
+browser downloads, and native hands the file to the share sheet.
+
+### Speed
+
+The Speed card follows magpie's `DecodeOf` (`usage/speed.ts`); the gateway times
+each streamed reply as it goes to the CLI (`gateway/reply-clock.ts`, magpie's
+`ttft.go`). Only gateway requests that streamed have timing; a direct call, a
+reply not streamed and a request no one answered have none.
+
+- **Time to first token** is from the gateway taking the request to the first
+  content (text, reasoning or a tool call) sent to the CLI, failed tries
+  before it included. A group's is the mean over its answered, timed requests,
+  each counted even when it tells no speed.
+- **Output speed** is output tokens over the time from the first content to the
+  end. A reply that reasoned counts only its answer (output less reasoning) from
+  its first text. One with no text counts all its output from where its
+  reasoning began, but only when that reasoning came first, streamed visibly for
+  100 ms or more, and from a Chat or Anthropic upstream.
+- A reply tells no speed when its window is under 100 ms, it would be over
+  10,000 tokens a second, its content came in under a quarter of its window
+  (held and let go at once: the flow, the time the middle 80% of its content
+  bytes took scaled to the whole, times 4 is under the window), its answer came
+  over 20 times faster than its reasoning, or its reasoning was sealed
+  (Anthropic `redacted_thinking`, Responses `encrypted_content`, or any
+  Responses reasoning, which is only a summary) and it has no text.
+- A group's speed is its counted tokens over its counted windows, so a long
+  reply weighs more than a short one. There is no minimum sample; each row says
+  how many replies its speed is of. Groups are by endpoint, model, model and
+  endpoint, or agent; the fastest first, then the one of more tokens.
+
+The sums sit in the bucket rows (`ttftCount`, `ttftMs`, `speedCount`,
+`speedOutput`, `speedMs`), added when the ledger row lands and moved with its
+tokens when the log's reply is merged, so a speed outlives the 30 days of
+per-request records and follows the period and filters like every other
+figure. Ledger rows written before the gateway kept a reply's flow add none.
+Across hosts the client adds the sums up, endpoints by name as on the endpoint
+cards.
+
+### An endpoint's Recent problems
+
+`provider.api_endpoint.recent_problems` reads the same records: the endpoint's 20
+latest requests in which one of its tries did not answer (it failed, refused, or
+was turned away without asking because every endpoint was cooling down), or
+that ended failed on it, newest first. That is magpie's moved and bad routes,
+narrowed to one endpoint; magpie shows them on its Routing page, Osuna on the
+endpoint page. Two things do not count, as in magpie's per-account tally
+(`renderActs` in `internal/gui/assets/plugins/routing/client.js`): a try the
+agent cancelled, which is the agent's doing, and an endpoint passed over while
+it cooled down and another answered, which leaves no try in the ledger and
+which magpie only notes as found resting. Each row takes the endpoint's last
+try that did not answer: the model the CLI asked for and the one the endpoint
+was asked, the failure class, the vendor's words and the cooldown, plus the
+endpoint tried next, if any. The section follows the records' retention and
+survives a restart. It is served by the usage service, so a daemon without
+usage tracking answers with an error.
+
+### Endpoint cards
+
+Usage counts an endpoint by its id, so a rename shows the new name over all of
+its calls and a duplicate is a card of its own. The name comes from
+`endpoint-snapshots.json` ([data-model.md](data-model.md#9-api-endpoints)), which
+also keeps a deleted endpoint's last name: its usage stays, marked "(deleted)",
+and no balance is read for it. An id the ledger names that is in neither
+`endpoints.json` nor the snapshots (deleted before snapshots existed, or the file
+was lost) is deleted too, under the name its last ledger row recorded.
+
+Across hosts the client puts endpoints of one name on one card and adds Official
+up, since the same relay set up on two machines has two ids; the card is deleted
+only when it is deleted on every host. On one host an endpoint is its id: a host
+joins the card with its live endpoint of that name (or its only one, when all are
+deleted), and any other of that name there is a card of its own. When some host
+has two or more live endpoints of one name, no endpoint of that name is merged
+across hosts, since nothing says which of the two the other host's stands for.
+Picking a host splits
+them again. The balance line is the first host's reading that has something to
+show.
 
 ## What each log makes hard
 
@@ -128,8 +327,8 @@ request it makes on its own is the daily model list refresh of each API
 endpoint that is on, which carries that endpoint's key. Its other requests are
 something you asked for, such as the CLI update check or an endpoint's tests;
 follow from a page you have open, such as the vendor status pages read while the
-API endpoints or usage page is open, or an endpoint's balance; or follow from a switch you turned on: the
-API endpoint checks and the gateway's calls to endpoints, all below. Traffic the CLIs send
+API endpoints or usage page is open, or an endpoint's balance; or follow from a choice or switch you turned on: the
+CNY currency, the API endpoint checks and the gateway's calls to endpoints, all below. Traffic the CLIs send
 through the gateway is theirs, not the daemon's.
 
 | File                                           | Fetched when                                      | Used for                                                                                                                                                                                                                                                                                                                        |
@@ -154,8 +353,8 @@ Turn both off with `features.usage.pricing.autoUpdate: false` in `config.json`,
 or `PASEO_USAGE_PRICING_AUTO_UPDATE=0` at launch. Off means the daemon prices
 from the built-in snapshot and your own prices, tells Claude Code and Codex what
 an endpoint's own model list says and what a models.dev copy fetched earlier
-says, reads no vendor status page, refreshes no endpoint's model list on its
-own, and fetches neither file — including on a host that has no network at all. The switch covers the automatic check only:
+says, reads no vendor status page, fetches no exchange rate, refreshes no
+endpoint's model list on its own, and fetches neither file — including on a host that has no network at all. The switch covers the automatic check only:
 "Refresh now" in the price table still fetches the price table when you press
 it.
 
@@ -169,6 +368,24 @@ open page asks every 5 minutes, and the daemon reads each summary at most once i
 minutes, waiting up to 4 seconds on the first look. A read times out after 15
 seconds; a failure is logged at `info` and shows nothing. DeepSeek's page is
 only linked, never read.
+
+The exchange rate is fetched only while a client has chosen CNY in the usage
+page's options, and only while the price table's auto-update is on. The client
+asks its host with `usage.exchange_rate.get`, and the daemon answers at once
+with the rate in `$PASEO_HOME/usage/exchange-rate.json` (7.2 when there is
+none), so the page never waits on the network (magpie's `fx.Soon`). When that
+rate is a day old, the daemon sends one GET behind the answer to
+`https://open.er-api.com/v6/latest/USD` with Osuna's user agent and nothing
+else: no authentication, no query string, no body. It keeps `rates.CNY` and
+when it got it, and sends `usage.pricing.updated` so open pages ask again. A
+request times out after 15 seconds; a failure is logged at `info`, the last
+rate stays, and nothing is tried again for 10 minutes. A daemon that never got a rate answers 7.2 and
+says so, and the page reads "No exchange rate yet; using 7.2 for now". With USD
+chosen, or auto-update off, nothing is sent; with auto-update off the page
+converts with the rate already on disk, or 7.2. Costs stay in USD everywhere
+they are stored or exported: the price table and the CSV export are never
+converted, and neither is an endpoint's balance, which is in its vendor's own
+currency.
 
 The CLI update check runs only when you ask for it. Opening Settings →
 Providers, or pressing refresh on a provider there, makes the daemon look up the
@@ -356,10 +573,10 @@ replace that user agent. When both are sent depends on the "Auto-refresh balance
 and plan usage" switch at the bottom of the API endpoints page (on by default,
 for the whole host):
 
-| Switch | The API endpoints page (endpoints that are on)    | An endpoint's page (on or off)                    |
-| ------ | ------------------------------------------------- | ------------------------------------------------- |
-| On     | When you open it, then every minute it stays open | When you open it, then every minute it stays open |
-| Off    | When you open it                                  | When you open it                                  |
+| Switch | The API endpoints page (endpoints that are on)    | An endpoint's page (on or off)                    | The Usage page (endpoint cards not deleted)       |
+| ------ | ------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------- |
+| On     | When you open it, then every minute it stays open | When you open it, then every minute it stays open | When you open it, then every minute it stays open |
+| Off    | When you open it                                  | When you open it                                  | When you open it                                  |
 
 Bringing the app back to the front counts as opening the page, and a page you
 can't see sends nothing. Refresh in the "Balance and plan usage" section always
@@ -446,3 +663,23 @@ steps with a gateway prefix removed. A model that survives all of that unmatched
 costs zero and is reported as unpriced. The price table lists those models at
 the top of its "Custom prices" group, marked "No price data", with inputs open
 for the four columns; saving writes the override and the row stays in that group.
+
+### An endpoint's price multiplier
+
+A relay that bills a share of the public price gets a **Price multiplier** in
+its edit window, under Advanced: 0 to 1000, at most three decimals, empty for
+the list price, 0 for free. The price of a row is found in this order, as
+magpie's `priceOf` does:
+
+1. A custom price for the model, as entered. It is not multiplied.
+2. The table price, through the lookup above, times the multiplier of the
+   endpoint the row went through.
+3. An Official row is the table price as it is.
+
+Cost is still computed on read, so a new multiplier reprices that endpoint's
+whole history, and the daemon sends `usage.pricing.updated` so open pages
+re-read. A deleted endpoint stays at the multiplier it had when it was deleted,
+read from `endpoint-snapshots.json`. The Usage page, the session list and turn
+usage price the same way; a turn that went partly through an endpoint is priced
+row by row. Two places differ from magpie on purpose: magpie reads 0 as "no
+multiplier", and prices an endpoint it no longer knows at the list price.

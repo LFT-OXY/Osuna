@@ -32,7 +32,7 @@ import {
 } from "../disabled-models.js";
 import { isRecord, parseJson } from "../upstream-http.js";
 import { sendAgentError, sendRefusal, type AgentWire } from "./agent-errors.js";
-import { ConversationSticks, conversationId, turnOf } from "./affinity.js";
+import { ConversationSticks, conversationId, sessionHeaderOf, turnOf } from "./affinity.js";
 import { extraBodySession } from "../request-extras.js";
 import { judgeCaller } from "./callers.js";
 import { CliHeaderSamples, isFromClaudeCode, isFromCodex } from "../cli-header-samples.js";
@@ -107,10 +107,14 @@ import { decodeAgentBody, readAgentBody, readRawBody } from "./request-body.js";
 import { joinToolRuns, orphanedToolOutputs, pairToolItems } from "./translation/responses.js";
 import {
   ANSWERED_BY_HEADER,
+  type AnswerEnd,
   type AttemptOutcome,
   type FailedAttempt,
   type HandBack,
 } from "./upstream-call.js";
+import type { GatewayLedger } from "../../usage/ledger.js";
+import { LedgerCall, type LedgerAttemptEnd } from "./ledger-call.js";
+import { ChatGptLedgerWatch } from "./chatgpt-ledger.js";
 import {
   asksAnthropicWebSearch,
   asksWebSearch,
@@ -194,6 +198,8 @@ export function createApiEndpointGateway(options: {
   sightings: GatewaySightings;
   // 记下经中转站来过的 Codex 的版本（magpie codexSeen），没有 Codex 样本时「按 Codex 的样子测」用。
   noteCliVersion: (headers: IncomingHttpHeaders) => void;
+  // 中转站账本：每个 CLI 请求结束时记一行，用量服务把它与 CLI 会话记录合并（ADR 0014）。
+  ledger: GatewayLedger;
   overrides?: ApiEndpointGatewayOverrides;
 }): RequestHandler {
   const logger = options.logger.child({ module: "api-endpoint-gateway" });
@@ -213,6 +219,7 @@ export function createApiEndpointGateway(options: {
     bodyLimitBytes: options.overrides?.gatewayBodyLimitBytes ?? MAX_REQUEST_BODY_BYTES,
     ownUserAgent: `Osuna/${options.daemonVersion}`,
     cliSamples: new CliHeaderSamples({ store, logger }),
+    ledger: options.ledger,
   };
   const chatgpt: ChatGptBackend = {
     bases: {
@@ -343,6 +350,7 @@ async function serveChatGptBackend(input: {
   failover: Failover;
 }): Promise<void> {
   const { req, res, rest, chatgpt, logger } = input;
+  const since = Date.now();
   if (req.method === "GET" && rest === "/models") {
     await answerChatGptModels({ req, res, ...chatgpt, waitMs: chatgpt.modelsWaitMs, logger });
     return;
@@ -388,7 +396,11 @@ async function serveChatGptBackend(input: {
       return;
     }
     const isShaped = text !== sentText;
-    relayChatGpt({ ...input, sent: chatgptBodyFor({ rest, raw: raw.body, text, isShaped }) });
+    relayChatGpt({
+      ...input,
+      sent: chatgptBodyFor({ rest, raw: raw.body, text, isShaped }),
+      watch: chatgptWatch({ ...input, since, model, text }),
+    });
     return;
   }
   if (rest === "/responses" && hasSealedAgentTask(parseJson(text))) {
@@ -472,12 +484,37 @@ function chatgptBodyFor(input: {
   return { kind: "raw", body: input.raw };
 }
 
+/**
+ * ChatGPT 自带模型的对话（/responses）记进账本，接口记为官方（magpie 同样只记这一条路径）；压缩与搜索不记。
+ */
+function chatgptWatch(input: {
+  req: Request;
+  rest: string;
+  failover: Failover;
+  since: number;
+  model: string;
+  text: string;
+}): ChatGptLedgerWatch | undefined {
+  if (input.rest !== "/responses") return undefined;
+  const parsed = parseJson(input.text);
+  const call = new LedgerCall({
+    ledger: input.failover.ledger,
+    agent: "codex",
+    sessionId: sessionHeaderOf(input.req.headers),
+    model: input.model,
+    since: input.since,
+  });
+  const streams = isRecord(parsed) && parsed.stream === true;
+  return new ChatGptLedgerWatch({ call, model: input.model, since: input.since, streams });
+}
+
 function relayChatGpt(input: {
   req: Request;
   res: Response;
   chatgpt: ChatGptBackend;
   logger: pino.Logger;
   sent: ChatGptBody;
+  watch?: ChatGptLedgerWatch;
 }): void {
   const { req, chatgpt, logger, sent } = input;
   logger.debug({ agent: "codex", method: req.method, path: req.path }, "Relaying to ChatGPT");
@@ -495,6 +532,7 @@ function relayChatGpt(input: {
     body: sent?.body,
     headers,
     listTag: () => chatgpt.listing().tag,
+    watch: input.watch,
   });
 }
 
@@ -610,6 +648,7 @@ interface Failover {
   ownUserAgent: string;
   // 「按 Claude Code / Codex 的样子测」用的 CLI 请求头样本（ADR 0013）。
   cliSamples: CliHeaderSamples;
+  ledger: GatewayLedger;
 }
 
 /** 读出 Agent 的请求体与模型名，按模型名找到候选；读不了或找不到时已按 Agent 协议回了错误，返回 null。 */
@@ -1050,6 +1089,13 @@ async function handleAgentRequest(input: {
     return;
   }
 
+  const call = new LedgerCall({
+    ledger: input.failover.ledger,
+    agent: input.agent,
+    sessionId: sessionHeaderOf(input.forwardedHeaders ?? req.headers),
+    model,
+    since,
+  });
   const conversation = `${input.agent}|${model}|${conversationId(req.headers, parsed)}`;
   const planned = planAttempts({
     passable,
@@ -1058,7 +1104,10 @@ async function handleAgentRequest(input: {
     within: turnOf(wire, parsed).within,
   });
   if (planned.kind === "rest") {
-    sendRest({ res, wire, ...planned });
+    // 没问任何一家：交出冷却里记着的那次错误，账本记这家的冷却与交出的说法。
+    const told = sendRest({ res, wire, ...planned });
+    call.heldBack({ candidate: planned.candidate, rest: planned.rest, told });
+    call.finish();
     return;
   }
   const { modelFacts } = input.failover;
@@ -1099,9 +1148,11 @@ async function handleAgentRequest(input: {
       tokens,
       windowOf,
       keepAlive,
+      call,
     });
   } finally {
     keepAlive.stop();
+    call.finish();
   }
 }
 
@@ -1302,8 +1353,9 @@ async function askInTurn(input: {
   windowOf: WindowOf;
   keepAlive: AgentKeepAlive;
   forwardedHeaders?: IncomingHttpHeaders;
+  call: LedgerCall;
 }): Promise<void> {
-  const { res, wire, logger, tokens, windowOf } = input;
+  const { res, wire, logger, tokens, windowOf, call } = input;
   const { cooldowns, sticks, retired } = input.failover;
   const restOf = (candidate: GatewayCandidate) =>
     cooldowns.restOf(candidate.endpoint.id, candidate.upstreamModel);
@@ -1313,10 +1365,26 @@ async function askInTurn(input: {
   let handBack: HandBack | null = null;
   for (let candidate = remaining.shift(); candidate; candidate = remaining.shift()) {
     const next = spentAfter(remaining.map(restOf)) ? undefined : remaining[0];
-    const outcome = await askUntilSettled({ ...input, candidate, last: next === undefined });
-    if (outcome.kind === "gone") return;
+    const startedAt = Date.now();
+    let reasked = false;
+    const outcome = await askUntilSettled({
+      ...input,
+      candidate,
+      last: next === undefined,
+      noteReasked: () => {
+        reasked = true;
+      },
+    });
+    const noteAttempt = (end: LedgerAttemptEnd) =>
+      call.attempt({ candidate, startedAt, reasked, end });
+    if (outcome.kind === "gone") {
+      call.cancelledAt({ candidate, startedAt, reasked });
+      return;
+    }
     if (outcome.kind === "answered") {
       const end = await outcome.finished;
+      if (end.kind === "gone") call.cancelledAt({ candidate, startedAt, reasked });
+      else noteAnswered({ call, candidate, end, noteAttempt });
       if (end.kind === "complete") {
         cooldowns.served(candidate.endpoint.id, candidate.upstreamModel);
         retired.restore({ endpoint: candidate.endpoint, model: candidate.upstreamModel });
@@ -1339,15 +1407,23 @@ async function askInTurn(input: {
       { endpoint: candidate.endpoint.slug, status: failed.status, detail: failed.detail },
       "API endpoint returned an error",
     );
+    const noteFailed = (failure: string, rest: EndpointRest | null) =>
+      noteAttempt({
+        result: failed.cause === "refused" ? "refused" : "failed",
+        failure,
+        reason: failed.detail,
+        cooldownUntil: rest?.until ?? null,
+      });
     // 拒答不怪这家：不冷却、不标「需要检查」，问遍剩下的；都拒答时交出排第一那家的（magpie #248）。
     if (failed.cause === "refused") {
+      noteFailed("refused", null);
       refused ??= { candidate, failed };
       handBack ??= failed.handBack;
       if (next) {
         logSwitch({ logger, from: candidate, to: next, failure: "refused", failed, rest: null });
         continue;
       }
-      await sendAllRefused({ res, wire, refused, handBack });
+      await sendAllRefused({ res, wire, refused, handBack, call });
       return;
     }
     // 厂商自己的清单可能还列着它（OpenCode Zen 的 exo-free）：这家的这一项一周内不进列表。
@@ -1363,6 +1439,7 @@ async function askInTurn(input: {
       endpointName: candidate.endpoint.name,
     });
     if (overflow) {
+      noteFailed("too_long", null);
       const larger = largerWindows({ left: remaining, window, tokens, windowOf });
       const to = larger[0];
       if (to) {
@@ -1381,7 +1458,7 @@ async function askInTurn(input: {
         continue;
       }
       const told = toldTooLong(failed, overflow);
-      sendFailedAttempt({
+      const message = sendFailedAttempt({
         res,
         wire,
         endpoint: candidate.endpoint,
@@ -1389,10 +1466,12 @@ async function askInTurn(input: {
         suffix: "",
         headers: {},
       });
+      call.failed(message);
       return;
     }
     if (!retryable(failed.status, failed.text)) {
-      sendFailedAttempt({
+      noteFailed(endpointFailure(failed.status, failed.text), null);
+      const message = sendFailedAttempt({
         res,
         wire,
         endpoint: candidate.endpoint,
@@ -1400,17 +1479,19 @@ async function askInTurn(input: {
         suffix: "",
         headers: {},
       });
+      call.failed(message);
       return;
     }
     // 空回复怪不到这家，不冷却。
     let rest: EndpointRest | null = null;
     if (failed.cause !== "empty") rest = markFailed({ cooldowns, candidate, failed });
+    noteFailed(switchedFailure(failed, rest), rest);
     if (next) {
       const failure = switchedFailure(failed, rest);
       logSwitch({ logger, from: candidate, to: next, failure, failed, rest });
       continue;
     }
-    sendFailedAttempt({
+    const message = sendFailedAttempt({
       res,
       wire,
       endpoint: candidate.endpoint,
@@ -1418,7 +1499,55 @@ async function askInTurn(input: {
       suffix: backAgainSuffix(rest),
       headers: missingRetryAfter(failed, rest),
     });
+    call.failed(message);
     return;
+  }
+}
+
+/**
+ * 这家开了口：记这次尝试。交出了回复的（含以结束形式的拒答）记进账；以报错形式拒答的记失败与交出的说法；
+ * 开口后断了的记失败，说法是这家与断的原因（magpie 的 call.Error）。
+ */
+function noteAnswered(input: {
+  call: LedgerCall;
+  candidate: AskableCandidate;
+  end: Exclude<AnswerEnd, { kind: "gone" }>;
+  noteAttempt: (end: LedgerAttemptEnd) => void;
+}): void {
+  const { call, candidate, end } = input;
+  const isRefused = end.kind === "refused" || end.kind === "refused_as_error";
+  const failure = end.kind === "broken" ? "broken" : null;
+  const reason = end.kind === "broken" ? end.message : null;
+  input.noteAttempt({
+    result: isRefused ? "refused" : "answered",
+    failure,
+    reason,
+    cooldownUntil: null,
+  });
+  settleAnswer({ call, candidate, end });
+}
+
+/** 开了口的回复怎么结束的，记进账（尝试另记）。 */
+function settleAnswer(input: {
+  call: LedgerCall;
+  candidate: AskableCandidate;
+  end: AnswerEnd;
+}): void {
+  const { call, candidate, end } = input;
+  switch (end.kind) {
+    case "complete":
+    case "refused":
+      call.answered(candidate, end.reply);
+      return;
+    case "refused_as_error":
+      call.failed(end.told);
+      return;
+    case "broken":
+      call.failed(`${candidate.endpoint.name}: ${end.message}`);
+      return;
+    case "gone":
+      call.cancelled();
+      return;
   }
 }
 
@@ -1461,25 +1590,27 @@ async function sendAllRefused(input: {
   wire: AgentWire;
   refused: Refused;
   handBack: HandBack | null;
+  call: LedgerCall;
 }): Promise<void> {
-  const { res, wire, handBack } = input;
+  const { res, wire, handBack, call } = input;
+  const { candidate, failed } = input.refused;
   const handsBackToClaude = wire === "anthropic" && handBack !== null;
   if (handsBackToClaude) {
     const outcome = await handBack();
-    if (outcome.kind === "gone") return;
+    if (outcome.kind === "gone") {
+      call.cancelled();
+      return;
+    }
     if (outcome.kind === "answered") {
-      await outcome.finished;
+      // 交还的那份拒答回复也记进账，算在排第一那家。
+      settleAnswer({ call, candidate, end: await outcome.finished });
       return;
     }
   }
-  const { candidate, failed } = input.refused;
   const { endpoint } = candidate;
-  sendRefusal({
-    res,
-    wire,
-    message: `${endpoint.name}: ${candidate.upstreamModel} refused this request (${failed.detail})`,
-    headers: { [ANSWERED_BY_HEADER]: endpoint.slug },
-  });
+  const message = `${endpoint.name}: ${candidate.upstreamModel} refused this request (${failed.detail})`;
+  sendRefusal({ res, wire, message, headers: { [ANSWERED_BY_HEADER]: endpoint.slug } });
+  call.failed(message);
 }
 
 type SettledAttempt =
@@ -1504,6 +1635,7 @@ async function askUntilSettled(input: {
   failover: Failover;
   keepAlive: AgentKeepAlive;
   forwardedHeaders?: IncomingHttpHeaders;
+  noteReasked?: () => void;
 }): Promise<SettledAttempt> {
   const { res } = input;
   let askedEmptyAgain = false;
@@ -1551,6 +1683,8 @@ interface EndpointAsk {
   keepAlive: AgentKeepAlive;
   // 转给上游的 Agent 请求头；缺省是全部（attemptEndpoint）。
   forwardedHeaders?: IncomingHttpHeaders;
+  // 这家不收某个写法、去掉它重问时告诉账本（拒收重问）。
+  noteReasked?: () => void;
 }
 
 /**
@@ -1621,6 +1755,7 @@ function shapeRefusals(input: EndpointAsk): ShapeRefusals {
       const refusal = { endpointId, model, format, shape };
       if (refusals.has(refusal)) return;
       refusals.add(refusal);
+      input.noteReasked?.();
       input.logger.info(
         { endpoint: candidate.endpoint.name, model, refused: shape },
         refusalNote(shape),
@@ -1781,27 +1916,26 @@ function retryAfterSeconds(at: number): string {
   return String(Math.max(Math.ceil((at - Date.now()) / 1000), 1));
 }
 
-/** 不问上游，直接交出冷却里记着的那次错误：全在额度冷却中，或都需要检查。 */
+/** 不问上游，直接交出冷却里记着的那次错误：全在额度冷却中，或都需要检查。返回交出的说法。 */
 function sendRest(input: {
   res: Response;
   wire: AgentWire;
   candidate: GatewayCandidate;
   rest: EndpointRest;
   backAt?: number;
-}): void {
+}): string {
   const { rest } = input;
+  const message = `${input.candidate.endpoint.name}: ${rest.said}${backAgainSuffix(rest, input.backAt)}`;
   sendAgentError({
     res: input.res,
     wire: input.wire,
-    error: {
-      status: rest.status,
-      message: `${input.candidate.endpoint.name}: ${rest.said}${backAgainSuffix(rest, input.backAt)}`,
-    },
+    error: { status: rest.status, message },
     headers: {
       [ANSWERED_BY_HEADER]: input.candidate.endpoint.slug,
       ...(input.backAt === undefined ? {} : { "retry-after": retryAfterSeconds(input.backAt) }),
     },
   });
+  return message;
 }
 
 function agentPath(path: string): AgentPath | null {

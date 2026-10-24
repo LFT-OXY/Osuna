@@ -4,11 +4,14 @@
 
 import type { IncomingHttpHeaders } from "node:http";
 import type pino from "pino";
+import { z } from "zod";
 import {
   API_ENDPOINT_COOLDOWN_MAX_MINUTES,
   nextResetAt,
 } from "@getpaseo/protocol/api-endpoint/cooldown-settings";
 import type { ApiEndpointCooldownSettings } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import { writePrivateFileAtomicSync } from "../../private-files.js";
+import { readOptionalFile } from "../config-file.js";
 import { hostOf } from "../model-facts.js";
 import { isRecord, parseJson } from "../upstream-http.js";
 import {
@@ -18,11 +21,11 @@ import {
   modelRefused,
   requestRefused,
   wordsOf,
-  type FailureClass,
 } from "./failure.js";
 
 /*
- * 冷却：一家接口失败后多久不被自动选中。只记在内存里，daemon 重启清零。
+ * 冷却：一家接口失败后多久不被自动选中。存在 api-endpoints/cooldowns.json（magpie 只记在内存里，这是多做，ADR 0014），
+ * daemon 重启后读回、接着冷却，过期的丢掉；文件读不懂当作没有冷却。连续失败次数只在内存里，重启清零。
  * 冷却按整家接口记；只因模型被拒（这把 key 不提供它）、厂商说只是这个模型的额度、或这个模型自己接连失败时，
  * 只冷却这家的这个模型。
  * 冷却结束的时刻也会记一行日志，所以每条冷却挂一个定时器。
@@ -54,30 +57,50 @@ export const COOLDOWN = {
 } as const;
 
 /** 冷却时长由什么定的：欠费、厂商的 Retry-After、错误里写的重置时间、额度默认、起始冷却、翻倍、需要检查。 */
-export type RestBy =
-  | "credit"
-  | "retry-after"
-  | "resets"
-  | "quota"
-  | "cooldown"
-  | "backoff"
-  | "auth";
+const RestBySchema = z.enum([
+  "credit",
+  "retry-after",
+  "resets",
+  "quota",
+  "cooldown",
+  "backoff",
+  "auth",
+]);
+export type RestBy = z.infer<typeof RestBySchema>;
+
+// 会冷却的失败分类（代理没连上不冷却）；FailureClass 加了值而这里没加，markFailed 记冷却处编译不过。
+const RestWhySchema = z.enum(["credit", "quota", "rate", "other", "auth"]);
+type RestWhy = z.infer<typeof RestWhySchema>;
 
 export interface EndpointRest {
   endpointId: string;
   endpointName: string;
   // 只冷却这个模型时有值。
   model: string | null;
-  why: FailureClass;
+  why: RestWhy;
   status: number;
   by: RestBy;
-  // 连续失败次数，翻倍用。
+  // 连续失败次数，翻倍用；不存盘，重启后读回的记为 0，翻倍从头算。
   failures: number;
   // 需要检查（key 无效）没有结束时刻，直到用户编辑这家接口。
   until: number | null;
   // 上游原文（key 已打码）：全在冷却时原样交给 Agent。
   said: string;
 }
+
+const StoredRestSchema = z.object({
+  endpointId: z.string(),
+  endpointName: z.string(),
+  model: z.string().nullable(),
+  why: RestWhySchema,
+  status: z.number().int(),
+  by: RestBySchema,
+  until: z.string().datetime().nullable(),
+  said: z.string(),
+});
+type StoredRest = z.infer<typeof StoredRestSchema>;
+
+const CooldownsFileSchema = z.object({ rests: z.array(StoredRestSchema) });
 
 /** 一次失败交给冷却记录的样子：哪家（带它的冷却设置）、哪个模型、问的哪个地址、上游怎么答的。 */
 export interface FailureReport {
@@ -416,15 +439,20 @@ export class EndpointCooldowns {
   // 连续的其他失败次数，按冷却键记，模型自己的另记一份（「<endpointId>/<model>」）；答复成功清零。
   private readonly failures = new Map<string, number>();
   private readonly endTimers = new Map<string, NodeJS.Timeout>();
+  private readonly filePath: string;
+  // 上次写进文件的内容；没变就不再写。
+  private written: string | null = null;
 
-  constructor(options: { logger: pino.Logger; now?: () => number }) {
+  constructor(options: { filePath: string; logger: pino.Logger; now?: () => number }) {
     this.logger = options.logger.child({ module: "api-endpoint-cooldowns" });
     this.now = options.now ?? Date.now;
+    this.filePath = options.filePath;
+    this.restore();
   }
 
   /** 这家接口（或它的这个模型）正在冷却中；先看整家，再看模型。 */
   restOf(endpointId: string, model: string): EndpointRest | null {
-    return this.active(endpointId) ?? this.active(`${endpointId}/${model}`);
+    return this.active(endpointId) ?? this.active(restKey(endpointId, model));
   }
 
   /** 整家接口的冷却，接口列表显示用。 */
@@ -441,7 +469,7 @@ export class EndpointCooldowns {
     const why = endpointFailure(attempt.status, attempt.body);
     if (why === "proxy" || requestRefused(attempt.status, attempt.body)) return null;
     const { id } = attempt.endpoint;
-    const modelKey = `${id}/${attempt.model}`;
+    const modelKey = restKey(id, attempt.model);
     const unserved = why === "other" && modelRefused(attempt.status, attempt.body);
     const modelQuota = why === "quota" && modelOwnQuota(attempt);
     let key = unserved || modelQuota ? modelKey : id;
@@ -496,12 +524,13 @@ export class EndpointCooldowns {
       "API endpoint is cooling down",
     );
     this.scheduleEnd(key, rest);
+    this.save();
     return rest;
   }
 
   /** 答复成功：这家与这个模型的冷却和连续失败次数一起清掉。 */
   served(endpointId: string, model: string): void {
-    for (const key of [endpointId, `${endpointId}/${model}`]) {
+    for (const key of [endpointId, restKey(endpointId, model)]) {
       this.failures.delete(key);
       this.end(key);
     }
@@ -555,7 +584,8 @@ export class EndpointCooldowns {
     const { now } = input;
     const previous = this.rests.get(input.key);
     let failures = 1;
-    if (previous?.why === "rate" && previous.until !== null) {
+    // 重启前的限流（failures 为 0）不接着翻倍：连续失败次数只在内存里。
+    if (previous?.why === "rate" && previous.until !== null && previous.failures > 0) {
       if (now < previous.until) failures = Math.max(previous.failures, 1);
       else if (now - previous.until < COOLDOWN.rateForget) {
         failures = Math.max(previous.failures, 1) + 1;
@@ -587,6 +617,7 @@ export class EndpointCooldowns {
     const timer = setTimeout(() => {
       this.endTimers.delete(key);
       this.logEnded(rest);
+      this.save();
     }, rest.until - this.now());
     timer.unref();
     this.endTimers.set(key, timer);
@@ -596,8 +627,50 @@ export class EndpointCooldowns {
     const rest = this.active(key);
     clearTimeout(this.endTimers.get(key));
     this.endTimers.delete(key);
-    this.rests.delete(key);
+    if (!this.rests.delete(key)) return;
     if (rest) this.logEnded(rest);
+    this.save();
+  }
+
+  /** 正在冷却的记录写回文件；写不进只记日志，内存里的照用，下次变动再写。 */
+  private save(): void {
+    const rests: StoredRest[] = [];
+    for (const key of this.rests.keys()) {
+      const rest = this.active(key);
+      if (rest) rests.push(toStored(rest));
+    }
+    const text = `${JSON.stringify(CooldownsFileSchema.parse({ rests }), null, 2)}\n`;
+    if (text === this.written) return;
+    try {
+      writePrivateFileAtomicSync(this.filePath, text);
+      this.written = text;
+    } catch (error) {
+      this.logger.warn(
+        { err: error, filePath: this.filePath },
+        "Failed to write API endpoint cooldowns",
+      );
+    }
+  }
+
+  /** 启动时读回还没到点的冷却并重新定时；文件读不懂（坏了或格式不对）当作没有冷却。 */
+  private restore(): void {
+    const bytes = readOptionalFile(this.filePath);
+    if (bytes === null) return;
+    const parsed = CooldownsFileSchema.safeParse(parseJson(bytes.toString("utf8")));
+    if (!parsed.success) {
+      this.logger.warn(
+        { filePath: this.filePath },
+        "Ignoring an unreadable API endpoint cooldowns file",
+      );
+      return;
+    }
+    for (const stored of parsed.data.rests) {
+      const rest = fromStored(stored);
+      if (rest.until !== null && rest.until <= this.now()) continue;
+      const key = rest.model === null ? rest.endpointId : restKey(rest.endpointId, rest.model);
+      this.rests.set(key, rest);
+      this.scheduleEnd(key, rest);
+    }
   }
 
   private logEnded(rest: EndpointRest): void {
@@ -610,4 +683,22 @@ export class EndpointCooldowns {
       "API endpoint cooldown ended",
     );
   }
+}
+
+/** 只冷却某个模型时的冷却键。 */
+function restKey(endpointId: string, model: string): string {
+  return `${endpointId}/${model}`;
+}
+
+function toStored(rest: EndpointRest): StoredRest {
+  const { failures: _inMemoryOnly, ...stored } = rest;
+  return { ...stored, until: rest.until === null ? null : new Date(rest.until).toISOString() };
+}
+
+function fromStored(stored: StoredRest): EndpointRest {
+  return {
+    ...stored,
+    failures: 0,
+    until: stored.until === null ? null : Date.parse(stored.until),
+  };
 }

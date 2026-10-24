@@ -1,5 +1,6 @@
 import { Buffer } from "buffer";
 import { buildAgentDeepLinkRoute } from "@getpaseo/protocol/agent-deep-link";
+import type { UsageRequestsEndpointIntent } from "@/usage-stats/requests";
 
 type NullableString = string | null | undefined;
 const BASE64_WORKSPACE_ID_PREFIX = "b64_";
@@ -430,6 +431,16 @@ export function buildSchedulesRoute() {
 
 export function buildUsageRoute() {
   return "/usage" as const;
+}
+
+/** 用量页的「请求」标签，按这家接口筛好（接口页「最近异常」的「在请求列表里看全部」）。 */
+export function buildUsageRequestsRoute(endpoint: UsageRequestsEndpointIntent) {
+  const params = new URLSearchParams({
+    tab: "requests",
+    endpoint: endpoint.endpointId,
+    endpointName: endpoint.endpointName,
+  });
+  return `/usage?${params.toString()}` as const;
 }
 
 export function buildOpenProjectRoute() {

@@ -25,7 +25,7 @@
  * 6. 不带开发者的代理：daemon 自己的 HTTP_PROXY、HTTPS_PROXY、ALL_PROXY、NO_PROXY（各种大小写）在这里删掉，
  *    查 Codex 经哪个代理时只会读到用例给的假系统代理（上面第 5 条）。spawn-node.ts 的 withUpgradeSeal 同样会删。
  *
- * 8. 不带着 key 去问真的厂商：第三方接口读余额的厂商（balance.ts 的厂商表）的 API 主机，daemon 的 fetch 一律不真的去
+ * 8. 不带着 key 去问真的厂商（也不问真的汇率网站）：第三方接口读余额的厂商（balance.ts 的厂商表）的 API 主机，daemon 的 fetch 一律不真的去
  *    （读余额、保存后拉模型清单都是）。PASEO_E2E_FAKE_SITES_PATH 里写了这个网址的，回那里写的回复（JSON）；
  *    没写的当作连不上。厂商表加了新厂商，这里跟着加。
  *
@@ -74,6 +74,8 @@ const SEALED_VENDOR_ORIGINS = [
   "https://tokenhub.tencentmaas.com/",
   // Codex 的套餐用量与重置卡（plugins/codex-usage-source）：测试的 CODEX_HOME 是空的不会去问，这里兜底。
   "https://chatgpt.com/",
+  // 人民币显示用的汇率（usage/exchange-rate.ts）：价格表自动更新开着又选了人民币才会去问，这里兜底。
+  "https://open.er-api.com/",
 ];
 
 const realFetch = globalThis.fetch;

@@ -99,7 +99,7 @@ function consumeEntry(entry: PiLikeEntry, state: PiLikeParserState, sink: UsageP
   // and a turn the CLI abandoned mid-tool measures to its last message too.
   advanceOpenTurn(state, timestamp);
   if (role !== "assistant") return;
-  recordAssistant(message, state, sink, timestamp);
+  recordAssistant({ message, entryId: asString(entry.id), state, sink, timestamp });
   const stopReason = asString(message.stopReason);
   // A response that stopped to run a tool is still inside its turn, and so is
   // one whose line names no stop reason at all. A turn that ends and then runs
@@ -163,12 +163,19 @@ function startTurn(
   state.turnBackend = null;
 }
 
-function recordAssistant(
-  message: Record<string, unknown>,
-  state: PiLikeParserState,
-  sink: UsageParseSink,
-  timestamp: number | null,
-): void {
+function recordAssistant({
+  message,
+  entryId,
+  state,
+  sink,
+  timestamp,
+}: {
+  message: Record<string, unknown>;
+  entryId: string | null;
+  state: PiLikeParserState;
+  sink: UsageParseSink;
+  timestamp: number | null;
+}): void {
   const usage = asRecord(message.usage);
   if (!usage || timestamp === null) return;
   // Both CLIs route to backends the user names themselves, and OMP does not
@@ -187,14 +194,23 @@ function recordAssistant(
       durationMs: 0,
     });
   }
-  pushTurnUsage({
-    sink,
-    identity,
-    attachment: turnAttachmentOf(state),
-    model,
-    at: new Date(timestamp).toISOString(),
-    amounts,
-  });
+  const attachment = turnAttachmentOf(state);
+  const at = new Date(timestamp).toISOString();
+  pushTurnUsage({ sink, identity, attachment, model, at, amounts });
+  // 请求列表的直连行：条目编号只在一个会话里不重，前面加上会话编号。
+  if (entryId && identity.sessionId && identity.cwd) {
+    sink.calls.push({
+      replyId: `${identity.sessionId}/${entryId}`,
+      cli: state.kind,
+      model,
+      sessionId: identity.sessionId,
+      cwd: identity.cwd,
+      bucket: toBucketStart(timestamp),
+      at,
+      turnKey: attachment?.turnKey ?? null,
+      amounts,
+    });
+  }
 
   const openTurn = state.openTurn;
   if (!openTurn || openTurn.model) return;
