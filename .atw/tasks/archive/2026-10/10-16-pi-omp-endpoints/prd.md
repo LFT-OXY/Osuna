@@ -295,7 +295,7 @@ Pi 和 OMP 像 Claude Code、Codex 一样用第三方接口：
 - [x] 协议：新功能挂在 `server_info.features.*` 上，新字段可选；旧 daemon 下新 App 不显示 Pi / OMP 的第三方接口设置；官方 Paseo 手机 App 照常工作。
 - [x] 界面验收（UI and Design 一节）逐条有截图；9 种语言的 i18n 测试通过。
 - [x] 文档：`docs/glossary.md` 相关条目已核对；ADR 0004、0007、0010、0012、0014 在原文中补上 Pi / OMP；`docs/usage.md`、`docs/custom-providers.md` 已更新；`THIRD_PARTY_NOTICES` 覆盖新借鉴的 magpie 文件。
-- [ ] typecheck、lint 通过；改到的测试文件本机通过；PR 的 CI 通过（已知常红的 Nix 两项除外）。
+- [x] typecheck、lint 通过；改到的测试文件本机通过；PR 的 CI 通过（已知常红的 Nix 两项除外）。PR #29 第三轮全绿，Windows 跳过一条见下方待另开工单。
 
 ## Further Notes
 
