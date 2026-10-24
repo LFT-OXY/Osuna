@@ -396,7 +396,7 @@ describe("parsePiLikeChunk on entries that went through Osuna's gateway", () => 
   const ZERO = { input: 0, cachedInput: 0, cacheWrite: 0, output: 0, reasoning: 0 };
 
   test("Pi: a gateway reply counts no tokens but its turn, a usage entry counts like a reply, and an old reply falls back to session and entry id", () => {
-    const result = parse("pi", "pi-gateway.jsonl", { sessionId: PI_GATEWAY_SESSION });
+    const result = parse("pi", "parser-only/pi-gateway.jsonl", { sessionId: PI_GATEWAY_SESSION });
 
     expect(result.rows).toEqual([
       {
@@ -502,7 +502,9 @@ describe("parsePiLikeChunk on entries that went through Osuna's gateway", () => 
   });
 
   test("OMP: a gateway reply and a gateway model_usage count no tokens, another provider's model_usage counts", () => {
-    const result = parse("omp", "omp-gateway.jsonl", { sessionId: OMP_GATEWAY_SESSION });
+    const result = parse("omp", "parser-only/omp-gateway.jsonl", {
+      sessionId: OMP_GATEWAY_SESSION,
+    });
 
     expect(result.rows).toEqual([
       {
@@ -559,7 +561,9 @@ describe("parsePiLikeChunk on entries that went through Osuna's gateway", () => 
  */
 describe("parsePiLikeChunk on usage that names no model", () => {
   test("Pi: a tool result's and a compaction's usage count on the model in use, an Osuna one is left to the ledger, and a negative count drops the entry", () => {
-    const result = parse("pi", "pi-model-in-use.jsonl", { sessionId: PI_IN_USE_SESSION });
+    const result = parse("pi", "parser-only/pi-model-in-use.jsonl", {
+      sessionId: PI_IN_USE_SESSION,
+    });
 
     expect(result.rows).toEqual([
       {
@@ -611,7 +615,9 @@ describe("parsePiLikeChunk on usage that names no model", () => {
   });
 
   test("OMP: a compaction counts on the model its model change names as provider/model", () => {
-    const result = parse("omp", "omp-model-in-use.jsonl", { sessionId: OMP_IN_USE_SESSION });
+    const result = parse("omp", "parser-only/omp-model-in-use.jsonl", {
+      sessionId: OMP_IN_USE_SESSION,
+    });
 
     expect(result.rows).toEqual([
       {
