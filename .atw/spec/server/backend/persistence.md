@@ -165,6 +165,14 @@ Test it with a unit test that loads state from what was on disk at the kill
 point and re-runs the scan (`call-merge.test.ts`), not only with a daemon
 restart.
 
+Changing how a parser names a reply id is a persistence change: records already
+on disk keep the old id, and a full rescan (cursor reset when the file shrinks or
+its inode changes) writes the same call again under the new one, so the Requests
+list shows it twice. Carry the old name alongside the new one and drop the
+unmatched old-name record on write and on load (`formerReplyId` / `dropFormer`,
+`COMPAT(piReplyIdByResponseId)`, pi-omp-endpoints ticket 07, when Pi / OMP moved
+to `responseId`).
+
 ### Wiring a runtime-safe `config.json` field
 
 A field users can change while the daemon runs needs five edits, and missing any one of them fails quietly rather than loudly (`features.usage.pricing.*` is the worked example):

@@ -4,7 +4,7 @@
 
 **Blocked by:** 01
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 读 Pi / OMP 会话记录时回复编号改用记录里的 `responseId`；没有它的老记录照旧。
 - [ ] 能按回复编号对上账本的条目合并后只算一次（token、接口、耗时取账本，项目、会话、轮次取会话记录），与到达顺序、daemon 中途重启无关。
