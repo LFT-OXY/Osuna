@@ -593,6 +593,11 @@ export async function resetApiEndpoints(client: ApiEndpointSeedClient): Promise<
     forcedSubagentModelId: null,
     allowsAnySubagentModel: false,
   });
+  await client.apiEndpointSetAgentSettings({
+    provider: "pi",
+    enabled: false,
+    defaultThinkingOptionId: null,
+  });
   // 长对话是整台主机的设置，同样会带进下一个用例。
   await client.apiEndpointSetLongConversations({ fullContext: false, compactAt: null });
   await client.apiEndpointSetDisabledModels({ models: [] });

@@ -855,3 +855,42 @@ describe("Codex's default Subagent model and memory model", () => {
     expect(claude.codexSideModels).toBeNull();
   });
 });
+
+describe("Pi's Use API endpoints block", () => {
+  it("picks the default model and its thinking from Pi's groups, whose ids Pi names osuna/…", () => {
+    const shown = view({
+      provider: "pi",
+      enabled: true,
+      defaultModelId: "relay/glm-5",
+      defaultThinkingOptionId: "high",
+      endpoints: [endpoint({ id: "relay", name: "Relay", models: [{ id: "glm-5" }] })],
+      endpointModelGroups: [
+        {
+          name: "Relay",
+          models: [
+            {
+              provider: "pi",
+              id: "osuna/relay/glm-5",
+              label: "glm-5",
+              thinkingOptions: [
+                { id: "low", label: "Low" },
+                { id: "high", label: "High" },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    expect(shown.modelOptions.map((option) => option.id)).toEqual(["glm-5", "relay/glm-5"]);
+    expect(shown.defaultModel).toMatchObject({ id: "relay/glm-5", model: "glm-5" });
+    expect(shown.defaultThinking).toEqual({
+      value: "high",
+      options: [
+        { id: "low", label: "Low" },
+        { id: "high", label: "High" },
+      ],
+      usesUltraCode: null,
+      lockedAt: null,
+    });
+  });
+});

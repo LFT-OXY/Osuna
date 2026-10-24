@@ -13,6 +13,7 @@ import {
   type FakeRelay,
 } from "../support/helpers/api-endpoints";
 import { gotoAppShell, openSettings } from "../support/helpers/app";
+import { seedWorkspace } from "../support/helpers/seed-client";
 import { getServerId } from "../support/helpers/server-id";
 import {
   clickProviderRow,
@@ -31,6 +32,24 @@ const piDir = path.join(cliHome, "pi-agent");
 const modelsPath = path.join(piDir, "models.json");
 const settingsPath = path.join(piDir, "settings.json");
 test.use({
+  // Osuna 里开的 Pi 对话由假的 Pi（e2e/fixtures/fake-pi-rpc.mjs）扮演，不运行真的 Pi；别的 CLI 关掉，
+  // 免得真的 OMP 读到同一个 PI_CODING_AGENT_DIR，把 settings.json 迁成它自己的 config.yml。
+  e2eDaemonConfig: {
+    version: 1,
+    agents: {
+      providers: {
+        pi: {
+          enabled: true,
+          command: [process.execPath, path.resolve("e2e/fixtures/fake-pi-rpc.mjs")],
+        },
+        omp: { enabled: false },
+        claude: { enabled: false },
+        codex: { enabled: false },
+        copilot: { enabled: false },
+        opencode: { enabled: false },
+      },
+    },
+  },
   e2eDaemonEnvironment: {
     PI_CODING_AGENT_DIR: piDir,
     CLAUDE_CONFIG_DIR: path.join(cliHome, "claude"),
@@ -61,6 +80,8 @@ test.beforeEach(async ({ page }) => {
   await resetApiEndpoints(client);
   await rm(modelsPath, { force: true });
   await mkdir(piDir, { recursive: true });
+  // 假的 Pi 在家目录里起来读模型清单。
+  await mkdir(path.join(cliHome, "home"), { recursive: true });
   await writeFile(settingsPath, USER_SETTINGS);
   await page.setViewportSize({ width: 1280, height: 800 });
 });
@@ -101,6 +122,7 @@ async function seedRelay(): Promise<void> {
 interface PiSettings {
   defaultProvider?: string;
   defaultModel?: string;
+  defaultThinkingLevel?: string;
 }
 
 async function piSettings(): Promise<PiSettings> {
@@ -233,4 +255,99 @@ test("a host without Pi's API endpoints shows no switch on Pi's page", async ({ 
   await openPiPage(page);
   await expect(page.getByTestId("provider-models-section").filter({ visible: true })).toBeVisible();
   await expect(agentSection(page)).toHaveCount(0);
+});
+
+test("Pi's default thinking sits beside the default model, and a failed change stays in this section", async ({
+  page,
+}) => {
+  await client.apiEndpointSave({
+    provider: "pi",
+    name: "Relay A",
+    baseUrls: [{ format: "openai_chat", url: `${relay.origin}/good/v1` }],
+    models: [{ id: "glm-5" }, { id: "kimi-k2" }],
+    modelSettings: { models: { "glm-5": { efforts: ["low", "medium", "high"] } } },
+  });
+  await openPiPage(page);
+  const section = agentSection(page);
+  await section.getByTestId("agent-api-endpoints-switch").click();
+  const trigger = section.getByTestId("agent-api-endpoints-default-thinking-trigger");
+
+  await test.step("unset: Pi's own level, nothing written", async () => {
+    await expect(trigger).toHaveText("Not set (Pi decides)");
+    expect(await piSettings()).not.toHaveProperty("defaultThinkingLevel");
+  });
+
+  await test.step("the options are the levels Pi offers for the default model", async () => {
+    await trigger.click();
+    for (const level of ["low", "medium", "high"]) {
+      await expect(
+        page.getByTestId(`agent-api-endpoints-default-thinking-option-${level}`),
+      ).toBeVisible();
+    }
+    await expect(page.getByTestId("agent-api-endpoints-default-thinking-option-max")).toHaveCount(
+      0,
+    );
+  });
+
+  await test.step("a failed save keeps the level and says so here", async () => {
+    await chmod(piDir, 0o500);
+    try {
+      await page.getByTestId("agent-api-endpoints-default-thinking-option-high").click();
+      await expect(section.getByTestId("agent-api-endpoints-error")).toContainText(
+        "Couldn't change the API endpoint settings for Pi",
+      );
+    } finally {
+      await chmod(piDir, 0o700);
+    }
+    await expect(trigger).toHaveText("Not set (Pi decides)");
+    expect(await piSettings()).not.toHaveProperty("defaultThinkingLevel");
+    await section.getByRole("button", { name: "Dismiss" }).click();
+  });
+
+  await test.step("picking a level writes it into Pi's settings.json", async () => {
+    await trigger.click();
+    await page.getByTestId("agent-api-endpoints-default-thinking-option-high").click();
+    await expect(trigger).toHaveText("High");
+    await expect.poll(piSettings).toMatchObject({ defaultThinkingLevel: "high" });
+  });
+
+  await test.step("switching off puts settings.json back", async () => {
+    await section.getByTestId("agent-api-endpoints-switch").click();
+    await inSheet(page, "switch-off-confirm").click();
+    await expect.poll(() => readFile(settingsPath, "utf8")).toBe(USER_SETTINGS);
+  });
+});
+
+test("after a change, the open Pi agents in Osuna are listed to reopen", async ({ page }) => {
+  await seedRelay();
+  const workspace = await seedWorkspace({ repoPrefix: "api-endpoints-pi-reopen-" });
+  try {
+    expect(
+      (await client.apiEndpointSetAgentSettings({ provider: "pi", enabled: true })).error,
+    ).toBeNull();
+    await workspace.client.createAgent({
+      provider: "pi",
+      cwd: workspace.repoPath,
+      workspaceId: workspace.workspaceId,
+      title: "Pi reopen",
+    });
+    await openPiPage(page);
+    const section = agentSection(page);
+    await expect(
+      section.getByText("Running copies of Pi still have the settings from before"),
+    ).toHaveCount(0);
+
+    await section.getByTestId("agent-api-endpoints-default-model-trigger").click();
+    await page.getByTestId("agent-api-endpoints-default-option-relay-a/kimi-k2").click();
+    await expect.poll(piDefaultModel).toBe("relay-a/kimi-k2");
+
+    await expect(
+      section.getByText("Running copies of Pi still have the settings from before"),
+    ).toBeVisible({ timeout: 20_000 });
+    await expect(
+      section.getByText("1 Pi agent in Osuna: reload it (Reload agent in its tab's menu)."),
+    ).toBeVisible();
+  } finally {
+    await workspace.cleanup();
+  }
 });

@@ -139,6 +139,9 @@ import {
   applyPiSettings,
   inspectPiModels,
   inspectPiSettings,
+  keepPiCliModel,
+  readPiCliPicks,
+  readPiStartupReads,
   PI_PROVIDER_ID,
   readPiGateway,
   readPiDefaultProvider,
@@ -147,11 +150,16 @@ import {
   restorePiSettings,
   type PiModelsTakeover,
   type PiSettingsTakeover,
+  type PiSettingsWiring,
 } from "./pi-config-patch.js";
 import {
   piBareFormat,
+  piClamp,
   piEndpointFormat,
   piModelEntry,
+  piModelThinking,
+  piOfferedLevels,
+  PI_THINKING_LEVELS,
   type PiModelCost,
   type PiModelEntry,
   type PiModelSource,
@@ -286,6 +294,12 @@ interface TakeoverWrite<Takeover> {
   current: Buffer | null;
 }
 
+/** 写进 Pi settings.json 的默认设置，与 Pi 自己换过的默认模型要不要写回。 */
+interface PiSettingsWrite {
+  wiring: PiSettingsWiring;
+  shouldRewriteModel: boolean;
+}
+
 /** 把中转站写进 CLI 配置：要写的内容，与 CLI 自己换过的模型要不要写回。 */
 interface CliEndpointWrite {
   wiring: CliWiring;
@@ -297,6 +311,8 @@ type ChatThinking = Pick<AgentModelDefinition, "thinkingOptions" | "defaultThink
 
 // 没设默认思考档位时 Osuna 的 Claude 新对话起步的档位，同 Claude 自定义模型（agent/providers/claude/model-manifest.ts）。
 const CLAUDE_START_THINKING = "high";
+// 没设默认思考档位时 Pi 新会话起步的档位（pi-mono coding-agent 的 DEFAULT_THINKING_LEVEL）。
+const PI_START_THINKING = "medium";
 
 /** 挑默认模型时从 CLI 配置与接管记录里读的那些。 */
 type CliPickInput = Omit<DefaultModelPickInput, "state" | "provider">;
@@ -925,7 +941,8 @@ const ROUTING_KEYS: Record<CliConfigProvider, readonly string[]> = {
     "openai_base_url",
     `model_providers.${CODEX_API_ENDPOINT_PROVIDER_ID}`,
   ],
-  pi: [`providers.${PI_PROVIDER_ID}`, "defaultProvider"],
+  // Pi 的默认服务商与模型是它自己会换的选择，换成接口以外的按「模型被换掉」提示（同 Codex 的 model）。
+  pi: [`providers.${PI_PROVIDER_ID}`],
 };
 
 const AGENT_NAMES: Record<ApiEndpointProvider, string> = {
@@ -1126,6 +1143,7 @@ export class ApiEndpointService {
       subjects: () => ({
         claude: this.reopenSubject("claude"),
         codex: this.reopenSubject("codex"),
+        pi: this.reopenSubject("pi"),
       }),
       timers: options.reopenHintsTimers ?? REAL_PRICING_TIMERS,
       now: this.now,
@@ -1347,6 +1365,17 @@ export class ApiEndpointService {
       read: () => readOptionalFile(configPath)?.toString("utf8") ?? null,
     });
     if (provider === "claude") return { files: [configPath], reads: readClaudeStartupReads(text) };
+    if (provider === "pi") {
+      const modelsPath = this.resolvePiModelsPath();
+      const modelsText = this.readForReopenHints({
+        file: modelsPath,
+        read: () => readOptionalFile(modelsPath)?.toString("utf8") ?? null,
+      });
+      return {
+        files: [configPath, modelsPath],
+        reads: readPiStartupReads({ settingsText: text, modelsText }),
+      };
+    }
     const catalog =
       this.readForReopenHints({
         file: this.store.codexModelCatalogPath,
@@ -1439,6 +1468,7 @@ export class ApiEndpointService {
     provider: ApiEndpointProvider,
   ): ApiEndpointAgentSettings {
     const agent = state.agents[provider];
+    if (provider === "pi") return this.shownPiAgent(state, agent);
     if (provider !== "claude") return agent;
     const levels = this.claudeLevels(state, agent);
     const chosen = agent.defaultThinkingOptionId ?? null;
@@ -1449,10 +1479,22 @@ export class ApiEndpointService {
     return { ...agent, ...thinking, ...ultraCode };
   }
 
+  /** Pi 的默认思考档位按 Pi 让默认模型跑的那一档显示（magpie 的 effort 字段 Get：piClamp），设置本身不改。 */
+  private shownPiAgent(
+    state: ApiEndpointState,
+    agent: ApiEndpointAgentSettings,
+  ): ApiEndpointAgentSettings {
+    const chosen = agent.defaultThinkingOptionId ?? null;
+    if (chosen === null || agent.defaultModelId === null) return agent;
+    const offered = this.piOffered(state, agent.defaultModelId);
+    if (offered.length === 0) return agent;
+    return { ...agent, defaultThinkingOptionId: piClamp(chosen, offered) };
+  }
+
   /** 老客户端眼里当前启用的接口；官方模式、不支持的提供方或文件读不懂时为 null。 */
   activeEndpoint(provider: string): ApiEndpointRef | null {
     const state = this.readStateForSnapshot();
-    const supported = findChatProvider(provider);
+    const supported = findProvider(provider);
     if (!state || !supported) return null;
     const endpoint = agentTargetEndpoint(state, supported);
     return endpoint ? { id: endpoint.id, name: endpoint.name } : null;
@@ -1464,7 +1506,7 @@ export class ApiEndpointService {
    */
   activeModels(provider: string): AgentModelDefinition[] | null {
     const state = this.readStateForSnapshot();
-    const supported = findChatProvider(provider);
+    const supported = findProvider(provider);
     if (!state || !supported) return null;
     const agent = state.agents[supported];
     if (!agent.enabled) return null;
@@ -1477,7 +1519,7 @@ export class ApiEndpointService {
       Object.assign(
         {
           provider: supported,
-          id: model.id,
+          id: chatModelId(supported, model.id),
           label: labels[index] ?? model.id,
           isDefault: model.id === defaultModel,
         },
@@ -1497,6 +1539,7 @@ export class ApiEndpointService {
   ): (modelId: string) => ChatThinking {
     const agent = state.agents[provider];
     const chosen = agent.defaultThinkingOptionId ?? null;
+    if (provider === "pi") return this.piChatThinking(state, chosen);
     const codexOwn = provider === "codex" ? this.codexReasoningEffort() : null;
     return (modelId) => {
       const levels = this.thinkingLevelsFor({ state, provider, modelId });
@@ -1516,6 +1559,34 @@ export class ApiEndpointService {
         defaultThinkingOptionId: startsAtUltraCode ? CLAUDE_ULTRA_CODE : level,
       };
     };
+  }
+
+  /**
+   * Osuna 对话里 Pi 的接口模型的档位：Pi 给它写进 models.json 的那一条能选的档位（不会思考的不给档位，同 Osuna 的 Pi 对话）；
+   * 新对话从默认思考档位起步，没设时从 Pi 的 medium 起，都按 piClamp 取模型跑得到的一档。
+   */
+  private piChatThinking(
+    state: ApiEndpointState,
+    chosen: string | null,
+  ): (modelId: string) => ChatThinking {
+    const sources = this.piSources(state);
+    return (modelId) => {
+      const source = sources.find((candidate) => candidate.id === modelId);
+      if (!source) return {};
+      const thinking = piModelThinking(source);
+      const offered = piOfferedLevels(thinking);
+      if (!thinking.reasoning || offered.length === 0) return {};
+      return {
+        thinkingOptions: thinkingOptionsOf({ levels: offered }),
+        defaultThinkingOptionId: piClamp(chosen ?? PI_START_THINKING, offered),
+      };
+    };
+  }
+
+  /** Pi 给这个接口模型能选的档位；不是 Osuna 写给 Pi 的模型时为空。 */
+  private piOffered(state: ApiEndpointState, modelId: string): string[] {
+    const source = this.piSources(state).find((candidate) => candidate.id === modelId);
+    return source ? piOfferedLevels(piModelThinking(source)) : [];
   }
 
   /** 第三方接口的默认思考档位是 max 时，Claude Code 的每个会话都锁在 max（CLAUDE_CODE_EFFORT_LEVEL 盖过每次选的档位）。 */
@@ -1545,13 +1616,13 @@ export class ApiEndpointService {
       if (isNamed) return id === agent.defaultModelId;
       return model.id === agent.defaultModelId;
     }
-    // Pi 的分组只给设置页挑默认模型（「接口标识/模型名」），还没有思考档位与对话里的模型（工单 03）。
-    const thinkingOf = supported === "pi" ? () => ({}) : this.chatThinking(state, supported);
+    const thinkingOf = this.chatThinking(state, supported);
     function toDefinition(entry: EndpointGroupModel, label: string): AgentModelDefinition {
       const { id } = entry;
       const isDefault = !defaultMarked && isDefaultEntry(entry);
       if (isDefault) defaultMarked = true;
-      return { provider: agentProvider, id, label, isDefault, ...thinkingOf(id) };
+      const chatId = chatModelId(agentProvider, id);
+      return { provider: agentProvider, id: chatId, label, isDefault, ...thinkingOf(id) };
     }
     return endpointModelGroups(this.served(state)).map((group) => {
       const labels = this.groupModelLabels(group);
@@ -1967,12 +2038,6 @@ export class ApiEndpointService {
   }): ApiEndpointAgentSettings {
     const { state, provider, agent } = input;
     if (input.requested === undefined) return agent;
-    if (provider === "pi") {
-      throw new ApiEndpointRequestError({
-        code: "invalid_input",
-        message: "Pi has no default thinking for API endpoints yet",
-      });
-    }
     if (input.requested === null) return { ...agent, defaultThinkingOptionId: null };
     const requested = input.requested.trim();
     if (requested === "") {
@@ -1982,6 +2047,16 @@ export class ApiEndpointService {
       });
     }
     if (provider === "codex") return { ...agent, defaultThinkingOptionId: requested };
+    // Pi 照 magpie 收它的 7 档之一，跑的时候自己贴合模型（piClamp）。
+    if (provider === "pi") {
+      if (!PI_THINKING_LEVELS.includes(requested)) {
+        throw new ApiEndpointRequestError({
+          code: "invalid_input",
+          message: `Pi's default thinking is one of ${PI_THINKING_LEVELS.join(", ")}, not ${requested}`,
+        });
+      }
+      return { ...agent, defaultThinkingOptionId: requested };
+    }
     const levels = this.claudeLevels(state, agent);
     if (!levels.includes(requested)) {
       throw new ApiEndpointRequestError({
@@ -2488,8 +2563,15 @@ export class ApiEndpointService {
   /** 把 CLI 配置里现在的模型记作 CLI 自己的（跟过去的，或保留当前设置后不再提示的）：重写不碰它。 */
   private keepCliModel(input: { provider: ApiEndpointProvider; held: CliModelHold }): void {
     const { provider, held } = input;
-    // Pi 自己存下的模型还不跟（工单 03），没有可记的。
-    if (provider === "pi") return;
+    if (provider === "pi") {
+      const record = this.store.readPiSettingsTakeover();
+      const text = readOptionalFile(this.resolvePiSettingsPath())?.toString("utf8") ?? null;
+      const takeover = keepPiCliModel({ text, takeover: record.takeover, held });
+      if (!isDeepStrictEqual(takeover, record.takeover)) {
+        this.store.writePiSettingsTakeover({ ...record, takeover });
+      }
+      return;
+    }
     if (provider === "claude") {
       const record = this.store.readClaudeTakeover();
       const text = readOptionalFile(this.resolveClaudeSettingsPath())?.toString("utf8") ?? null;
@@ -2510,7 +2592,10 @@ export class ApiEndpointService {
 
   /** CLI 配置里自己存下的选择；没开开关、没有接管记录或读不懂时为 null。 */
   private readCliPicks(provider: ApiEndpointProvider): CliPicks | null {
-    if (provider === "pi") return null;
+    if (provider === "pi") {
+      const text = readOptionalFile(this.resolvePiSettingsPath())?.toString("utf8") ?? null;
+      return readPiCliPicks({ text, takeover: this.store.readPiSettingsTakeover().takeover });
+    }
     if (provider === "claude") {
       const text = readOptionalFile(this.resolveClaudeSettingsPath())?.toString("utf8") ?? null;
       return readClaudeCliPicks({ text, takeover: this.store.readClaudeTakeover().takeover });
@@ -2530,6 +2615,14 @@ export class ApiEndpointService {
   }): string | null {
     const { state, provider, cliModel } = input;
     if (cliModel === null) return null;
+    // Pi 的写法是「服务商/模型」：只有 Osuna 写给它的模型（osuna/ 后面原样是接口模型的 id）。
+    if (provider === "pi") {
+      const id = cliModel.startsWith(`${PI_PROVIDER_ID}/`)
+        ? cliModel.slice(PI_PROVIDER_ID.length + 1)
+        : null;
+      const isServed = this.piSources(state).some((source) => source.id === id);
+      return isServed ? id : null;
+    }
     const isChatGptWiredCodex = provider === "codex" && this.isCodexChatGptWired();
     if (isChatGptWiredCodex) {
       const named = endpointModelGroups(state).flatMap((group) => group.models);
@@ -2697,8 +2790,7 @@ export class ApiEndpointService {
     if (this.followedModel({ state, provider, cliModel: model.now }) !== null) return null;
     const isChatGptOwnModel = provider === "codex" && this.isCodexChatGptWired();
     if (isChatGptOwnModel) return null;
-    const file =
-      provider === "claude" ? this.resolveClaudeSettingsPath() : this.resolveCodexConfigPath();
+    const file = this.resolveCliConfigPath(provider);
     const now = model.now ?? "";
     const shown = model.now ?? `${AGENT_NAMES[provider]}'s own default`;
     return {
@@ -2875,7 +2967,7 @@ export class ApiEndpointService {
   /** 选择器里接口名的显示方式；官方模式、不支持的提供方或文件读不懂时返回 null。 */
   endpointNameDisplay(provider: string): ApiEndpointNameDisplay | null {
     const state = this.readStateForSnapshot();
-    const supported = findChatProvider(provider);
+    const supported = findProvider(provider);
     if (!state || !supported || !state.agents[supported].enabled) return null;
     return endpointNameDisplayOf(state);
   }
@@ -3007,7 +3099,7 @@ export class ApiEndpointService {
     } else if (provider === "codex") {
       this.writeCodexEndpoint({ wiring, shouldRewriteModel });
     } else if (provider === "pi") {
-      this.writePiEndpoint(wiring);
+      this.writePiEndpoint({ wiring, shouldRewriteModel });
     } else {
       this.writeClaudeEndpoint({ wiring, shouldRewriteModel });
     }
@@ -3173,10 +3265,10 @@ export class ApiEndpointService {
    */
   subagentThinkingOptions(provider: string): AgentSelectOption[] | null {
     const state = this.readStateForSnapshot();
-    const supported = findChatProvider(provider);
+    const supported = findProvider(provider);
     if (!state || !supported) return null;
     const agent = state.agents[supported];
-    if (!agent.enabled || agent.defaultModelId === null) return null;
+    if (supported === "pi" || !agent.enabled || agent.defaultModelId === null) return null;
     if (supported === "codex") {
       // 档位不清楚时照 magpie 给 low、medium、high、xhigh。
       const levels = this.codexSubagentLevels(state, agent);
@@ -3286,6 +3378,11 @@ export class ApiEndpointService {
   private piModels(state: ApiEndpointState): PiModelEntry[] {
     const gatewayRoot = this.gatewayUrlFor("pi");
     if (gatewayRoot === null) throw this.gatewayError();
+    return this.piSources(state).map((source) => piModelEntry(source, gatewayRoot));
+  }
+
+  /** Pi models.json 里每个模型的来源（id、显示名、资料、格式与价格），顺序同写进去的清单。 */
+  private piSources(state: ApiEndpointState): PiModelSource[] {
     const listed = this.served(state);
     const bare = usableModels(listed);
     const bareLabels = this.bareModelLabels(listed, bare);
@@ -3325,7 +3422,7 @@ export class ApiEndpointService {
         cost: this.piCost(endpoint, modelId),
       });
     });
-    return sources.map((source) => piModelEntry(source, gatewayRoot));
+    return sources;
   }
 
   /** 这家这个模型 Pi 问中转站用的格式：这家给它的格式与「只用这种格式」。 */
@@ -3478,6 +3575,30 @@ export class ApiEndpointService {
   }
 
   /**
+   * 模型资料变了或有模型下线、恢复：开着的 Pi 跟着重写 models.json 的模型清单（settings.json 照接管记录写，Pi 自己换过的不碰）。
+   * Osuna 的服务商被外部改过时不动，留给提示区；写不成只记日志，不挡调用方。
+   */
+  private rewritePiModels(state: ApiEndpointState): void {
+    if (!state.agents.pi.enabled || this.gatewayUrlFor("pi") === null) return;
+    const isRerouted = this.inspectPi(true).issues.some(
+      (issue) => issue.code === "not_through_gateway",
+    );
+    if (isRerouted) {
+      this.logger.info("Pi models.json changed outside Osuna; model list left as it is");
+      return;
+    }
+    try {
+      this.syncCli({
+        provider: "pi",
+        wiring: this.cliWiring(state, "pi", this.store.readGatewayTokens()),
+        agent: state.agents.pi,
+      });
+    } catch (error) {
+      this.logger.warn({ err: error }, "Failed to rewrite Pi's model list");
+    }
+  }
+
+  /**
    * 中转站记下或恢复了已下线模型（含满一周到期）：走「接口变了」的流程，重写 Codex 模型目录与
    * Claude Code 的模型选择列表，再通知客户端刷新开着总开关的 Agent。接口与默认模型都不动。
    */
@@ -3487,6 +3608,7 @@ export class ApiEndpointService {
       if (!state) return;
       this.rewriteCodexCatalog(state);
       this.rewriteClaudeHints(state);
+      this.rewritePiModels(state);
       for (const provider of CLI_CONFIG_PROVIDERS) {
         if (state.agents[provider].enabled) this.onActiveEndpointChanged(provider);
       }
@@ -3500,6 +3622,7 @@ export class ApiEndpointService {
       if (!state) return;
       this.rewriteCodexCatalog(state);
       this.rewriteClaudeHints(state);
+      this.rewritePiModels(state);
     });
   }
 
@@ -4443,6 +4566,9 @@ export class ApiEndpointService {
       ) {
         this.rewriteClaudeHints(next);
       }
+      if (this.cliFingerprint(state, "pi", tokens) !== this.cliFingerprint(next, "pi", tokens)) {
+        this.rewritePiModels(next);
+      }
     });
   }
 
@@ -5181,7 +5307,8 @@ export class ApiEndpointService {
    * Pi：先 models.json（Osuna 的服务商得先在），再 settings.json；settings.json 写不成时 models.json 与它的接管记录退回去，
    * 两份要么都指向中转站，要么都不动。
    */
-  private writePiEndpoint(wiring: CliWiring): void {
+  private writePiEndpoint(input: CliEndpointWrite): void {
+    const { wiring } = input;
     const modelsPath = this.resolvePiModelsPath();
     const before = {
       bytes: readOptionalFile(modelsPath),
@@ -5189,7 +5316,10 @@ export class ApiEndpointService {
     };
     this.writePiModels(wiring);
     try {
-      this.writePiSettings(wiring.model);
+      this.writePiSettings({
+        wiring: { model: wiring.model, thinking: wiring.defaultThinking },
+        shouldRewriteModel: input.shouldRewriteModel,
+      });
     } catch (error) {
       this.putPiModelsBack(before);
       throw error;
@@ -5241,14 +5371,14 @@ export class ApiEndpointService {
     });
   }
 
-  private writePiSettings(model: string): void {
+  private writePiSettings(input: PiSettingsWrite): void {
     const filePath = this.resolvePiSettingsPath();
     const record = this.store.readPiSettingsTakeover();
     let createdBackup: string | null = null;
     this.writeConfigFile<TakeoverWrite<PiSettingsTakeover>>({
       filePath,
       compute: (text, current) => {
-        const result = applyPiSettings({ text, model, takeover: record.takeover });
+        const result = applyPiSettings({ text, takeover: record.takeover, ...input });
         if (result.kind === "unparsable") {
           throw unparsable({ filePath, detail: result.message, reason: result.reason });
         }
@@ -5776,12 +5906,9 @@ function findProvider(provider: string): CliConfigProvider | undefined {
   return CLI_CONFIG_PROVIDERS.find((candidate) => candidate === provider);
 }
 
-/** Osuna 对话里换成接口模型的提供方（模型清单、接口名显示方式等快照字段）；Pi 的还没接上（工单 03），它的分组只给设置页。 */
-type ChatModelProvider = Exclude<CliConfigProvider, "pi">;
-
-function findChatProvider(provider: string): ChatModelProvider | undefined {
-  const supported = findProvider(provider);
-  return supported === "pi" ? undefined : supported;
+/** Osuna 对话里接口模型的 id：Pi 的要写成 Pi 认得的「osuna/模型」，别的就是接口模型的 id。 */
+function chatModelId(provider: CliConfigProvider, modelId: string): string {
+  return provider === "pi" ? `${PI_PROVIDER_ID}/${modelId}` : modelId;
 }
 
 function requireProvider(provider: string): CliConfigProvider {

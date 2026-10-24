@@ -1,9 +1,12 @@
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
+
+type EndpointSave = Parameters<DaemonClient["apiEndpointSave"]>[0];
 
 /*
  * Pi 的「使用第三方接口」（任务 10-16-pi-omp-endpoints 工单 02）：真实 daemon，Pi 的 agent 目录是临时目录
@@ -98,7 +101,7 @@ describe.skipIf(process.platform === "win32")("Pi API endpoints over the daemon 
   }
 
   /** 一家接口，三种格式的地址都有：GPT 走 Responses、Claude 走 Anthropic、别的留在 Chat。 */
-  async function createEndpoint(): Promise<string> {
+  async function createEndpoint(extra: Partial<EndpointSave> = {}): Promise<string> {
     const saved = await client.apiEndpointSave({
       provider: "pi",
       name: "Relay",
@@ -109,10 +112,23 @@ describe.skipIf(process.platform === "win32")("Pi API endpoints over the daemon 
       ],
       apiKey: "sk-relay-secret",
       models: [{ id: "glm-5" }, { id: "gpt-5" }, { id: "claude-opus-5-5" }],
+      ...extra,
     });
     expect(saved.error).toBeNull();
     if (!saved.endpoint) throw new Error("Expected a saved endpoint");
     return saved.endpoint.id;
+  }
+
+  async function settingsJson(): Promise<Record<string, unknown>> {
+    return JSON.parse(await readFile(settingsPath, "utf8")) as Record<string, unknown>;
+  }
+
+  async function osunaModelIds(): Promise<string[]> {
+    const providers = readJsonc(await readFile(modelsPath, "utf8")).providers as Record<
+      string,
+      { models: { id: string; name: string }[] }
+    >;
+    return providers.osuna?.models.map((model) => `${model.id} ${model.name}`) ?? [];
   }
 
   test("turning the switch on adds Osuna's provider and default, and turning it off puts both files back", async () => {
@@ -217,25 +233,303 @@ describe.skipIf(process.platform === "win32")("Pi API endpoints over the daemon 
     });
   });
 
-  test("Pi's snapshot carries the endpoint groups for its default model, with no thinking levels yet", async () => {
-    await createEndpoint();
+  test("new Pi chats in Osuna pick from Osuna's models as Pi names them, with the levels Pi offers", async () => {
+    await createEndpoint({ modelSettings: { models: { "glm-5": { efforts: ["low", "high"] } } } });
     await client.apiEndpointSetAgentSettings({ provider: "pi", enabled: true });
-    async function piGroups(): Promise<string[] | null> {
+    async function piChoices(): Promise<{ models: string[]; groups: string[] } | null> {
       const snapshot = await client.getProvidersSnapshot();
       const entry = snapshot.entries.find((candidate) => candidate.provider === "pi");
       const groups = entry?.apiEndpointModelGroups;
-      if (!groups) return null;
-      const rows: string[] = [];
-      for (const group of groups) {
-        for (const model of group.models) {
-          rows.push(`${group.name} ${model.id}${model.thinkingOptions ? " thinks" : ""}`);
-        }
-      }
-      return rows;
+      if (!groups || !entry.models) return null;
+      const describeModel = (model: {
+        id: string;
+        isDefault?: boolean;
+        thinkingOptions?: { id: string }[];
+        defaultThinkingOptionId?: string;
+      }) => {
+        const levels = model.thinkingOptions?.map((option) => option.id).join(",");
+        const thinking = levels ? ` [${levels}] from ${model.defaultThinkingOptionId}` : "";
+        return `${model.id}${model.isDefault ? " (default)" : ""}${thinking}`;
+      };
+      return {
+        models: entry.models.map(describeModel),
+        groups: groups.flatMap((group) => group.models.map(describeModel)),
+      };
     }
-    await expect
-      .poll(piGroups, { timeout: 10_000 })
-      .toEqual(["Relay relay/glm-5", "Relay relay/gpt-5", "Relay relay/claude-opus-5-5"]);
+    // 没记住上次选择的新对话用默认模型；起步档位没设时是 Pi 的 medium 贴合到模型有的一档。
+    // 模型没有 none，Pi 的 off 映射成 null，不给选。
+    await expect.poll(piChoices, { timeout: 10_000 }).toEqual({
+      models: [
+        "osuna/glm-5 (default) [low,high] from high",
+        "osuna/gpt-5",
+        "osuna/claude-opus-5-5",
+      ],
+      groups: [
+        // 光秃秃的默认模型在分组里标在提供它的第一家上。
+        "osuna/relay/glm-5 (default) [low,high] from high",
+        "osuna/relay/gpt-5",
+        "osuna/relay/claude-opus-5-5",
+      ],
+    });
+  });
+
+  test("the default thinking is written only when set, and put back when the switch goes off", async () => {
+    await writeFile(
+      settingsPath,
+      USER_SETTINGS.replace('"theme": "dark"', '"defaultThinkingLevel": "low",\n  "theme": "dark"'),
+    );
+    const before = await readFile(settingsPath, "utf8");
+    await createEndpoint({ modelSettings: { models: { "glm-5": { efforts: ["low", "high"] } } } });
+    await client.apiEndpointSetAgentSettings({ provider: "pi", enabled: true });
+    // 没设：用户自己的档位跟过来，文件不改。
+    expect(await settingsJson()).toMatchObject({ defaultThinkingLevel: "low" });
+
+    const set = await client.apiEndpointSetAgentSettings({
+      provider: "pi",
+      enabled: true,
+      defaultThinkingOptionId: "high",
+    });
+    expect(set.error).toBeNull();
+    expect(set.agent).toMatchObject({ defaultThinkingOptionId: "high" });
+    expect(await settingsJson()).toMatchObject({ defaultThinkingLevel: "high" });
+    const refused = await client.apiEndpointSetAgentSettings({
+      provider: "pi",
+      enabled: true,
+      defaultThinkingOptionId: "ultra",
+    });
+    expect(refused.error).toMatchObject({ code: "invalid_input" });
+
+    // Pi 里改了档位：跟过去。
+    const text = await readFile(settingsPath, "utf8");
+    await writeFile(
+      settingsPath,
+      text.replace('"defaultThinkingLevel": "high"', '"defaultThinkingLevel": "minimal"'),
+    );
+    const listed = await client.apiEndpointList("pi");
+    // minimal 这个模型没有：照 Pi 显示成它跑的那一档。
+    expect(listed.agents?.pi).toMatchObject({ defaultThinkingOptionId: "low" });
+    expect(listed.health).toEqual([]);
+
+    await client.apiEndpointSetAgentSettings({
+      provider: "pi",
+      enabled: true,
+      defaultThinkingOptionId: "high",
+    });
+    await client.apiEndpointSetAgentSettings({ provider: "pi", enabled: false });
+    expect(await readFile(settingsPath, "utf8")).toBe(before);
+  });
+
+  test("an existing enabledModels list gets the default first, follows it, and is put back", async () => {
+    const scoped = USER_SETTINGS.replace(
+      '"theme": "dark"',
+      '"enabledModels": ["anthropic/claude-sonnet-4-5", "openai/gpt-5"],\n  "theme": "dark"',
+    );
+    await writeFile(settingsPath, scoped);
+    await createEndpoint();
+    await client.apiEndpointSetAgentSettings({ provider: "pi", enabled: true });
+    expect((await settingsJson()).enabledModels).toEqual([
+      "osuna/glm-5",
+      "anthropic/claude-sonnet-4-5",
+      "openai/gpt-5",
+    ]);
+    await client.apiEndpointSetAgentSettings({
+      provider: "pi",
+      enabled: true,
+      defaultModelId: "relay/gpt-5",
+    });
+    expect((await settingsJson()).enabledModels).toEqual([
+      "osuna/relay/gpt-5",
+      "anthropic/claude-sonnet-4-5",
+      "openai/gpt-5",
+    ]);
+    const preview = await client.apiEndpointPreviewSwitchOff("pi");
+    expect(JSON.stringify(preview.preview?.files[0]?.lines)).toContain("osuna/relay/gpt-5");
+
+    await client.apiEndpointSetAgentSettings({ provider: "pi", enabled: false });
+    expect(await readFile(settingsPath, "utf8")).toBe(scoped);
+  });
+
+  test("no enabledModels list is made when there is none", async () => {
+    await createEndpoint();
+    await client.apiEndpointSetAgentSettings({ provider: "pi", enabled: true });
+    expect(await settingsJson()).not.toHaveProperty("enabledModels");
+  });
+
+  test("another of Osuna's models saved as the default in Pi becomes Osuna's default model", async () => {
+    await createEndpoint();
+    await client.apiEndpointSetAgentSettings({ provider: "pi", enabled: true });
+    const text = await readFile(settingsPath, "utf8");
+    await writeFile(
+      settingsPath,
+      text.replace('"defaultModel": "glm-5"', '"defaultModel": "relay/gpt-5"'),
+    );
+
+    const listed = await client.apiEndpointList("pi");
+    expect(listed.agents?.pi).toMatchObject({ defaultModelId: "relay/gpt-5" });
+    expect(listed.agentIssues?.pi).toEqual([]);
+    expect(listed.health).toEqual([]);
+    expect(await settingsJson()).toMatchObject({
+      defaultProvider: "osuna",
+      defaultModel: "relay/gpt-5",
+    });
+  });
+
+  test("a model outside Osuna saved in Pi is reported as replaced, like Claude Code and Codex", async () => {
+    await createEndpoint();
+    await client.apiEndpointSetAgentSettings({ provider: "pi", enabled: true });
+    const text = await readFile(settingsPath, "utf8");
+    const replaced = text
+      .replace('"defaultProvider": "osuna"', '"defaultProvider": "openai"')
+      .replace('"defaultModel": "glm-5"', '"defaultModel": "gpt-6"');
+    await writeFile(settingsPath, replaced);
+
+    const listed = await client.apiEndpointList("pi");
+    expect(listed.agentIssues?.pi).toEqual([
+      {
+        code: "model_replaced",
+        params: { file: settingsPath, model: "openai/gpt-6", defaultModel: "glm-5" },
+        message: expect.stringContaining("Pi's model was changed to openai/gpt-6"),
+      },
+    ]);
+    expect(listed.agents?.pi).toMatchObject({ defaultModelId: "glm-5" });
+
+    const kept = await client.apiEndpointKeepCurrentSettings({
+      provider: "pi",
+      code: "model_replaced",
+    });
+    expect(kept.error).toBeNull();
+    expect((await client.apiEndpointList("pi")).agentIssues?.pi).toEqual([]);
+    // 之后的重写不碰 Pi 自己的默认模型。
+    await client.apiEndpointSetAgentSettings({
+      provider: "pi",
+      enabled: true,
+      defaultThinkingOptionId: "high",
+    });
+    expect(await settingsJson()).toMatchObject({
+      defaultProvider: "openai",
+      defaultModel: "gpt-6",
+    });
+
+    // 重新应用写回默认模型。
+    const reapplied = await client.apiEndpointSetAgentSettings({
+      provider: "pi",
+      enabled: true,
+      reapply: true,
+    });
+    expect(reapplied.error).toBeNull();
+    expect(await settingsJson()).toMatchObject({ defaultProvider: "osuna", defaultModel: "glm-5" });
+  });
+
+  test("Osuna's provider pointed elsewhere reads as no longer going through the gateway", async () => {
+    await createEndpoint();
+    await client.apiEndpointSetAgentSettings({ provider: "pi", enabled: true });
+    const text = await readFile(modelsPath, "utf8");
+    await writeFile(
+      modelsPath,
+      text.replace(`${gatewayRoot()}/v1`, "https://other-tool.example/v1"),
+    );
+
+    expect((await client.apiEndpointList("pi")).agentIssues?.pi).toEqual([
+      {
+        code: "not_through_gateway",
+        params: { file: modelsPath, keys: "providers.osuna" },
+        message: expect.stringContaining("Pi no longer goes through the gateway"),
+      },
+    ]);
+  });
+
+  test("the model list in models.json follows the endpoints, selected models and name display", async () => {
+    const endpointId = await createEndpoint();
+    await client.apiEndpointSetAgentSettings({ provider: "pi", enabled: true });
+    const saved = await client.apiEndpointSave({
+      provider: "pi",
+      endpointId,
+      name: "Relay",
+      baseUrls: [{ format: "openai_chat", url: "https://relay.example/v1" }],
+      models: [{ id: "glm-5" }, { id: "kimi-k3" }],
+    });
+    expect(saved.error).toBeNull();
+    expect(await osunaModelIds()).toEqual([
+      "glm-5 glm-5",
+      "kimi-k3 kimi-k3",
+      "relay/glm-5 glm-5 (Relay)",
+      "relay/kimi-k3 kimi-k3 (Relay)",
+    ]);
+    expect((await client.apiEndpointSetEndpointNameDisplay({ display: "never" })).error).toBeNull();
+    expect(await osunaModelIds()).toEqual([
+      "glm-5 glm-5",
+      "kimi-k3 kimi-k3",
+      "relay/glm-5 glm-5",
+      "relay/kimi-k3 kimi-k3",
+    ]);
+  });
+
+  test("a model its vendor says is retired leaves the model list in models.json", async () => {
+    // 本机假上游：glm-5 回 410 已下线（magpie retired_test.go 的 zenDeprecated）。
+    const upstream = createServer((_request, res) => {
+      res.writeHead(410, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          type: "error",
+          error: { type: "ModelDeprecated", message: "Model glm-5 has been deprecated." },
+          metadata: { model: "glm-5" },
+        }),
+      );
+    });
+    await new Promise<void>((resolve) => upstream.listen(0, "127.0.0.1", resolve));
+    try {
+      const address = upstream.address();
+      if (address === null || typeof address === "string") throw new Error("Expected a port");
+      await createEndpoint({
+        baseUrls: [{ format: "openai_chat", url: `http://127.0.0.1:${address.port}/v1` }],
+        models: [{ id: "glm-5" }, { id: "kimi-k3" }],
+      });
+      await client.apiEndpointSetAgentSettings({
+        provider: "pi",
+        enabled: true,
+        defaultModelId: "kimi-k3",
+      });
+      const response = await fetch(`${gatewayRoot()}/v1/chat/completions`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${(await piToken()) ?? ""}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ model: "glm-5", messages: [{ role: "user", content: "hi" }] }),
+      });
+      expect(response.status).toBe(410);
+      await expect
+        .poll(osunaModelIds, { timeout: 10_000 })
+        .toEqual(["kimi-k3 kimi-k3", "relay/kimi-k3 kimi-k3 (Relay)"]);
+    } finally {
+      await new Promise<void>((resolve) => upstream.close(() => resolve()));
+    }
+  });
+
+  test("the default model no longer served moves to another one, as for the other agents", async () => {
+    const endpointId = await createEndpoint();
+    await client.apiEndpointSetAgentSettings({
+      provider: "pi",
+      enabled: true,
+      defaultModelId: "relay/gpt-5",
+    });
+    await client.apiEndpointSave({
+      provider: "pi",
+      endpointId,
+      name: "Relay",
+      baseUrls: [{ format: "openai_chat", url: "https://relay.example/v1" }],
+      models: [{ id: "glm-5" }],
+    });
+    const listed = await client.apiEndpointList("pi");
+    const moved = listed.agents?.pi?.defaultModelId;
+    expect(moved).not.toBe("relay/gpt-5");
+    expect(await settingsJson()).toMatchObject({ defaultModel: moved });
+  });
+
+  test("a rewrite puts Pi into the reopen hints", async () => {
+    await createEndpoint();
+    await client.apiEndpointSetAgentSettings({ provider: "pi", enabled: true });
+    expect((await client.apiEndpointList("pi")).reopenHints).toHaveProperty("pi");
   });
 
   test("the switch-off preview lists Pi's default provider and model and Osuna's provider", async () => {

@@ -75,21 +75,17 @@ export function piBareFormat(
 /** `gatewayRoot` 是中转站的根地址（Anthropic 的 SDK 自己补 /v1）。 */
 export function piModelEntry(source: PiModelSource, gatewayRoot: string): PiModelEntry {
   const { id, facts } = source;
-  const efforts = facts.efforts ?? [];
-  // 会思考的模型档位不知道也让 Pi 给它的思考档位，中转站再贴合模型（magpie 的 m.Reasoning || len(m.Efforts) > 0）。
-  const reasoning = facts.thinks === true || efforts.length > 0;
+  const { reasoning, thinkingLevelMap } = piModelThinking(source);
   const entry: PiModelEntry = { id, name: source.name, reasoning };
   if (source.format === "openai_responses") entry.api = "openai-responses";
-  const isAnthropic = source.format === "anthropic_messages";
-  if (isAnthropic) {
+  if (source.format === "anthropic_messages") {
     entry.api = "anthropic-messages";
     entry.baseUrl = gatewayRoot;
     // 只认自适应思考的 Claude：不说的话 Pi 会要思考预算，被它拒绝。
     if (thinksAdaptivelyOnly(id)) entry.compat = { forceAdaptiveThinking: true };
   }
   if (facts.images === true) entry.input = ["text", "image"];
-  const levels = piThinkingLevels({ efforts, claudeOff: isAnthropic && isClaudeModel(id) });
-  if (levels !== null) entry.thinkingLevelMap = levels;
+  if (thinkingLevelMap !== undefined) entry.thinkingLevelMap = thinkingLevelMap;
   // 不写的话 Pi 把每个模型都当 128K，回复上限 16384。
   if (facts.context !== undefined && facts.context > 0) entry.contextWindow = facts.context;
   const output = publishedOutput(facts);
@@ -98,6 +94,46 @@ export function piModelEntry(source: PiModelSource, gatewayRoot: string): PiMode
   const cache = piPromptCache({ format: source.format, id });
   if (cache !== null) entry.promptCache = cache;
   return entry;
+}
+
+/** 写进 models.json 的那个模型会不会思考、Pi 的档位怎么映射（Pi 按它们给出能选的档位）。 */
+export type PiModelThinking = Pick<PiModelEntry, "reasoning" | "thinkingLevelMap">;
+
+export function piModelThinking(source: PiModelSource): PiModelThinking {
+  const { id, facts } = source;
+  const efforts = facts.efforts ?? [];
+  // 会思考的模型档位不知道也让 Pi 给它的思考档位，中转站再贴合模型（magpie 的 m.Reasoning || len(m.Efforts) > 0）。
+  const reasoning = facts.thinks === true || efforts.length > 0;
+  const isAnthropic = source.format === "anthropic_messages";
+  const levels = piThinkingLevels({ efforts, claudeOff: isAnthropic && isClaudeModel(id) });
+  return levels === null ? { reasoning } : { reasoning, thinkingLevelMap: levels };
+}
+
+/**
+ * Pi 给这个模型能选的档位（magpie piSupported，同 pi-ai 的 getSupportedThinkingLevels）：不会思考的只有 off；
+ * 会思考的是没映射成 null 的档，xhigh 与 max 要映射了才有。
+ */
+export function piOfferedLevels(thinking: PiModelThinking): string[] {
+  if (!thinking.reasoning) return ["off"];
+  const map = thinking.thinkingLevelMap ?? {};
+  return PI_THINKING_LEVELS.filter((level) => {
+    const isMapped = Object.hasOwn(map, level);
+    if (isMapped) return map[level] !== null;
+    return level !== "xhigh" && level !== "max";
+  });
+}
+
+/** 设成 level 时 Pi 让模型跑在哪一档（magpie piClamp，同 pi-ai 的 clampThinkingLevel）：有就是它，否则往上找最近的，再往下找。 */
+export function piClamp(level: string, offered: readonly string[]): string {
+  if (offered.includes(level)) return level;
+  const at = PI_THINKING_LEVELS.indexOf(level);
+  if (at < 0) return offered[0] ?? "off";
+  const above = PI_THINKING_LEVELS.slice(at).find((candidate) => offered.includes(candidate));
+  if (above !== undefined) return above;
+  const below = PI_THINKING_LEVELS.slice(0, at).findLast((candidate) =>
+    offered.includes(candidate),
+  );
+  return below ?? "off";
 }
 
 /**

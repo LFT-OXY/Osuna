@@ -3,13 +3,17 @@
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import {
+  findNodeAtLocation,
   parse as parseJsonc,
+  parseTree,
   printParseErrorCode,
   type FormattingOptions,
   type ParseError,
 } from "jsonc-parser";
+import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import type { ClaudeSettingsUnparsableReason } from "./claude-settings-patch.js";
+import { CliModelHoldSchema, type CliModelHold, type CliPicks } from "./cli-model-hold.js";
 import {
   classifyOriginalFile,
   detectFormatting,
@@ -32,6 +36,9 @@ import type { PiModelEntry } from "./pi-model-entries.js";
  *   关掉时放回接管前的值（多半是没有），为它新建的 providers 空了就删掉。
  * - settings.json 的 defaultProvider（osuna）与 defaultModel：两个键是 Pi 的一个默认模型，一起放回（照 magpie 的 Disconnect）。
  *   关掉时默认服务商还是 Osuna、或两个键都还是 Osuna 写的，就放回接管前的一对；用户开着期间换成了别家的模型，两个都留着。
+ *   Pi 里换过的默认模型归 Pi（ADR 0012），重写不碰。设了默认思考档位才写 defaultThinkingLevel。
+ * - settings.json 的 enabledModels：已有清单时把默认模型挪到最前（Pi 新会话先用清单的第一个，比 magpie 只追加到末尾多做），
+ *   关掉时挪回原位、去掉指向 Osuna 的条目，删空了整个删掉；没有清单不新建。
  * 接管前文件不存在、关掉后只剩空对象就删掉文件；接管前是空对象的逐字节放回。
  */
 
@@ -46,14 +53,64 @@ export const PiModelsTakeoverSchema = z.object({
 });
 export type PiModelsTakeover = z.infer<typeof PiModelsTakeoverSchema>;
 
-const SETTINGS_KEYS = ["defaultProvider", "defaultModel"] as const;
-type SettingsKey = (typeof SETTINGS_KEYS)[number];
+// 默认服务商与默认模型是 Pi 的一个默认模型，一起写、一起放回；默认思考档位设了才写。
+const PAIR_KEYS = ["defaultProvider", "defaultModel"] as const;
+const THINKING_KEY = "defaultThinkingLevel";
+const SCOPE_KEY = "enabledModels";
+
+// written 为 null：文件里这个键没了（Pi 里删掉了默认模型后记作 Pi 的）。
+const PiSettingsKeyRecordSchema = z.object({
+  original: OriginalValueSchema,
+  written: z.string().nullable(),
+});
+
+/** enabledModels 里 Osuna 挪到最前的默认模型，与它挪之前在用户清单里的位置（null 为 Osuna 加的）。 */
+const PiScopePlacementSchema = z.object({
+  front: z.string(),
+  wasAt: z.number().int().nonnegative().nullable(),
+});
+type PiScopePlacement = z.infer<typeof PiScopePlacementSchema>;
 
 export const PiSettingsTakeoverSchema = z.object({
   originalFile: OriginalFileSchema,
-  keys: z.record(z.string(), z.object({ original: OriginalValueSchema, written: z.string() })),
+  keys: z.record(z.string(), PiSettingsKeyRecordSchema),
+  // 文件里的默认模型归 Pi（见 cli-model-hold.ts）：重写不碰这一对。
+  modelHeld: CliModelHoldSchema.optional(),
+  scope: PiScopePlacementSchema.optional(),
 });
 export type PiSettingsTakeover = z.infer<typeof PiSettingsTakeoverSchema>;
+
+/** 写进 settings.json 的默认设置：默认模型（接口模型的 id），默认思考档位（null 为没设，不碰用户自己的）。 */
+export interface PiSettingsWiring {
+  model: string;
+  thinking: string | null;
+}
+
+export interface PiSettingsApplyInput {
+  // null 为文件不存在。
+  text: string | null;
+  wiring: PiSettingsWiring;
+  // null 为首次接管。
+  takeover: PiSettingsTakeover | null;
+  // 「重新应用」或在 Osuna 里换了默认模型：Pi 自己换过的默认模型也写回。省略为不写回。
+  shouldRewriteModel?: boolean;
+}
+
+/** Pi 的两份文件现在的内容；null 为不存在。 */
+export interface PiStartupFiles {
+  settingsText: string | null;
+  modelsText: string | null;
+}
+
+/** settings.json 现在的内容（null 为不存在）与接管记录。 */
+export interface PiSettingsFile {
+  text: string | null;
+  takeover: PiSettingsTakeover | null;
+}
+
+export interface PiSettingsKeepInput extends PiSettingsFile {
+  held: CliModelHold;
+}
 
 /** Osuna 写进 models.json 的 providers.osuna。 */
 export interface PiProviderBlock {
@@ -169,40 +226,97 @@ export function readPiGateway(text: string | null): PiGatewayAddress | null {
   return { baseUrl, apiKey };
 }
 
-/** 把默认服务商与默认模型写进 settings.json。 */
-export function applyPiSettings(input: {
-  text: string | null;
-  model: string;
-  takeover: PiSettingsTakeover | null;
-}): PiConfigPatchResult<PiSettingsTakeover> {
+/**
+ * 把默认设置写进 settings.json：默认服务商与模型（Pi 换过、记作它的就不碰，照 magpie 的 Follow），设了的默认思考档位，
+ * 以及 enabledModels 里把默认模型挪到最前（Pi 新会话先用清单里的第一个；没有清单不新建）。
+ */
+export function applyPiSettings(
+  input: PiSettingsApplyInput,
+): PiConfigPatchResult<PiSettingsTakeover> {
   const opened = openFile(input.text, "settings.json");
   if (opened.kind === "unparsable") return opened;
   const { bom, root, formatting } = opened;
-  const values: Record<SettingsKey, string> = {
-    defaultProvider: PI_PROVIDER_ID,
-    defaultModel: input.model,
-  };
-  let text = opened.text;
-  const keys: PiSettingsTakeover["keys"] = {};
-  for (const key of SETTINGS_KEYS) {
-    const original = input.takeover?.keys[key]?.original ?? originalValue(root, key);
-    keys[key] = { original, written: values[key] };
-    text = edit(text, [key], values[key], formatting);
+  const { wiring, takeover } = input;
+  const isPairHeld =
+    takeover !== null &&
+    input.shouldRewriteModel !== true &&
+    (takeover.modelHeld !== undefined || isPairChanged(root, takeover));
+  const draft: SettingsDraft = { text: opened.text, keys: {}, root, formatting, takeover };
+  if (isPairHeld) keepPair(draft);
+  else writePair(draft, wiring.model);
+  writeThinking(draft, wiring.thinking);
+  const written = readObject(draft.text);
+  const placed = placeScope({
+    value: written[SCOPE_KEY],
+    previous: takeover?.scope ?? null,
+    front: osunaRef(written),
+  });
+  if (placed.list !== null && !isDeepStrictEqual(placed.list, written[SCOPE_KEY])) {
+    draft.text = editScope({ text: draft.text, list: placed.list, formatting });
   }
+  const modelHeld = isPairHeld ? takeover.modelHeld : undefined;
   return {
     kind: "patched",
-    text: `${bom}${text}`,
+    text: `${bom}${draft.text}`,
     takeover: {
-      originalFile: input.takeover?.originalFile ?? classifyOriginalFile(input.text),
-      keys,
+      originalFile: takeover?.originalFile ?? classifyOriginalFile(input.text),
+      keys: draft.keys,
+      ...(modelHeld === undefined ? {} : { modelHeld }),
+      ...(placed.scope === null ? {} : { scope: placed.scope }),
     },
   };
 }
 
+/** 改写 settings.json 时一路改下去的正文与这次的接管记录；root 是改之前读到的。 */
+interface SettingsDraft {
+  text: string;
+  keys: PiSettingsTakeover["keys"];
+  root: Record<string, unknown>;
+  formatting: FormattingOptions;
+  takeover: PiSettingsTakeover | null;
+}
+
+/** 默认模型归 Pi：这一对不写，记录照旧。 */
+function keepPair(draft: SettingsDraft): void {
+  for (const key of PAIR_KEYS) {
+    const record = draft.takeover?.keys[key];
+    if (record) draft.keys[key] = record;
+  }
+}
+
+function writePair(draft: SettingsDraft, model: string): void {
+  const values: Record<(typeof PAIR_KEYS)[number], string> = {
+    defaultProvider: PI_PROVIDER_ID,
+    defaultModel: model,
+  };
+  for (const key of PAIR_KEYS) {
+    const original = draft.takeover?.keys[key]?.original ?? originalValue(draft.root, key);
+    draft.keys[key] = { original, written: values[key] };
+    draft.text = edit(draft.text, [key], values[key], draft.formatting);
+  }
+}
+
+/** 设了就写；不再设时 Osuna 写的放回原值，用户在 Pi 里改过的留着。 */
+function writeThinking(draft: SettingsDraft, thinking: string | null): void {
+  const record = draft.takeover?.keys[THINKING_KEY];
+  if (thinking !== null) {
+    const original = record?.original ?? originalValue(draft.root, THINKING_KEY);
+    draft.keys[THINKING_KEY] = { original, written: thinking };
+    draft.text = edit(draft.text, [THINKING_KEY], thinking, draft.formatting);
+    return;
+  }
+  if (record && holds(draft.root[THINKING_KEY], record.written)) {
+    draft.text = restoreValue(draft.text, [THINKING_KEY], record.original, draft.formatting);
+  }
+}
+
 /**
- * 关掉时的 settings.json（照 magpie 的 Disconnect：默认模型这一项是 Osuna 写的、或指着 Osuna 的模型就清掉，放回接通前的）：
- * 默认服务商还是 osuna，或两个键都还是 Osuna 写的值，两个键一起放回原值；用户开着期间换成了别家的模型就都留着。
- * 不拆开放回，免得拼出「原来的服务商 + Osuna 的模型名」。
+ * 关掉时的 settings.json（照 magpie 的 Disconnect）：
+ * - 默认服务商还是 osuna，或两个键都还是 Osuna 写的值（且没记作 Pi 的），两个键一起放回原值；用户换成了别家的模型就都留着。
+ *   不拆开放回，免得拼出「原来的服务商 + Osuna 的模型名」。
+ * - 默认思考档位还是 Osuna 写的就放回原值，用户改过的留着。
+ * - enabledModels：挪到最前的默认模型挪回原位，再去掉指向 Osuna 的条目（服务商删了，它们什么也不指；magpie piScopeWithout），
+ *   删空了整个删掉。
  */
 export function restorePiSettings(input: {
   text: string | null;
@@ -212,28 +326,100 @@ export function restorePiSettings(input: {
   const opened = openFile(input.text, "settings.json");
   if (opened.kind === "unparsable") return opened;
   const { bom, root, formatting } = opened;
-  const records = Object.entries(input.takeover.keys);
-  const isAllWritten = records.every(([key, record]) => root[key] === record.written);
+  const { takeover } = input;
   const isOnOsuna = root.defaultProvider === PI_PROVIDER_ID;
+  const isOursStill = takeover.modelHeld === undefined && !isPairChanged(root, takeover);
   let text = opened.text;
-  if (isOnOsuna || isAllWritten) {
-    for (const [key, record] of records) {
-      text = restoreValue(text, [key], record.original, formatting);
+  if (isOnOsuna || isOursStill) {
+    for (const key of PAIR_KEYS) {
+      const record = takeover.keys[key];
+      if (record) text = restoreValue(text, [key], record.original, formatting);
     }
   }
-  return finishedRestore({ bom, text, originalFile: input.takeover.originalFile });
+  const thinking = takeover.keys[THINKING_KEY];
+  if (thinking && holds(root[THINKING_KEY], thinking.written)) {
+    text = restoreValue(text, [THINKING_KEY], thinking.original, formatting);
+  }
+  const scope = root[SCOPE_KEY];
+  if (isScopeList(scope)) {
+    const kept = unplaceScope(scope, takeover.scope ?? null).filter(
+      (pattern) => !namesOsunaModel(pattern),
+    );
+    if (kept.length === 0) text = edit(text, [SCOPE_KEY], undefined, formatting);
+    else if (!isDeepStrictEqual(kept, scope)) text = editScope({ text, list: kept, formatting });
+  }
+  return finishedRestore({ bom, text, originalFile: takeover.originalFile });
 }
 
+/** 默认服务商或默认模型不再是 Osuna 记下的写入值（默认思考档位与 enabledModels 是 Pi 自己会存的，跟着走、不算）。 */
 export function inspectPiSettings(input: {
   text: string | null;
   takeover: PiSettingsTakeover | null;
 }): PiConfigInspection {
   const opened = openFile(input.text, "settings.json");
   if (opened.kind === "unparsable") return opened;
-  const modifiedKeys = Object.entries(input.takeover?.keys ?? {})
-    .filter(([key, record]) => opened.root[key] !== record.written)
-    .map(([key]) => key);
+  const recorded = input.takeover?.keys ?? {};
+  const modifiedKeys = PAIR_KEYS.filter((key) => {
+    const record = recorded[key];
+    return record !== undefined && !holds(opened.root[key], record.written);
+  });
   return { kind: "parsed", modifiedKeys };
+}
+
+/**
+ * Pi 自己存下、与 Osuna 记下的写入值不同的选择（照 magpie 的 Follow 与 effort 字段的 Get 读文件）：model 是 Pi 写法的
+ * 「服务商/模型」（删掉了为 null），level 是 defaultThinkingLevel。没有接管记录或读不懂为 null。
+ */
+export function readPiCliPicks(input: PiSettingsFile): CliPicks | null {
+  const { takeover } = input;
+  if (!takeover) return null;
+  const opened = openFile(input.text, "settings.json");
+  if (opened.kind === "unparsable") return null;
+  const { root } = opened;
+  const model = isPairChanged(root, takeover)
+    ? { now: piModelRef(root), isKept: takeover.modelHeld === "kept" }
+    : null;
+  const level = root[THINKING_KEY];
+  return {
+    model,
+    level: typeof level === "string" && level !== "" ? level : null,
+    isUltraCodeOn: null,
+    subagent: null,
+    subagentLevel: null,
+    memory: null,
+  };
+}
+
+/** 把文件里现在的默认模型记作 Pi 的（held 说是跟过去的还是保留当前设置留下的）：重写不碰。读不懂时原样返回。 */
+export function keepPiCliModel(input: PiSettingsKeepInput): PiSettingsTakeover | null {
+  const { takeover } = input;
+  if (!takeover) return takeover;
+  const opened = openFile(input.text, "settings.json");
+  if (opened.kind === "unparsable") return takeover;
+  const keys = { ...takeover.keys };
+  for (const key of PAIR_KEYS) {
+    const record = keys[key];
+    if (!record) continue;
+    const now = opened.root[key];
+    keys[key] = { ...record, written: typeof now === "string" ? now : null };
+  }
+  return { ...takeover, keys, modelHeld: input.held };
+}
+
+/**
+ * Pi 启动时读进来、Osuna 替它写的那部分（magpie startsWith）：settings.json 的默认设置与 enabledModels，
+ * models.json 里 Osuna 的服务商；读不懂时是整份文本。拿来比较，不用来读值。
+ */
+export function readPiStartupReads(input: PiStartupFiles): string {
+  const settings = openFile(input.settingsText, "settings.json");
+  const models = openModels(input.modelsText);
+  const settingsPart =
+    settings.kind === "unparsable"
+      ? (input.settingsText ?? "")
+      : [...PAIR_KEYS, THINKING_KEY, SCOPE_KEY].map((key) => settings.root[key]);
+  const modelsPart =
+    models.kind === "unparsable" ? (input.modelsText ?? "") : models.providers?.[PI_PROVIDER_ID];
+  return JSON.stringify({ settings: settingsPart, provider: modelsPart });
 }
 
 /** settings.json 的 defaultProvider；没设或读不懂为 null。 */
@@ -256,6 +442,100 @@ export function readPiModel(text: string | null): string | null {
   if (defaultProvider === PI_PROVIDER_ID) return defaultModel;
   if (typeof defaultProvider !== "string" || defaultProvider === "") return defaultModel;
   return `${defaultProvider}/${defaultModel}`;
+}
+
+/** 文件里的值还是记下的写入值（null 为没有这个键）。 */
+function holds(value: unknown, written: string | null): boolean {
+  return written === null ? value === undefined : value === written;
+}
+
+/** 默认服务商或默认模型不再是记下的写入值。 */
+function isPairChanged(root: Record<string, unknown>, takeover: PiSettingsTakeover): boolean {
+  return PAIR_KEYS.some((key) => {
+    const record = takeover.keys[key];
+    return record !== undefined && !holds(root[key], record.written);
+  });
+}
+
+/** Pi 写法的默认模型：「服务商/模型」，没设服务商时只是模型；没设为 null。 */
+function piModelRef(root: Record<string, unknown>): string | null {
+  const { defaultProvider, defaultModel } = root;
+  if (typeof defaultModel !== "string" || defaultModel === "") return null;
+  if (typeof defaultProvider !== "string" || defaultProvider === "") return defaultModel;
+  return `${defaultProvider}/${defaultModel}`;
+}
+
+/** 默认服务商是 Osuna 时 enabledModels 里它的写法「osuna/模型」；不是为 null。 */
+function osunaRef(root: Record<string, unknown>): string | null {
+  const ref = piModelRef(root);
+  return root.defaultProvider === PI_PROVIDER_ID ? ref : null;
+}
+
+/** Pi 当成清单读的 enabledModels：非空、全是字符串（magpie piScope）；别的样子 Pi 不按它挑模型，Osuna 也不碰。 */
+function isScopeList(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every((pattern): pattern is string => typeof pattern === "string")
+  );
+}
+
+/** 指着 Osuna 某个模型的条目（不含通配符的「osuna/…」）。 */
+function namesOsunaModel(pattern: string): boolean {
+  const isGlob = /[*?[]/.test(pattern);
+  return !isGlob && pattern.toLowerCase().startsWith(`${PI_PROVIDER_ID}/`);
+}
+
+/** 用户自己的清单：上次挪到最前的还在最前，就挪回原位（Osuna 加的拿掉）。 */
+function unplaceScope(list: readonly string[], previous: PiScopePlacement | null): string[] {
+  const user = [...list];
+  if (previous === null || user[0] !== previous.front) return user;
+  user.shift();
+  if (previous.wasAt !== null)
+    user.splice(Math.min(previous.wasAt, user.length), 0, previous.front);
+  return user;
+}
+
+/** 换掉 enabledModels：用户写成一行的照样写成一行，别的按文件格式展开。 */
+interface ScopeEdit {
+  text: string;
+  list: string[];
+  formatting: FormattingOptions;
+}
+
+function editScope(input: ScopeEdit): string {
+  const { text, list } = input;
+  const tree = parseTree(text, [], JSONC_OPTIONS);
+  const node = tree ? findNodeAtLocation(tree, [SCOPE_KEY]) : undefined;
+  const isOneLine =
+    node !== undefined && !/\r?\n/.test(text.slice(node.offset, node.offset + node.length));
+  if (!isOneLine) return edit(text, [SCOPE_KEY], list, input.formatting);
+  const inline = `[${list.map((pattern) => JSON.stringify(pattern)).join(", ")}]`;
+  return `${text.slice(0, node.offset)}${inline}${text.slice(node.offset + node.length)}`;
+}
+
+interface ScopePlacement {
+  // 要写进去的清单；null 为没有清单，不碰。
+  list: string[] | null;
+  scope: PiScopePlacement | null;
+}
+
+/** 先挪回上次的，再把 front 放到最前；front 为 null（默认服务商不是 Osuna）时只挪回。 */
+interface PlaceScopeInput {
+  // 文件里现在的 enabledModels。
+  value: unknown;
+  previous: PiScopePlacement | null;
+  front: string | null;
+}
+
+function placeScope(input: PlaceScopeInput): ScopePlacement {
+  if (!isScopeList(input.value)) return { list: null, scope: null };
+  const user = unplaceScope(input.value, input.previous);
+  const { front } = input;
+  if (front === null) return { list: user, scope: null };
+  const at = user.indexOf(front);
+  const rest = at < 0 ? user : user.filter((_, index) => index !== at);
+  return { list: [front, ...rest], scope: { front, wasAt: at < 0 ? null : at } };
 }
 
 /**

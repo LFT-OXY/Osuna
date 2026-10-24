@@ -130,11 +130,11 @@ export function selectableEntryModels(
 }
 
 /**
- * 对话里能选的按接口分组的模型：只有 Osuna 对话换成接口模型的提供方。Pi 的分组只给设置页挑默认模型，
- * 对话里还是 Pi 自己的模型（Pi 要 `osuna/` 开头的写法，工单 03 接上）。
+ * 对话里能选的按接口分组的模型：Osuna 对话换成接口模型的提供方。Pi 的模型 id 由主机写成 Pi 认得的 `osuna/…`。
  */
 function chatEndpointGroups(entry: ProviderSnapshotEntry): ApiEndpointModelGroup[] | undefined {
-  return supportsApiEndpoints(entry.provider) ? entry.apiEndpointModelGroups : undefined;
+  const isEndpointChat = supportsApiEndpoints(entry.provider) || entry.provider === "pi";
+  return isEndpointChat ? entry.apiEndpointModelGroups : undefined;
 }
 
 function buildApiEndpointGroupRows(input: {

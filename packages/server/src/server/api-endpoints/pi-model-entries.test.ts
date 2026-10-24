@@ -4,8 +4,10 @@
 import { describe, expect, it } from "vitest";
 import {
   piBareFormat,
+  piClamp,
   piEndpointFormat,
   piModelEntry,
+  piOfferedLevels,
   piThinkingLevels,
 } from "./pi-model-entries.js";
 
@@ -133,5 +135,41 @@ describe("a Pi model entry", () => {
       api: "openai-responses",
       promptCache: { short: 300 },
     });
+  });
+});
+
+describe("the levels Pi offers for an Osuna model", () => {
+  it("is off alone for a model that does not think, and every level mapped otherwise", () => {
+    expect(piOfferedLevels({ reasoning: false })).toEqual(["off"]);
+    // 档位不知道：Pi 给 off 到 high，xhigh 与 max 要映射了才有。
+    expect(piOfferedLevels({ reasoning: true })).toEqual([
+      "off",
+      "minimal",
+      "low",
+      "medium",
+      "high",
+    ]);
+    const map = {
+      off: null,
+      minimal: null,
+      low: "low",
+      medium: "medium",
+      high: "high",
+      xhigh: "xhigh",
+      max: null,
+    };
+    expect(piOfferedLevels({ reasoning: true, thinkingLevelMap: map })).toEqual([
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+    ]);
+  });
+
+  it("clamps a level up first, then down (magpie piClamp)", () => {
+    expect(piClamp("high", ["low", "high"])).toBe("high");
+    expect(piClamp("minimal", ["low", "high"])).toBe("low");
+    expect(piClamp("max", ["low", "high"])).toBe("high");
+    expect(piClamp("medium", ["off"])).toBe("off");
   });
 });

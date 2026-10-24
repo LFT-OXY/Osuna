@@ -18,7 +18,7 @@ import {
 } from "./host-list";
 
 /*
- * Claude Code / Codex 提供方页「第三方接口」区的纯计算：总开关能不能打开、默认模型的候选、后台小任务 / Subagent / 记忆模型、
+ * Claude Code / Codex / Pi 提供方页「第三方接口」区的纯计算：总开关能不能打开、默认模型的候选、后台小任务 / Subagent / 记忆模型、
  * 「管理第三方接口」入口行的汇总、提示区的「设置被改过」。规则与 daemon 一致（R-A2、R-B6、ADR 0012）。
  */
 
@@ -312,6 +312,7 @@ export function selectAgentApiEndpointsView(input: {
 }): AgentApiEndpointsView {
   const { state, provider, now } = input;
   const agent = state.agents[provider] ?? { enabled: false, defaultModelId: null };
+  const endpointModelGroups = settingsModelGroups({ provider, groups: input.endpointModelGroups });
   const enabledEndpoints = state.endpoints.filter((endpoint) => endpoint.enabled !== false);
   // 被禁的模型不在服务：默认模型候选不列（分组由主机按在服务的模型给，已经去掉）。
   const modelOptions = withEndpointNamesShown({
@@ -320,7 +321,7 @@ export function selectAgentApiEndpointsView(input: {
         endpoints: enabledEndpoints,
         patterns: state.disabledModels,
       }),
-      groups: input.endpointModelGroups ?? [],
+      groups: endpointModelGroups ?? [],
     }),
     display: state.endpointNameDisplay,
   });
@@ -353,7 +354,7 @@ export function selectAgentApiEndpointsView(input: {
   let defaultThinking: DefaultThinkingView | null = null;
   if (agent.enabled) {
     defaultThinking = defaultThinkingView({
-      groups: input.endpointModelGroups ?? [],
+      groups: endpointModelGroups ?? [],
       defaultModelId: agent.defaultModelId,
       value: agent.defaultThinkingOptionId ?? null,
       usesUltraCode: agent.usesUltraCode === true,
@@ -391,6 +392,31 @@ export function selectAgentApiEndpointsView(input: {
     sideModels,
     codexSideModels,
   };
+}
+
+// Pi 对话里的接口模型 id 前面带 Pi 里 Osuna 服务商的名字（daemon 的 PI_PROVIDER_ID）。
+const PI_OSUNA_PREFIX = "osuna/";
+
+interface SettingsModelGroupsInput {
+  provider: string;
+  groups: ApiEndpointModelGroup[] | null;
+}
+
+/** 设置页按 Osuna 的模型 id（「接口标识/模型名」）挑默认模型：Pi 的分组 id 去掉 `osuna/`。 */
+function settingsModelGroups(input: SettingsModelGroupsInput): ApiEndpointModelGroup[] | null {
+  const { provider, groups } = input;
+  if (provider !== "pi" || groups === null) return groups;
+  return groups.map((group) =>
+    Object.assign({}, group, {
+      models: group.models.map((model) =>
+        Object.assign({}, model, { id: withoutOsunaPrefix(model.id) }),
+      ),
+    }),
+  );
+}
+
+function withoutOsunaPrefix(id: string): string {
+  return id.startsWith(PI_OSUNA_PREFIX) ? id.slice(PI_OSUNA_PREFIX.length) : id;
 }
 
 /**
