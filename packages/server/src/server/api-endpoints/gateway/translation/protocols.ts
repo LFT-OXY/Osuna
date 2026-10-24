@@ -16,6 +16,7 @@ import {
   parseChatRequest,
   renderChat,
 } from "./chat.js";
+import type { GeminiSignatureStore } from "../gemini-signatures.js";
 import { GeminiDecoder, buildGeminiRequest } from "./gemini.js";
 import type { EmitEvent, GatewayRequest, Reply, StreamEvent, Usage } from "./ir.js";
 import {
@@ -50,7 +51,8 @@ export interface StreamEncoder {
 
 interface UpstreamProtocol {
   build(request: GatewayRequest, model: string): Record<string, unknown>;
-  decoder(): StreamDecoder;
+  // signatures：Gemini 的调用签名存放（藏进调用 id）；只为认出回复里有什么时不给。
+  decoder(options?: { signatures?: GeminiSignatureStore }): StreamDecoder;
 }
 
 interface Protocol extends UpstreamProtocol {
@@ -91,7 +93,7 @@ const PROTOCOLS: Record<AgentFormat, Protocol> = {
 
 const GEMINI: UpstreamProtocol = {
   build: buildGeminiRequest,
-  decoder: () => new GeminiDecoder(),
+  decoder: (options) => new GeminiDecoder(options),
 };
 
 /** Agent 说的协议：Agent 不说 Gemini，按 Gemini 要是中转站自己的错。 */

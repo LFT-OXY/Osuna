@@ -9,6 +9,7 @@
 - [ ] 400 且错误说 key 无效（`API key not valid` / `API_KEY_INVALID`）认作 key 无效：标「需要检查」、换家（G4，比 magpie 多）。
 - [ ] 读 `error.details` 里 RetryInfo 的 `retryDelay` 作为恢复时间，与现有 Retry-After、重置时间同一优先级规则（G5，比 magpie 多）。
 - [ ] 额度用尽、欠费、限流按现有状态码 + 词表分类（`RESOURCE_EXHAUSTED` 等），冷却时长沿用现有规则。
+- [ ] 思考后空回复（只想了、什么都没说）在同一家多重试一次（magpie 59289946 的 `emptyRetries`：思考已随来随发给了 Agent，重问在原地接着写；从 03 挪来）。
 - [ ] 空回复（什么都没说、且不是 length / filter 结束）按失败重试或换家；没见到 finishReason 就断开按「回复不完整」处理；没有 candidate 的 chunk 交给空回复逻辑（照 magpie）。
 - [ ] 安全拦截（`promptFeedback.blockReason`，或 SAFETY、PROHIBITED_CONTENT、BLOCKLIST、SPII、IMAGE_SAFETY 结束且还没输出内容）按拒答：不冷却、换下一家。
 - [ ] 「没有这个模型」时按现有规则去掉这个格式再试下一种或下一家。

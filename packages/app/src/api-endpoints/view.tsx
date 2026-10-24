@@ -1016,9 +1016,12 @@ function ApiEndpointDetailSections({
   const hasCliWiring = useHostFeature(serverId, "apiEndpointCliWiring");
   // COMPAT(apiEndpointGemini): added in v0.17.0, remove gate after 2027-04-24. 老主机没有 Gemini 地址。
   const hasGemini = useHostFeature(serverId, "apiEndpointGemini");
-  // 「自己能联网搜索」只在有 Anthropic 或 Responses 地址时算数（ADR 0009）。
+  // 「自己能联网搜索」只在有 Anthropic、Responses 或 Gemini 地址时算数（ADR 0009）。
   const canSearchWeb = (endpoint.baseUrls ?? []).some(
-    (entry) => entry.format === "anthropic_messages" || entry.format === "openai_responses",
+    (entry) =>
+      entry.format === "anthropic_messages" ||
+      entry.format === "openai_responses" ||
+      entry.format === "gemini",
   );
   // 头部操作、删除、模型与映射保存的失败共用头部下面一个提示（docs/design.md：每处一个 Alert）。
   let pageError: { title: string; message: string } | null = null;

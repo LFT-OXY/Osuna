@@ -11,8 +11,11 @@ import {
   chatCallSignatures,
   geminiCompat,
   signedId,
+  unsignCalls,
   unsignedId,
 } from "./gemini-signatures.js";
+import { parseAnthropicRequest } from "./translation/anthropic.js";
+import { parseChatRequest } from "./translation/chat.js";
 
 const dirs: string[] = [];
 
@@ -161,5 +164,60 @@ describe("which Chat upstream is Gemini's (magpie geminiCompat)", () => {
     expect(at("http://box.local:8317/v1", "Gemini-3-Pro")).toBe(true);
     expect(at("http://127.0.0.1:8317/v1", "deepseek-v3")).toBe(false);
     expect(at("https://relay.example/v1", "gemini-3-pro")).toBe(false);
+  });
+});
+
+describe("a translated request's calls, their signatures taken off the ids (magpie unsignCalls)", () => {
+  test("each agent's call keeps its own id and has the signature; its result answers that id", () => {
+    const { store: kept } = store();
+    const signed = signedId({ id: "toolu_1", signature: SIGNATURE, store: kept });
+    const claudeCode = parseAnthropicRequest({
+      model: "gemini-3-pro-preview",
+      max_tokens: 100,
+      messages: [
+        { role: "user", content: "list" },
+        { role: "assistant", content: [{ type: "tool_use", id: signed, name: "ls", input: {} }] },
+        { role: "user", content: [{ type: "tool_result", tool_use_id: signed, content: "a" }] },
+      ],
+    });
+
+    const unsigned = unsignCalls({ request: claudeCode, store: kept });
+
+    expect(unsigned.messages[1]?.parts).toEqual([
+      { kind: "tool_call", id: "toolu_1", name: "ls", args: "{}", signature: SIGNATURE },
+    ]);
+    expect(unsigned.messages[2]?.parts[0]).toMatchObject({
+      kind: "tool_result",
+      callId: "toolu_1",
+    });
+    // 解析出的请求不改：别家的候选用的还是它。
+    expect(claudeCode.messages[1]?.parts[0]).toMatchObject({ id: signed });
+  });
+
+  test("a Chat client's call keeps the signature it carried in extra_content", () => {
+    const { store: kept } = store();
+    const request = parseChatRequest({
+      model: "gemini-3-pro-preview",
+      messages: [
+        { role: "user", content: "list" },
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: "call_1",
+              type: "function",
+              function: { name: "ls", arguments: "{}" },
+              extra_content: { google: { thought_signature: "Z2l2ZW4=" } },
+            },
+          ],
+        },
+        { role: "tool", tool_call_id: "call_1", content: "a" },
+      ],
+    });
+
+    const unsigned = unsignCalls({ request, store: kept });
+
+    expect(unsigned.messages[1]?.parts[0]).toMatchObject({ id: "call_1", signature: "Z2l2ZW4=" });
   });
 });

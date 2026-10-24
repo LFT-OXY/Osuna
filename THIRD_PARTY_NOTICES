@@ -1381,6 +1381,45 @@ for Gemini coming last:
   packages/server/src/server/api-endpoints/gateway/upstream-call.ts
   packages/server/src/server/api-endpoints/gateway/routing.ts
 
+A request translated to a Gemini base URL thinking at a level or a budget by
+the model's generation, its tools as function declarations with the calling
+mode, its calls and their results under one id with the thought signature
+carried back (or the skip value), the tools' images after their responses,
+the user's words split from a turn of responses, a call left unanswered
+answered with the interrupted note, a second answer left out, a history
+opening or ending with the model given a user turn, images inline or as
+fileData, Google's own search, and an image model asked for images; and
+Gemini's reply read back (thoughts and their signatures, a call's signature in
+the id the agent gets, a call with no id given one, the default_api namespace
+taken off, a call written out in the text made a call, a drawn image, what
+Google's search found, a stop after calls read as a tool stop) follow
+buildCodeAssistSent, dropSecondAnswers, pairFunctionTurns, thinkingConfig,
+geminiGeneration and codeAssistDecoder (with toolOfCall, textCall, closeBrace,
+textArgs and nextKey) in magpie's internal/gateway/codeassist.go, a compaction
+ending with the model asked for its summary per compacting in
+internal/gateway/compacting.go and modelLastAsk in internal/gateway/prefill.go,
+DrawsID in
+internal/catalog/catalog.go, budgetOf in internal/gateway/ir.go, signedID and
+unsignCalls in internal/gateway/gemini_signature.go and googleSignature's use
+in parseChat in internal/gateway/chat.go. Gemini counted among the formats
+that search follows searchesFor in internal/gateway/search.go; Gemini's
+reasoning timed as a summary follows hidesReasoning and reasoningMs in
+internal/gateway/ttft.go; a refused JSON answer read off generationConfig
+follows the structured-output refusal in internal/gateway/format.go; and a
+function declaration's union root folded follows objectRootsReq in
+internal/gateway/object_root.go:
+
+  packages/server/src/server/api-endpoints/gateway/translation/gemini.ts
+  packages/server/src/server/api-endpoints/gateway/translation/gemini.test.ts
+  packages/server/src/server/api-endpoints/gateway/translation/compacting.ts
+  packages/server/src/server/api-endpoints/gateway/translation/chat.ts
+  packages/server/src/server/api-endpoints/gateway/gemini-signatures.ts
+  packages/server/src/server/api-endpoints/gateway/gemini-signatures.test.ts
+  packages/server/src/server/api-endpoints/gateway/web-search.ts
+  packages/server/src/server/api-endpoints/gateway/reply-clock.ts
+  packages/server/src/server/api-endpoints/gateway/refused-downgrades.ts
+  packages/server/src/server/api-endpoints/gateway/refused-fields.ts
+
 An endpoint's price multiplier (from 0 to 1000 in steps of 0.001; a save that
 leaves it out keeps it and null clears it; empty in the editor is the list
 price, a comma read as the decimal point; a table price scaled by it and a

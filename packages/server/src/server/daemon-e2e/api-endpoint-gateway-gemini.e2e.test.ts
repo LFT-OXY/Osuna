@@ -38,6 +38,7 @@ interface FakeUpstream {
 interface Harness {
   gateway: string;
   usageDir: string;
+  signaturesDir: string;
 }
 
 const servers: Server[] = [];
@@ -132,6 +133,7 @@ interface EndpointSpec {
   modelSettings?: Record<string, unknown>;
   headers?: Record<string, string>;
   extraBody?: Record<string, unknown>;
+  searchesWeb?: boolean;
 }
 
 async function start(endpoints: EndpointSpec[]): Promise<Harness> {
@@ -153,6 +155,7 @@ async function start(endpoints: EndpointSpec[]): Promise<Harness> {
         ...(spec.modelSettings ? { modelSettings: spec.modelSettings } : {}),
         ...(spec.headers ? { headers: spec.headers } : {}),
         ...(spec.extraBody ? { extraBody: spec.extraBody } : {}),
+        ...(spec.searchesWeb ? { searchesWeb: true } : {}),
       })),
       agents: {
         claude: { enabled: false, defaultModelId: null },
@@ -184,6 +187,7 @@ async function start(endpoints: EndpointSpec[]): Promise<Harness> {
   return {
     gateway: `http://127.0.0.1:${daemon.port}/api-endpoint-gateway`,
     usageDir: path.join(root, ".paseo", "usage"),
+    signaturesDir: path.join(endpointsDir, "gemini-signatures"),
   };
 }
 
@@ -510,5 +514,410 @@ describe("the gateway asking a Gemini base URL", () => {
         reasoning: 5,
       });
     }
+  });
+});
+
+/** 假 Gemini 上游：第 n 个请求回第 n 份脚本里的 chunk（多出的请求回最后一份）。 */
+function scriptedGemini(replies: unknown[][]): Promise<FakeUpstream> {
+  let asked = 0;
+  return startUpstream((_request, res) => {
+    const reply = replies[Math.min(asked, replies.length - 1)] ?? [];
+    asked++;
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    for (const chunk of reply) res.write(`data: ${JSON.stringify(chunk)}\r\n\r\n`);
+    res.end();
+  });
+}
+
+const SIGNATURE = Buffer.alloc(2000, 9).toString("base64");
+
+/** 想了一下、带签名调用 bash 的回复；id 为空时 Gemini 没给调用编号。 */
+function signedCall(id: string): unknown[] {
+  return [
+    {
+      responseId: "r1",
+      candidates: [{ content: { role: "model", parts: [{ text: "Need ls.", thought: true }] } }],
+      usageMetadata: { promptTokenCount: 10 },
+    },
+    {
+      candidates: [
+        {
+          content: {
+            role: "model",
+            parts: [
+              {
+                functionCall: {
+                  ...(id ? { id } : {}),
+                  name: "default_api:bash",
+                  args: { cmd: "ls" },
+                },
+                thoughtSignature: SIGNATURE,
+              },
+            ],
+          },
+          finishReason: "STOP",
+        },
+      ],
+      usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 3, thoughtsTokenCount: 4 },
+    },
+  ];
+}
+
+const DONE = [
+  {
+    candidates: [{ content: { role: "model", parts: [{ text: "a.txt" }] }, finishReason: "STOP" }],
+    usageMetadata: { promptTokenCount: 20, candidatesTokenCount: 2 },
+  },
+];
+
+const BASH = {
+  name: "bash",
+  description: "run",
+  input_schema: { type: "object", properties: { cmd: { type: "string" } } },
+};
+
+describe("thinking, tools, images and search through a Gemini base URL", () => {
+  test("Claude Code's thinking and a signed call come back; the next turn carries the signature back to Gemini off the kept store", async () => {
+    const upstream = await scriptedGemini([signedCall(""), DONE]);
+    const harness = await start([geminiOnly(upstream, { models: ["gemini-3-pro-preview"] })]);
+    const first = {
+      model: "gemini-3-pro-preview",
+      max_tokens: 32_000,
+      stream: true,
+      thinking: { type: "enabled", budget_tokens: 24_000 },
+      tools: [BASH],
+      messages: [{ role: "user", content: "list files" }],
+    };
+
+    const events = sseData(await (await askClaude(harness, first)).text());
+
+    expect(sentBody(upstream.requests[0]).generationConfig).toEqual({
+      maxOutputTokens: 32_000,
+      thinkingConfig: { includeThoughts: true, thinkingLevel: "high" },
+    });
+    const thought = events
+      .filter(
+        (event) => (event.delta as Record<string, unknown> | undefined)?.type === "thinking_delta",
+      )
+      .map((event) => (event.delta as Record<string, unknown>).thinking)
+      .join("");
+    expect(thought).toBe("Need ls.");
+    const use = events.find(
+      (event) => (event.content_block as Record<string, unknown> | undefined)?.type === "tool_use",
+    )?.content_block as Record<string, unknown>;
+    expect(use.name).toBe("bash");
+    const id = String(use.id);
+    // 签名几 KB，id 里只带 16 个字符的引用（存在 daemon 目录里）。
+    expect(id.length).toBeLessThan(64);
+    expect(await readdir(harness.signaturesDir)).toHaveLength(1);
+    expect(events.find((event) => event.type === "message_delta")).toMatchObject({
+      delta: { stop_reason: "tool_use" },
+    });
+
+    const second = await askClaude(harness, {
+      ...first,
+      messages: [
+        { role: "user", content: "list files" },
+        {
+          role: "assistant",
+          content: [
+            { type: "thinking", thinking: "Need ls.", signature: "" },
+            { type: "tool_use", id, name: "bash", input: { cmd: "ls" } },
+          ],
+        },
+        { role: "user", content: [{ type: "tool_result", tool_use_id: id, content: "a.txt" }] },
+      ],
+    });
+    await second.text();
+
+    const contents = sentBody(upstream.requests[1]).contents as Record<string, unknown>[];
+    const callId = id.slice(0, id.indexOf("__ts"));
+    expect(callId).toMatch(/^call_/);
+    expect(contents.slice(1)).toEqual([
+      {
+        role: "model",
+        parts: [
+          {
+            functionCall: { name: "bash", args: { cmd: "ls" }, id: callId },
+            thoughtSignature: SIGNATURE,
+          },
+        ],
+      },
+      {
+        role: "user",
+        parts: [{ functionResponse: { name: "bash", response: { output: "a.txt" }, id: callId } }],
+      },
+    ]);
+  });
+
+  test("Codex's parallel calls with no ids get ids of their own, and the answers go back under them", async () => {
+    const parallel = [
+      {
+        candidates: [
+          {
+            content: {
+              role: "model",
+              parts: [
+                { functionCall: { name: "read", args: { path: "a" } } },
+                { functionCall: { name: "read", args: { path: "b" } } },
+              ],
+            },
+            finishReason: "STOP",
+          },
+        ],
+      },
+    ];
+    const upstream = await scriptedGemini([parallel, DONE]);
+    const harness = await start([geminiOnly(upstream)]);
+    const tools = [
+      {
+        type: "function",
+        name: "read",
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+      },
+    ];
+
+    const reply = (await (
+      await askCodex(harness, { model: "gemini-2.5-pro", input: "read both", tools, stream: false })
+    ).json()) as { output: Record<string, unknown>[] };
+
+    const calls = reply.output.filter((item) => item.type === "function_call");
+    expect(calls).toHaveLength(2);
+    const [a, b] = calls.map((call) => String(call.call_id));
+    expect(a).toMatch(/^call_/);
+    expect(a).not.toBe(b);
+
+    await askCodex(harness, {
+      model: "gemini-2.5-pro",
+      tools,
+      stream: false,
+      input: [
+        { type: "message", role: "user", content: [{ type: "input_text", text: "read both" }] },
+        ...calls.map((call) => ({
+          type: "function_call",
+          call_id: call.call_id,
+          name: "read",
+          arguments: call.arguments,
+        })),
+        { type: "function_call_output", call_id: a, output: "A" },
+        { type: "function_call_output", call_id: b, output: "B" },
+      ],
+    }).then((response) => response.text());
+
+    const contents = sentBody(upstream.requests[1]).contents as Record<string, unknown>[];
+    expect(contents.slice(1)).toEqual([
+      {
+        role: "model",
+        parts: [
+          {
+            functionCall: { name: "read", args: { path: "a" }, id: a },
+            thoughtSignature: "skip_thought_signature_validator",
+          },
+          {
+            functionCall: { name: "read", args: { path: "b" }, id: b },
+            thoughtSignature: "skip_thought_signature_validator",
+          },
+        ],
+      },
+      {
+        role: "user",
+        parts: [
+          { functionResponse: { name: "read", response: { output: "A" }, id: a } },
+          { functionResponse: { name: "read", response: { output: "B" }, id: b } },
+        ],
+      },
+    ]);
+  });
+
+  test("Pi's signed call comes back on the next Chat turn with its signature", async () => {
+    const upstream = await scriptedGemini([signedCall("fc_9"), DONE]);
+    const harness = await start([geminiOnly(upstream, { models: ["gemini-3-flash"] })]);
+    const tools = [{ type: "function", function: { name: "bash", parameters: BASH.input_schema } }];
+
+    const reply = (await (
+      await askPi(harness, {
+        model: "gemini-3-flash",
+        messages: [{ role: "user", content: "ls" }],
+        tools,
+      })
+    ).json()) as { choices: { message: { tool_calls: { id: string }[] } }[] };
+    const id = reply.choices[0]?.message.tool_calls[0]?.id ?? "";
+    expect(id.startsWith("fc_9__ts")).toBe(true);
+
+    await askPi(harness, {
+      model: "gemini-3-flash",
+      tools,
+      messages: [
+        { role: "user", content: "ls" },
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            { id, type: "function", function: { name: "bash", arguments: '{"cmd":"ls"}' } },
+          ],
+        },
+        { role: "tool", tool_call_id: id, content: "a.txt" },
+      ],
+    }).then((response) => response.text());
+
+    const contents = sentBody(upstream.requests[1]).contents as Record<string, unknown>[];
+    expect(contents[1]).toEqual({
+      role: "model",
+      parts: [
+        {
+          functionCall: { name: "bash", args: { cmd: "ls" }, id: "fc_9" },
+          thoughtSignature: SIGNATURE,
+        },
+      ],
+    });
+    expect(contents[2]).toEqual({
+      role: "user",
+      parts: [{ functionResponse: { name: "bash", response: { output: "a.txt" }, id: "fc_9" } }],
+    });
+  });
+
+  test.each([
+    {
+      model: "gemini-2.5-pro",
+      effort: "medium",
+      thinking: { includeThoughts: true, thinkingBudget: 10_000 },
+    },
+    {
+      model: "gemini-3-pro-preview",
+      effort: "medium",
+      thinking: { includeThoughts: true, thinkingLevel: "high" },
+    },
+    {
+      model: "gemini-4-argon",
+      effort: "medium",
+      thinking: { includeThoughts: true, thinkingLevel: "medium" },
+    },
+    {
+      model: "gemini-3-pro-preview",
+      effort: "none",
+      thinking: { includeThoughts: true, thinkingLevel: "low" },
+    },
+    {
+      model: "gemini-2.5-pro",
+      effort: "none",
+      thinking: { includeThoughts: true, thinkingBudget: 4096 },
+    },
+  ])("Codex at $effort on $model asks $thinking", async ({ model, effort, thinking }) => {
+    const upstream = await scriptedGemini([DONE]);
+    const harness = await start([geminiOnly(upstream, { models: [model] })]);
+
+    await (
+      await askCodex(harness, { model, input: "hi", reasoning: { effort }, stream: false })
+    ).text();
+
+    expect(
+      (sentBody(upstream.requests[0]).generationConfig as Record<string, unknown>).thinkingConfig,
+    ).toEqual(thinking);
+  });
+
+  test("a call left unanswered, a second answer, a history opening with the model and images by bytes and by address are mended for Gemini", async () => {
+    const upstream = await scriptedGemini([DONE]);
+    const harness = await start([geminiOnly(upstream)]);
+
+    await (
+      await askClaude(harness, {
+        model: "gemini-2.5-pro",
+        max_tokens: 100,
+        tools: [BASH],
+        messages: [
+          {
+            role: "assistant",
+            content: [
+              { type: "tool_use", id: "t1", name: "bash", input: {} },
+              { type: "tool_use", id: "t2", name: "bash", input: {} },
+            ],
+          },
+          {
+            role: "user",
+            content: [
+              { type: "tool_result", tool_use_id: "t1", content: "one" },
+              { type: "tool_result", tool_use_id: "t1", content: "again" },
+            ],
+          },
+          {
+            role: "user",
+            content: [
+              { type: "image", source: { type: "base64", media_type: "image/png", data: "iVBOR" } },
+              { type: "image", source: { type: "url", url: "https://example.com/a.png" } },
+              { type: "text", text: "what is this?" },
+            ],
+          },
+        ],
+      })
+    ).text();
+
+    const contents = sentBody(upstream.requests[0]).contents as Record<string, unknown>[];
+    expect(contents[0]).toEqual({
+      role: "user",
+      parts: [{ text: "[Continuing from previous AI thoughts...]" }],
+    });
+    expect(contents[2]).toEqual({
+      role: "user",
+      parts: [
+        {
+          functionResponse: {
+            name: "bash",
+            response: {
+              output: "[The result of this tool call is unavailable: the turn was interrupted.]",
+            },
+            id: "t2",
+          },
+        },
+        { functionResponse: { name: "bash", response: { output: "one" }, id: "t1" } },
+      ],
+    });
+    expect(contents[3]).toEqual({
+      role: "user",
+      parts: [
+        { inlineData: { mimeType: "image/png", data: "iVBOR" } },
+        { fileData: { mimeType: "", fileUri: "https://example.com/a.png" } },
+        { text: "what is this?" },
+      ],
+    });
+  });
+
+  test("with the endpoint searching the web itself, Claude Code's search goes as googleSearch and what it found comes back as Anthropic's search", async () => {
+    const found = [
+      {
+        candidates: [
+          {
+            content: { role: "model", parts: [{ text: "Osuna shipped." }] },
+            groundingMetadata: {
+              webSearchQueries: ["osuna"],
+              groundingChunks: [
+                { web: { title: "osuna.dev", uri: "https://vertexaisearch.cloud.google.com/x" } },
+              ],
+            },
+            finishReason: "STOP",
+          },
+        ],
+      },
+    ];
+    const upstream = await scriptedGemini([found]);
+    const harness = await start([geminiOnly(upstream, { searchesWeb: true })]);
+
+    const events = sseData(
+      await (
+        await askClaude(harness, {
+          model: "gemini-2.5-pro",
+          max_tokens: 100,
+          stream: true,
+          messages: [{ role: "user", content: "Perform a web search for the query: osuna" }],
+          tool_choice: { type: "tool", name: "web_search" },
+          tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 8 }],
+        })
+      ).text(),
+    );
+
+    expect(sentBody(upstream.requests[0]).tools).toEqual([{ googleSearch: {} }]);
+    const blocks = events
+      .filter((event) => event.type === "content_block_start")
+      .map((event) => (event.content_block as Record<string, unknown>).type);
+    expect(blocks).toEqual(["text", "server_tool_use", "web_search_tool_result"]);
   });
 });

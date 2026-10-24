@@ -32,6 +32,8 @@ export interface ToolCallPart {
   name: string;
   // 参数的 JSON 对象原文。
   args: string;
+  // Gemini 给这个调用的思考签名（藏在 Agent 那边的调用 id 里，gemini-signatures.ts）；只回给 Gemini。
+  signature?: string;
 }
 
 export interface ToolResultPart {
@@ -204,6 +206,8 @@ export type StreamEvent =
   | { kind: "other_tool" }
   // 上游自己做完的一次联网搜索（magpie KSearch）：整个到达，不拆成调用与参数。
   | { kind: "search"; query: string; hits: SearchHit[] }
+  // 模型画的一张图（Gemini 的 inlineData，base64）：算模型说了东西，编码器不写给 Agent（magpie 同样）。
+  | { kind: "image"; mediaType: string; data: string }
   // details 只有 Anthropic 上游给了 stop_details 时才有。
   | { kind: "stop"; stop: StopReason; details?: StopDetails }
   | { kind: "usage"; usage: Usage }
@@ -271,6 +275,8 @@ export class RequestShapeError extends Error {
 export const INTERRUPTED_TOOL =
   "[The result of this tool call is unavailable: the turn was interrupted.]";
 export const TOOL_RESULT_RECEIVED = "Tool result received.";
+// 补在以 assistant 结尾的对话后面的 user 轮（magpie continueText）。
+export const CONTINUE_TEXT = "Continue.";
 
 export function emptyUsage(): Usage {
   return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cacheWrite1h: 0, reasoning: 0 };
@@ -632,6 +638,8 @@ export class ReplyCollector {
   private args = "";
   // 收到 think_start：下一段推理自成一块。
   private fresh = false;
+  // 模型画了图（不进回复，Agent 的格式装不下）。
+  private drewImage = false;
   error: Omit<Extract<StreamEvent, { kind: "error" }>, "kind"> | null = null;
 
   add(event: StreamEvent): void {
@@ -651,6 +659,9 @@ export class ReplyCollector {
         return;
       case "think_start":
         this.fresh = true;
+        return;
+      case "image":
+        this.drewImage = true;
         return;
       default:
         this.addContent(event);
@@ -731,7 +742,7 @@ export class ReplyCollector {
 
   /** 回复里除了推理还说了什么：只想了一下就出错的不算回答。 */
   saidAnything(): boolean {
-    return this.reply.parts.some((part) => part.kind !== "thinking");
+    return this.drewImage || this.reply.parts.some((part) => part.kind !== "thinking");
   }
 
   usage(): Usage {

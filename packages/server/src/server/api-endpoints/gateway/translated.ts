@@ -75,6 +75,7 @@ import {
 import { isGrokReply, wholeArgsFilter } from "./grok-integral.js";
 import { fenceFilter, unfencedReply } from "./translation/fence.js";
 import { protocolOf, upstreamProtocolOf, type StreamDecoder } from "./translation/protocols.js";
+import type { GeminiSignatureStore } from "./gemini-signatures.js";
 import { SseReader } from "./translation/sse.js";
 import { textCallFilter } from "./translation/text-calls.js";
 import { withSearchSourcesFor, withThinkingInline, withVendorRewrites } from "./vendor-rewrites.js";
@@ -142,6 +143,8 @@ export async function attemptTranslated(input: {
   retryPauseMs: number;
   // 附加请求体里 ${sessionId} 换成的对话标识（request-extras.ts 的 extraBodySession）。
   sessionId: string;
+  // Gemini 的调用签名存放：解码 Gemini 回复时签名藏进交给 Agent 的调用 id。
+  signatures: GeminiSignatureStore;
 }): Promise<AttemptOutcome> {
   const { res, apiKey, to, refusals } = input;
   const sentModel = upstreamModelName({
@@ -286,6 +289,7 @@ interface TranslatedAnswer {
   url: URL;
   opened: OpenedUpstream;
   goOn: GoOn;
+  signatures: GeminiSignatureStore;
 }
 
 /**
@@ -583,6 +587,7 @@ async function streamReply(input: {
   upstreamModel: string;
   reply: UpstreamReply;
   goOn: GoOn;
+  signatures: GeminiSignatureStore;
 }): Promise<AnswerEnd> {
   const { res } = input;
   // 保活已经回了 200 与响应头：接着在同一个流里写。
@@ -693,9 +698,10 @@ async function readTry(input: {
   soFar: ReplySoFar;
   // 上游每个事件的原文（计时看推理是否被封存）。
   onData: (data: string) => void;
+  signatures: GeminiSignatureStore;
 }): Promise<TryEnd> {
   const { soFar } = input;
-  const decoder = upstreamProtocolOf(input.to).decoder();
+  const decoder = upstreamProtocolOf(input.to).decoder({ signatures: input.signatures });
   const calls = textCallFilter({
     tools: input.request.tools,
     emit: (event) => soFar.event(event),
@@ -733,10 +739,11 @@ async function wholeReply(input: {
   requestedModel: string;
   upstreamModel: string;
   reply: UpstreamReply;
+  signatures: GeminiSignatureStore;
 }): Promise<AnswerEnd> {
   const { res, endpoint } = input;
   const collector = new ReplyCollector();
-  const decoder = upstreamProtocolOf(input.to).decoder();
+  const decoder = upstreamProtocolOf(input.to).decoder({ signatures: input.signatures });
   const numbers = wholeNumbersFilter({
     requestedModel: input.requestedModel,
     upstreamModel: input.upstreamModel,

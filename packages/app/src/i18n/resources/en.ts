@@ -3285,7 +3285,7 @@ export const en = {
       webSearch: {
         title: "Web search",
         switch: "Searches the web by itself",
-        hint: "For a service in front of Anthropic's or OpenAI's own API: Claude Code's and Codex's web search go to it as sent. Turning this on or off reaches running Claude Code sessions on their next request, and that request loses its prompt cache.",
+        hint: "For a service in front of Anthropic's, OpenAI's or Google's own API: Claude Code's and Codex's web search go to it as sent. Turning this on or off reaches running Claude Code sessions on their next request, and that request loses its prompt cache.",
         saving: "Saving…",
         saveFailed: "Couldn't save: {{message}}",
       },

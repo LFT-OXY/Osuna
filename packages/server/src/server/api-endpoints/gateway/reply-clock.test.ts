@@ -81,6 +81,16 @@ describe("timing a reply as it goes to the agent", () => {
     expect(times.reasoningHidden).toBe(true);
     expect(times.firstReasoningAt).toBeNull();
   });
+
+  test("Gemini's thought summaries hide the reasoning and give it no start", () => {
+    const gemini = clockFor("gemini");
+    gemini.at(1000).saw(THINK("summary"));
+    gemini.at(1500).saw(THINK("summary"));
+    gemini.at(2000).saw(TEXT("answer"));
+    const times = gemini.clock.times({ reasoning: 30 });
+    expect(times.reasoningHidden).toBe(true);
+    expect(times.firstReasoningAt).toBeNull();
+  });
 });
 
 /** 计时器与拨它时钟的手：`at(ms)` 把时钟拨到那一刻再交出计时器。 */

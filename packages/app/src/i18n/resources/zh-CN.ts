@@ -3229,7 +3229,7 @@ export const zhCN: TranslationResources = {
       webSearch: {
         title: "联网搜索",
         switch: "自己能联网搜索",
-        hint: "适用于 Anthropic 或 OpenAI 官方接口前面的中转：Claude Code 和 Codex 的联网搜索原样交给它。打开或关掉后，正在运行的 Claude Code 会话下一次请求就跟着变，这一次的提示缓存失效。",
+        hint: "适用于 Anthropic、OpenAI 或 Google 官方接口前面的中转：Claude Code 和 Codex 的联网搜索原样交给它。打开或关掉后，正在运行的 Claude Code 会话下一次请求就跟着变，这一次的提示缓存失效。",
         saving: "正在保存…",
         saveFailed: "没能保存：{{message}}",
       },

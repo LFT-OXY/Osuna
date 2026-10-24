@@ -1,4 +1,4 @@
-// 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/gateway/chat.go，chattidy.go 的 messageReasoning 与 reasoningText）
+// 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/gateway/chat.go，chattidy.go 的 messageReasoning 与 reasoningText；调用的 Gemini 签名照 parseChat 读 googleSignature）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { isRecord, parseJson } from "../../upstream-http.js";
@@ -38,6 +38,7 @@ import {
   type Usage,
   vendorErrorFields,
 } from "./ir.js";
+import { googleSignature } from "../gemini-signatures.js";
 import { sseEvent } from "./sse.js";
 
 /*
@@ -146,11 +147,14 @@ export function reasoningText(message: Record<string, unknown>): string {
 
 function chatToolCall(call: Record<string, unknown>): Part {
   const fn = isRecord(call.function) ? call.function : {};
+  // 留着 Gemini 签名的客户端把它放在 extra_content 里发回来（magpie parseChat）。
+  const signature = googleSignature(call.extra_content);
   return {
     kind: "tool_call",
     id: typeof call.id === "string" ? call.id : "",
     name: typeof fn.name === "string" ? fn.name : "",
     args: parseArgs(typeof fn.arguments === "string" ? fn.arguments : ""),
+    ...(signature === "" ? {} : { signature }),
   };
 }
 

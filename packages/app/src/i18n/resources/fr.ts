@@ -3293,7 +3293,7 @@ export const fr: TranslationResources = {
       webSearch: {
         title: "Recherche web",
         switch: "Fait ses propres recherches web",
-        hint: "Pour un service placé devant l'API d'Anthropic ou d'OpenAI : les recherches web de Claude Code et de Codex lui sont transmises telles quelles. L'activer ou le désactiver s'applique aux sessions Claude Code en cours dès leur prochaine requête, qui perd alors son cache de prompt.",
+        hint: "Pour un service placé devant l'API d'Anthropic, d'OpenAI ou de Google : les recherches web de Claude Code et de Codex lui sont transmises telles quelles. L'activer ou le désactiver s'applique aux sessions Claude Code en cours dès leur prochaine requête, qui perd alors son cache de prompt.",
         saving: "Enregistrement…",
         saveFailed: "Impossible d'enregistrer : {{message}}",
       },

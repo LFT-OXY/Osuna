@@ -1612,13 +1612,18 @@ test.describe("Settings API endpoints", () => {
     ).toEqual(["claude-sonnet-4-5"]);
   });
 
-  test("Searches the web by itself saves from its switch, a failed save stays in place, and a Chat-only endpoint has no such row", async ({
+  test("Searches the web by itself saves from its switch, a failed save stays in place, a Gemini-only endpoint has the row, and a Chat-only endpoint has none", async ({
     page,
   }) => {
     const endpointId = await seedApiEndpoint(client, {
       name: "Searching relay",
       baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
       models: ["claude-sonnet-4-5"],
+    });
+    const geminiOnlyId = await seedApiEndpoint(client, {
+      name: "Gemini relay",
+      baseUrls: [{ format: "gemini", url: `${relay.origin}/good/v1beta` }],
+      models: ["gemini-2.5-pro"],
     });
     const chatOnlyId = await seedApiEndpoint(client, {
       name: "Chat relay",
@@ -1652,6 +1657,14 @@ test.describe("Settings API endpoints", () => {
       await expect(section.getByTestId("api-endpoint-web-search-error")).toHaveCount(0);
       await expect.poll(searchesWeb).toBe(true);
     });
+
+    await openEndpointDetail(page, geminiOnlyId);
+    await expect(
+      page
+        .getByTestId("api-endpoint-web-search-section")
+        .filter({ visible: true })
+        .getByRole("switch", { name: "Searches the web by itself" }),
+    ).toBeVisible();
 
     await openEndpointDetail(page, chatOnlyId);
     await expect(page.getByTestId("api-endpoint-detail").filter({ visible: true })).toBeVisible();

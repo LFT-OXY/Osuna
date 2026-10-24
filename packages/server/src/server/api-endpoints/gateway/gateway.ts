@@ -107,7 +107,7 @@ import { RequestShapeError, estimateInputTokens, type GatewayRequest } from "./t
 import { protocolOf } from "./translation/protocols.js";
 import { decodeAgentBody, readAgentBody, readRawBody } from "./request-body.js";
 import { liftMessageTools } from "./message-tools.js";
-import { GeminiSignatureStore, chatCallSignatures } from "./gemini-signatures.js";
+import { GeminiSignatureStore, unsignCalls } from "./gemini-signatures.js";
 import { joinToolRuns, orphanedToolOutputs, pairToolItems } from "./translation/responses.js";
 import {
   ANSWERED_BY_HEADER,
@@ -660,7 +660,7 @@ interface Failover {
   // 「按 Claude Code / Codex 的样子测」用的 CLI 请求头样本（ADR 0013）。
   cliSamples: CliHeaderSamples;
   ledger: GatewayLedger;
-  // 直转 Chat 时 Gemini 的思考签名（gemini-signatures.ts）。
+  // Gemini 的思考签名（gemini-signatures.ts）：直转 Chat 时，与翻译给 Gemini 时。
   signatures: GeminiSignatureStore;
 }
 
@@ -1076,13 +1076,8 @@ async function handleAgentRequest(input: {
   const body = withAgentEffort({ body: routed.body, format: input.format, fixedEffort });
   const parsed = body === routed.body ? routed.parsed : parseJson(body.toString("utf8"));
   const mended = mendedBody(input.format, body);
-  // 翻译读的是修补过的请求，和直通发出去的一样；只是 Chat 调用 id 里藏的 Gemini 签名先取下（直通时才用得上）。
-  const translatable = translatableOf({
-    format: input.format,
-    mended,
-    parsed: mended === body ? parsed : null,
-    signatures: input.failover.signatures,
-  });
+  // 翻译读的是修补过的请求，和直通发出去的一样；调用 id 里藏的 Gemini 签名在问每家之前取下（askOnce）。
+  const translatable = mended === body ? parsed : parseJson(mended.toString("utf8"));
   const { refusals } = input.failover;
   let passable: AskableCandidate[];
   try {
@@ -1312,20 +1307,6 @@ function mendedBody(format: ApiEndpointRequestFormat, body: Buffer): Buffer {
       ? liftMessageTools(text)
       : pairToolItems(orphanedToolOutputs(joinToolRuns(text)));
   return mended === text ? body : Buffer.from(mended);
-}
-
-/** 翻译读的请求：修补过的请求；Chat 的调用 id 去掉 Gemini 签名（gemini-signatures.ts）。parsed 是已经解析好的。 */
-function translatableOf(input: {
-  format: ApiEndpointRequestFormat;
-  mended: Buffer;
-  parsed: unknown;
-  signatures: GeminiSignatureStore;
-}): unknown {
-  const text = input.mended.toString("utf8");
-  const parsed = input.parsed ?? parseJson(text);
-  if (input.format !== "openai_chat") return parsed;
-  const unsigned = chatCallSignatures({ text, gemini: false, store: input.signatures });
-  return unsigned === text ? parsed : parseJson(unsigned);
 }
 
 type PlannedAttempts =
@@ -1841,7 +1822,11 @@ function askOnce(input: EndpointAsk): Promise<AttemptOutcome> {
     wire: input.wire,
     from: input.format,
     to: candidate.format,
-    request: withWebSearchFor({ request: candidate.translated, searches }),
+    // 调用 id 里藏的 Gemini 签名取下：发给 Gemini 的带回签名，发给别家的只用调用原来的 id。
+    request: withWebSearchFor({
+      request: unsignCalls({ request: candidate.translated, store: input.failover.signatures }),
+      searches,
+    }),
     clientIdentity,
     facts: input.failover.modelFacts(candidate.endpoint, candidate.upstreamModel),
     retryPauseMs: input.failover.retryPauseMs,

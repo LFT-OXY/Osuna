@@ -3267,7 +3267,7 @@ export const ptBR: TranslationResources = {
       webSearch: {
         title: "Pesquisa na web",
         switch: "Pesquisa na web por conta própria",
-        hint: "Para um serviço na frente da API da própria Anthropic ou OpenAI: a pesquisa na web do Claude Code e do Codex chega a ele como foi enviada. Ao ligar ou desligar, as sessões do Claude Code em andamento mudam na próxima solicitação, e essa solicitação perde o cache de prompt.",
+        hint: "Para um serviço na frente da API da própria Anthropic, OpenAI ou Google: a pesquisa na web do Claude Code e do Codex chega a ele como foi enviada. Ao ligar ou desligar, as sessões do Claude Code em andamento mudam na próxima solicitação, e essa solicitação perde o cache de prompt.",
         saving: "Salvando…",
         saveFailed: "Não foi possível salvar: {{message}}",
       },

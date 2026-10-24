@@ -4,7 +4,12 @@
 import { describe, expect, test } from "vitest";
 import { parseAnthropicRequest } from "./translation/anthropic.js";
 import { parseResponsesRequest } from "./translation/responses.js";
-import { formatsToSearchOn, withWebSearchFor, withoutResponsesWebSearch } from "./web-search.js";
+import {
+  formatsToSearchOn,
+  searchesWebItself,
+  withWebSearchFor,
+  withoutResponsesWebSearch,
+} from "./web-search.js";
 
 const WEB_SEARCH = { type: "web_search", external_web_access: false };
 const EXEC = { type: "function", name: "exec_command", parameters: { type: "object" } };
@@ -146,5 +151,20 @@ describe("a translated request and the endpoint's web search", () => {
     expect(formatsToSearchOn({ endpoint, formats, asked: false })).toEqual(formats);
     const off = { ...endpoint, searchesWeb: false };
     expect(formatsToSearchOn({ endpoint: off, formats, asked: true })).toEqual(formats);
+  });
+
+  test("a Gemini address searches with Google's own search: it is a format to search on", () => {
+    const endpoint = {
+      searchesWeb: true,
+      baseUrls: [
+        { format: "openai_chat" as const, url: "https://relay.example/v1" },
+        { format: "gemini" as const, url: "https://relay.example/v1beta" },
+      ],
+    };
+    const formats = ["openai_chat", "gemini"] as const;
+
+    expect(searchesWebItself(endpoint, "gemini")).toBe(true);
+    expect(searchesWebItself({ ...endpoint, baseUrls: endpoint.baseUrls.slice(1) })).toBe(true);
+    expect(formatsToSearchOn({ endpoint, formats, asked: true })).toEqual(["gemini"]);
   });
 });

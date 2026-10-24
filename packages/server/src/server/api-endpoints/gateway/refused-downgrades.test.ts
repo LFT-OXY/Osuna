@@ -55,7 +55,7 @@ const ANTHROPIC_SCHEMA = {
   output_config: { effort: "low", format: { type: "json_schema", schema: SCHEMA } },
 };
 
-type ApiFormat = "anthropic_messages" | "openai_chat" | "openai_responses";
+type ApiFormat = "anthropic_messages" | "openai_chat" | "openai_responses" | "gemini";
 
 function readOff(input: {
   format: ApiFormat;
@@ -109,6 +109,22 @@ describe("an endpoint refusing structured output", () => {
     },
   ] as const)("refusing $why is told the format in words", (refused) => {
     expect(readOff(refused)).toEqual(["structuredOutput"]);
+  });
+
+  test("a Gemini schema refused (generationConfig.responseJsonSchema) is asked for a JSON object first, an object told in words", () => {
+    const schema = { responseMimeType: "application/json", responseJsonSchema: SCHEMA };
+    const refusedSchema = `{"error":{"code":400,"message":"Invalid JSON payload received. Unknown name \\"responseJsonSchema\\" at 'generation_config'","status":"INVALID_ARGUMENT"}}`;
+    const refusedObject = `{"error":{"code":400,"message":"response_mime_type application/json is not supported","status":"INVALID_ARGUMENT"}}`;
+    expect(
+      readOff({ format: "gemini", body: { generationConfig: schema }, text: refusedSchema }),
+    ).toEqual(["jsonSchema"]);
+    expect(
+      readOff({
+        format: "gemini",
+        body: { generationConfig: { responseMimeType: "application/json" } },
+        text: refusedObject,
+      }),
+    ).toEqual(["structuredOutput"]);
   });
 
   test.each([

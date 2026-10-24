@@ -54,6 +54,9 @@ Config-shaped schemas that the daemon also persists live in leaf modules, not in
 
 ### 3. Contracts
 - Exhaustive `Record`/`switch` sites fail typecheck and must each get the new value; lists that drive behaviour (`TRANSLATION_ORDER` in `routing.ts`, `TEMPLATE_MATCHED_FORMATS` in `import-apps.ts`, `CLI_TEST_POLICIES`) don't and must be read by hand.
+- Two-way checks that compare against one format fall silently into the wrong branch for a new one; each needs the magpie side decided: `SEARCHABLE_FORMATS` (`web-search.ts`, Gemini searches with `googleSearch`), `hidesReasoning` / `visibleReasoning` (`reply-clock.ts`, Gemini reasoning is a summary), `sentFormat` (`refused-downgrades.ts`, Gemini's `generationConfig.responseMimeType` / `responseJsonSchema`), `foldsTools` (`refused-fields.ts`, Gemini's `functionDeclarations[].parametersJsonSchema`). The conclusions per site for Gemini are in ticket `10-16-gemini-upstream/03` Comments.
+- Gemini thought signatures ride in the call id the agent gets: the decoder signs (`GeminiDecoder({ signatures })` → `signedId`), and `askOnce` (`gateway.ts`) runs `unsignCalls({ request, store })` on the translated request for every agent format before any candidate is asked, so `ToolCallPart.signature` reaches the Gemini builder and other upstreams get the bare id. `upstreamProtocolOf(f).decoder()` without `signatures` (the `ReplyTap` opening check) leaves ids unsigned.
+- A new `StreamEvent` kind must be counted where "the model said something" is decided: `ReplyTap.add` (opening) and `ReplyCollector.saidAnything` (whole replies). `image` (a picture Gemini drew) is content there, and every agent encoder drops it, as magpie's do.
 - An upstream-only format gets a module with `build` and a decoder only; don't write stub `parse`/`encoder`/`render`. The translated body for it carries no `model` (`translatedBody` skips `built.model` for Gemini) — the model is in the URL.
 - A decoder for a format with no end marker emits `stop` at its finish reason and never `done`; `endedShort` (`broken-reply.ts`) counts `stop` as closed, so a stream cut before the finish reason is still a broken reply. Gemini: a chunk with only `usageMetadata` is not an end.
 - Where only some formats are supported yet, narrow the type instead of adding a fake branch: `PROBED_FORMATS` / `ProbedFormat` in `upstream-detect.ts` makes every caller of `probeUpstreamFormat` filter (`isProbedFormat`).
@@ -75,6 +78,8 @@ Config-shaped schemas that the daemon also persists live in leaf modules, not in
 - browser: a host with the flag hidden (`hideHostFeature`) shows no field and no row.
 - daemon e2e (`api-endpoint-gateway-gemini.e2e.test.ts`, not in `test:integration` — run locally): each entrance streamed and whole; upstream path, `x-goog-api-key` alone, body without `model`/`stream`; format choice; headers, extra body, upstream name; ledger row.
 - unit (`translation/gemini.test.ts`, `gemini-base-url.test.ts`): request shape, usage, finish reasons, usage-only chunk, error words, path escaping.
+- daemon e2e (same file): a signed call round-trips through Claude Code, Codex and Pi (second request carries `thoughtSignature`, the store directory has the file, the agent's id stays short); thinking per generation and `none`; mended history; `googleSearch` with the endpoint searching and its grounding coming back as the agent's search.
+- unit: `gemini-signatures.test.ts` (`unsignCalls` per agent, Chat `extra_content`), `translation/gemini.test.ts` (thinking level/budget table, tools, signatures, turn repair, decoder calls / text calls / image / grounding).
 
 ### 7. Wrong vs Correct
 #### Wrong
@@ -86,6 +91,16 @@ const FORMAT_PROBES: Record<ApiEndpointRequestFormat, FormatProbe> = { ..., gemi
 export const PROBED_FORMATS = ["anthropic_messages", "openai_chat", "openai_responses"] as const;
 const FORMAT_PROBES: Record<ProbedFormat, FormatProbe> = { ... };
 // callers: if (!isProbedFormat(format)) return …; — removed when the probe lands
+```
+#### Wrong
+```ts
+// Gemini 签名在 Chat 请求的文字层取下、丢掉：Pi 下一轮发给 Gemini 时没有签名，400 "missing a thought_signature"
+const translatable = chatCallSignatures({ text, gemini: false, store });
+```
+#### Correct
+```ts
+// 解析后在中间格式上取下，签名留在 ToolCallPart.signature（askOnce）
+request: withWebSearchFor({ request: unsignCalls({ request: candidate.translated, store }), searches }),
 ```
 
 ## Scenario: optional request field gated by a daemon feature flag
