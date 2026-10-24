@@ -4,7 +4,7 @@
 
 **Blocked by:** 02
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] Pi 设置页有默认思考档位；设了才写 `settings.json` 的 `defaultThinkingLevel`，关开关时放回原值；用户在 Pi 里改了默认档位时跟随。
 - [ ] `enabledModels` 已存在时把默认模型放到最前（比 magpie 多做）；关开关时挪回原位、删掉 Osuna 加的条目，删空的列表整个删掉；没有清单不新建。
