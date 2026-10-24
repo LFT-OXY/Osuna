@@ -828,6 +828,16 @@ YAML follows JSONToYAML in internal/edit/yaml.go:
   packages/server/src/server/api-endpoints/omp-model-entries.ts
   packages/server/src/server/api-endpoints/omp-config-patch.ts
 
+OMP's model roles (the nine roles and their order, the thinking levels a role
+takes, setting and clearing a role and following one saved in OMP) follow role
+and its thinking field in magpie's internal/agent/omp.go; what each role falls
+back to when empty follows FOLLOWS_MODEL and OMP_UNSET in magpie's
+internal/gui/assets/app.js:
+
+  packages/protocol/src/api-endpoint/omp-model-roles.ts
+  packages/server/src/server/api-endpoints/omp-model-roles.ts
+  packages/app/src/api-endpoints/internal/model-roles.ts
+
 The gateway's ChatGPT backend path (relaying a Codex signed in with ChatGPT to
 the ChatGPT backend as it came, an API key's requests to the OpenAI API, and
 426 to a WebSocket handshake) follows CodexPath, codexBackend, codexUpstream,

@@ -6330,16 +6330,10 @@ interface RequestedModelRoles {
   change: ModelRolesChange | undefined;
 }
 
-/** 设模型角色（照 magpie 的 role 与它的 thinking 字段）：只有 OMP 有；省略时不变。 */
+/** 设模型角色（照 magpie 的 role 与它的 thinking 字段）：只有 OMP 有，别的 Agent 忽略（同别的单家字段）；省略时不变。 */
 function withRequestedModelRoles(input: RequestedModelRoles): ApiEndpointAgentSettings {
   const { state, provider, agent, change } = input;
-  if (change === undefined) return agent;
-  if (!takesModelRoles(provider)) {
-    throw new ApiEndpointRequestError({
-      code: "invalid_input",
-      message: `Only Oh My Pi has model roles, not ${AGENT_NAMES[provider]}`,
-    });
-  }
+  if (change === undefined || !takesModelRoles(provider)) return agent;
   const result = withModelRolesChanged({ state, agent, change });
   if (result.kind === "refused") {
     throw new ApiEndpointRequestError({ code: "invalid_input", message: result.message });

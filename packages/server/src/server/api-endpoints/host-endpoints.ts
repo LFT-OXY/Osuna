@@ -154,17 +154,17 @@ export function settleAgentSettings(input: {
   const codexOwnModels = input.codexOwnModels ?? [];
   const agents = { ...state.agents };
   for (const provider of API_ENDPOINT_PROVIDERS) {
-    const agent = withSettledModelRoles(
+    const sided = withoutUnservedSideModels({
       state,
-      withoutUnservedSideModels({
-        state,
-        provider,
-        agent: agents[provider],
-        codexOwnModels,
-      }),
-    );
+      provider,
+      agent: agents[provider],
+      codexOwnModels,
+    });
+    agents[provider] = sided;
+    // 关着的 Agent 的默认模型与角色都不动，再打开时照下面的规则换。
+    if (!sided.enabled) continue;
+    const agent = withSettledModelRoles(state, sided);
     agents[provider] = agent;
-    if (!agent.enabled) continue;
     if (isDefaultModelChoice(state, agent.defaultModelId)) continue;
     const settled = settledModelId(state, agent.defaultModelId ?? "");
     agents[provider] =
@@ -188,8 +188,8 @@ function settledModelId(state: ApiEndpointState, current: string): string | null
 }
 
 /**
- * OMP 的模型角色指向的模型不再能选时照默认模型失踪规则换掉，档位留着（OMP 自己把模型没有的档位贴到最近一档）；
- * 一个可用模型都不剩时清空。没变时原样返回同一个对象。
+ * 开着的 OMP 的模型角色指向的模型不再能选时照默认模型失踪规则换掉，档位留着（OMP 自己把模型没有的档位贴到最近一档）；
+ * 一个可用模型都不剩时（总开关随之关掉）照默认模型留着。没变时原样返回同一个对象。
  */
 function withSettledModelRoles(
   state: ApiEndpointState,
@@ -204,9 +204,9 @@ function withSettledModelRoles(
       settled[role] = value;
       continue;
     }
-    isChanged = true;
     const modelId = settledModelId(state, value.modelId);
-    if (modelId !== null) settled[role] = { ...value, modelId };
+    isChanged = isChanged || modelId !== null;
+    settled[role] = modelId === null ? value : { ...value, modelId };
   }
   return isChanged ? { ...agent, modelRoles: settled } : agent;
 }

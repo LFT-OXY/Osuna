@@ -3492,12 +3492,11 @@ export const fr: TranslationResources = {
             memory: "Mémoire (memory)",
           },
           unset: {
-            followsDefault: "Si vide : le modèle par défaut",
+            default: "Si vide : comme le modèle par défaut ({{model}})",
             ompPicks: "Si vide : {{agent}} en choisit un",
-            followsSlow: "Si vide : le modèle des Problèmes difficiles, sinon {{agent}} choisit",
-            followsSmol: "Si vide : le modèle des Petites tâches",
-            followsTiny:
-              "Si vide : le modèle des Toutes petites tâches, sinon celui des Petites tâches",
+            slow: "Si vide : le modèle des Problèmes difficiles ({{model}})",
+            smol: "Si vide : le modèle des Petites tâches ({{model}})",
+            tiny: "Si vide : le modèle des Toutes petites tâches ({{model}})",
           },
         },
         forcedSubagentModel: "Modèle de Subagent imposé",

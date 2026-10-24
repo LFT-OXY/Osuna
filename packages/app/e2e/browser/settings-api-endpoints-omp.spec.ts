@@ -281,9 +281,9 @@ test("OMP's model roles: a role takes a model and a thinking level, can be clear
   await test.step("switching on leaves the nine roles empty, each saying what OMP uses then", async () => {
     await expect(section.getByTestId("agent-api-endpoints-model-roles")).toBeVisible();
     await expect(slow).toContainText("Hard problems (slow)");
-    await expect(slow).toContainText("When empty: the default model");
+    await expect(slow).toContainText("When empty: same as the default model (glm-5)");
     await expect(section.getByTestId("agent-api-endpoints-role-memory")).toContainText(
-      "When empty: the Tiny tasks model, else the Small tasks model",
+      "When empty: the Small tasks model (glm-5)",
     );
     await expect(modelTrigger).toHaveText("Empty");
     await expect(thinkingTrigger).toHaveText("Session level");
@@ -297,6 +297,10 @@ test("OMP's model roles: a role takes a model and a thinking level, can be clear
     await expect
       .poll(async () => (await ompConfig()).modelRoles?.slow)
       .toBe("osuna/relay-a/kimi-k2");
+    // 顾问空着时用难题的模型，说明跟着写上它。
+    await expect(section.getByTestId("agent-api-endpoints-role-advisor")).toContainText(
+      "When empty: the Hard problems model (kimi-k2 (Relay A))",
+    );
   });
 
   await test.step("picking a thinking level adds it after the model", async () => {

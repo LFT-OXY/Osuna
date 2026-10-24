@@ -20,7 +20,7 @@ import type { DefaultModelOption, ModelRoleView } from "./internal/agent-setting
 
 /*
  * OMP 的「模型角色」区（工单 05，照 magpie 的 roles 方块）：每个角色一行，模型与思考档位各一个下拉，
- * 下面一行说空着时 OMP 用什么（magpie app.js 的 FOLLOWS_MODEL 与 OMP_UNSET）。
+ * 下面一行说空着时 OMP 用什么，跟默认模型或另一个角色时带上那个模型的名字（internal/model-roles.ts）。
  */
 
 /** 设成某个模型与档位；null 为清空，交还 OMP。 */
@@ -28,22 +28,6 @@ export type ModelRoleChangeHandler = (
   role: OmpModelRole,
   value: ApiEndpointModelRole | null,
 ) => void;
-
-type UnsetKind = "followsDefault" | "ompPicks" | "followsSlow" | "followsSmol" | "followsTiny";
-
-// 空着时 OMP 用什么：Subagent、小任务、难题跟默认模型；规划、看图由 OMP 自己挑；顾问先用难题的；
-// 提交说明、极小任务用小任务的；记忆先用极小任务的，再用小任务的。
-const UNSET_KINDS: Record<OmpModelRole, UnsetKind> = {
-  task: "followsDefault",
-  smol: "followsDefault",
-  slow: "followsDefault",
-  plan: "ompPicks",
-  vision: "ompPicks",
-  advisor: "followsSlow",
-  commit: "followsSmol",
-  tiny: "followsSmol",
-  memory: "followsTiny",
-};
 
 // 下拉里「空着」「跟会话的档位」的 id：模型 id 与档位 id 都不会是空串。
 const UNSET = "";
@@ -117,9 +101,10 @@ function ModelRoleRow({ providerLabel, role, options, busy, onChange }: ModelRol
     ],
     [labelOf, options, testID, unsetModelLabel],
   );
-  const modelDisplay = useMemo<SelectFieldDisplay>(
-    () => ({ label: role.model === null ? unsetModelLabel : labelOf(role.model) }),
-    [labelOf, role.model, unsetModelLabel],
+  // 空着是未选状态：不给显示，下拉按占位的淡色写「空着」。
+  const modelDisplay = useMemo<SelectFieldDisplay | null>(
+    () => (role.model === null ? null : { label: labelOf(role.model) }),
+    [labelOf, role.model],
   );
   const unsetThinkingLabel = t("settings.apiEndpoints.agent.modelRoles.unsetThinking");
   const thinkingOptions = useMemo<SelectFieldOption<string>[]>(
@@ -140,7 +125,8 @@ function ModelRoleRow({ providerLabel, role, options, busy, onChange }: ModelRol
     [testID, unsetThinkingLabel],
   );
   const thinkingId = role.thinking ?? UNSET;
-  const thinkingDisplay = useMemo<SelectFieldDisplay>(() => {
+  const thinkingDisplay = useMemo<SelectFieldDisplay | null>(() => {
+    if (thinkingId === UNSET) return null;
     const selected = thinkingOptions.find((option) => option.id === thinkingId);
     return { label: selected?.label ?? thinkingId };
   }, [thinkingId, thinkingOptions]);
@@ -169,9 +155,11 @@ function ModelRoleRow({ providerLabel, role, options, busy, onChange }: ModelRol
       <View style={settingsStyles.rowContent}>
         <Text style={settingsStyles.rowTitle}>{name}</Text>
         <Text style={settingsStyles.rowHint}>
-          {t(`settings.apiEndpoints.agent.modelRoles.unset.${UNSET_KINDS[role.role]}`, {
-            agent: providerLabel,
-          })}
+          {role.whenEmpty.kind === "ompPicks"
+            ? t("settings.apiEndpoints.agent.modelRoles.unset.ompPicks", { agent: providerLabel })
+            : t(`settings.apiEndpoints.agent.modelRoles.unset.${role.whenEmpty.via}`, {
+                model: labelOf(role.whenEmpty.model),
+              })}
         </Text>
       </View>
       <View style={isCompact ? styles.selectsStacked : styles.selects}>
@@ -183,7 +171,7 @@ function ModelRoleRow({ providerLabel, role, options, busy, onChange }: ModelRol
             selectedDisplay={modelDisplay}
             options={modelOptions}
             onChange={handleModelChange}
-            placeholder={name}
+            placeholder={unsetModelLabel}
             emptyText={t("settings.apiEndpoints.agent.noUsableEndpoint")}
             searchable={modelOptions.length > 6}
             title={modelPick}

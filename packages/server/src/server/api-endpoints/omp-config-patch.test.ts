@@ -517,4 +517,14 @@ defaultThinkingLevel: xhigh
       memory: { now: null, level: null },
     });
   });
+
+  it("puts a default role that was a flow list back as a flow list", () => {
+    const before = "modelRoles:\n  default: [anthropic/a, openai/b] # fallbacks\ntheme: dark\n";
+    const first = config({ text: before, model: "glm-5" });
+    expect(parse(first.text).modelRoles.default).toBe("osuna/glm-5");
+    expect(restoreOmpConfig({ text: first.text, takeover: first.takeover })).toEqual({
+      kind: "patched",
+      text: before,
+    });
+  });
 });

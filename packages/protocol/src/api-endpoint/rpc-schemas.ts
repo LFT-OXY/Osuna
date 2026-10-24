@@ -599,7 +599,7 @@ export type ApiEndpointSetActiveResponse = z.infer<typeof ApiEndpointSetActiveRe
  * `memoryModelId`：只给 Codex，设记忆模型，取值同 subagentModelId。老 daemon 忽略它。
  * `forcedSubagentModelId`、`allowsAnySubagentModel`：只给 Codex，设强制 Subagent 模型（取值同 subagentModelId，null 为不设）
  * 与「Codex Subagent 可用任意模型」；省略即不变，老 daemon 忽略它们。
- * `modelRoles`：只给 OMP，按角色改模型角色——给出的角色设成这个模型与档位（模型要是开着的接口的已选模型），null 为清空交还 OMP，
+ * `modelRoles`：只给 OMP（别的 Agent 忽略），按角色改模型角色——给出的角色设成这个模型与档位（模型要是开着的接口的已选模型），null 为清空交还 OMP，
  * 没给的角色不变；省略即都不变。老 daemon 忽略它。
  */
 export const ApiEndpointSetAgentSettingsRequestSchema = z.object({

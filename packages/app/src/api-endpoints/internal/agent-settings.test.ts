@@ -961,17 +961,69 @@ describe("OMP's model roles", () => {
       "tiny",
       "memory",
     ]);
+    const glm = { id: "glm-5", model: "glm-5", endpointName: null };
+    const gone = { id: "gone", model: "gone", endpointName: null };
     expect(shown.modelRoles?.[2]).toEqual({
       role: "slow",
-      model: { id: "glm-5", model: "glm-5", endpointName: null },
+      model: glm,
       thinking: "high",
+      whenEmpty: { kind: "model", via: "default", model: glm },
     });
     expect(shown.modelRoles?.[7]).toEqual({
       role: "tiny",
-      model: { id: "gone", model: "gone", endpointName: null },
+      model: gone,
       thinking: null,
+      whenEmpty: { kind: "model", via: "smol", model: glm },
     });
-    expect(shown.modelRoles?.[0]).toEqual({ role: "task", model: null, thinking: null });
+    expect(shown.modelRoles?.[0]).toEqual({
+      role: "task",
+      model: null,
+      thinking: null,
+      whenEmpty: { kind: "model", via: "default", model: glm },
+    });
+  });
+
+  it("say what an empty role falls back to, naming that model", () => {
+    const kimi = { id: "relay/kimi-k2", model: "kimi-k2", endpointName: "Relay" };
+    const fallbacks = (modelRoles: ApiEndpointModelRoles) =>
+      view({
+        provider: "omp",
+        enabled: true,
+        defaultModelId: "glm-5",
+        endpoints: [relay],
+        endpointModelGroups: [
+          {
+            name: "Relay",
+            models: [{ provider: "omp", id: "osuna/relay/kimi-k2", label: "kimi-k2" }],
+          },
+        ],
+        modelRoles,
+      }).modelRoles?.map((role) => [role.role, role.whenEmpty]);
+    const glm = { id: "glm-5", model: "glm-5", endpointName: null };
+    expect(fallbacks({})).toEqual([
+      ["task", { kind: "model", via: "default", model: glm }],
+      ["smol", { kind: "model", via: "default", model: glm }],
+      ["slow", { kind: "model", via: "default", model: glm }],
+      ["plan", { kind: "ompPicks" }],
+      ["vision", { kind: "ompPicks" }],
+      // 顾问不跟默认模型：难题空着就由 OMP 自己挑。
+      ["advisor", { kind: "ompPicks" }],
+      ["commit", { kind: "model", via: "smol", model: glm }],
+      ["tiny", { kind: "model", via: "smol", model: glm }],
+      ["memory", { kind: "model", via: "smol", model: glm }],
+    ]);
+    const set = { modelId: "relay/kimi-k2" };
+    expect(fallbacks({ slow: set, smol: set, tiny: set })).toEqual([
+      ["task", { kind: "model", via: "default", model: glm }],
+      ["smol", { kind: "model", via: "default", model: glm }],
+      ["slow", { kind: "model", via: "default", model: glm }],
+      ["plan", { kind: "ompPicks" }],
+      ["vision", { kind: "ompPicks" }],
+      ["advisor", { kind: "model", via: "slow", model: kimi }],
+      ["commit", { kind: "model", via: "smol", model: kimi }],
+      ["tiny", { kind: "model", via: "smol", model: kimi }],
+      ["memory", { kind: "model", via: "tiny", model: kimi }],
+    ]);
   });
 
   it("are only on OMP's page, while its switch is on", () => {

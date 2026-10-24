@@ -15,6 +15,7 @@ import {
   type OmpModelRole,
 } from "@getpaseo/protocol/api-endpoint/omp-model-roles";
 import { withoutDisabledEndpointModels } from "./disabled-models-list";
+import { roleFallback, type RoleFallback } from "./model-roles";
 import { hasModelRoles, isPiLikeProvider } from "./pi-like";
 import {
   endpointRowStatus,
@@ -269,11 +270,15 @@ export interface CodexSideModelsView {
   allowsAnySubagentModel: boolean;
 }
 
-/** OMP 的一个模型角色（工单 05）：模型为 null 是空着、交给 OMP；thinking 为 null 是不带档位、跟会话的档位。 */
+/**
+ * OMP 的一个模型角色（工单 05）：模型为 null 是空着、交给 OMP；thinking 为 null 是不带档位、跟会话的档位；
+ * whenEmpty 是空着时 OMP 用什么（跟默认模型或另一个角色时带上那个模型）。
+ */
 export interface ModelRoleView {
   role: OmpModelRole;
   model: DefaultModelOption | null;
   thinking: string | null;
+  whenEmpty: RoleFallback<DefaultModelOption>;
 }
 
 export interface SubagentThinkingView {
@@ -419,14 +424,15 @@ function modelRolesView(input: ModelRolesViewInput): ModelRoleView[] | null {
   const { agent, modelOptions } = input;
   if (!hasModelRoles(input.provider) || !agent.enabled) return null;
   const roles = agent.modelRoles ?? {};
-  return OMP_MODEL_ROLES.map((role) => {
-    const value = roles[role];
-    return {
-      role,
-      model: displayedDefaultModel(modelOptions, value?.modelId ?? null),
-      thinking: value?.thinkingOptionId ?? null,
-    };
-  });
+  const modelOf = (role: OmpModelRole) =>
+    displayedDefaultModel(modelOptions, roles[role]?.modelId ?? null);
+  const defaultModel = displayedDefaultModel(modelOptions, agent.defaultModelId);
+  return OMP_MODEL_ROLES.map((role) => ({
+    role,
+    model: modelOf(role),
+    thinking: roles[role]?.thinkingOptionId ?? null,
+    whenEmpty: roleFallback({ role, defaultModel, modelOf }),
+  }));
 }
 
 // Pi、OMP 对话里的接口模型 id 前面带它们里 Osuna 服务商的名字（daemon 的 PI_PROVIDER_ID）。

@@ -1,5 +1,5 @@
 // providers.osuna 里用户自己加的键照留、关开关时别处还用着 osuna/ 就留下服务商、enabledModels 的认法、旧 models.json 的迁移
-// 移植自 magpie（https://github.com/yetone/magpie，internal/agent/omp.go 的 ompKept、ompLevel、ompRefKeys 与 dropMagpie，
+// 与角色的设、放回移植自 magpie（https://github.com/yetone/magpie，internal/agent/omp.go 的 ompKept、ompLevel、ompRefKeys、dropMagpie 与 role，
 // internal/agent/omp_scope.go 的 ompTakes，internal/edit/yaml.go 的 JSONToYAML）。
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
@@ -252,7 +252,8 @@ export function restoreOmpConfig(input: PiFileState<PiSettingsTakeover>): PiConf
   const isOnOsuna = role !== null && isOsunaModel(role);
   const isOursStill = takeover.modelHeld === undefined && !isRoleChanged(root, takeover);
   const roleRecord = takeover.keys[OMP_ROLE_KEY];
-  if (roleRecord && (isOnOsuna || isOursStill)) restoreValue(doc, ROLE_PATH, roleRecord.original);
+  if (roleRecord && (isOnOsuna || isOursStill))
+    restoreRole({ doc, role: "default", record: roleRecord });
   for (const [name, record] of roleRecords(takeover)) {
     putRoleBack({ doc, root, role: name, record });
   }
@@ -501,7 +502,18 @@ interface RolePutBack {
 function putRoleBack(input: RolePutBack): void {
   const { doc, root, role, record } = input;
   const now = valueAt(root, [ROLES, role]);
-  if (!isRoleOnOsuna(now) && !holds(now, record.written)) return;
+  if (isRoleOnOsuna(now) || holds(now, record.written)) restoreRole({ doc, role, record });
+}
+
+interface RoleRestore {
+  doc: Document;
+  role: string;
+  record: PiSettingsKeyRecord;
+}
+
+/** 角色放回接管前的值；原来是 flow 写法的列表照样写成 flow。 */
+function restoreRole(input: RoleRestore): void {
+  const { doc, role, record } = input;
   restoreValue(doc, [ROLES, role], record.original);
   const node: unknown = doc.getIn([ROLES, role], true);
   if (record.isOriginalFlow === true && isSeq(node)) node.flow = true;
@@ -579,8 +591,10 @@ function writeRole(input: RoleWrite): void {
   // Osuna 里没有单独清默认角色档位的地方，所以档位只会在 OMP 里清。
   let value = ref;
   if (current !== null) value = `${ref}${ompLevelSuffix(current.trim())}`;
-  const original = takeover?.keys[OMP_ROLE_KEY]?.original ?? originalValue(roles(root), "default");
-  keys[OMP_ROLE_KEY] = { original, written: value };
+  const record = takeover?.keys[OMP_ROLE_KEY];
+  const original = record?.original ?? originalValue(roles(root), "default");
+  const isOriginalFlow = record ? record.isOriginalFlow === true : isFlowSeq(doc, "default");
+  keys[OMP_ROLE_KEY] = { original, written: value, ...(isOriginalFlow ? { isOriginalFlow } : {}) };
   if (!isMap(doc.getIn([ROLES]))) doc.setIn([ROLES], doc.createNode({}));
   setValue(doc, ROLE_PATH, value);
 }
@@ -833,7 +847,11 @@ function setValue(doc: Document, path: readonly string[], value: unknown): void 
     node.value = value;
     return;
   }
-  doc.setIn(path, doc.createNode(value));
+  const created = doc.createNode(value);
+  // 换掉的节点（标量换成列表或反过来）同一行的注释留着。
+  if ((isScalar(node) || isSeq(node) || isMap(node)) && node.comment)
+    created.comment = node.comment;
+  doc.setIn(path, created);
 }
 
 function classifyYamlOriginal(text: string | null): OriginalFile {

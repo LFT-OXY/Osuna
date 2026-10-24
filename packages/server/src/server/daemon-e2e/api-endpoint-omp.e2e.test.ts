@@ -732,14 +732,48 @@ theme: dark
     expect((await client.apiEndpointList("omp")).agents?.omp?.modelRoles).toBeUndefined();
   });
 
-  test("only OMP takes model roles", async () => {
+  test("Claude Code ignores model roles, as it does other agents' own fields", async () => {
     await createEndpoint();
-    const refused = await client.apiEndpointSetAgentSettings({
+    const ignored = await client.apiEndpointSetAgentSettings({
       provider: "claude",
       enabled: false,
       modelRoles: { slow: { modelId: "glm-5" } },
     });
-    expect(refused.error).toMatchObject({ code: "invalid_input" });
+    expect(ignored.error).toBeNull();
+    expect(ignored.agent).toEqual({ enabled: false, defaultModelId: null });
+  });
+
+  test("a role keeps its model while the switch is off, and moves the way the default model does on switching on again", async () => {
+    const endpointId = await createEndpoint();
+    await client.apiEndpointSetAgentSettings({
+      provider: "omp",
+      enabled: true,
+      defaultModelId: "relay/claude-opus-5-5",
+      modelRoles: { vision: { modelId: "relay/claude-opus-5-5", thinkingOptionId: "high" } },
+    });
+    await client.apiEndpointSetAgentSettings({ provider: "omp", enabled: false });
+    expect(
+      (
+        await client.apiEndpointSave({
+          provider: "omp",
+          endpointId,
+          name: "Relay",
+          baseUrls: [{ format: "openai_chat", url: "https://relay.example/v1" }],
+          models: [{ id: "glm-5" }, { id: "kimi-k3" }],
+        })
+      ).error,
+    ).toBeNull();
+    expect((await client.apiEndpointList("omp")).agents?.omp).toMatchObject({
+      enabled: false,
+      defaultModelId: "relay/claude-opus-5-5",
+      modelRoles: { vision: { modelId: "relay/claude-opus-5-5", thinkingOptionId: "high" } },
+    });
+
+    const on = await client.apiEndpointSetAgentSettings({ provider: "omp", enabled: true });
+    expect(on.agent?.modelRoles).toEqual({
+      vision: { modelId: "glm-5", thinkingOptionId: "high" },
+    });
+    expect((await configYaml()).modelRoles).toMatchObject({ vision: "osuna/glm-5:high" });
   });
 
   test("a config.yml that does not parse is named and neither file is written", async () => {
