@@ -838,6 +838,14 @@ internal/gui/assets/app.js:
   packages/server/src/server/api-endpoints/omp-model-roles.ts
   packages/app/src/api-endpoints/internal/model-roles.ts
 
+OMP's named profiles (finding them under the OMP folder's profiles, the profile
+name rules, leaving out the one the environment already selects, and a link to
+a folder counting as a folder) follow ompProfileName, ompReserved, ompProfileOK,
+ompRoot and ompProfiles in magpie's internal/agent/omp.go and IsFolder in
+internal/dirent/dirent.go:
+
+  packages/server/src/server/api-endpoints/omp-profiles.ts
+
 The gateway's ChatGPT backend path (relaying a Codex signed in with ChatGPT to
 the ChatGPT backend as it came, an API key's requests to the OpenAI API, and
 426 to a WebSocket handshake) follows CodexPath, codexBackend, codexUpstream,

@@ -46,6 +46,8 @@ export type HostEndpointsLoadState =
       endpointNamesUnreached: string[];
       // 「自动刷新余额与套餐用量」，整台主机共用；缺省开。
       balanceAutoRefresh: boolean;
+      // 电脑上的 OMP 命名配置（按名字排），每套的设置在 agents 的 omp#<名字> 下；没有或老主机不发时为空。
+      ompProfiles: string[];
     };
 
 export function selectHostEndpointsState(input: {
@@ -68,6 +70,8 @@ export function selectHostEndpointsState(input: {
       endpointNamesUnreached: input.data.endpointNamesUnreached ?? [],
       // COMPAT(apiEndpointBalance): added in v0.17.0, remove fallback after 2027-04-22. 老主机不发；那时页面上不读余额，开关也不出。
       balanceAutoRefresh: input.data.balanceAutoRefresh ?? true,
+      // 老主机不发：只有默认那块。
+      ompProfiles: input.data.ompProfiles ?? [],
     };
   }
   if (input.error) return { status: "error", message: input.error.message };

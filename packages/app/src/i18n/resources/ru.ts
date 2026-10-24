@@ -3390,6 +3390,9 @@ export const ru: TranslationResources = {
       agent: {
         title: "Сторонние API",
         useSwitch: "Использовать сторонние API",
+        // OMP 有命名配置时默认那块的标题，与命名配置那块里 CLI 的称呼。
+        defaultProfile: "По умолчанию",
+        profileAgent: "{{agent}} ({{profile}})",
         useHint:
           "Когда включено, {{agent}} может использовать выбранные модели включённых эндпоинтов со страницы «Сторонние API». Выключите, чтобы вернуться к официальному.",
         noUsableEndpoint:

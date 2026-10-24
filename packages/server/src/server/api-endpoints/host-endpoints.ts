@@ -9,6 +9,10 @@ import type {
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import {
   API_ENDPOINT_PROVIDERS,
+  agentSettingsOf,
+  storedOmpProfileKeys,
+  type ApiEndpointAgentKey,
+  type ApiEndpointAgents,
   type ApiEndpointProvider,
   type ApiEndpointState,
   type StoredApiEndpoint,
@@ -152,12 +156,13 @@ export function settleAgentSettings(input: {
 }): ApiEndpointState {
   const { state } = input;
   const codexOwnModels = input.codexOwnModels ?? [];
-  const agents = { ...state.agents };
-  for (const provider of API_ENDPOINT_PROVIDERS) {
+  const agents: ApiEndpointAgents = { ...state.agents };
+  // 每个提供方与设置过的每套 OMP 命名配置。
+  for (const provider of [...API_ENDPOINT_PROVIDERS, ...storedOmpProfileKeys(state.agents)]) {
     const sided = withoutUnservedSideModels({
       state,
       provider,
-      agent: agents[provider],
+      agent: agentSettingsOf(state, provider),
       codexOwnModels,
     });
     agents[provider] = sided;
@@ -217,7 +222,7 @@ function withSettledModelRoles(
  */
 function withoutUnservedSideModels(input: {
   state: ApiEndpointState;
-  provider: ApiEndpointProvider;
+  provider: ApiEndpointAgentKey;
   agent: ApiEndpointAgentSettings;
   codexOwnModels: readonly string[];
 }): ApiEndpointAgentSettings {
@@ -247,9 +252,9 @@ function isUnserved(state: ApiEndpointState, id: string | null | undefined): boo
  */
 export function agentTargetEndpoint(
   state: ApiEndpointState,
-  provider: ApiEndpointProvider,
+  provider: ApiEndpointAgentKey,
 ): StoredApiEndpoint | null {
-  const agent = state.agents[provider];
+  const agent = agentSettingsOf(state, provider);
   if (!agent.enabled) return null;
   const named = namedDefaultModel(state, agent.defaultModelId);
   if (named) return named.endpoint;

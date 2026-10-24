@@ -439,6 +439,9 @@ export const ApiEndpointListResponseSchema = z.object({
     endpointNamesUnreached: z.array(z.string()).optional(),
     // 「自动刷新余额与套餐用量」，整台主机共用；缺省开。没声明 apiEndpointBalance 的 daemon 不发。
     balanceAutoRefresh: z.boolean().optional(),
+    // 电脑上的 OMP 命名配置（omp-profiles 的名字，按名字排），daemon 环境已经指向的那套不在里面；每套的设置在 agents 的
+    // `omp#<名字>` 下（提示区与要重开的副本同样）。设置 RPC 的 provider 取 `omp#<名字>` 即那一套。老 daemon 不发。
+    ompProfiles: z.array(z.string()).optional(),
     error: ApiEndpointErrorSchema.nullable(),
   }),
 });

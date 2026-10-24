@@ -41,8 +41,11 @@ const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foregrou
 const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
 export interface AgentApiEndpointsSectionProps {
-  // CLI 的名称，如 "Claude Code"。
+  // CLI 的名称，如 "Claude Code"；OMP 命名配置那块带配置名。
   providerLabel: string;
+  // 块标题：OMP 有命名配置时默认那块是「默认」，别的是配置名；只有一块时为 null。
+  title: string | null;
+  testID: string;
   view: AgentApiEndpointsView;
   busy: boolean;
   actionError: string | null;
@@ -78,6 +81,8 @@ export interface AgentApiEndpointsSectionProps {
 
 export function AgentApiEndpointsSection({
   providerLabel,
+  title,
+  testID,
   view,
   busy,
   actionError,
@@ -113,7 +118,12 @@ export function AgentApiEndpointsSection({
     return view.issues.filter((issue) => issue.kind !== "configUnparsable");
   }, [isRefusalRepeatedByIssue, view.issues]);
   return (
-    <AgentApiEndpointsFrame>
+    <View style={styles.block} testID={testID}>
+      {title === null ? null : (
+        <Text style={styles.blockTitle} testID={`${testID}-title`}>
+          {title}
+        </Text>
+      )}
       {actionError ? (
         <View style={styles.alert}>
           <PrimaryTextAlert
@@ -233,16 +243,16 @@ export function AgentApiEndpointsSection({
           <AgentIssuesUpdateHost providerLabel={providerLabel} />
         </View>
       )}
-    </AgentApiEndpointsFrame>
+    </View>
   );
 }
 
-/** 区块外框；加载中、出错与主机太旧时也用它，标题位置不跳。 */
+/** 区块外框；加载中、出错与主机太旧时也用它，标题位置不跳。OMP 的几块放在一起，块与块之间多空一些。 */
 export function AgentApiEndpointsFrame({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
   return (
     <SettingsSection title={t("settings.apiEndpoints.agent.title")} testID="agent-api-endpoints">
-      {children}
+      <View style={styles.blocks}>{children}</View>
     </SettingsSection>
   );
 }
@@ -918,6 +928,18 @@ function ManageRow({ summary, onPress }: { summary: AgentEndpointsSummary; onPre
 }
 
 const styles = StyleSheet.create((theme) => ({
+  blocks: {
+    gap: theme.spacing[6],
+  },
+  block: {
+    gap: theme.spacing[3],
+  },
+  blockTitle: {
+    color: theme.colors.foreground,
+    ...theme.typeScale.body,
+    fontWeight: theme.fontWeight.medium,
+    marginLeft: theme.spacing[0.5],
+  },
   alert: {
     marginBottom: theme.spacing[3],
   },

@@ -3394,6 +3394,9 @@ export const ptBR: TranslationResources = {
       agent: {
         title: "Endpoints de API",
         useSwitch: "Usar endpoints de API",
+        // OMP 有命名配置时默认那块的标题，与命名配置那块里 CLI 的称呼。
+        defaultProfile: "Padrão",
+        profileAgent: "{{agent}} ({{profile}})",
         useHint:
           "Quando ativado, {{agent}} pode usar os modelos selecionados dos endpoints ativos em Endpoints de API. Desative para voltar ao oficial.",
         noUsableEndpoint:

@@ -17,6 +17,7 @@ import {
   type OmpProviderBlock,
 } from "./omp-config-patch.js";
 import { ompModelEntry } from "./omp-model-entries.js";
+import { isOmpProfileKey, type OmpProfileKey } from "./omp-profiles.js";
 import {
   applyPiModels,
   applyPiSettings,
@@ -53,9 +54,11 @@ import { piModelEntry, type PiModelSource } from "./pi-model-entries.js";
 
 export const PI_LIKE_PROVIDERS = ["pi", "omp"] as const;
 export type PiLikeProvider = (typeof PI_LIKE_PROVIDERS)[number];
+/** Pi、OMP 默认那套与 OMP 的每套命名配置：各有自己的两份文件与接管记录。 */
+export type PiLikeAgent = PiLikeProvider | OmpProfileKey;
 
-export function isPiLike(provider: string): provider is PiLikeProvider {
-  return PI_LIKE_PROVIDERS.some((candidate) => candidate === provider);
+export function isPiLike(agent: string): agent is PiLikeAgent {
+  return PI_LIKE_PROVIDERS.some((candidate) => candidate === agent) || isOmpProfileKey(agent);
 }
 
 /** 服务商的地址是中转站的 /v1（Chat 与 Responses 都在它下面）。 */

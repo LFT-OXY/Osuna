@@ -16,7 +16,7 @@ import {
 } from "@getpaseo/protocol/api-endpoint/omp-model-roles";
 import { withoutDisabledEndpointModels } from "./disabled-models-list";
 import { roleFallback, type RoleFallback } from "./model-roles";
-import { hasModelRoles, isPiLikeProvider } from "./pi-like";
+import { hasModelRoles, hasOmpProfiles, isPiLikeProvider, ompProfileSettingsKey } from "./pi-like";
 import {
   endpointRowStatus,
   type CooldownRemaining,
@@ -316,9 +316,34 @@ export interface AgentApiEndpointsView {
   modelRoles: ModelRoleView[] | null;
 }
 
+/** 「使用第三方接口」的一块：设置所在的键，与它是哪套 OMP 命名配置（默认那块与别的提供方为 null）。 */
+export interface AgentSettingsBlock {
+  settingsKey: string;
+  profile: string | null;
+}
+
+export interface AgentSettingsBlocksInput {
+  provider: string;
+  // 主机列出的 OMP 命名配置，按名字排。
+  ompProfiles: string[];
+}
+
+/** 提供方页上的几块：默认那块在前，OMP 再每套命名配置一块。 */
+export function agentSettingsBlocks(input: AgentSettingsBlocksInput): AgentSettingsBlock[] {
+  const own: AgentSettingsBlock = { settingsKey: input.provider, profile: null };
+  if (!hasOmpProfiles(input.provider)) return [own];
+  const profiles = input.ompProfiles.map((profile) => ({
+    settingsKey: ompProfileSettingsKey(profile),
+    profile,
+  }));
+  return [own, ...profiles];
+}
+
 export function selectAgentApiEndpointsView(input: {
   state: Extract<HostEndpointsLoadState, { status: "ready" }>;
   provider: string;
+  // 这一块的设置、提示区与要重开的副本所在的键：OMP 的命名配置是 omp#<名字>，规则仍按 provider；省略为 provider 本身。
+  settingsKey?: string;
   // 提供方快照里按接口分组的模型（id 是「接口标识/模型名」）；主机认不出指定某一家的默认模型时为 null。
   endpointModelGroups: ApiEndpointModelGroup[] | null;
   // 提供方快照说每个会话都锁在的思考档位（第三方接口的默认思考档位是 max 时）；没有为 null。
@@ -330,7 +355,8 @@ export function selectAgentApiEndpointsView(input: {
   now: Date;
 }): AgentApiEndpointsView {
   const { state, provider, now } = input;
-  const agent = state.agents[provider] ?? { enabled: false, defaultModelId: null };
+  const settingsKey = input.settingsKey ?? provider;
+  const agent = state.agents[settingsKey] ?? { enabled: false, defaultModelId: null };
   const endpointModelGroups = settingsModelGroups({ provider, groups: input.endpointModelGroups });
   const enabledEndpoints = state.endpoints.filter((endpoint) => endpoint.enabled !== false);
   // 被禁的模型不在服务：默认模型候选不列（分组由主机按在服务的模型给，已经去掉）。
@@ -404,8 +430,8 @@ export function selectAgentApiEndpointsView(input: {
     defaultModel: displayedDefaultModel(modelOptions, agent.defaultModelId),
     modelOptions,
     summary: { enabledCount: enabledEndpoints.length, cooling },
-    issues: (state.agentIssues[provider] ?? []).map(toIssueView),
-    reopen: (state.reopenHints[provider] ?? []).map(toReopenView),
+    issues: (state.agentIssues[settingsKey] ?? []).map(toIssueView),
+    reopen: (state.reopenHints[settingsKey] ?? []).map(toReopenView),
     keepsClaudeAiLogin,
     defaultThinking,
     sideModels,

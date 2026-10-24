@@ -3350,6 +3350,9 @@ export const zhCN: TranslationResources = {
       agent: {
         title: "第三方接口",
         useSwitch: "使用第三方接口",
+        // OMP 有命名配置时默认那块的标题，与命名配置那块里 CLI 的称呼。
+        defaultProfile: "默认",
+        profileAgent: "{{agent}}（{{profile}}）",
         useHint: "打开后，{{agent}} 能用「第三方接口」页里开着的接口的已选模型；关掉就回到官方。",
         noUsableEndpoint: "先到「第三方接口」页开启一家并选好模型。",
         gatewayRequiresTcp:

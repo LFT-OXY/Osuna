@@ -313,6 +313,27 @@ describe("findStaleCopies", () => {
     ).toEqual([{ kind: "cli", app: null, count: 2, since: hoursAgo(6) }]);
   });
 
+  test("an OMP copy run with --profile belongs to that profile, one without to the default block", () => {
+    const processes = [
+      proc({ pid: 90, startedAt: hoursAgo(6), commandLine: "omp --profile work" }),
+      proc({
+        pid: 91,
+        startedAt: hoursAgo(5),
+        commandLine: "/opt/homebrew/bin/omp --profile=work -c",
+      }),
+      proc({ pid: 92, startedAt: hoursAgo(4), commandLine: "omp --profile personal" }),
+      proc({ pid: 93, startedAt: hoursAgo(3), commandLine: "omp --continue" }),
+    ];
+    const look = (provider: "omp" | "omp#work", cliDir: string) =>
+      findStaleCopies({ provider, processes, changedAt: hoursAgo(2), cliDir, ownPid: OWN_PID });
+    expect(look("omp#work", `${home}/.omp/profiles/work/agent`)).toEqual([
+      { kind: "cli", app: null, count: 2, since: hoursAgo(6) },
+    ]);
+    expect(look("omp", `${home}/.omp/agent`)).toEqual([
+      { kind: "cli", app: null, count: 1, since: hoursAgo(3) },
+    ]);
+  });
+
   test("Claude Code in a terminal and in an editor", () => {
     const processes = [
       proc({ pid: 50, startedAt: hoursAgo(6), commandLine: "claude --resume" }),

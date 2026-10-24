@@ -14,18 +14,23 @@ import type {
 import type { CliRolePick } from "./cli-model-hold.js";
 import { isDefaultModelChoice } from "./host-endpoints.js";
 import type { PiLikeRoleWiring } from "./pi-config-patch.js";
-import type { ApiEndpointProvider, ApiEndpointState } from "./store.js";
+import {
+  providerOfAgent,
+  type ApiEndpointAgentKey,
+  type ApiEndpointProvider,
+  type ApiEndpointState,
+} from "./store.js";
 
 /*
  * OMP 的模型角色（工单 05）：存在 OMP 那份 Agent 设置的 modelRoles 里，打开开关时写进 config.yml 的 modelRoles.<角色>
  * （omp-config-patch.ts）。默认角色是默认模型，不在这里。
  */
 
-// 有模型角色的 CLI。
+// 有模型角色的 CLI（OMP 的每套命名配置同样有）。
 const MODEL_ROLE_PROVIDERS: ReadonlySet<ApiEndpointProvider> = new Set(["omp"]);
 
-export function takesModelRoles(provider: ApiEndpointProvider): boolean {
-  return MODEL_ROLE_PROVIDERS.has(provider);
+export function takesModelRoles(provider: ApiEndpointAgentKey): boolean {
+  return MODEL_ROLE_PROVIDERS.has(providerOfAgent(provider));
 }
 
 /** 一次设置里要改的角色：给出的设成这个模型与档位，null 为清空，没给的不变。 */

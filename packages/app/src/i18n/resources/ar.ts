@@ -3331,6 +3331,9 @@ export const ar: TranslationResources = {
       agent: {
         title: "واجهات API الخارجية",
         useSwitch: "استخدام واجهات API الخارجية",
+        // OMP 有命名配置时默认那块的标题，与命名配置那块里 CLI 的称呼。
+        defaultProfile: "الافتراضي",
+        profileAgent: "{{agent}} ({{profile}})",
         useHint:
           "عند التشغيل، يمكن لـ {{agent}} استخدام النماذج المحددة من نقاط الوصول المشغّلة في صفحة واجهات API الخارجية. أوقفه للعودة إلى الرسمي.",
         noUsableEndpoint: "شغّل أولًا نقطة وصول في صفحة واجهات API الخارجية وحدد نماذجها.",

@@ -7,7 +7,7 @@ import type {
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { ApiEndpointModelGroup } from "@getpaseo/protocol/agent-types";
 import type { ApiEndpointNameDisplay } from "@getpaseo/protocol/api-endpoint/endpoint-names";
-import { selectAgentApiEndpointsView } from "./agent-settings";
+import { agentSettingsBlocks, selectAgentApiEndpointsView } from "./agent-settings";
 
 const NOW = new Date("2026-10-14T12:00:00.000Z");
 
@@ -76,6 +76,7 @@ function view(input: {
       endpointNameDisplay: input.endpointNameDisplay ?? "always",
       endpointNamesUnreached: [],
       balanceAutoRefresh: true,
+      ompProfiles: [],
     },
     provider: input.provider ?? "claude",
     endpointModelGroups: input.endpointModelGroups ?? null,
@@ -566,6 +567,7 @@ describe("Keep claude.ai sign-in on an agent page", () => {
         endpointNameDisplay: "always",
         endpointNamesUnreached: [],
         balanceAutoRefresh: true,
+        ompProfiles: [],
       },
       provider: "claude",
       endpointModelGroups: null,
@@ -588,6 +590,7 @@ describe("Keep claude.ai sign-in on an agent page", () => {
         endpointNameDisplay: "always",
         endpointNamesUnreached: [],
         balanceAutoRefresh: true,
+        ompProfiles: [],
       },
       provider: "codex",
       endpointModelGroups: null,
@@ -933,6 +936,84 @@ describe("OMP's Use API endpoints block", () => {
       usesUltraCode: null,
       lockedAt: null,
     });
+  });
+});
+
+describe("the blocks of the Use API endpoints section", () => {
+  it("is one untitled block when OMP has no named profiles, and for every other agent", () => {
+    expect(agentSettingsBlocks({ provider: "omp", ompProfiles: [] })).toEqual([
+      { settingsKey: "omp", profile: null },
+    ]);
+    expect(agentSettingsBlocks({ provider: "claude", ompProfiles: ["work"] })).toEqual([
+      { settingsKey: "claude", profile: null },
+    ]);
+  });
+
+  it("puts OMP's default block first, then one block per named profile", () => {
+    expect(agentSettingsBlocks({ provider: "omp", ompProfiles: ["personal", "work"] })).toEqual([
+      { settingsKey: "omp", profile: null },
+      { settingsKey: "omp#personal", profile: "personal" },
+      { settingsKey: "omp#work", profile: "work" },
+    ]);
+  });
+});
+
+describe("a named OMP profile's block", () => {
+  it("reads that profile's own settings, issues and copies to reopen, by OMP's rules", () => {
+    const shown = selectAgentApiEndpointsView({
+      state: {
+        status: "ready",
+        endpoints: [endpoint({ id: "relay", name: "Relay", models: [{ id: "glm-5" }] })],
+        agents: {
+          omp: { enabled: false, defaultModelId: null },
+          "omp#work": {
+            enabled: true,
+            defaultModelId: "relay/glm-5",
+            modelRoles: { slow: { modelId: "glm-5" } },
+          },
+        },
+        gatewayUnavailable: null,
+        agentIssues: {
+          omp: [],
+          "omp#work": [{ code: "bypassed", message: "work went around Osuna" }],
+        },
+        reopenHints: {
+          omp: [],
+          "omp#work": [{ kind: "osuna_sessions", count: 2, message: "2 work agents" }],
+        },
+        longConversations: {},
+        disabledModels: [],
+        endpointNameDisplay: "always",
+        endpointNamesUnreached: [],
+        balanceAutoRefresh: true,
+        ompProfiles: ["work"],
+      },
+      provider: "omp",
+      settingsKey: "omp#work",
+      endpointModelGroups: [
+        {
+          name: "Relay",
+          models: [{ provider: "omp", id: "osuna/relay/glm-5", label: "glm-5" }],
+        },
+      ],
+      lockedThinkingOptionId: null,
+      subagentThinkingOptions: null,
+      sideModelOptions: [],
+      now: NOW,
+    });
+    expect(shown.enabled).toBe(true);
+    expect(shown.defaultModel).toEqual({
+      id: "relay/glm-5",
+      model: "glm-5",
+      endpointName: "Relay",
+    });
+    expect(shown.modelRoles?.find((role) => role.role === "slow")?.model).toEqual({
+      id: "glm-5",
+      model: "glm-5",
+      endpointName: null,
+    });
+    expect(shown.issues.map((issue) => issue.message)).toEqual(["work went around Osuna"]);
+    expect(shown.reopen).toEqual([{ kind: "osunaSessions", count: 2 }]);
   });
 });
 

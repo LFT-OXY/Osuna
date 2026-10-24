@@ -42,9 +42,18 @@ import { ApiEndpointBalanceSection } from "./balance-section";
 import { ApiEndpointRecentProblemsSection } from "./recent-problems-section";
 import { useEndpointRecentProblems } from "./use-endpoint-recent-problems";
 import { AgentApiEndpointsFrame, AgentApiEndpointsSection } from "./agent-section";
-import { selectAgentApiEndpointsView, type AgentIssueAction } from "./internal/agent-settings";
+import {
+  agentSettingsBlocks,
+  selectAgentApiEndpointsView,
+  type AgentIssueAction,
+  type AgentSettingsBlock,
+} from "./internal/agent-settings";
 import type { ConnectionFormSeed, ConnectionSaveResult } from "./internal/connection-form-model";
-import { balanceAutoRefreshOf, findHostEndpoint } from "./internal/host-list";
+import {
+  balanceAutoRefreshOf,
+  findHostEndpoint,
+  type HostEndpointsLoadState,
+} from "./internal/host-list";
 import { ApiEndpointDisabledModelsSection } from "./disabled-models-section";
 import {
   ApiEndpointNameDisplayRow,
@@ -120,20 +129,83 @@ function AgentApiEndpoints({
   providerLabel: string;
 }) {
   const { t } = useTranslation();
-  const router = useRouter();
   const now = useClock();
   const endpoints = useHostEndpoints(serverId);
-  const { state, setAgentSettings, runIssueAction } = endpoints;
+  const { state } = endpoints;
+  if (state.status === "loading") {
+    return <AgentNotice text={t("settings.apiEndpoints.loading")} />;
+  }
+  if (state.status === "error") {
+    return <AgentNotice text={state.message} />;
+  }
+  // OMP 每套命名配置一块；只有默认那块时不显示块标题。
+  const blocks = agentSettingsBlocks({ provider, ompProfiles: state.ompProfiles });
+  const isTitled = blocks.length > 1;
+  return (
+    <AgentApiEndpointsFrame>
+      {blocks.map((block) => (
+        <AgentApiEndpointsBlock
+          key={block.settingsKey}
+          serverId={serverId}
+          provider={provider}
+          providerLabel={providerLabel}
+          block={block}
+          isTitled={isTitled}
+          state={state}
+          endpoints={endpoints}
+          now={now}
+        />
+      ))}
+    </AgentApiEndpointsFrame>
+  );
+}
+
+interface AgentApiEndpointsBlockProps {
+  serverId: string;
+  provider: string;
+  providerLabel: string;
+  block: AgentSettingsBlock;
+  // 有几块时每块带标题（默认那块叫「默认」，别的是配置名）。
+  isTitled: boolean;
+  state: Extract<HostEndpointsLoadState, { status: "ready" }>;
+  endpoints: UseHostEndpointsResult;
+  now: Date;
+}
+
+/** 一块设置（OMP 的一套配置，别的提供方就是它自己）：开关、默认模型等都改 block.settingsKey 那份。 */
+function AgentApiEndpointsBlock({
+  serverId,
+  provider,
+  providerLabel: cliLabel,
+  block,
+  isTitled,
+  state,
+  endpoints,
+  now,
+}: AgentApiEndpointsBlockProps) {
+  const { t } = useTranslation();
+  const router = useRouter();
+  const { setAgentSettings, runIssueAction } = endpoints;
+  const { settingsKey, profile } = block;
+  // 命名配置那块的文字里带上配置名，如「Oh My Pi（work）的默认模型」。
+  const providerLabel =
+    profile === null
+      ? cliLabel
+      : t("settings.apiEndpoints.agent.profileAgent", { agent: cliLabel, profile });
+  let title: string | null = null;
+  if (isTitled) title = profile ?? t("settings.apiEndpoints.agent.defaultProfile");
   // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove gate after 2027-04-18.
   const hasIssues = useHostFeature(serverId, "apiEndpointCliWiring");
   const { entries: providerEntries } = useProvidersSnapshot(serverId);
   // 指定某一家的默认模型取聊天模型选择器同一份分组（「接口标识/模型名」）。
   // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove gate after 2027-04-18. 老主机不收「接口标识/模型名」的默认模型。
   const providerEntry = providerEntries?.find((candidate) => candidate.provider === provider);
+  // 命名配置的分组在 OMP 条目的 ompProfileModelGroups 里（OMP 自己的对话选单只看默认那块）。
   const endpointModelGroups = useMemo(() => {
     if (!hasIssues) return null;
+    if (profile !== null) return providerEntry?.ompProfileModelGroups?.[settingsKey] ?? null;
     return providerEntry?.apiEndpointModelGroups ?? null;
-  }, [hasIssues, providerEntry]);
+  }, [hasIssues, profile, providerEntry, settingsKey]);
   // 每个会话都锁在哪一档由主机说（只有 Claude Code 的 max 会）。
   const lockedThinkingOptionId = providerEntry?.lockedThinkingOptionId ?? null;
   // Subagent 思考档位的选项由主机按 Subagent 模型或 settings.json 里的主模型给（照 magpie 的 subagent_effort）。
@@ -150,7 +222,7 @@ function AgentApiEndpoints({
     return options.map(({ id, model, endpointName }) => ({ id, model, endpointName }));
   }, [hasIssues, providerEntry]);
   const lastConnection = endpoints.lastConnection;
-  const isOwnConnection = lastConnection?.provider === provider;
+  const isOwnConnection = lastConnection?.provider === settingsKey;
   const connection = isOwnConnection ? lastConnection.connection : null;
 
   const client = useHostRuntimeClient(serverId);
@@ -164,63 +236,65 @@ function AgentApiEndpoints({
         setIsConfirmingSwitchOff(true);
         return;
       }
-      setAgentSettings(provider, { enabled });
+      setAgentSettings(settingsKey, { enabled });
     },
-    [hasIssues, provider, setAgentSettings],
+    [hasIssues, settingsKey, setAgentSettings],
   );
   const closeSwitchOff = useCallback(() => setIsConfirmingSwitchOff(false), []);
   const handleDefaultModelChange = useCallback(
-    (defaultModelId: string) => setAgentSettings(provider, { enabled: true, defaultModelId }),
-    [provider, setAgentSettings],
+    (defaultModelId: string) => setAgentSettings(settingsKey, { enabled: true, defaultModelId }),
+    [settingsKey, setAgentSettings],
   );
   const handleDefaultThinkingChange = useCallback(
     (defaultThinkingOptionId: string | null) =>
-      setAgentSettings(provider, { enabled: true, defaultThinkingOptionId }),
-    [provider, setAgentSettings],
+      setAgentSettings(settingsKey, { enabled: true, defaultThinkingOptionId }),
+    [settingsKey, setAgentSettings],
   );
   const handleUltraCodeChange = useCallback(
-    (usesUltraCode: boolean) => setAgentSettings(provider, { enabled: true, usesUltraCode }),
-    [provider, setAgentSettings],
+    (usesUltraCode: boolean) => setAgentSettings(settingsKey, { enabled: true, usesUltraCode }),
+    [settingsKey, setAgentSettings],
   );
   const handleBackgroundModelChange = useCallback(
     (backgroundModelId: string | null) =>
-      setAgentSettings(provider, { enabled: true, backgroundModelId }),
-    [provider, setAgentSettings],
+      setAgentSettings(settingsKey, { enabled: true, backgroundModelId }),
+    [settingsKey, setAgentSettings],
   );
   const handleSubagentModelChange = useCallback(
     (subagentModelId: string | null) =>
-      setAgentSettings(provider, { enabled: true, subagentModelId }),
-    [provider, setAgentSettings],
+      setAgentSettings(settingsKey, { enabled: true, subagentModelId }),
+    [settingsKey, setAgentSettings],
   );
   const handleSubagentThinkingChange = useCallback(
     (subagentThinkingOptionId: string | null) =>
-      setAgentSettings(provider, { enabled: true, subagentThinkingOptionId }),
-    [provider, setAgentSettings],
+      setAgentSettings(settingsKey, { enabled: true, subagentThinkingOptionId }),
+    [settingsKey, setAgentSettings],
   );
   const handleMemoryModelChange = useCallback(
-    (memoryModelId: string | null) => setAgentSettings(provider, { enabled: true, memoryModelId }),
-    [provider, setAgentSettings],
+    (memoryModelId: string | null) =>
+      setAgentSettings(settingsKey, { enabled: true, memoryModelId }),
+    [settingsKey, setAgentSettings],
   );
   const handleForcedSubagentModelChange = useCallback(
     (forcedSubagentModelId: string | null) =>
-      setAgentSettings(provider, { enabled: true, forcedSubagentModelId }),
-    [provider, setAgentSettings],
+      setAgentSettings(settingsKey, { enabled: true, forcedSubagentModelId }),
+    [settingsKey, setAgentSettings],
   );
   const handleAnySubagentModelChange = useCallback(
     (allowsAnySubagentModel: boolean) =>
-      setAgentSettings(provider, { enabled: true, allowsAnySubagentModel }),
-    [provider, setAgentSettings],
+      setAgentSettings(settingsKey, { enabled: true, allowsAnySubagentModel }),
+    [settingsKey, setAgentSettings],
   );
   const handleModelRoleChange = useCallback<ModelRoleChangeHandler>(
-    (role, value) => setAgentSettings(provider, { enabled: true, modelRoles: { [role]: value } }),
-    [provider, setAgentSettings],
+    (role, value) =>
+      setAgentSettings(settingsKey, { enabled: true, modelRoles: { [role]: value } }),
+    [settingsKey, setAgentSettings],
   );
   // 总开关开着、关着都能设，开关保持原样。
-  const isEnabled = state.status === "ready" && state.agents[provider]?.enabled === true;
+  const isEnabled = state.agents[settingsKey]?.enabled === true;
   const handleKeepClaudeAiLoginChange = useCallback(
     (keepsClaudeAiLogin: boolean) =>
-      setAgentSettings(provider, { enabled: isEnabled, keepsClaudeAiLogin }),
-    [isEnabled, provider, setAgentSettings],
+      setAgentSettings(settingsKey, { enabled: isEnabled, keepsClaudeAiLogin }),
+    [isEnabled, settingsKey, setAgentSettings],
   );
   const handleIssueAction = useCallback(
     (action: AgentIssueAction) => {
@@ -228,25 +302,25 @@ function AgentApiEndpoints({
         setIsConfirmingSwitchOff(true);
         return;
       }
-      runIssueAction(provider, action);
+      runIssueAction(settingsKey, action);
     },
-    [provider, runIssueAction],
+    [settingsKey, runIssueAction],
   );
   const seenReopen = useReopenSeenStore(
-    (store) => store.seen[reopenSeenKey({ serverId, provider })] ?? null,
+    (store) => store.seen[reopenSeenKey({ serverId, provider: settingsKey })] ?? null,
   );
   const markReopenSeen = useReopenSeenStore((store) => store.markSeen);
   const handleDismissReopen = useCallback(
-    (signature: string) => markReopenSeen({ serverId, provider, signature }),
-    [markReopenSeen, provider, serverId],
+    (signature: string) => markReopenSeen({ serverId, provider: settingsKey, signature }),
+    [markReopenSeen, settingsKey, serverId],
   );
   const issueActions = useMemo(() => {
     if (!hasIssues) return null;
     const pending = endpoints.pendingIssueAction;
     const failed = endpoints.issueActionError;
     return {
-      pendingAction: pending?.provider === provider ? pending.action : null,
-      actionError: failed?.provider === provider ? failed : null,
+      pendingAction: pending?.provider === settingsKey ? pending.action : null,
+      actionError: failed?.provider === settingsKey ? failed : null,
       onAction: handleIssueAction,
       onDismissError: endpoints.dismissIssueActionError,
       seenReopen,
@@ -260,36 +334,39 @@ function AgentApiEndpoints({
     endpoints.pendingIssueAction,
     handleIssueAction,
     hasIssues,
-    provider,
+    settingsKey,
   ]);
   const handleManage = useCallback(
     () => router.push(buildSettingsHostSectionRoute(serverId, "api-endpoints")),
     [router, serverId],
   );
 
-  if (state.status === "loading") {
-    return <AgentNotice text={t("settings.apiEndpoints.loading")} />;
-  }
-  if (state.status === "error") {
-    return <AgentNotice text={state.message} />;
-  }
+  const handleDismissError = useCallback(
+    () => endpoints.dismissAgentActionError(settingsKey),
+    [endpoints, settingsKey],
+  );
+  const actionFailure = endpoints.agentActionErrors[settingsKey] ?? null;
+
   return (
     <>
       <AgentApiEndpointsSection
         providerLabel={providerLabel}
+        title={title}
+        testID={`agent-api-endpoints-block-${settingsKey}`}
         view={selectAgentApiEndpointsView({
           state,
           provider,
+          settingsKey,
           endpointModelGroups,
           lockedThinkingOptionId,
           subagentThinkingOptions,
           sideModelOptions,
           now,
         })}
-        busy={endpoints.pendingAgent === provider}
-        actionError={endpoints.actionError}
-        actionErrorCode={endpoints.actionErrorCode}
-        onDismissError={endpoints.dismissActionError}
+        busy={endpoints.pendingAgent === settingsKey}
+        actionError={actionFailure?.message ?? null}
+        actionErrorCode={actionFailure?.code ?? null}
+        onDismissError={handleDismissError}
         connection={connection}
         onToggle={handleToggle}
         onDefaultModelChange={handleDefaultModelChange}
@@ -311,7 +388,7 @@ function AgentApiEndpoints({
         <SwitchOffSheet
           client={client}
           serverId={serverId}
-          provider={provider}
+          provider={settingsKey}
           providerLabel={providerLabel}
           onClose={closeSwitchOff}
         />

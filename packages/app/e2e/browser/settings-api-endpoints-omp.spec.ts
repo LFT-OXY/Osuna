@@ -32,6 +32,8 @@ const homeDir = path.join(cliHome, "home");
 const ompDir = path.join(homeDir, ".omp", "agent");
 const modelsPath = path.join(ompDir, "models.yml");
 const configPath = path.join(ompDir, "config.yml");
+// OMP 的命名配置（omp --profile <名字>）都在这里；只有讲命名配置的用例放，用完删掉。
+const profilesDir = path.join(homeDir, ".omp", "profiles");
 test.use({
   // Osuna 里的 OMP 由假的 OMP（e2e/fixtures/fake-omp-rpc.mjs）扮演；别的 CLI 关掉，免得真的 Pi、Claude Code、Codex 被起来。
   e2eDaemonConfig: {
@@ -88,6 +90,7 @@ test.beforeEach(async ({ page }) => {
 
 test.afterEach(async () => {
   await resetApiEndpoints(client);
+  await rm(profilesDir, { recursive: true, force: true });
   await client.close();
   await relay.close();
 });
@@ -141,6 +144,8 @@ test("the switch writes OMP's default role and Osuna's provider, the default mod
   const toggle = section.getByTestId("agent-api-endpoints-switch");
 
   await test.step("on: OMP's default role is Osuna's first model", async () => {
+    // 没有命名配置时只有默认那一块，没有块标题。
+    await expect(section.getByTestId("agent-api-endpoints-block-omp-title")).toHaveCount(0);
     await toggle.click();
     await expect(toggle).toBeChecked();
     await expect(section.getByTestId("agent-api-endpoints-default-model-trigger")).toHaveText(
@@ -371,4 +376,73 @@ test("a host without OMP's API endpoints shows no switch on OMP's page", async (
   await openOmpPage(page);
   await expect(page.getByTestId("provider-models-section").filter({ visible: true })).toBeVisible();
   await expect(agentSection(page)).toHaveCount(0);
+});
+
+test("each named OMP profile is a block of its own, whose switch and failures touch only that profile", async ({
+  page,
+}) => {
+  const workDir = path.join(profilesDir, "work", "agent");
+  const workConfigPath = path.join(workDir, "config.yml");
+  await mkdir(workDir, { recursive: true });
+  await writeFile(workConfigPath, USER_CONFIG);
+  await mkdir(path.join(profilesDir, "personal", "agent"), { recursive: true });
+  await seedRelay();
+  await openOmpPage(page);
+  const section = agentSection(page);
+  const defaultBlock = section.getByTestId("agent-api-endpoints-block-omp");
+  const personal = section.getByTestId("agent-api-endpoints-block-omp#personal");
+  const work = section.getByTestId("agent-api-endpoints-block-omp#work");
+  const workToggle = work.getByTestId("agent-api-endpoints-switch");
+
+  await test.step("the default block comes first, then one block per profile, each titled and off", async () => {
+    await expect(defaultBlock.getByTestId("agent-api-endpoints-block-omp-title")).toHaveText(
+      "Default",
+    );
+    await expect(personal.getByTestId("agent-api-endpoints-block-omp#personal-title")).toHaveText(
+      "personal",
+    );
+    await expect(work.getByTestId("agent-api-endpoints-block-omp#work-title")).toHaveText("work");
+    for (const block of [defaultBlock, personal, work]) {
+      await expect(block.getByTestId("agent-api-endpoints-switch")).not.toBeChecked();
+    }
+  });
+
+  await test.step("turning work on writes only work's config.yml", async () => {
+    await workToggle.click();
+    await expect(workToggle).toBeChecked();
+    await expect(work.getByTestId("agent-api-endpoints-default-model-trigger")).toHaveText("glm-5");
+    await expect(work.getByTestId("agent-api-endpoints-model-roles")).toBeVisible();
+    await expect
+      .poll(async () => (parse(await readFile(workConfigPath, "utf8")) as OmpConfig).modelRoles)
+      .toEqual({ default: "osuna/glm-5" });
+    expect(await readFile(configPath, "utf8")).toBe(USER_CONFIG);
+    await expect(defaultBlock.getByTestId("agent-api-endpoints-switch")).not.toBeChecked();
+    await expect(personal.getByTestId("agent-api-endpoints-switch")).not.toBeChecked();
+  });
+
+  await test.step("a failed change in work says so in work's block only", async () => {
+    await work.getByTestId("agent-api-endpoints-default-model-trigger").click();
+    await chmod(workDir, 0o500);
+    try {
+      await page.getByTestId("agent-api-endpoints-default-option-relay-a/kimi-k2").click();
+      await expect(work.getByTestId("agent-api-endpoints-error")).toContainText(
+        "Couldn't change the API endpoint settings for Oh My Pi (work)",
+      );
+    } finally {
+      await chmod(workDir, 0o700);
+    }
+    await expect(defaultBlock.getByTestId("agent-api-endpoints-error")).toHaveCount(0);
+    await work.getByRole("button", { name: "Dismiss" }).click();
+  });
+
+  await test.step("switching work off previews work's files and puts its config.yml back", async () => {
+    await workToggle.click();
+    await expect(page.getByText("Turn off API endpoints for Oh My Pi (work)?")).toBeVisible();
+    await expect(
+      inSheet(page, "switch-off-file-~/.omp/profiles/work/agent/config.yml"),
+    ).toBeVisible();
+    await inSheet(page, "switch-off-confirm").click();
+    await expect(workToggle).not.toBeChecked();
+    await expect.poll(() => readFile(workConfigPath, "utf8")).toBe(USER_CONFIG);
+  });
 });

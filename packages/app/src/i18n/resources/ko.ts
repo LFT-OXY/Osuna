@@ -3363,6 +3363,9 @@ export const ko: TranslationResources = {
       agent: {
         title: "서드파티 API",
         useSwitch: "서드파티 API 사용",
+        // OMP 有命名配置时默认那块的标题，与命名配置那块里 CLI 的称呼。
+        defaultProfile: "기본",
+        profileAgent: "{{agent}} ({{profile}})",
         useHint:
           "켜면 {{agent}}에서 「서드파티 API」 페이지에서 켜 둔 엔드포인트의 선택된 모델을 쓸 수 있습니다. 끄면 공식으로 돌아갑니다.",
         noUsableEndpoint: "먼저 「서드파티 API」 페이지에서 엔드포인트를 켜고 모델을 선택하세요.",

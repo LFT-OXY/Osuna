@@ -10,7 +10,7 @@ import {
   isDefaultModelChoice,
   usableModels,
 } from "./host-endpoints.js";
-import type { ApiEndpointProvider, ApiEndpointState } from "./store.js";
+import { agentSettingsOf, type ApiEndpointAgentKey, type ApiEndpointState } from "./store.js";
 
 /*
  * 打开「使用第三方接口」时默认模型怎么挑（ADR 0012、PRD 第 28 条），依次：
@@ -45,7 +45,7 @@ export interface DefaultModelReconnect {
 
 export interface DefaultModelPickInput {
   state: ApiEndpointState;
-  provider: ApiEndpointProvider;
+  provider: ApiEndpointAgentKey;
   // CLI 配置里现在的模型（Claude Code 的 settings.json model、Codex 的 config.toml model），没设为 null。
   cliModel: string | null;
   // CLI 没设模型时它自己列表里的第一个（Claude Code：models.dev 上最新的 Claude；Codex：models_cache.json），不知道为 null。
@@ -85,7 +85,7 @@ export function pickDefaultModel(input: DefaultModelPickInput): DefaultModelPick
 function pickedModel(args: { input: DefaultModelPickInput; first: string }): PickedModel {
   const { input, first } = args;
   const { state } = input;
-  const agent = state.agents[input.provider];
+  const agent = agentSettingsOf(state, input.provider);
   const current = isDefaultModelChoice(state, agent.defaultModelId) ? agent.defaultModelId : null;
   if (input.joinsOwnModel) return { how: "joined", defaultModelId: current ?? first };
   if (agent.enabled && current !== null) return { how: "kept", defaultModelId: current };

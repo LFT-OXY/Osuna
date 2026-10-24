@@ -18,7 +18,15 @@ import {
   type HostProcess,
   type HostProcesses,
 } from "./host-processes.js";
-import type { CliConfigProvider, CliStartRead } from "./store.js";
+import {
+  agentNameOf,
+  CLI_CONFIG_PROVIDERS,
+  providerOfAgent,
+  type CliConfigAgent,
+  type CliConfigProvider,
+  type CliStartRead,
+} from "./store.js";
+import { isOmpProfileKey, ompProfileNameOf, type OmpProfileKey } from "./omp-profiles.js";
 
 /*
  * 改完 CLI 配置后，还在用旧设置的副本（PRD 第 36 条）：CLI 启动时读的那部分最近一次变了之前启动的进程。
@@ -39,7 +47,8 @@ export interface StaleCopyGroup {
 }
 
 export interface FindStaleCopiesInput {
-  provider: CliConfigProvider;
+  // OMP 的命名配置（omp#<名字>）只认带 --profile <名字> 的副本，默认那块只认不带 --profile 的。
+  provider: CliConfigAgent;
   processes: HostProcess[];
   changedAt: Date;
   // CLI 配置所在目录（CLAUDE_CONFIG_DIR 或 ~/.claude、CODEX_HOME 或 ~/.codex、PI_CODING_AGENT_DIR 或 ~/.pi/agent）。
@@ -63,7 +72,8 @@ const CLOCK_SLACK_MS = 1_000;
 
 /** 最近一次改动之前启动、还在用旧设置的副本，按类合并；后台 app-server 与它的帮手不在这里。 */
 export function findStaleCopies(input: FindStaleCopiesInput): StaleCopyGroup[] {
-  const pattern = CLI_PATTERNS[input.provider];
+  const provider = providerOfAgent(input.provider);
+  const pattern = CLI_PATTERNS[provider];
   const others = `/${path.basename(input.cliDir)}/`;
   const ownDir = `${input.cliDir}/`;
   const before = input.changedAt.getTime() - CLOCK_SLACK_MS;
@@ -73,9 +83,13 @@ export function findStaleCopies(input: FindStaleCopiesInput): StaleCopyGroup[] {
     const isOsunaSession = running.parentPid === input.ownPid || running.pid === input.ownPid;
     // 从别的 home 的 CLI 目录里跑的（另一个 CODEX_HOME 留下的 app-server）读的是别的文件。
     const isOtherHome = commandLine.includes(others) && !commandLine.includes(ownDir);
-    const isCandidate = pattern.test(commandLine) && !isOsunaSession && !isOtherHome;
+    const isCandidate =
+      pattern.test(commandLine) &&
+      !isOsunaSession &&
+      !isOtherHome &&
+      isOwnOmpProfile({ agent: input.provider, commandLine });
     if (!isCandidate || startedAt === null || startedAt.getTime() >= before) continue;
-    const copy = COPY_KINDS[input.provider](commandLine);
+    const copy = COPY_KINDS[provider](commandLine);
     if (copy.kind === "daemon" || copy.kind === "helper") continue;
     // 一个应用的几个进程（它的 app-server、exec-server）是一个副本，取最早的启动时间。
     const sameApp = copies.find((known) => copy.app !== null && known.app === copy.app);
@@ -83,6 +97,20 @@ export function findStaleCopies(input: FindStaleCopiesInput): StaleCopyGroup[] {
     else if (startedAt < sameApp.since) sameApp.since = startedAt;
   }
   return groupCopies(copies);
+}
+
+interface OmpProfileCopy {
+  agent: CliConfigAgent;
+  commandLine: string;
+}
+
+/** OMP 的副本归哪套配置看命令行里的 --profile（OMP_PROFILE 在命令行里看不出，按默认那块算）；别的 CLI 都算。 */
+function isOwnOmpProfile(input: OmpProfileCopy): boolean {
+  const { agent, commandLine } = input;
+  if (providerOfAgent(agent) !== "omp") return true;
+  const named = /(?:^|\s)--profile(?:=|\s+)(\S+)/.exec(commandLine)?.[1] ?? null;
+  if (isOmpProfileKey(agent)) return named === ompProfileNameOf(agent);
+  return named === null;
 }
 
 interface StaleCopy {
@@ -421,13 +449,6 @@ const FIRST_LOOK_WAIT_MS = 3_000;
 // 多久再看一次后台 app-server 与在跑的副本（magpie codexDaemonEvery）。
 export const REOPEN_CHECK_EVERY_MS = 15_000;
 
-const AGENT_NAMES: Record<CliConfigProvider, string> = {
-  claude: "Claude Code",
-  codex: "Codex",
-  pi: "Pi",
-  omp: "Oh My Pi",
-};
-
 /** 读状态时一个 CLI 的情况：配置所在目录、启动时读的那部分最近一次变了的时刻、Osuna 里那之前启动的会话数。 */
 export interface ReopenHintsSubject {
   cliDir: string;
@@ -435,7 +456,14 @@ export interface ReopenHintsSubject {
   osunaSessions: number;
 }
 
-export type ReopenHintsSubjects = Record<CliConfigProvider, ReopenHintsSubject>;
+/** 每个 CLI 一个；OMP 的每套命名配置各一个（omp#<名字>）。 */
+export type ReopenHintsSubjects = Record<CliConfigProvider, ReopenHintsSubject> &
+  Partial<Record<OmpProfileKey, ReopenHintsSubject>>;
+
+/** 要看的每份设置：四个 CLI 与给了的每套 OMP 命名配置。 */
+function subjectAgents(subjects: ReopenHintsSubjects): CliConfigAgent[] {
+  return [...CLI_CONFIG_PROVIDERS, ...Object.keys(subjects).filter(isOmpProfileKey)];
+}
 
 export interface CliReopenHintsOptions {
   // 第一次要用时才造：真的实现在测试里一造就抛错。
@@ -471,10 +499,10 @@ interface LookScope {
 /** 这次查看对应的改动：每个 CLI 的目录与改动时刻；变了就要重新看。 */
 function lookKey(subjects: ReopenHintsSubjects): string {
   return JSON.stringify(
-    Object.entries(subjects).map(([provider, subject]) => [
-      provider,
-      subject.cliDir,
-      subject.changedAt?.getTime() ?? null,
+    subjectAgents(subjects).map((agent) => [
+      agent,
+      subjects[agent]?.cliDir ?? null,
+      subjects[agent]?.changedAt?.getTime() ?? null,
     ]),
   );
 }
@@ -573,8 +601,8 @@ export class CliReopenHints {
         copiesListedAt: previous?.copiesListedAt ?? null,
       };
     }
-    const isAnyChanged = Object.values(input.subjects).some(
-      (subject) => subject.changedAt !== null,
+    const isAnyChanged = subjectAgents(input.subjects).some(
+      (agent) => (input.subjects[agent]?.changedAt ?? null) !== null,
     );
     // 不带启动时间的进程表认不出旧副本，只为后台 app-server 列（magpie #2341）。
     const needsCopies = isAnyChanged && this.hostProcesses().reportsStartTimes;
@@ -648,7 +676,7 @@ export class CliReopenHints {
   }
 
   /** 每个 CLI 要重开的副本，用最近一次看到的；这次改动还没看过时等它看完（最多 FIRST_LOOK_WAIT_MS）。 */
-  async read(): Promise<Record<CliConfigProvider, ApiEndpointReopenHint[]>> {
+  async read(): Promise<Record<string, ApiEndpointReopenHint[]>> {
     const subjects = this.options.subjects();
     const key = lookKey(subjects);
     const listedAt = this.seenFor(key)?.copiesListedAt ?? null;
@@ -660,12 +688,12 @@ export class CliReopenHints {
       });
     }
     const seen = this.seenFor(key);
-    return {
-      claude: this.hintsOf({ provider: "claude", subject: subjects.claude, seen }),
-      codex: this.hintsOf({ provider: "codex", subject: subjects.codex, seen }),
-      pi: this.hintsOf({ provider: "pi", subject: subjects.pi, seen }),
-      omp: this.hintsOf({ provider: "omp", subject: subjects.omp, seen }),
-    };
+    const hints: Record<string, ApiEndpointReopenHint[]> = {};
+    for (const agent of subjectAgents(subjects)) {
+      const subject = subjects[agent];
+      if (subject !== undefined) hints[agent] = this.hintsOf({ provider: agent, subject, seen });
+    }
+    return hints;
   }
 
   private seenFor(key: string): ReopenLook | null {
@@ -674,14 +702,14 @@ export class CliReopenHints {
   }
 
   private hintsOf(input: {
-    provider: CliConfigProvider;
+    provider: CliConfigAgent;
     subject: ReopenHintsSubject;
     seen: ReopenLook | null;
   }): ApiEndpointReopenHint[] {
     const { provider, subject, seen } = input;
     const { changedAt } = subject;
     if (changedAt === null) return [];
-    const words = { agent: AGENT_NAMES[provider], now: this.options.now() };
+    const words = { agent: agentNameOf(provider), now: this.options.now() };
     const hints: ApiEndpointReopenHint[] = [];
     if (subject.osunaSessions > 0) {
       hints.push(osunaSessionsHint({ ...words, count: subject.osunaSessions }));

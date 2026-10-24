@@ -9,7 +9,16 @@ import { DaemonClient } from "../test-utils/daemon-client.js";
 import { createTestAgentClient, createTestAgentClients } from "../test-utils/fake-agent-client.js";
 
 type EndpointSave = Parameters<DaemonClient["apiEndpointSave"]>[0];
-type ApiEndpointOptions = NonNullable<Parameters<typeof createTestPaseoDaemon>[0]>["apiEndpoints"];
+type DaemonOptions = NonNullable<Parameters<typeof createTestPaseoDaemon>[0]>;
+type ApiEndpointOptions = NonNullable<DaemonOptions["apiEndpoints"]>;
+type ProviderOverrides = NonNullable<DaemonOptions["providerOverrides"]>;
+
+/** 起 daemon 时另给的：中转站的选项、daemon 环境里多的变量、自定义提供方（各配一个假的客户端）。 */
+interface DaemonStart {
+  apiEndpoints?: Partial<ApiEndpointOptions>;
+  env?: Record<string, string>;
+  customProviders?: ProviderOverrides;
+}
 
 // 用到的只有 Claude Code、Codex（假的）与 OMP（假的客户端）；别的内置提供方关掉，快照不去起它们的 CLI。
 const USED_PROVIDERS = new Set(["claude", "codex", "omp"]);
@@ -57,6 +66,11 @@ interface ChatModel {
   defaultThinkingOptionId?: string;
 }
 
+/** 选单里一个模型：id，默认模型后面标 (default)。 */
+function describeChoice(model: ChatModel): string {
+  return `${model.id}${model.isDefault ? " (default)" : ""}`;
+}
+
 interface OmpModel {
   id: string;
   name: string;
@@ -94,18 +108,27 @@ describe("OMP API endpoints over the daemon RPC", () => {
     await rm(guardDir, { recursive: true, force: true });
   });
 
-  async function startDaemon(extra: Partial<NonNullable<ApiEndpointOptions>> = {}): Promise<void> {
+  async function startDaemon(start: DaemonStart = {}): Promise<void> {
+    const customProviders = start.customProviders ?? {};
+    const customClients = Object.fromEntries(
+      Object.keys(customProviders).map((id) => [id, createTestAgentClient(id)]),
+    );
     daemon = await createTestPaseoDaemon({
-      agentClients: { ...createTestAgentClients(), omp: createTestAgentClient("omp") },
-      providerOverrides: OTHER_PROVIDERS_OFF,
+      agentClients: {
+        ...createTestAgentClients(),
+        omp: createTestAgentClient("omp"),
+        ...customClients,
+      },
+      providerOverrides: { ...OTHER_PROVIDERS_OFF, ...customProviders },
       apiEndpoints: {
         env: {
           CLAUDE_CONFIG_DIR: path.join(root, "claude"),
           CODEX_HOME: path.join(root, "codex"),
+          ...start.env,
         },
         homeDir: root,
         readOmpCliVersion: async () => "18.12.6",
-        ...extra,
+        ...start.apiEndpoints,
       },
     });
     client = await connect(daemon);
@@ -130,10 +153,10 @@ describe("OMP API endpoints over the daemon RPC", () => {
     await Promise.all(tempRoots.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
   });
 
-  async function restartDaemon(extra: Partial<NonNullable<ApiEndpointOptions>>): Promise<void> {
+  async function restartDaemon(start: DaemonStart): Promise<void> {
     await client.close();
     await daemon.close();
-    await startDaemon(extra);
+    await startDaemon(start);
   }
 
   function gatewayRoot(): string {
@@ -260,7 +283,7 @@ theme: dark
   ])(
     "an OMP of version %s gets xhigh in place of max, which it would refuse",
     async (_name, version) => {
-      await restartDaemon({ readOmpCliVersion: async () => version });
+      await restartDaemon({ apiEndpoints: { readOmpCliVersion: async () => version } });
       await createEndpoint({
         modelSettings: { models: { "glm-5": { efforts: ["low", "high", "max"] } } },
       });
@@ -790,5 +813,184 @@ theme: dark
     expect(await readFile(configPath, "utf8")).toBe(broken);
     expect(await readFile(modelsPath, "utf8")).toBe(USER_MODELS);
     expect((await client.apiEndpointList("omp")).agents?.omp).toMatchObject({ enabled: false });
+  });
+
+  /** 一套命名配置的 agent 目录，放好用户自己的两份文件。 */
+  async function makeProfile(name: string): Promise<string> {
+    const dir = path.join(root, ".omp", "profiles", name, "agent");
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, "models.yml"), USER_MODELS);
+    await writeFile(path.join(dir, "config.yml"), USER_CONFIG);
+    return dir;
+  }
+
+  test("each named OMP profile has its own switch, and turning one on and off touches only its own files", async () => {
+    const workDir = await makeProfile("work");
+    const personalDir = await makeProfile("personal");
+    // 名字不合 OMP 规则的文件夹不是配置。
+    await mkdir(path.join(root, ".omp", "profiles", "Not-OMP"), { recursive: true });
+    await createEndpoint();
+
+    const listed = await client.apiEndpointList("omp");
+    expect(listed.ompProfiles).toEqual(["personal", "work"]);
+    expect(listed.agents?.["omp#work"]).toEqual({ enabled: false, defaultModelId: null });
+
+    const on = await client.apiEndpointSetAgentSettings({
+      provider: "omp#work",
+      enabled: true,
+      defaultModelId: "gpt-5",
+      defaultThinkingOptionId: "high",
+    });
+    expect(on.error).toBeNull();
+    expect(on.agent).toMatchObject({ enabled: true, defaultModelId: "gpt-5" });
+    expect(await readFile(path.join(workDir, "config.yml"), "utf8")).toBe(`# omp settings
+modelRoles:
+  default: osuna/gpt-5 # main model
+theme: dark
+defaultThinkingLevel: high
+`);
+    // 各套共用 OMP 的口令。
+    const workModels = parse(await readFile(path.join(workDir, "models.yml"), "utf8")) as {
+      providers: Record<string, Record<string, unknown>>;
+    };
+    expect(workModels.providers.osuna).toMatchObject({
+      baseUrl: `${gatewayRoot()}/v1`,
+      apiKey: await ompToken(),
+    });
+    expect(await readFile(configPath, "utf8")).toBe(USER_CONFIG);
+    expect(await readFile(modelsPath, "utf8")).toBe(USER_MODELS);
+    expect(await readFile(path.join(personalDir, "config.yml"), "utf8")).toBe(USER_CONFIG);
+    const after = await client.apiEndpointList("omp");
+    expect(after.agents?.omp).toMatchObject({ enabled: false });
+    expect(after.agents?.["omp#personal"]).toEqual({ enabled: false, defaultModelId: null });
+    expect(after.agentIssues?.["omp#work"]).toEqual([]);
+    // 这套的首次改写前各留一份完整副本，和默认那套的分开。
+    const backups = await readdir(path.join(daemon.paseoHome, "api-endpoints", "backups"));
+    expect(backups.map((name) => name.split(".")[0]).sort()).toEqual([
+      "omp-profile-work-config",
+      "omp-profile-work-models",
+    ]);
+
+    const preview = await client.apiEndpointPreviewSwitchOff("omp#work");
+    expect(preview.preview?.files.map((file) => file.path)).toEqual([
+      "~/.omp/profiles/work/agent/config.yml",
+      "~/.omp/profiles/work/agent/models.yml",
+    ]);
+    const off = await client.apiEndpointSetAgentSettings({ provider: "omp#work", enabled: false });
+    expect(off.error).toBeNull();
+    expect(await readFile(path.join(workDir, "config.yml"), "utf8")).toBe(USER_CONFIG);
+    expect(await readFile(path.join(workDir, "models.yml"), "utf8")).toBe(USER_MODELS);
+  });
+
+  test("the default block and a named profile stay apart when both are on", async () => {
+    const workDir = await makeProfile("work");
+    await createEndpoint();
+    await client.apiEndpointSetAgentSettings({ provider: "omp", enabled: true });
+    await client.apiEndpointSetAgentSettings({
+      provider: "omp#work",
+      enabled: true,
+      defaultModelId: "gpt-5",
+    });
+
+    await client.apiEndpointSetAgentSettings({ provider: "omp", enabled: false });
+
+    expect(await readFile(configPath, "utf8")).toBe(USER_CONFIG);
+    expect((await configYaml()).modelRoles).toEqual({
+      default: "anthropic/claude-sonnet-4-5",
+    });
+    const workConfig = parse(await readFile(path.join(workDir, "config.yml"), "utf8")) as {
+      modelRoles: Record<string, string>;
+    };
+    expect(workConfig.modelRoles).toEqual({ default: "osuna/gpt-5" });
+    expect((await client.apiEndpointList("omp")).agents?.["omp#work"]).toMatchObject({
+      enabled: true,
+      defaultModelId: "gpt-5",
+    });
+  });
+
+  test("the profile OMP_PROFILE already points at is the default block's, and is not listed again", async () => {
+    const workDir = await makeProfile("work");
+    await makeProfile("personal");
+    await restartDaemon({ env: { OMP_PROFILE: "work" } });
+    await createEndpoint();
+
+    expect((await client.apiEndpointList("omp")).ompProfiles).toEqual(["personal"]);
+    const refused = await client.apiEndpointSetAgentSettings({
+      provider: "omp#work",
+      enabled: true,
+    });
+    expect(refused.error).toMatchObject({ code: "unsupported_provider" });
+
+    await client.apiEndpointSetAgentSettings({ provider: "omp", enabled: true });
+    const workConfig = parse(await readFile(path.join(workDir, "config.yml"), "utf8")) as {
+      modelRoles: Record<string, string>;
+    };
+    expect(workConfig.modelRoles).toEqual({ default: "osuna/glm-5" });
+    expect(await readFile(configPath, "utf8")).toBe(USER_CONFIG);
+  });
+
+  test("a custom provider that extends omp with OMP_PROFILE follows that profile's block", async () => {
+    await makeProfile("work");
+    await restartDaemon({
+      customProviders: {
+        "omp-work": { extends: "omp", label: "OMP Work", env: { OMP_PROFILE: "work" } },
+      },
+    });
+    await createEndpoint();
+    await client.apiEndpointSetAgentSettings({
+      provider: "omp#work",
+      enabled: true,
+      defaultModelId: "gpt-5",
+    });
+    async function choices(provider: string): Promise<string[] | null> {
+      const snapshot = await client.getProvidersSnapshot();
+      const entry = snapshot.entries.find((candidate) => candidate.provider === provider);
+      const groups = entry?.apiEndpointModelGroups;
+      if (!groups) return null;
+      return groups.flatMap((group) => group.models.map(describeChoice));
+    }
+    await expect
+      .poll(() => choices("omp-work"), { timeout: 10_000 })
+      .toEqual(["osuna/relay/glm-5", "osuna/relay/gpt-5 (default)", "osuna/relay/claude-opus-5-5"]);
+    // 默认那块关着，OMP 自己的选单不变；这套的分组另给设置页那一块。自定义提供方不单独出现开关。
+    expect(await choices("omp")).toBeNull();
+    const ompEntry = (await client.getProvidersSnapshot()).entries.find(
+      (candidate) => candidate.provider === "omp",
+    );
+    const workModels = ompEntry?.ompProfileModelGroups?.["omp#work"]?.flatMap(
+      (group) => group.models,
+    );
+    expect(workModels?.map(describeChoice)).toEqual([
+      "osuna/relay/glm-5",
+      "osuna/relay/gpt-5 (default)",
+      "osuna/relay/claude-opus-5-5",
+    ]);
+    const listed = await client.apiEndpointList("omp");
+    expect(Object.keys(listed.agents ?? {}).sort()).toEqual([
+      "claude",
+      "codex",
+      "omp",
+      "omp#work",
+      "pi",
+    ]);
+
+    // 在这套上开着的 Osuna 对话，改了这套才要重开。
+    await client.createAgent({ provider: "omp-work", cwd: root, title: "Work agent" });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await client.apiEndpointSetAgentSettings({
+      provider: "omp#work",
+      enabled: true,
+      defaultModelId: "glm-5",
+    });
+    const hints = (await client.apiEndpointList("omp")).reopenHints;
+    expect(hints?.["omp#work"]).toEqual([
+      {
+        kind: "osuna_sessions",
+        count: 1,
+        message:
+          "1 Oh My Pi (work) agent(s) in Osuna: reload each one (Reload agent in its tab's menu).",
+      },
+    ]);
+    expect(hints?.omp).toEqual([]);
   });
 });

@@ -518,6 +518,9 @@ export const ProviderSnapshotEntrySchema = z.object({
   // Codex 的默认 Subagent 模型与记忆模型的选项：用 ChatGPT 登录时 Codex 自己的模型在前（id 是 /model 里的写法），
   // 再是接口的模型；总开关开着才有，老 daemon 不发。
   sideModelOptions: z.array(ApiEndpointSideModelOptionSchema).optional(),
+  // OMP 每套开着「使用第三方接口」的命名配置（键 omp#<名字>）的分组，同 apiEndpointModelGroups；只在 OMP 的条目上，
+  // 给设置页那一块挑默认模型与思考档位用（OMP 自己的对话选单仍看 apiEndpointModelGroups）。老 daemon 不发。
+  ompProfileModelGroups: z.record(z.string(), z.array(ApiEndpointModelGroupSchema)).optional(),
   // 接口名显示方式（api-endpoint/endpoint-names.ts）：选择器里接口名带不带；总开关开着才有，老 daemon 不发（当 always）。
   apiEndpointNameDisplay: z.string().optional(),
   // 已装 CLI 的版本号（纯 x.y.z），只有启用的内置提供方才有；取不到时省略。

@@ -31,7 +31,8 @@ import { writePrivateFileAtomicSync } from "../private-files.js";
 import { ClaudeSettingsTakeoverSchema } from "./claude-settings-patch.js";
 import { CodexConfigTakeoverSchema } from "./codex-config-patch.js";
 import { PiModelsTakeoverSchema, PiSettingsTakeoverSchema } from "./pi-config-patch.js";
-import type { PiLikeProvider } from "./pi-like-config.js";
+import type { PiLikeAgent, PiLikeProvider } from "./pi-like-config.js";
+import { isOmpProfileKey, ompProfileNameOf, type OmpProfileKey } from "./omp-profiles.js";
 import { readOptionalFile } from "./config-file.js";
 import { type DataFileSystem, LastGoodFile, NODE_DATA_FILE_SYSTEM } from "./last-good.js";
 import { ModelFactsSchema } from "./model-facts.js";
@@ -45,13 +46,14 @@ import { ModelFactsSchema } from "./model-facts.js";
  * - takeover-codex.json：config.toml 的接管记录；
  * - takeover-pi-models.json、takeover-pi-settings.json：Pi 的 models.json 与 settings.json 各一份接管记录；
  * - takeover-omp-models.json、takeover-omp-config.json：OMP 默认那套配置的 models.yml 与 config.yml 各一份；
+ *   每套命名配置另有 takeover-omp-profile-<名字>-models.json、takeover-omp-profile-<名字>-config.json；
  * - codex-models.json：Codex 的 model_catalog_json，Codex 总开关开着时才有；
  * - codex-agent-versions.json：ChatGPT 给 Codex 自带模型的多 Agent 版本，缓存顶替清单时放回（codex-agent-versions.ts）；
  * - models-dev.json：models.dev 模型资料的精简缓存（models-dev.ts），给 Claude Code 的模型提示与 Codex 的模型目录用；
  * - gateway-tokens.json：每个开过总开关的 Agent 一个中转站口令，只说明是哪个 Agent；关掉总开关不作废（ADR 0010）；
  * - retired-models.json：厂商说已下线的「接口 + 模型」与时间，一周内不进列表（retired-models.ts）；
  * - balance-readings.json：每家最近一次成功的余额读数，暂时查不到时回它；不含 key（balance-last.ts）；
- * - cli-rewrites.json：每个 Agent 最近一次改写 CLI 配置（含「重新应用」）的时刻，这之前 CLI 的使用不算「被绕过」（cli-bypass.ts）；
+ * - cli-rewrites.json：每个 Agent（OMP 每套命名配置各算一个）最近一次改写 CLI 配置（含「重新应用」）的时刻，这之前 CLI 的使用不算「被绕过」（cli-bypass.ts）；
  * - cli-start-reads.json：每个 Agent 启动时读、Osuna 替它写的那部分的摘要与它变成这样的时刻，这之前启动的副本要重开（reopen-hints.ts）；
  * - gateway-seen.json：中转站最近一次收到每个 Agent 请求的时刻，重启后还在（cli-bypass.ts 的 GatewaySightings 读写）；
  * - import-fingerprint-key.json：导入指纹的 HMAC 密钥，第一次扫描时随机取，重启后指纹不变、已忽略的发现照样认得（import-apps.ts）；
@@ -75,6 +77,32 @@ export const CLI_CONFIG_PROVIDERS = [
   "omp",
 ] as const satisfies readonly ApiEndpointProvider[];
 export type CliConfigProvider = (typeof CLI_CONFIG_PROVIDERS)[number];
+
+/** 一份「使用第三方接口」设置的键：提供方本身，或 OMP 的一套命名配置（omp-profiles.ts）。 */
+export type ApiEndpointAgentKey = ApiEndpointProvider | OmpProfileKey;
+/** Osuna 改写其 CLI 配置的那几份设置的键。 */
+export type CliConfigAgent = CliConfigProvider | OmpProfileKey;
+
+const AGENT_NAMES: Record<ApiEndpointProvider, string> = {
+  claude: "Claude Code",
+  codex: "Codex",
+  pi: "Pi",
+  omp: "Oh My Pi",
+};
+
+/** 提示与报错里这份设置的 CLI 名字：OMP 的命名配置带上配置名，如 Oh My Pi (work)。 */
+export function agentNameOf(key: ApiEndpointAgentKey): string {
+  if (isOmpProfileKey(key)) return `${AGENT_NAMES.omp} (${ompProfileNameOf(key)})`;
+  return AGENT_NAMES[key];
+}
+
+/** 这份设置归哪个提供方：OMP 的命名配置归 OMP。 */
+export function providerOfAgent<Key extends ApiEndpointAgentKey>(
+  key: Key,
+): Key extends OmpProfileKey ? "omp" : Key;
+export function providerOfAgent(key: ApiEndpointAgentKey): ApiEndpointProvider {
+  return isOmpProfileKey(key) ? "omp" : key;
+}
 
 // 存下的 key 头：两个都放（缺省）不存。
 const STORED_KEY_HEADERS = ["x-api-key", "bearer"] as const;
@@ -218,9 +246,13 @@ function parseEndpointsFile(filePath: string, raw: unknown): EndpointsFileConten
   throw new ApiEndpointsFileUnparsableError(filePath, current.error.message);
 }
 
+/** 每个提供方一份设置；OMP 的命名配置有设置过的才有。 */
+export type ApiEndpointAgents = Record<ApiEndpointProvider, ApiEndpointAgentSettings> &
+  Partial<Record<OmpProfileKey, ApiEndpointAgentSettings>>;
+
 export interface ApiEndpointState {
   endpoints: StoredApiEndpoint[];
-  agents: Record<ApiEndpointProvider, ApiEndpointAgentSettings>;
+  agents: ApiEndpointAgents;
   longConversations?: ApiEndpointLongConversations;
   disabledModels?: string[];
   // 接口名显示方式；always 不存。
@@ -242,6 +274,19 @@ export function endpointNameDisplayOf(state: ApiEndpointState): ApiEndpointNameD
 }
 
 const OFFICIAL_AGENT: ApiEndpointAgentSettings = { enabled: false, defaultModelId: null };
+
+/** 这份设置；还没设置过的命名配置是关着的。 */
+export function agentSettingsOf(
+  state: ApiEndpointState,
+  key: ApiEndpointAgentKey,
+): ApiEndpointAgentSettings {
+  return state.agents[key] ?? OFFICIAL_AGENT;
+}
+
+/** 设置过的命名配置的键（不管电脑上还有没有这套）。 */
+export function storedOmpProfileKeys(agents: ApiEndpointAgents): OmpProfileKey[] {
+  return Object.keys(agents).filter(isOmpProfileKey);
+}
 
 /** 每个 Agent 都没打开「使用第三方接口」。 */
 function officialAgents(): Record<ApiEndpointProvider, ApiEndpointAgentSettings> {
@@ -341,13 +386,19 @@ const PI_LIKE_FILES: Record<PiLikeProvider, Record<PiLikeFile, PiLikeFileName>> 
   },
 };
 
-function takeoverFileName(provider: PiLikeProvider, file: PiLikeFile): string {
-  return `takeover-${provider}-${PI_LIKE_FILES[provider][file].name}.json`;
+/** 接管记录与副本文件名里这份设置的名字：pi、omp，命名配置是 omp-profile-<名字>。 */
+function piLikeStem(agent: PiLikeAgent): string {
+  return isOmpProfileKey(agent) ? `omp-profile-${ompProfileNameOf(agent)}` : agent;
+}
+
+function takeoverFileName(agent: PiLikeAgent, file: PiLikeFile): string {
+  const { name } = PI_LIKE_FILES[providerOfAgent(agent)][file];
+  return `takeover-${piLikeStem(agent)}-${name}.json`;
 }
 
 /** 首次改写 Pi / OMP 的一份文件前的完整副本。 */
 export interface PiLikeBackup {
-  provider: PiLikeProvider;
+  agent: PiLikeAgent;
   file: PiLikeFile;
   // null 为文件不存在，不做副本。
   bytes: Buffer | null;
@@ -359,23 +410,14 @@ const GatewayTokensFileSchema = z.object({ tokens: z.record(z.string(), z.string
 type GatewayTokensFile = z.infer<typeof GatewayTokensFileSchema>;
 export type GatewayTokens = GatewayTokensFile["tokens"];
 
-// 每个 Agent 最近一次改写 CLI 配置的时刻（ISO 时间）；没有条目即这个 daemon 目录下没改写过。
-const CliRewritesFileSchema = z.object({
-  claude: z.string().datetime().optional(),
-  codex: z.string().datetime().optional(),
-  pi: z.string().datetime().optional(),
-  omp: z.string().datetime().optional(),
-});
+// 每个 Agent 最近一次改写 CLI 配置的时刻（ISO 时间），按设置的键（OMP 的命名配置是 omp#<名字>）；
+// 没有条目即这个 daemon 目录下没改写过。
+const CliRewritesFileSchema = z.record(z.string(), z.string().datetime());
 type CliRewritesFile = z.infer<typeof CliRewritesFileSchema>;
 
 // 每个 Agent 启动时读的那部分的摘要与它变成这样的时刻（magpie stash 的 "<agent>.started"）。
 const CliStartReadSchema = z.object({ digest: z.string(), at: z.string().datetime() });
-const CliStartReadsFileSchema = z.object({
-  claude: CliStartReadSchema.optional(),
-  codex: CliStartReadSchema.optional(),
-  pi: CliStartReadSchema.optional(),
-  omp: CliStartReadSchema.optional(),
-});
+const CliStartReadsFileSchema = z.record(z.string(), CliStartReadSchema);
 type CliStartReadsFile = z.infer<typeof CliStartReadsFileSchema>;
 
 /** 启动时读的那部分的摘要，和它从什么时候起是这样的。 */
@@ -472,11 +514,11 @@ export class ApiEndpointStore {
   }
 
   writePiLikeBackup(input: PiLikeBackup): string | null {
-    const { name, extension } = PI_LIKE_FILES[input.provider][input.file];
+    const { name, extension } = PI_LIKE_FILES[providerOfAgent(input.agent)][input.file];
     return this.writeBackup({
       bytes: input.bytes,
       at: input.at,
-      prefix: `${input.provider}-${name}`,
+      prefix: `${piLikeStem(input.agent)}-${name}`,
       extension,
     });
   }
@@ -511,9 +553,11 @@ export class ApiEndpointStore {
       ignoredImports,
       balanceAutoRefresh,
     } = content.file;
+    const profiles = Object.entries(agents).filter(([key]) => isOmpProfileKey(key));
     return {
       endpoints: content.file.endpoints,
       agents: {
+        ...Object.fromEntries(profiles),
         claude: agents.claude ?? OFFICIAL_AGENT,
         codex: agents.codex ?? OFFICIAL_AGENT,
         pi: agents.pi ?? OFFICIAL_AGENT,
@@ -683,25 +727,25 @@ export class ApiEndpointStore {
   }
 
   /** 最近一次改写这个 Agent 的 CLI 配置的时刻；没改写过、或文件读不懂（只影响提示）为 null。 */
-  readCliRewrittenAt(provider: ApiEndpointProvider): Date | null {
+  readCliRewrittenAt(provider: ApiEndpointAgentKey): Date | null {
     const at = this.readCliRewrites()[provider];
     if (at === undefined) return null;
     return new Date(at);
   }
 
-  recordCliRewrite(input: { provider: ApiEndpointProvider; at: Date }): void {
+  recordCliRewrite(input: { provider: ApiEndpointAgentKey; at: Date }): void {
     const next = { ...this.readCliRewrites(), [input.provider]: input.at.toISOString() };
     this.writeJson(CLI_REWRITES_FILE, CliRewritesFileSchema.parse(next));
   }
 
   /** 上次见到的、这个 Agent 启动时读的那部分；没见过、或文件读不懂（只影响提示）为 null。 */
-  readCliStartRead(provider: ApiEndpointProvider): CliStartRead | null {
+  readCliStartRead(provider: ApiEndpointAgentKey): CliStartRead | null {
     const entry = this.readCliStartReads()[provider];
     if (entry === undefined) return null;
     return { digest: entry.digest, at: new Date(entry.at) };
   }
 
-  writeCliStartRead(input: { provider: ApiEndpointProvider; read: CliStartRead }): void {
+  writeCliStartRead(input: { provider: ApiEndpointAgentKey; read: CliStartRead }): void {
     const entry = { digest: input.read.digest, at: input.read.at.toISOString() };
     const next = { ...this.readCliStartReads(), [input.provider]: entry };
     this.writeJson(CLI_START_READS_FILE, CliStartReadsFileSchema.parse(next));
@@ -735,23 +779,23 @@ export class ApiEndpointStore {
     this.writeJson("takeover-codex.json", CodexTakeoverFileSchema.parse(file));
   }
 
-  readPiModelsTakeover(provider: PiLikeProvider): PiModelsTakeoverFile {
+  readPiModelsTakeover(provider: PiLikeAgent): PiModelsTakeoverFile {
     const raw = this.readJson(takeoverFileName(provider, "models"));
     return raw === null ? { takeover: null, backup: null } : PiModelsTakeoverFileSchema.parse(raw);
   }
 
-  writePiModelsTakeover(provider: PiLikeProvider, file: PiModelsTakeoverFile): void {
+  writePiModelsTakeover(provider: PiLikeAgent, file: PiModelsTakeoverFile): void {
     this.writeJson(takeoverFileName(provider, "models"), PiModelsTakeoverFileSchema.parse(file));
   }
 
-  readPiSettingsTakeover(provider: PiLikeProvider): PiSettingsTakeoverFile {
+  readPiSettingsTakeover(provider: PiLikeAgent): PiSettingsTakeoverFile {
     const raw = this.readJson(takeoverFileName(provider, "settings"));
     return raw === null
       ? { takeover: null, backup: null }
       : PiSettingsTakeoverFileSchema.parse(raw);
   }
 
-  writePiSettingsTakeover(provider: PiLikeProvider, file: PiSettingsTakeoverFile): void {
+  writePiSettingsTakeover(provider: PiLikeAgent, file: PiSettingsTakeoverFile): void {
     this.writeJson(
       takeoverFileName(provider, "settings"),
       PiSettingsTakeoverFileSchema.parse(file),
