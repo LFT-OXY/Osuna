@@ -590,6 +590,158 @@ theme: dark
     await expect(stat(configPath)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
+  test("a model role set in Osuna goes into config.yml with its thinking level, is cleared back to OMP, and comes back on switching on again", async () => {
+    await writeFile(
+      configPath,
+      `${USER_CONFIG.replace("theme", "  smol: [anthropic/claude-haiku-4-5]\ntheme")}`,
+    );
+    await createEndpoint();
+    await client.apiEndpointSetAgentSettings({ provider: "omp", enabled: true });
+    // 打开开关只改默认角色，别的角色空着交给 OMP。
+    expect((await configYaml()).modelRoles).toEqual({
+      default: "osuna/glm-5",
+      smol: ["anthropic/claude-haiku-4-5"],
+    });
+
+    const set = await client.apiEndpointSetAgentSettings({
+      provider: "omp",
+      enabled: true,
+      modelRoles: {
+        slow: { modelId: "relay/gpt-5", thinkingOptionId: "xhigh" },
+        smol: { modelId: "glm-5" },
+      },
+    });
+    expect(set.error).toBeNull();
+    expect(set.agent?.modelRoles).toEqual({
+      slow: { modelId: "relay/gpt-5", thinkingOptionId: "xhigh" },
+      smol: { modelId: "glm-5", thinkingOptionId: null },
+    });
+    expect((await configYaml()).modelRoles).toEqual({
+      default: "osuna/glm-5",
+      smol: "osuna/glm-5",
+      slow: "osuna/relay/gpt-5:xhigh",
+    });
+    expect((await client.apiEndpointList("omp")).agents?.omp?.modelRoles).toEqual(
+      set.agent?.modelRoles,
+    );
+
+    const cleared = await client.apiEndpointSetAgentSettings({
+      provider: "omp",
+      enabled: true,
+      modelRoles: { smol: null },
+    });
+    expect(cleared.agent?.modelRoles).toEqual({
+      slow: { modelId: "relay/gpt-5", thinkingOptionId: "xhigh" },
+    });
+    expect(await readFile(configPath, "utf8")).toContain("  smol: [anthropic/claude-haiku-4-5]\n");
+
+    const preview = await client.apiEndpointPreviewSwitchOff("omp");
+    expect(preview.preview?.files.map((file) => file.path)).toEqual([
+      "~/.omp/agent/config.yml",
+      "~/.omp/agent/models.yml",
+    ]);
+    await client.apiEndpointSetAgentSettings({ provider: "omp", enabled: false });
+    expect(await configYaml()).toEqual({
+      modelRoles: { default: "anthropic/claude-sonnet-4-5", smol: ["anthropic/claude-haiku-4-5"] },
+      theme: "dark",
+    });
+    await expect(stat(modelsPath)).resolves.toBeTruthy();
+    expect(await readFile(modelsPath, "utf8")).toBe(USER_MODELS);
+
+    await client.apiEndpointSetAgentSettings({ provider: "omp", enabled: true });
+    expect((await configYaml()).modelRoles).toEqual({
+      default: "osuna/glm-5",
+      smol: ["anthropic/claude-haiku-4-5"],
+      slow: "osuna/relay/gpt-5:xhigh",
+    });
+  });
+
+  test("a role OMP saved on another of Osuna's models is followed, and one moved off Osuna is cleared and left on switch off", async () => {
+    await createEndpoint();
+    await client.apiEndpointSetAgentSettings({
+      provider: "omp",
+      enabled: true,
+      modelRoles: {
+        slow: { modelId: "glm-5", thinkingOptionId: null },
+        plan: { modelId: "glm-5", thinkingOptionId: "high" },
+      },
+    });
+    const text = await readFile(configPath, "utf8");
+    await writeFile(
+      configPath,
+      text
+        .replace("slow: osuna/glm-5", "slow: osuna/relay/gpt-5:low")
+        .replace("plan: osuna/glm-5:high", "plan: openai/gpt-6"),
+    );
+
+    const listed = await client.apiEndpointList("omp");
+    expect(listed.agents?.omp?.modelRoles).toEqual({
+      slow: { modelId: "relay/gpt-5", thinkingOptionId: "low" },
+    });
+    expect(listed.agentIssues?.omp).toEqual([]);
+
+    await client.apiEndpointSetAgentSettings({ provider: "omp", enabled: false });
+    expect((await configYaml()).modelRoles).toEqual({
+      default: "anthropic/claude-sonnet-4-5",
+      plan: "openai/gpt-6",
+    });
+  });
+
+  test("a role whose model is no longer served moves the way the default model does", async () => {
+    const endpointId = await createEndpoint();
+    await client.apiEndpointSetAgentSettings({
+      provider: "omp",
+      enabled: true,
+      modelRoles: { vision: { modelId: "relay/claude-opus-5-5", thinkingOptionId: "high" } },
+    });
+    const saved = await client.apiEndpointSave({
+      provider: "omp",
+      endpointId,
+      name: "Relay",
+      baseUrls: [{ format: "openai_chat", url: "https://relay.example/v1" }],
+      models: [{ id: "glm-5" }, { id: "kimi-k3" }],
+    });
+    expect(saved.error).toBeNull();
+
+    expect((await client.apiEndpointList("omp")).agents?.omp?.modelRoles).toEqual({
+      vision: { modelId: "glm-5", thinkingOptionId: "high" },
+    });
+    expect((await configYaml()).modelRoles).toMatchObject({ vision: "osuna/glm-5:high" });
+  });
+
+  test.each([
+    ["a role OMP doesn't have", { designer: { modelId: "glm-5" } }],
+    ["a model no endpoint serves", { slow: { modelId: "gpt-9" } }],
+    [
+      "a thinking level OMP doesn't have",
+      { slow: { modelId: "glm-5", thinkingOptionId: "ultra" } },
+    ],
+  ])("%s is refused and config.yml is left as it was", async (_name, modelRoles) => {
+    await createEndpoint();
+    await client.apiEndpointSetAgentSettings({ provider: "omp", enabled: true });
+    const before = await readFile(configPath, "utf8");
+
+    const refused = await client.apiEndpointSetAgentSettings({
+      provider: "omp",
+      enabled: true,
+      modelRoles,
+    });
+
+    expect(refused.error).toMatchObject({ code: "invalid_input" });
+    expect(await readFile(configPath, "utf8")).toBe(before);
+    expect((await client.apiEndpointList("omp")).agents?.omp?.modelRoles).toBeUndefined();
+  });
+
+  test("only OMP takes model roles", async () => {
+    await createEndpoint();
+    const refused = await client.apiEndpointSetAgentSettings({
+      provider: "claude",
+      enabled: false,
+      modelRoles: { slow: { modelId: "glm-5" } },
+    });
+    expect(refused.error).toMatchObject({ code: "invalid_input" });
+  });
+
   test("a config.yml that does not parse is named and neither file is written", async () => {
     await createEndpoint();
     const broken = "modelRoles:\n  default: [a\n";

@@ -4,3 +4,8 @@ const PI_LIKE_PROVIDERS = new Set(["pi", "omp"]);
 export function isPiLikeProvider(provider: string): boolean {
   return PI_LIKE_PROVIDERS.has(provider);
 }
+
+/** 有模型角色（modelRoles）的只有 OMP。 */
+export function hasModelRoles(provider: string): boolean {
+  return provider === "omp";
+}

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type {
   ApiEndpoint,
+  ApiEndpointModelRoles,
   ApiEndpointAgentIssue,
   ApiEndpointReopenHint,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
@@ -39,6 +40,7 @@ function view(input: {
   memoryModelId?: string | null;
   forcedSubagentModelId?: string | null;
   allowsAnySubagentModel?: boolean;
+  modelRoles?: ApiEndpointModelRoles;
   lockedThinkingOptionId?: string | null;
   subagentThinkingOptions?: { id: string; label: string }[] | null;
   sideModelOptions?: { id: string; model: string; endpointName: string | null }[];
@@ -63,6 +65,7 @@ function view(input: {
           memoryModelId: input.memoryModelId,
           forcedSubagentModelId: input.forcedSubagentModelId,
           allowsAnySubagentModel: input.allowsAnySubagentModel,
+          modelRoles: input.modelRoles,
         },
       },
       gatewayUnavailable: input.gatewayUnavailable ?? null,
@@ -930,5 +933,52 @@ describe("OMP's Use API endpoints block", () => {
       usesUltraCode: null,
       lockedAt: null,
     });
+  });
+});
+
+describe("OMP's model roles", () => {
+  const relay = endpoint({ id: "relay", name: "Relay", models: [{ id: "glm-5" }] });
+
+  it("lists OMP's nine roles in order, with the model and thinking set for each", () => {
+    const shown = view({
+      provider: "omp",
+      enabled: true,
+      defaultModelId: "glm-5",
+      endpoints: [relay],
+      modelRoles: {
+        slow: { modelId: "glm-5", thinkingOptionId: "high" },
+        tiny: { modelId: "gone" },
+      },
+    });
+    expect(shown.modelRoles?.map((role) => role.role)).toEqual([
+      "task",
+      "smol",
+      "slow",
+      "plan",
+      "vision",
+      "advisor",
+      "commit",
+      "tiny",
+      "memory",
+    ]);
+    expect(shown.modelRoles?.[2]).toEqual({
+      role: "slow",
+      model: { id: "glm-5", model: "glm-5", endpointName: null },
+      thinking: "high",
+    });
+    expect(shown.modelRoles?.[7]).toEqual({
+      role: "tiny",
+      model: { id: "gone", model: "gone", endpointName: null },
+      thinking: null,
+    });
+    expect(shown.modelRoles?.[0]).toEqual({ role: "task", model: null, thinking: null });
+  });
+
+  it("are only on OMP's page, while its switch is on", () => {
+    expect(view({ provider: "omp", endpoints: [relay] }).modelRoles).toBeNull();
+    expect(
+      view({ provider: "pi", enabled: true, defaultModelId: "glm-5", endpoints: [relay] })
+        .modelRoles,
+    ).toBeNull();
   });
 });

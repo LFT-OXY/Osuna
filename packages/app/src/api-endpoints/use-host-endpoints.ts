@@ -71,7 +71,7 @@ interface ActionFailure {
 
 /**
  * 「使用第三方接口」总开关、默认模型、默认思考档位、Ultra Code、「保留 claude.ai 登录」、后台小任务、Subagent 与记忆模型、
- * 强制 Subagent 模型与「Codex Subagent 可用任意模型」的一次修改。
+ * 强制 Subagent 模型与「Codex Subagent 可用任意模型」、OMP 的模型角色的一次修改。
  */
 export type AgentSettingsChange = Pick<
   ApiEndpointSetAgentSettingsRequest,
@@ -86,6 +86,7 @@ export type AgentSettingsChange = Pick<
   | "memoryModelId"
   | "forcedSubagentModelId"
   | "allowsAnySubagentModel"
+  | "modelRoles"
 >;
 
 /** 打开总开关时主机挑默认模型的办法，给那个 Agent 的设置页说一句（ADR 0012）。 */

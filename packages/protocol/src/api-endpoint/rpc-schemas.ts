@@ -82,7 +82,18 @@ export type ApiEndpointBaseUrl = z.infer<typeof ApiEndpointBaseUrlSchema>;
  * forcedSubagentModelId（强制 Subagent 模型）与 allowsAnySubagentModel（「Codex Subagent 可用任意模型」）只对 Codex 有意义：
  * 前者不写 Codex 配置，中转站把 Subagent 的请求改到这个模型，null 或没有为没设；后者把给 Codex 的模型清单里的多 Agent 版本标成 v1，
  * 没有即为关。老 daemon 都不发。
+ * modelRoles（模型角色）只对 OMP 有意义：键是 OMP 的角色（omp-model-roles.ts 的 OMP_MODEL_ROLES，键是字符串，以后加角色老客户端照常解析），
+ * 值是这个角色的模型（取值同 defaultModelId）与思考档位（OMP_ROLE_THINKING_LEVELS 之一，null 或没有为不带）；
+ * 没有的角色为空着、交给 OMP 自己。老 daemon 不发。
  */
+export const ApiEndpointModelRoleSchema = z.object({
+  modelId: z.string(),
+  thinkingOptionId: z.string().nullable().optional(),
+});
+export type ApiEndpointModelRole = z.infer<typeof ApiEndpointModelRoleSchema>;
+export const ApiEndpointModelRolesSchema = z.record(z.string(), ApiEndpointModelRoleSchema);
+export type ApiEndpointModelRoles = z.infer<typeof ApiEndpointModelRolesSchema>;
+
 export const ApiEndpointAgentSettingsSchema = z.object({
   enabled: z.boolean(),
   defaultModelId: z.string().nullable(),
@@ -95,6 +106,7 @@ export const ApiEndpointAgentSettingsSchema = z.object({
   memoryModelId: z.string().nullable().optional(),
   forcedSubagentModelId: z.string().nullable().optional(),
   allowsAnySubagentModel: z.boolean().optional(),
+  modelRoles: ApiEndpointModelRolesSchema.optional(),
 });
 export type ApiEndpointAgentSettings = z.infer<typeof ApiEndpointAgentSettingsSchema>;
 
@@ -587,6 +599,8 @@ export type ApiEndpointSetActiveResponse = z.infer<typeof ApiEndpointSetActiveRe
  * `memoryModelId`：只给 Codex，设记忆模型，取值同 subagentModelId。老 daemon 忽略它。
  * `forcedSubagentModelId`、`allowsAnySubagentModel`：只给 Codex，设强制 Subagent 模型（取值同 subagentModelId，null 为不设）
  * 与「Codex Subagent 可用任意模型」；省略即不变，老 daemon 忽略它们。
+ * `modelRoles`：只给 OMP，按角色改模型角色——给出的角色设成这个模型与档位（模型要是开着的接口的已选模型），null 为清空交还 OMP，
+ * 没给的角色不变；省略即都不变。老 daemon 忽略它。
  */
 export const ApiEndpointSetAgentSettingsRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.set_agent_settings.request"),
@@ -604,6 +618,7 @@ export const ApiEndpointSetAgentSettingsRequestSchema = z.object({
   memoryModelId: z.string().nullable().optional(),
   forcedSubagentModelId: z.string().nullable().optional(),
   allowsAnySubagentModel: z.boolean().optional(),
+  modelRoles: z.record(z.string(), ApiEndpointModelRoleSchema.nullable()).optional(),
 });
 export type ApiEndpointSetAgentSettingsRequest = z.infer<
   typeof ApiEndpointSetAgentSettingsRequestSchema

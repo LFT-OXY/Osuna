@@ -3473,6 +3473,33 @@ export const fr: TranslationResources = {
           "Résume en arrière-plan les conversations passées dans les mémoires de {{agent}}. Utilisé seulement quand la fonction mémoires de {{agent}} est activée ; Osuna ne l'active pas.",
         memoryModelUnset: "Celui de {{agent}}",
         memoryModelPick: "Modèle de mémoire pour {{agent}}",
+        modelRoles: {
+          title: "Rôles de modèle",
+          hint: "Choisissez un modèle pour chaque type de travail de {{agent}}. Un rôle vide est laissé à {{agent}}.",
+          modelPick: "Modèle pour {{role}}",
+          thinkingPick: "Réflexion pour {{role}}",
+          unsetModel: "Vide",
+          unsetThinking: "Comme la session",
+          roles: {
+            task: "Subagent (task)",
+            smol: "Petites tâches (smol)",
+            slow: "Problèmes difficiles (slow)",
+            plan: "Planification (plan)",
+            vision: "Images (vision)",
+            advisor: "Conseiller (advisor)",
+            commit: "Messages de commit (commit)",
+            tiny: "Toutes petites tâches (tiny)",
+            memory: "Mémoire (memory)",
+          },
+          unset: {
+            followsDefault: "Si vide : le modèle par défaut",
+            ompPicks: "Si vide : {{agent}} en choisit un",
+            followsSlow: "Si vide : le modèle des Problèmes difficiles, sinon {{agent}} choisit",
+            followsSmol: "Si vide : le modèle des Petites tâches",
+            followsTiny:
+              "Si vide : le modèle des Toutes petites tâches, sinon celui des Petites tâches",
+          },
+        },
         forcedSubagentModel: "Modèle de Subagent imposé",
         forcedSubagentModelHint:
           "Chaque Subagent l'utilise, quel que soit le modèle indiqué par la conversation principale. La configuration de Codex reste telle quelle.",

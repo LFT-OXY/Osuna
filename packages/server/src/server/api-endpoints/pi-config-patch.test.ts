@@ -66,7 +66,7 @@ interface SettingsCall {
 function settings(call: SettingsCall) {
   const result = applyPiSettings({
     text: call.text,
-    wiring: { model: call.model, thinking: call.thinking ?? null },
+    wiring: { model: call.model, thinking: call.thinking ?? null, roles: [] },
     takeover: call.takeover ?? null,
     shouldRewriteModel: call.shouldRewriteModel ?? false,
   });

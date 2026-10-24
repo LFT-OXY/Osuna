@@ -12,7 +12,7 @@ import {
   type OmpProviderBlock,
 } from "./omp-config-patch.js";
 import { ompModelEntry, ompTakesMax } from "./omp-model-entries.js";
-import type { PiModelsTakeover, PiSettingsTakeover } from "./pi-config-patch.js";
+import type { PiLikeRoleWiring, PiModelsTakeover, PiSettingsTakeover } from "./pi-config-patch.js";
 import type { PiModelSource } from "./pi-model-entries.js";
 
 /*
@@ -60,13 +60,14 @@ interface ConfigCall {
   text: string | null;
   model: string;
   thinking?: string | null;
+  roles?: PiLikeRoleWiring[];
   takeover?: PiSettingsTakeover | null;
 }
 
 function config(call: ConfigCall) {
   const result = applyOmpConfig({
     text: call.text,
-    wiring: { model: call.model, thinking: call.thinking ?? null },
+    wiring: { model: call.model, thinking: call.thinking ?? null, roles: call.roles ?? [] },
     takeover: call.takeover ?? null,
     shouldRewriteModel: false,
   });
@@ -424,6 +425,96 @@ defaultThinkingLevel: xhigh
     expect(readOmpCliPicks({ text: changed, takeover: first.takeover })?.model).toEqual({
       now: "osuna/kimi-k2",
       isKept: false,
+    });
+  });
+
+  it("writes a role set in Osuna as osuna/<model>:<level>, leaving the roles it wasn't given to OMP", () => {
+    const { text } = config({
+      text: USER_CONFIG,
+      model: "relay/glm-5",
+      roles: [
+        { role: "slow", model: "relay/glm-5", thinking: "high" },
+        { role: "task", model: "kimi-k2", thinking: null },
+      ],
+    });
+    expect(parse(text).modelRoles).toEqual({
+      default: "osuna/relay/glm-5",
+      smol: ["anthropic/claude-haiku-4-5"],
+      slow: "osuna/relay/glm-5:high",
+      task: "osuna/kimi-k2",
+    });
+  });
+
+  it("puts back what a role had when it is cleared or on switch off, keeping one the user changed in OMP", () => {
+    const first = config({
+      text: USER_CONFIG,
+      model: "relay/glm-5",
+      roles: [
+        { role: "smol", model: "kimi-k2", thinking: "low" },
+        { role: "plan", model: "glm-5", thinking: null },
+      ],
+    });
+    expect(parse(first.text).modelRoles).toMatchObject({
+      smol: "osuna/kimi-k2:low",
+      plan: "osuna/glm-5",
+    });
+    const cleared = config({
+      text: first.text,
+      model: "relay/glm-5",
+      roles: [{ role: "plan", model: "glm-5", thinking: null }],
+      takeover: first.takeover,
+    });
+    expect(parse(cleared.text).modelRoles).toEqual({
+      default: "osuna/relay/glm-5",
+      smol: ["anthropic/claude-haiku-4-5"],
+      plan: "osuna/glm-5",
+    });
+    expect(cleared.text).toContain("  smol: [anthropic/claude-haiku-4-5]\n");
+
+    expect(restoreOmpConfig({ text: first.text, takeover: first.takeover })).toEqual({
+      kind: "patched",
+      text: USER_CONFIG,
+    });
+    const userPlan = first.text.replace("plan: osuna/glm-5", "plan: openai/gpt-5");
+    const restored = restoreOmpConfig({ text: userPlan, takeover: first.takeover });
+    if (restored.kind !== "patched") throw new Error(`Expected a patch, got ${restored.kind}`);
+    expect(parse(restored.text).modelRoles).toEqual({
+      default: "anthropic/claude-sonnet-4-5",
+      smol: ["anthropic/claude-haiku-4-5"],
+      plan: "openai/gpt-5",
+    });
+  });
+
+  it("leaves a role the user moved off Osuna in OMP when Osuna clears it", () => {
+    const first = config({
+      text: null,
+      model: "glm-5",
+      roles: [{ role: "vision", model: "glm-5", thinking: null }],
+    });
+    const moved = first.text.replace("vision: osuna/glm-5", "vision: openai/gpt-5");
+    const cleared = config({ text: moved, model: "glm-5", takeover: first.takeover });
+    expect(parse(cleared.text).modelRoles.vision).toBe("openai/gpt-5");
+    expect(cleared.takeover.keys["modelRoles.vision"]).toBeUndefined();
+  });
+
+  it("reports a role OMP saved on another of Osuna's models, with its level, and one moved off Osuna", () => {
+    const first = config({
+      text: null,
+      model: "glm-5",
+      roles: [
+        { role: "slow", model: "glm-5", thinking: null },
+        { role: "tiny", model: "glm-5", thinking: null },
+        { role: "memory", model: "glm-5", thinking: null },
+      ],
+    });
+    const changed = first.text
+      .replace("slow: osuna/glm-5", "slow: osuna/relay/kimi-k2:xhigh")
+      .replace("tiny: osuna/glm-5", "tiny: openai/gpt-5")
+      .replace("  memory: osuna/glm-5\n", "");
+    expect(readOmpCliPicks({ text: changed, takeover: first.takeover })?.roles).toEqual({
+      slow: { now: "osuna/relay/kimi-k2", level: "xhigh" },
+      tiny: { now: "openai/gpt-5", level: null },
+      memory: { now: null, level: null },
     });
   });
 });

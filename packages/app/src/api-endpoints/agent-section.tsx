@@ -17,6 +17,8 @@ import { useIsCompactFormFactor } from "@/constants/layout";
 import { settingsStyles } from "@/styles/settings";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { AgentIssuesArea, AgentIssuesUpdateHost, type AgentIssuesAreaProps } from "./agent-issues";
+import { useDefaultModelLabel } from "./default-model-label";
+import { ModelRolesRows, type ModelRoleChangeHandler } from "./model-roles-rows";
 import type { ApiEndpointConnection } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type {
   AgentApiEndpointsView,
@@ -30,8 +32,8 @@ import type {
 } from "./internal/agent-settings";
 
 /*
- * Claude Code / Codex 提供方页的「第三方接口」区：一张卡片——总开关、默认模型、默认思考档位、
- * 后台小任务 / Subagent / 记忆模型、「保留 claude.ai 登录」、「管理第三方接口」入口。纯 props，运行时接线在 view.tsx。
+ * Claude Code / Codex / Pi / OMP 提供方页的「第三方接口」区：一张卡片——总开关、默认模型、默认思考档位、
+ * 后台小任务 / Subagent / 记忆模型、OMP 的模型角色、「保留 claude.ai 登录」、「管理第三方接口」入口。纯 props，运行时接线在 view.tsx。
  */
 
 const ThemedChevronRight = withUnistyles(ChevronRight);
@@ -62,6 +64,8 @@ export interface AgentApiEndpointsSectionProps {
   onMemoryModelChange: (modelId: string | null) => void;
   onForcedSubagentModelChange: (modelId: string | null) => void;
   onAnySubagentModelChange: (allowsAnySubagentModel: boolean) => void;
+  // OMP 的模型角色：设成某个模型与档位，null 为清空交还 OMP。
+  onModelRoleChange: ModelRoleChangeHandler;
   onManage: () => void;
   // 「保留 claude.ai 登录」；主机太旧时为 null，不显示这一行（Codex 页的 view 里本来就没有这个选项）。
   onKeepClaudeAiLoginChange: ((keepsClaudeAiLogin: boolean) => void) | null;
@@ -90,6 +94,7 @@ export function AgentApiEndpointsSection({
   onMemoryModelChange,
   onForcedSubagentModelChange,
   onAnySubagentModelChange,
+  onModelRoleChange,
   onManage,
   onKeepClaudeAiLoginChange,
   issueActions,
@@ -204,6 +209,15 @@ export function AgentApiEndpointsSection({
             onAnySubagentModelChange={onAnySubagentModelChange}
           />
         ) : null}
+        {view.modelRoles ? (
+          <ModelRolesRows
+            providerLabel={providerLabel}
+            roles={view.modelRoles}
+            options={view.modelOptions}
+            busy={busy}
+            onChange={onModelRoleChange}
+          />
+        ) : null}
         {showsKeepClaudeAiLogin ? (
           <KeepClaudeAiLoginRow
             providerLabel={providerLabel}
@@ -245,21 +259,6 @@ function useSwitchHint(providerLabel: string, block: AgentSwitchBlock | null): s
   }
   // 认不出的原因照 daemon 原文。
   return block.issue.message;
-}
-
-/** 默认模型的显示：指定某一家的写成「模型名（接口名）」。 */
-function useDefaultModelLabel(): (option: DefaultModelOption) => string {
-  const { t } = useTranslation();
-  return useCallback(
-    (option: DefaultModelOption) =>
-      option.endpointName === null
-        ? option.model
-        : t("settings.apiEndpoints.agent.defaultModelOnEndpoint", {
-            model: option.model,
-            endpoint: option.endpointName,
-          }),
-    [t],
-  );
 }
 
 /** 刚打开总开关时默认模型是怎么挑的（照 magpie 的 connectedSaid）；认不出的挑法不说。 */

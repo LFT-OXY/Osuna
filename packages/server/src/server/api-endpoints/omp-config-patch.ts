@@ -16,7 +16,7 @@ import {
   type ToStringOptions,
   type YAMLSeq,
 } from "yaml";
-import type { CliPicks } from "./cli-model-hold.js";
+import type { CliPicks, CliRolePick } from "./cli-model-hold.js";
 import { mergeEdits } from "./line-merge.js";
 import type { OriginalFile, OriginalValue } from "./jsonc-edit.js";
 import type { OmpModelEntry } from "./omp-model-entries.js";
@@ -37,11 +37,13 @@ import {
   type PiConfigUnparsable,
   type PiFileState,
   type PiGatewayAddress,
+  type PiLikeRoleWiring,
   type PiModelsTakeover,
   type PiScopePlacement,
   type PiSettingsApplyInput,
   type PiSettingsFile,
   type PiSettingsKeepInput,
+  type PiSettingsKeyRecord,
   type PiSettingsTakeover,
   type PiStartupFiles,
 } from "./pi-config-patch.js";
@@ -57,6 +59,8 @@ import {
  *   不写 User-Agent：中转站凭口令认 OMP。
  * - config.yml 的 modelRoles.default（osuna/<模型>，原来带「:档位」的换了模型也带着，照 magpie）、设了才写的
  *   defaultThinkingLevel，enabledModels 同 Pi（已有清单时把默认模型挪到最前，关掉时挪回）。
+ * - config.yml 里在 Osuna 设了的其余模型角色（工单 05，照 magpie 的 role）：modelRoles.<角色> 写成 osuna/<模型>，带档位时
+ *   接上「:档位」。清空或关掉时，还在 Osuna 上或还是 Osuna 写的放回原值，用户在 OMP 里改到别处的留着。
  * 关开关时 config.yml 里别的角色、fallback 链、task.agentModelOverrides 或按目录的 enabledModels 还用着 osuna/，
  * 服务商留在 models.yml（照 magpie 的 dropMagpie）。
  */
@@ -214,6 +218,7 @@ export function applyOmpConfig(
   } else {
     writeRole({ doc, root, keys, takeover, model: wiring.model });
   }
+  writeRoles({ doc, root, keys, takeover, roles: wiring.roles });
   const rolesRecord = takeover?.keys[ROLES];
   if (rolesRecord) keys[ROLES] = rolesRecord;
   else if (root[ROLES] === undefined) keys[ROLES] = { original: { present: false }, written: null };
@@ -248,6 +253,9 @@ export function restoreOmpConfig(input: PiFileState<PiSettingsTakeover>): PiConf
   const isOursStill = takeover.modelHeld === undefined && !isRoleChanged(root, takeover);
   const roleRecord = takeover.keys[OMP_ROLE_KEY];
   if (roleRecord && (isOnOsuna || isOursStill)) restoreValue(doc, ROLE_PATH, roleRecord.original);
+  for (const [name, record] of roleRecords(takeover)) {
+    putRoleBack({ doc, root, role: name, record });
+  }
   const rolesNode: unknown = doc.getIn([ROLES]);
   if (takeover.keys[ROLES] && isMap(rolesNode) && rolesNode.items.length === 0) {
     doc.deleteIn([ROLES]);
@@ -293,7 +301,25 @@ export function readOmpCliPicks(input: PiSettingsFile): CliPicks | null {
     subagent: null,
     subagentLevel: null,
     memory: null,
+    roles: changedRoles(root, takeover),
   };
+}
+
+/** Osuna 写过、现在不再是写入值的角色（照 magpie 的 role 字段 Get 读文件）：模型不带档位，一串备选或删掉了为 null。 */
+function changedRoles(
+  root: Record<string, unknown>,
+  takeover: PiSettingsTakeover,
+): Record<string, CliRolePick> {
+  const picks: Record<string, CliRolePick> = {};
+  for (const [role, record] of roleRecords(takeover)) {
+    const now = valueAt(root, [ROLES, role]);
+    if (holds(now, record.written)) continue;
+    const single = singleRole(now);
+    const model = single === null ? null : withoutOmpLevel(single);
+    const level = single === null ? "" : ompLevelSuffix(single).slice(1);
+    picks[role] = { now: model, level: level === "" ? null : level };
+  }
+  return picks;
 }
 
 /** 把文件里现在的默认角色记作 OMP 的：重写不碰。读不懂时原样返回。 */
@@ -401,6 +427,89 @@ function ompTakes(pattern: string, ref: string): boolean {
     }
   }
   return piTakes(bare, ref);
+}
+
+/** 接管记录里默认角色以外的角色（modelRoles.<角色>）与它们的记录。 */
+function roleRecords(takeover: PiSettingsTakeover): [string, PiSettingsKeyRecord][] {
+  const prefix = `${ROLES}.`;
+  return Object.entries(takeover.keys).flatMap(([key, record]): [string, PiSettingsKeyRecord][] =>
+    key.startsWith(prefix) && key !== OMP_ROLE_KEY ? [[key.slice(prefix.length), record]] : [],
+  );
+}
+
+/** 一个角色写的是单个模型时的值（去掉首尾空白）；不是字符串、空或一串备选为 null。 */
+function singleRole(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed === "" || trimmed.includes(",") ? null : trimmed;
+}
+
+/** 角色还在 Osuna 的某个模型上。 */
+function isRoleOnOsuna(value: unknown): boolean {
+  const single = singleRole(value);
+  return single !== null && isOsunaModel(withoutOmpLevel(single));
+}
+
+interface RolesWrite {
+  doc: Document;
+  root: Record<string, unknown>;
+  keys: PiSettingsTakeover["keys"];
+  takeover: PiSettingsTakeover | null;
+  roles: readonly PiLikeRoleWiring[];
+}
+
+/**
+ * 默认角色以外的角色（照 magpie 的 role）：设了的写成 osuna/<模型>[:档位]；上次写过、这次没设的放回原值。
+ * 设置没变、文件里却被用户在 OMP 里改过的不写回（magpie 的同步不碰角色）。
+ */
+function writeRoles(input: RolesWrite): void {
+  const { doc, root, keys, takeover } = input;
+  const wanted = new Set(input.roles.map(({ role }) => role));
+  if (takeover) {
+    for (const [role, record] of roleRecords(takeover)) {
+      if (!wanted.has(role)) putRoleBack({ doc, root, role, record });
+    }
+  }
+  for (const wiring of input.roles) {
+    const key = `${ROLES}.${wiring.role}`;
+    const record = takeover?.keys[key];
+    const now = valueAt(root, [ROLES, wiring.role]);
+    const value = `${PI_PROVIDER_ID}/${wiring.model}${wiring.thinking === null ? "" : `:${wiring.thinking}`}`;
+    const isOurs = record !== undefined && (holds(now, record.written) || isRoleOnOsuna(now));
+    if (record && !isOurs && record.written === value) {
+      keys[key] = record;
+      continue;
+    }
+    // 角色从别处换到 Osuna 时记下它原来的（magpie 的 stash），还在 Osuna 上的沿用接管时记下的。
+    const isKept = record !== undefined && isOurs;
+    const original = isKept ? record.original : originalValue(roles(root), wiring.role);
+    const isOriginalFlow = isKept ? record.isOriginalFlow === true : isFlowSeq(doc, wiring.role);
+    keys[key] = { original, written: value, ...(isOriginalFlow ? { isOriginalFlow } : {}) };
+    if (!isMap(doc.getIn([ROLES]))) doc.setIn([ROLES], doc.createNode({}));
+    setValue(doc, [ROLES, wiring.role], value);
+  }
+}
+
+interface RolePutBack {
+  doc: Document;
+  root: Record<string, unknown>;
+  role: string;
+  record: PiSettingsKeyRecord;
+}
+
+/** 角色还在 Osuna 上或还是 Osuna 写的就放回原值；用户在 OMP 里换到别处的留着。 */
+function putRoleBack(input: RolePutBack): void {
+  const { doc, root, role, record } = input;
+  const now = valueAt(root, [ROLES, role]);
+  if (!isRoleOnOsuna(now) && !holds(now, record.written)) return;
+  restoreValue(doc, [ROLES, role], record.original);
+  const node: unknown = doc.getIn([ROLES, role], true);
+  if (record.isOriginalFlow === true && isSeq(node)) node.flow = true;
+}
+
+function isFlowSeq(doc: Document, role: string): boolean {
+  const node: unknown = doc.getIn([ROLES, role], true);
+  return isSeq(node) && node.flow === true;
 }
 
 function roleRaw(root: Record<string, unknown>): string | null {

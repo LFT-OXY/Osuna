@@ -892,6 +892,7 @@ export function readClaudeCliPicks(input: {
     subagent,
     subagentLevel: null,
     memory: null,
+    roles: null,
   };
 }
 

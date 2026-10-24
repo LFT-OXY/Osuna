@@ -502,6 +502,7 @@ export class ApiEndpointSession {
         ...(request.keepsClaudeAiLogin !== undefined
           ? { keepsClaudeAiLogin: request.keepsClaudeAiLogin }
           : {}),
+        ...(request.modelRoles !== undefined ? { modelRoles: request.modelRoles } : {}),
       });
       this.host.emit({
         type: "provider.api_endpoint.set_agent_settings.response",

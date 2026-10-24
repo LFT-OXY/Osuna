@@ -4,6 +4,7 @@
 import type {
   ApiEndpointAgentSettings,
   ApiEndpointModel,
+  ApiEndpointModelRoles,
   ApiEndpointRequestFormat,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import {
@@ -151,29 +152,63 @@ export function settleAgentSettings(input: {
 }): ApiEndpointState {
   const { state } = input;
   const codexOwnModels = input.codexOwnModels ?? [];
-  const models = usableModels(state);
   const agents = { ...state.agents };
   for (const provider of API_ENDPOINT_PROVIDERS) {
-    const agent = withoutUnservedSideModels({
+    const agent = withSettledModelRoles(
       state,
-      provider,
-      agent: agents[provider],
-      codexOwnModels,
-    });
+      withoutUnservedSideModels({
+        state,
+        provider,
+        agent: agents[provider],
+        codexOwnModels,
+      }),
+    );
     agents[provider] = agent;
     if (!agent.enabled) continue;
     if (isDefaultModelChoice(state, agent.defaultModelId)) continue;
-    const first = models[0];
-    if (!first) {
-      agents[provider] = { ...agent, enabled: false };
-      continue;
-    }
-    const current = agent.defaultModelId ?? "";
-    const bare = current.slice(current.indexOf("/") + 1);
-    const isBareOffered = current.includes("/") && models.some((model) => model.id === bare);
-    agents[provider] = { ...agent, enabled: true, defaultModelId: isBareOffered ? bare : first.id };
+    const settled = settledModelId(state, agent.defaultModelId ?? "");
+    agents[provider] =
+      settled === null
+        ? { ...agent, enabled: false }
+        : { ...agent, enabled: true, defaultModelId: settled };
   }
   return { ...state, agents };
+}
+
+/**
+ * 不再能选的模型换成什么（默认模型失踪规则）：指定的那家不再提供而别家还有同名的就是光秃秃的名字，
+ * 否则是接口顺序里最靠前的开着接口的第一个已选模型；一个都不剩为 null。
+ */
+function settledModelId(state: ApiEndpointState, current: string): string | null {
+  const models = usableModels(state);
+  const bare = current.slice(current.indexOf("/") + 1);
+  const isBareOffered = current.includes("/") && models.some((model) => model.id === bare);
+  if (isBareOffered) return bare;
+  return models[0]?.id ?? null;
+}
+
+/**
+ * OMP 的模型角色指向的模型不再能选时照默认模型失踪规则换掉，档位留着（OMP 自己把模型没有的档位贴到最近一档）；
+ * 一个可用模型都不剩时清空。没变时原样返回同一个对象。
+ */
+function withSettledModelRoles(
+  state: ApiEndpointState,
+  agent: ApiEndpointAgentSettings,
+): ApiEndpointAgentSettings {
+  const roles = agent.modelRoles;
+  if (roles === undefined) return agent;
+  let isChanged = false;
+  const settled: ApiEndpointModelRoles = {};
+  for (const [role, value] of Object.entries(roles)) {
+    if (isDefaultModelChoice(state, value.modelId)) {
+      settled[role] = value;
+      continue;
+    }
+    isChanged = true;
+    const modelId = settledModelId(state, value.modelId);
+    if (modelId !== null) settled[role] = { ...value, modelId };
+  }
+  return isChanged ? { ...agent, modelRoles: settled } : agent;
 }
 
 /**

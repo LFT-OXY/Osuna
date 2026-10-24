@@ -995,6 +995,7 @@ describe("Codex's own picks in config.toml", () => {
       subagent: null,
       subagentLevel: null,
       memory: null,
+      roles: null,
     });
 
     const saved = first.text
@@ -1007,6 +1008,7 @@ describe("Codex's own picks in config.toml", () => {
       subagent: null,
       subagentLevel: null,
       memory: null,
+      roles: null,
     });
 
     const kept = patch({ text: saved, takeover: first.takeover, defaultThinking: "low" });

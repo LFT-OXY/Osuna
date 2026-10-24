@@ -602,6 +602,7 @@ export function readCodexCliPicks(input: {
     subagent: changedTableValue({ value, takeover, tableKey: SUBAGENT_MODEL_KEY }),
     subagentLevel: changedTableValue({ value, takeover, tableKey: SUBAGENT_EFFORT_KEY }),
     memory: changedMemoryModel(value, takeover),
+    roles: null,
   };
 }
 

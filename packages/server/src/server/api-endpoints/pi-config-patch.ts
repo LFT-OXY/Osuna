@@ -62,7 +62,10 @@ const SCOPE_KEY = "enabledModels";
 const PiSettingsKeyRecordSchema = z.object({
   original: OriginalValueSchema,
   written: z.string().nullable(),
+  // OMP 的角色接管前是 flow 写法的列表（[a, b]）：放回时照样写成 flow（magpie 按原来的 YAML 写法放回）。
+  isOriginalFlow: z.boolean().optional(),
 });
+export type PiSettingsKeyRecord = z.infer<typeof PiSettingsKeyRecordSchema>;
 
 /** enabledModels 里 Osuna 挪到最前的默认模型，与它挪之前在用户清单里的位置（null 为 Osuna 加的）。 */
 const PiScopePlacementSchema = z.object({
@@ -82,10 +85,21 @@ export const PiSettingsTakeoverSchema = z.object({
 });
 export type PiSettingsTakeover = z.infer<typeof PiSettingsTakeoverSchema>;
 
-/** 写进 settings.json 的默认设置：默认模型（接口模型的 id），默认思考档位（null 为没设，不碰用户自己的）。 */
+/** OMP 的一个模型角色写进 config.yml 的样子：角色键（task、smol……）、模型（接口模型的 id）与思考档位（null 为不带）。 */
+export interface PiLikeRoleWiring {
+  role: string;
+  model: string;
+  thinking: string | null;
+}
+
+/**
+ * 写进设置文件的默认设置：默认模型（接口模型的 id），默认思考档位（null 为没设，不碰用户自己的），
+ * 以及设了的模型角色（只有 OMP 有，Pi 恒为空）。
+ */
 export interface PiSettingsWiring {
   model: string;
   thinking: string | null;
+  roles: PiLikeRoleWiring[];
 }
 
 export interface PiSettingsApplyInput {
@@ -385,6 +399,7 @@ export function readPiCliPicks(input: PiSettingsFile): CliPicks | null {
     subagent: null,
     subagentLevel: null,
     memory: null,
+    roles: null,
   };
 }
 

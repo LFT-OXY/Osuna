@@ -136,7 +136,15 @@ import {
   type CodexSubagentWiring,
 } from "./codex-config-patch.js";
 import {
+  followedModelRoles,
+  modelRoleWiring,
+  takesModelRoles,
+  withModelRolesChanged,
+  type ModelRolesChange,
+} from "./omp-model-roles.js";
+import {
   PI_PROVIDER_ID,
+  type PiLikeRoleWiring,
   type PiModelsTakeover,
   type PiSettingsTakeover,
   type PiSettingsWiring,
@@ -736,6 +744,8 @@ export interface ApiEndpointAgentSettingsInput {
   // 强制 Subagent 模型与「Codex Subagent 可用任意模型」，只给 Codex；省略即不变，模型 null 为不设。
   forcedSubagentModelId?: string | null;
   allowsAnySubagentModel?: boolean;
+  // OMP 的模型角色，只给 OMP：给出的角色设成这个模型与档位，null 为清空，没给的不变；省略即不变。
+  modelRoles?: ModelRolesChange;
 }
 
 /** 改完的设置；打开总开关且没指定默认模型时另有默认模型是怎么挑的。 */
@@ -1089,6 +1099,8 @@ type CliWiring = ClaudeGatewayWiring & {
   memoryModel: string | null;
   // Pi / OMP 模型文件里 providers.osuna 的模型清单的来源；别的 Agent 恒为空。
   piSources: PiModelSource[];
+  // OMP 设了的模型角色；别的 Agent 恒为空。
+  modelRoles: PiLikeRoleWiring[];
 };
 
 /** CLI 配置里上次写进去的中转站地址与口令。 */
@@ -2116,11 +2128,17 @@ export class ApiEndpointService {
         agent: withThinking,
         requested: input.usesUltraCode,
       });
-      const agent = this.withSideModels({
+      const withSides = this.withSideModels({
         state,
         provider: supported,
         agent: withUltraCode,
         requested: input,
+      });
+      const agent = withRequestedModelRoles({
+        state,
+        provider: supported,
+        agent: withSides,
+        change: input.modelRoles,
       });
       const reapply = input.enabled && input.reapply === true;
       const next = await this.commit(
@@ -2858,6 +2876,13 @@ export class ApiEndpointService {
     } else if (picks.subagent) {
       agent = followedSubagent({ state, agent, now: picks.subagent.now });
     }
+    if (picks.roles) {
+      agent = followedModelRoles({
+        agent,
+        picks: picks.roles,
+        followedModel: (cliModel) => this.followedModel({ state, provider, cliModel }),
+      });
+    }
     const isEffortOriginalForgotten =
       provider === "codex" && isLevelChanged && picks.level === null;
     return { agent, held, isEffortOriginalForgotten };
@@ -3344,6 +3369,7 @@ export class ApiEndpointService {
       defaultThinking: agent.defaultThinkingOptionId ?? null,
       ultraCode: provider === "claude" ? (agent.usesUltraCode ?? null) : null,
       ...this.sideModels(state, provider),
+      modelRoles: modelRoleWiring(agent),
     };
   }
 
@@ -3863,6 +3889,7 @@ export class ApiEndpointService {
       agent.defaultThinkingOptionId ?? null,
       agent.usesUltraCode ?? null,
       this.sideModels(state, provider),
+      agent.modelRoles ?? null,
     ]);
   }
 
@@ -5514,7 +5541,11 @@ export class ApiEndpointService {
     try {
       this.writePiSettings({
         provider,
-        wiring: { model: wiring.model, thinking: wiring.defaultThinking },
+        wiring: {
+          model: wiring.model,
+          thinking: wiring.defaultThinking,
+          roles: wiring.modelRoles,
+        },
         shouldRewriteModel: input.shouldRewriteModel,
       });
     } catch (error) {
@@ -6221,6 +6252,7 @@ function agentFingerprint(state: ApiEndpointState, provider: ApiEndpointProvider
     agent.subagentModelId ?? null,
     agent.subagentThinkingOptionId ?? null,
     agent.memoryModelId ?? null,
+    agent.modelRoles ?? null,
     usableModels(state),
     state.disabledModels ?? null,
     state.endpointNameDisplay ?? null,
@@ -6289,6 +6321,30 @@ function sideModel(input: { state: ApiEndpointState; requested: string | null })
     });
   }
   return requested;
+}
+
+interface RequestedModelRoles {
+  state: ApiEndpointState;
+  provider: ApiEndpointProvider;
+  agent: ApiEndpointAgentSettings;
+  change: ModelRolesChange | undefined;
+}
+
+/** 设模型角色（照 magpie 的 role 与它的 thinking 字段）：只有 OMP 有；省略时不变。 */
+function withRequestedModelRoles(input: RequestedModelRoles): ApiEndpointAgentSettings {
+  const { state, provider, agent, change } = input;
+  if (change === undefined) return agent;
+  if (!takesModelRoles(provider)) {
+    throw new ApiEndpointRequestError({
+      code: "invalid_input",
+      message: `Only Oh My Pi has model roles, not ${AGENT_NAMES[provider]}`,
+    });
+  }
+  const result = withModelRolesChanged({ state, agent, change });
+  if (result.kind === "refused") {
+    throw new ApiEndpointRequestError({ code: "invalid_input", message: result.message });
+  }
+  return result.agent;
 }
 
 function subagentLevel(requested: string | null): string | null {

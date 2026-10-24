@@ -120,7 +120,7 @@ async function seedRelay(): Promise<void> {
 }
 
 interface OmpConfig {
-  modelRoles?: { default?: string };
+  modelRoles?: Record<string, string>;
   defaultThinkingLevel?: string;
 }
 
@@ -263,6 +263,77 @@ test("OMP's default thinking offers auto and the model's levels, and a failed ch
     await section.getByTestId("agent-api-endpoints-switch").click();
     await inSheet(page, "switch-off-confirm").click();
     await expect.poll(() => readFile(configPath, "utf8")).toBe(USER_CONFIG);
+  });
+});
+
+test("OMP's model roles: a role takes a model and a thinking level, can be cleared back to OMP, and a failed change stays here", async ({
+  page,
+}) => {
+  await seedRelay();
+  await openOmpPage(page);
+  const section = agentSection(page);
+  await section.getByTestId("agent-api-endpoints-switch").click();
+  await expect.poll(ompDefaultRole).toBe("osuna/glm-5");
+  const slow = section.getByTestId("agent-api-endpoints-role-slow");
+  const modelTrigger = slow.getByTestId("agent-api-endpoints-role-slow-model-trigger");
+  const thinkingTrigger = slow.getByTestId("agent-api-endpoints-role-slow-thinking-trigger");
+
+  await test.step("switching on leaves the nine roles empty, each saying what OMP uses then", async () => {
+    await expect(section.getByTestId("agent-api-endpoints-model-roles")).toBeVisible();
+    await expect(slow).toContainText("Hard problems (slow)");
+    await expect(slow).toContainText("When empty: the default model");
+    await expect(section.getByTestId("agent-api-endpoints-role-memory")).toContainText(
+      "When empty: the Tiny tasks model, else the Small tasks model",
+    );
+    await expect(modelTrigger).toHaveText("Empty");
+    await expect(thinkingTrigger).toHaveText("Session level");
+    expect(Object.keys((await ompConfig()).modelRoles ?? {})).toEqual(["default"]);
+  });
+
+  await test.step("picking a model writes the role into config.yml", async () => {
+    await modelTrigger.click();
+    await page.getByTestId("agent-api-endpoints-role-slow-option-relay-a/kimi-k2").click();
+    await expect(modelTrigger).toHaveText("kimi-k2 (Relay A)");
+    await expect
+      .poll(async () => (await ompConfig()).modelRoles?.slow)
+      .toBe("osuna/relay-a/kimi-k2");
+  });
+
+  await test.step("picking a thinking level adds it after the model", async () => {
+    await thinkingTrigger.click();
+    await page.getByTestId("agent-api-endpoints-role-slow-thinking-option-xhigh").click();
+    await expect(thinkingTrigger).toHaveText("Extra high");
+    await expect
+      .poll(async () => (await ompConfig()).modelRoles?.slow)
+      .toBe("osuna/relay-a/kimi-k2:xhigh");
+  });
+
+  await test.step("a failed change keeps the role and says so in this section", async () => {
+    await modelTrigger.click();
+    await chmod(ompDir, 0o500);
+    try {
+      await page.getByTestId("agent-api-endpoints-role-slow-option-glm-5").click();
+      await expect(section.getByTestId("agent-api-endpoints-error")).toContainText(
+        "Couldn't change the API endpoint settings for Oh My Pi",
+      );
+    } finally {
+      await chmod(ompDir, 0o700);
+    }
+    await expect(modelTrigger).toHaveText("kimi-k2 (Relay A)");
+    expect((await ompConfig()).modelRoles?.slow).toBe("osuna/relay-a/kimi-k2:xhigh");
+    await section.getByRole("button", { name: "Dismiss" }).click();
+  });
+
+  await test.step("clearing the role hands it back to OMP", async () => {
+    await modelTrigger.click();
+    await page.getByTestId("agent-api-endpoints-role-slow-option-unset").click();
+    await expect(modelTrigger).toHaveText("Empty");
+    await expect(thinkingTrigger).toHaveText("Session level");
+    await expect
+      .poll(async () => (await ompConfig()).modelRoles)
+      .toEqual({
+        default: "osuna/glm-5",
+      });
   });
 });
 

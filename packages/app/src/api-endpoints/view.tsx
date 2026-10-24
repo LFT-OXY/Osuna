@@ -73,6 +73,7 @@ import { ImportDiscoveryBanner } from "./import-discovery-banner";
 import { useImportDiscovery } from "./use-import-discovery";
 import { useEndpointTemplates } from "./use-endpoint-templates";
 import { useHostEndpoints, type UseHostEndpointsResult } from "./use-host-endpoints";
+import type { ModelRoleChangeHandler } from "./model-roles-rows";
 
 /*
  * 运行时接线：客户端、查询、确认框。各区块组件（*-section.tsx）保持纯 props。
@@ -210,6 +211,10 @@ function AgentApiEndpoints({
       setAgentSettings(provider, { enabled: true, allowsAnySubagentModel }),
     [provider, setAgentSettings],
   );
+  const handleModelRoleChange = useCallback<ModelRoleChangeHandler>(
+    (role, value) => setAgentSettings(provider, { enabled: true, modelRoles: { [role]: value } }),
+    [provider, setAgentSettings],
+  );
   // 总开关开着、关着都能设，开关保持原样。
   const isEnabled = state.status === "ready" && state.agents[provider]?.enabled === true;
   const handleKeepClaudeAiLoginChange = useCallback(
@@ -296,6 +301,7 @@ function AgentApiEndpoints({
         onMemoryModelChange={handleMemoryModelChange}
         onForcedSubagentModelChange={handleForcedSubagentModelChange}
         onAnySubagentModelChange={handleAnySubagentModelChange}
+        onModelRoleChange={handleModelRoleChange}
         onManage={handleManage}
         // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove gate after 2027-04-18. 老主机不认这个选项。
         onKeepClaudeAiLoginChange={hasIssues ? handleKeepClaudeAiLoginChange : null}

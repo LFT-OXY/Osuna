@@ -273,6 +273,32 @@ describe("OMP agent client and session", () => {
     });
   });
 
+  test("passes the smol, slow and plan models written in Osuna's config as launch flags", async () => {
+    const omp = new OmpHarness();
+    await omp.start({
+      modeId: "ask",
+      providerOptions: {
+        smolModel: "osuna/glm-5",
+        slowModel: "anthropic/claude-opus-5-5",
+        planModel: "osuna/relay/gpt-5",
+      },
+    });
+
+    expect(omp.launchConfiguration().argv).toEqual([
+      "omp",
+      "--mode",
+      "rpc-ui",
+      "--approval-mode",
+      "always-ask",
+      "--smol",
+      "osuna/glm-5",
+      "--slow",
+      "anthropic/claude-opus-5-5",
+      "--plan",
+      "osuna/relay/gpt-5",
+    ]);
+  });
+
   test("passes --thinking when a thinking option is provided", async () => {
     const omp = new OmpHarness();
     await omp.start({ modeId: "ask", thinkingOptionId: "xhigh" }, createToolCatalog());

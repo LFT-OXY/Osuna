@@ -31,6 +31,14 @@ export interface CliPicks {
   // Codex 的默认 Subagent 档位与记忆模型不再是 Osuna 写的值时有；Claude Code 没有，为 null。
   subagentLevel: CliSidePick | null;
   memory: CliSidePick | null;
+  // OMP 的模型角色里不再是 Osuna 写的值的（按角色键）；别的 CLI 为 null。
+  roles: Record<string, CliRolePick> | null;
+}
+
+/** 角色现在的模型（不带档位；删掉了或是一串备选为 null）与它末尾的思考档位（没有为 null）。 */
+export interface CliRolePick {
+  now: string | null;
+  level: string | null;
 }
 
 /** 文件里现在的值；删掉了为 null。 */
