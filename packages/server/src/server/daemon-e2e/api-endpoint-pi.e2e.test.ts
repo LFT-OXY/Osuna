@@ -1,12 +1,23 @@
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { AGENT_PROVIDER_DEFINITIONS } from "@getpaseo/protocol/provider-manifest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
+import { createTestAgentClient, createTestAgentClients } from "../test-utils/fake-agent-client.js";
 
 type EndpointSave = Parameters<DaemonClient["apiEndpointSave"]>[0];
+type ApiEndpointOptions = NonNullable<Parameters<typeof createTestPaseoDaemon>[0]>["apiEndpoints"];
+
+// 用到的只有 Claude Code、Codex（假的）与 Pi（假的客户端）；别的内置提供方关掉，快照不去起它们的 CLI。
+const USED_PROVIDERS = new Set(["claude", "codex", "pi"]);
+const OTHER_PROVIDERS_OFF = Object.fromEntries(
+  AGENT_PROVIDER_DEFINITIONS.filter((definition) => !USED_PROVIDERS.has(definition.id)).map(
+    (definition) => [definition.id, { enabled: false }],
+  ),
+);
 
 /*
  * Pi 的「使用第三方接口」（任务 10-16-pi-omp-endpoints 工单 02）：真实 daemon，Pi 的 agent 目录是临时目录
@@ -56,20 +67,36 @@ function readJsonc(text: string): Record<string, unknown> {
 describe.skipIf(process.platform === "win32")("Pi API endpoints over the daemon RPC", () => {
   let daemon: TestPaseoDaemon;
   let client: DaemonClient;
+  let root: string;
   let piDir: string;
   let modelsPath: string;
   let settingsPath: string;
+  // 守卫：PATH 最前面放会留下记号并失败的 pi 与 omp，真的 CLI 被起就能看出来。
+  let guardDir: string;
+  let guardMark: string;
+  let pathBefore: string | undefined;
 
-  beforeEach(async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-pi-"));
-    tempRoots.push(root);
-    piDir = path.join(root, "pi-agent");
-    modelsPath = path.join(piDir, "models.json");
-    settingsPath = path.join(piDir, "settings.json");
-    await mkdir(piDir, { recursive: true });
-    await writeFile(modelsPath, USER_MODELS);
-    await writeFile(settingsPath, USER_SETTINGS);
+  beforeAll(async () => {
+    guardDir = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-pi-guard-"));
+    guardMark = path.join(guardDir, "spawned");
+    for (const name of ["pi", "omp"]) {
+      const script = path.join(guardDir, name);
+      await writeFile(script, `#!/bin/sh\necho ${name} >> "${guardMark}"\nexit 1\n`);
+      await chmod(script, 0o755);
+    }
+    pathBefore = process.env.PATH;
+    process.env.PATH = `${guardDir}${path.delimiter}${pathBefore ?? ""}`;
+  });
+
+  afterAll(async () => {
+    process.env.PATH = pathBefore;
+    await rm(guardDir, { recursive: true, force: true });
+  });
+
+  async function startDaemon(extra: Partial<NonNullable<ApiEndpointOptions>> = {}): Promise<void> {
     daemon = await createTestPaseoDaemon({
+      agentClients: { ...createTestAgentClients(), pi: createTestAgentClient("pi") },
+      providerOverrides: OTHER_PROVIDERS_OFF,
       apiEndpoints: {
         env: {
           PI_CODING_AGENT_DIR: piDir,
@@ -77,14 +104,28 @@ describe.skipIf(process.platform === "win32")("Pi API endpoints over the daemon 
           CODEX_HOME: path.join(root, "codex"),
         },
         homeDir: root,
+        ...extra,
       },
     });
     client = await connect(daemon);
+  }
+
+  beforeEach(async () => {
+    root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-pi-"));
+    tempRoots.push(root);
+    piDir = path.join(root, "pi-agent");
+    modelsPath = path.join(piDir, "models.json");
+    settingsPath = path.join(piDir, "settings.json");
+    await mkdir(piDir, { recursive: true });
+    await writeFile(modelsPath, USER_MODELS);
+    await writeFile(settingsPath, USER_SETTINGS);
+    await startDaemon();
   });
 
   afterEach(async () => {
     await client?.close();
     await daemon?.close();
+    await expect(stat(guardMark)).rejects.toMatchObject({ code: "ENOENT" });
     await Promise.all(tempRoots.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
   });
 
@@ -257,18 +298,18 @@ describe.skipIf(process.platform === "win32")("Pi API endpoints over the daemon 
       };
     }
     // 没记住上次选择的新对话用默认模型；起步档位没设时是 Pi 的 medium 贴合到模型有的一档。
-    // 模型没有 none，Pi 的 off 映射成 null，不给选。
+    // 模型没有 none，Pi 的 off 映射成 null，不给选；不会思考的模型 Pi 只给 off（magpie piSupported）。
     await expect.poll(piChoices, { timeout: 10_000 }).toEqual({
       models: [
         "osuna/glm-5 (default) [low,high] from high",
-        "osuna/gpt-5",
-        "osuna/claude-opus-5-5",
+        "osuna/gpt-5 [off] from off",
+        "osuna/claude-opus-5-5 [off] from off",
       ],
       groups: [
         // 光秃秃的默认模型在分组里标在提供它的第一家上。
         "osuna/relay/glm-5 (default) [low,high] from high",
-        "osuna/relay/gpt-5",
-        "osuna/relay/claude-opus-5-5",
+        "osuna/relay/gpt-5 [off] from off",
+        "osuna/relay/claude-opus-5-5 [off] from off",
       ],
     });
   });
@@ -526,10 +567,96 @@ describe.skipIf(process.platform === "win32")("Pi API endpoints over the daemon 
     expect(await settingsJson()).toMatchObject({ defaultModel: moved });
   });
 
-  test("a rewrite puts Pi into the reopen hints", async () => {
+  test("a rewrite lists the Pi agents open in Osuna to reopen", async () => {
     await createEndpoint();
     await client.apiEndpointSetAgentSettings({ provider: "pi", enabled: true });
-    expect((await client.apiEndpointList("pi")).reopenHints).toHaveProperty("pi");
+    await client.createAgent({ provider: "pi", cwd: root, title: "Pi agent" });
+    // 文件的修改时刻按毫秒，让改写确实晚于会话起来。
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await client.apiEndpointSetAgentSettings({
+      provider: "pi",
+      enabled: true,
+      defaultModelId: "relay/gpt-5",
+    });
+    expect((await client.apiEndpointList("pi")).reopenHints?.pi).toEqual([
+      {
+        kind: "osuna_sessions",
+        count: 1,
+        message: "1 Pi agent(s) in Osuna: reload each one (Reload agent in its tab's menu).",
+      },
+    ]);
+  });
+
+  test("a model setting change rewrites the model list in models.json", async () => {
+    const endpointId = await createEndpoint();
+    await client.apiEndpointSetAgentSettings({ provider: "pi", enabled: true });
+    const saved = await client.apiEndpointSave({
+      provider: "pi",
+      endpointId,
+      name: "Relay",
+      baseUrls: [{ format: "openai_chat", url: "https://relay.example/v1" }],
+      models: [{ id: "glm-5" }],
+      modelSettings: { models: { "glm-5": { name: "GLM Five", efforts: ["low", "high"] } } },
+    });
+    expect(saved.error).toBeNull();
+    const providers = readJsonc(await readFile(modelsPath, "utf8")).providers as Record<
+      string,
+      { models: Record<string, unknown>[] }
+    >;
+    expect(providers.osuna?.models[0]).toMatchObject({
+      id: "glm-5",
+      name: "GLM Five",
+      reasoning: true,
+      thinkingLevelMap: { low: "low", high: "high", medium: null },
+    });
+  });
+
+  test("updated models.dev facts rewrite the model list in models.json", async () => {
+    await client.close();
+    await daemon.close();
+    // 价格表自动更新开着；检查的定时器由测试手动到点。
+    let pending: (() => void) | null = null;
+    const modelsDevTimers = {
+      schedule(handler: () => void) {
+        pending = handler;
+        return () => {
+          if (pending === handler) pending = null;
+        };
+      },
+    };
+    const modelsDevFetch: typeof globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify({
+          relay: {
+            models: {
+              "kimi-k3": {
+                limit: { context: 400_000, output: 64_000 },
+                reasoning_options: [{ type: "effort", values: ["low", "high"] }],
+              },
+            },
+          },
+        }),
+        { status: 200 },
+      );
+    await startDaemon({ isModelsDevAutoUpdate: () => true, modelsDevFetch, modelsDevTimers });
+    await createEndpoint({ models: [{ id: "kimi-k3" }] });
+    await client.apiEndpointSetAgentSettings({ provider: "pi", enabled: true });
+    expect(await kimiFacts()).toEqual({ contextWindow: undefined, reasoning: false });
+
+    const check = pending as (() => void) | null;
+    if (!check) throw new Error("Expected a scheduled models.dev check");
+    check();
+
+    await expect.poll(kimiFacts).toEqual({ contextWindow: 400_000, reasoning: true });
+
+    async function kimiFacts() {
+      const providers = readJsonc(await readFile(modelsPath, "utf8")).providers as Record<
+        string,
+        { models: { id: string; contextWindow?: number; reasoning: boolean }[] }
+      >;
+      const kimi = providers.osuna?.models.find((model) => model.id === "kimi-k3");
+      return { contextWindow: kimi?.contextWindow, reasoning: kimi?.reasoning };
+    }
   });
 
   test("the switch-off preview lists Pi's default provider and model and Osuna's provider", async () => {

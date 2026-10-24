@@ -12,7 +12,6 @@ import {
   type PiModelsTakeover,
   type PiProviderBlock,
   type PiSettingsTakeover,
-  type PiSettingsWiring,
 } from "./pi-config-patch.js";
 
 /*
@@ -55,14 +54,22 @@ function models(text: string | null, takeover: PiModelsTakeover | null = null, b
   return result;
 }
 
-function settings(
-  text: string | null,
-  wiring: string | PiSettingsWiring,
-  takeover: PiSettingsTakeover | null = null,
-  shouldRewriteModel = false,
-) {
-  const shaped = typeof wiring === "string" ? { model: wiring, thinking: null } : wiring;
-  const result = applyPiSettings({ text, wiring: shaped, takeover, shouldRewriteModel });
+/** 一次 applyPiSettings：文件内容、默认模型与思考档位、接管记录、要不要写回 Pi 换过的默认模型。 */
+interface SettingsCall {
+  text: string | null;
+  model: string;
+  thinking?: string | null;
+  takeover?: PiSettingsTakeover | null;
+  shouldRewriteModel?: boolean;
+}
+
+function settings(call: SettingsCall) {
+  const result = applyPiSettings({
+    text: call.text,
+    wiring: { model: call.model, thinking: call.thinking ?? null },
+    takeover: call.takeover ?? null,
+    shouldRewriteModel: call.shouldRewriteModel ?? false,
+  });
   if (result.kind !== "patched") throw new Error(`Expected a patch, got ${result.kind}`);
   return result;
 }
@@ -137,7 +144,7 @@ describe("Pi models.json", () => {
 
 describe("Pi settings.json", () => {
   it("points the default provider and model at Osuna and keeps the rest", () => {
-    const { text } = settings(USER_SETTINGS, "relay/glm-5");
+    const { text } = settings({ text: USER_SETTINGS, model: "relay/glm-5" });
     expect(JSON.parse(text)).toEqual({
       defaultProvider: "osuna",
       defaultModel: "relay/glm-5",
@@ -148,9 +155,9 @@ describe("Pi settings.json", () => {
   });
 
   it("puts the user's default back when the switch goes off", () => {
-    const first = settings(USER_SETTINGS, "glm-5");
+    const first = settings({ text: USER_SETTINGS, model: "glm-5" });
     // 换了默认模型再写一次：原值仍是接管前的。
-    const second = settings(first.text, "kimi-k3", first.takeover);
+    const second = settings({ text: first.text, model: "kimi-k3", takeover: first.takeover });
     expect(restorePiSettings({ text: second.text, takeover: second.takeover })).toEqual({
       kind: "patched",
       text: USER_SETTINGS,
@@ -158,7 +165,7 @@ describe("Pi settings.json", () => {
   });
 
   it("puts both keys back when the user only picked another of Osuna's models", () => {
-    const { text, takeover } = settings(USER_SETTINGS, "glm-5");
+    const { text, takeover } = settings({ text: USER_SETTINGS, model: "glm-5" });
     const changed = text.replace('"defaultModel": "glm-5"', '"defaultModel": "relay/kimi-k3"');
     expect(inspectPiSettings({ text: changed, takeover })).toMatchObject({
       modifiedKeys: ["defaultModel"],
@@ -171,7 +178,7 @@ describe("Pi settings.json", () => {
   });
 
   it("keeps a default the user moved to another provider while the switch was on", () => {
-    const { text, takeover } = settings(USER_SETTINGS, "glm-5");
+    const { text, takeover } = settings({ text: USER_SETTINGS, model: "glm-5" });
     const changed = text
       .replace('"defaultProvider": "osuna"', '"defaultProvider": "openai"')
       .replace('"defaultModel": "glm-5"', '"defaultModel": "gpt-6"');
@@ -185,7 +192,7 @@ describe("Pi settings.json", () => {
   });
 
   it("deletes a settings.json that did not exist before", () => {
-    const { text, takeover } = settings(null, "glm-5");
+    const { text, takeover } = settings({ text: null, model: "glm-5" });
     expect(restorePiSettings({ text, takeover })).toEqual({ kind: "delete" });
   });
 });
@@ -198,10 +205,10 @@ function restoredText(text: string, takeover: PiSettingsTakeover): string {
 
 describe("Pi settings.json default thinking", () => {
   it("writes defaultThinkingLevel only when it is set", () => {
-    expect(JSON.parse(settings(USER_SETTINGS, "glm-5").text)).not.toHaveProperty(
+    expect(JSON.parse(settings({ text: USER_SETTINGS, model: "glm-5" }).text)).not.toHaveProperty(
       "defaultThinkingLevel",
     );
-    const { text } = settings(USER_SETTINGS, { model: "glm-5", thinking: "high" });
+    const { text } = settings({ text: USER_SETTINGS, model: "glm-5", thinking: "high" });
     expect(JSON.parse(text)).toMatchObject({ defaultThinkingLevel: "high" });
   });
 
@@ -210,7 +217,7 @@ describe("Pi settings.json default thinking", () => {
       '"theme": "dark"',
       '"theme": "dark",\n  "defaultThinkingLevel": "low"',
     );
-    const { text, takeover } = settings(user, { model: "glm-5", thinking: "xhigh" });
+    const { text, takeover } = settings({ text: user, model: "glm-5", thinking: "xhigh" });
     expect(JSON.parse(text)).toMatchObject({ defaultThinkingLevel: "xhigh" });
     expect(restoredText(text, takeover)).toBe(user);
   });
@@ -220,13 +227,13 @@ describe("Pi settings.json default thinking", () => {
       '"theme": "dark"',
       '"theme": "dark",\n  "defaultThinkingLevel": "low"',
     );
-    const first = settings(user, { model: "glm-5", thinking: "xhigh" });
-    const second = settings(first.text, "glm-5", first.takeover);
+    const first = settings({ text: user, model: "glm-5", thinking: "xhigh" });
+    const second = settings({ text: first.text, model: "glm-5", takeover: first.takeover });
     expect(JSON.parse(second.text)).toMatchObject({ defaultThinkingLevel: "low" });
   });
 
   it("keeps a level the user picked in Pi when the switch goes off, and reads it as Pi's pick", () => {
-    const { text, takeover } = settings(USER_SETTINGS, { model: "glm-5", thinking: "high" });
+    const { text, takeover } = settings({ text: USER_SETTINGS, model: "glm-5", thinking: "high" });
     const changed = text.replace(
       '"defaultThinkingLevel": "high"',
       '"defaultThinkingLevel": "minimal"',
@@ -255,7 +262,7 @@ describe("Pi settings.json enabledModels", () => {
   }
 
   it("puts the default model first in an existing list", () => {
-    const { text } = settings(SCOPED, "relay/glm-5");
+    const { text } = settings({ text: SCOPED, model: "relay/glm-5" });
     expect(scopeOf(text)).toEqual([
       "osuna/relay/glm-5",
       "anthropic/claude-sonnet-4-5",
@@ -264,12 +271,19 @@ describe("Pi settings.json enabledModels", () => {
   });
 
   it("does not make a list when there is none", () => {
-    expect(JSON.parse(settings(USER_SETTINGS, "glm-5").text)).not.toHaveProperty("enabledModels");
+    expect(JSON.parse(settings({ text: USER_SETTINGS, model: "glm-5" }).text)).not.toHaveProperty(
+      "enabledModels",
+    );
   });
 
   it("moves the previous default out of the front when the default changes", () => {
-    const first = settings(SCOPED, "glm-5");
-    const second = settings(first.text, "kimi-k3", first.takeover, true);
+    const first = settings({ text: SCOPED, model: "glm-5" });
+    const second = settings({
+      text: first.text,
+      model: "kimi-k3",
+      takeover: first.takeover,
+      shouldRewriteModel: true,
+    });
     expect(scopeOf(second.text)).toEqual([
       "osuna/kimi-k3",
       "anthropic/claude-sonnet-4-5",
@@ -279,13 +293,18 @@ describe("Pi settings.json enabledModels", () => {
 
   it("moves an entry the user had back to where it was", () => {
     const user = SCOPED.replace('"openai/gpt-5"]', '"openai/gpt-5", "osuna/glm-5"]');
-    const first = settings(user, "glm-5");
+    const first = settings({ text: user, model: "glm-5" });
     expect(scopeOf(first.text)).toEqual([
       "osuna/glm-5",
       "anthropic/claude-sonnet-4-5",
       "openai/gpt-5",
     ]);
-    const second = settings(first.text, "kimi-k3", first.takeover, true);
+    const second = settings({
+      text: first.text,
+      model: "kimi-k3",
+      takeover: first.takeover,
+      shouldRewriteModel: true,
+    });
     expect(scopeOf(second.text)).toEqual([
       "osuna/kimi-k3",
       "anthropic/claude-sonnet-4-5",
@@ -295,7 +314,7 @@ describe("Pi settings.json enabledModels", () => {
   });
 
   it("takes Osuna's entries out when the switch goes off", () => {
-    const { text, takeover } = settings(SCOPED, "glm-5");
+    const { text, takeover } = settings({ text: SCOPED, model: "glm-5" });
     // 开着期间用户在 Pi 里又加了 Osuna 的一个模型和一个通配符。
     const edited = text.replace(
       '"openai/gpt-5"',
@@ -310,15 +329,56 @@ describe("Pi settings.json enabledModels", () => {
   });
 
   it("removes a list left empty", () => {
-    const user = `{\n  "enabledModels": ["osuna/glm-5"],\n  "theme": "dark"\n}\n`;
-    const { text, takeover } = settings(user, "glm-5");
-    expect(JSON.parse(restoredText(text, takeover))).toEqual({ theme: "dark" });
+    const user = `{\n  "enabledModels": ["anthropic/claude-sonnet-4-5"],\n  "theme": "dark"\n}\n`;
+    const { text, takeover } = settings({ text: user, model: "glm-5" });
+    // 开着期间用户在 Pi 里把自己的条目删了，只剩 Osuna 加的。
+    const edited = text.replace(', "anthropic/claude-sonnet-4-5"', "");
+    expect(scopeOf(edited)).toEqual(["osuna/glm-5"]);
+    expect(JSON.parse(restoredText(edited, takeover))).toEqual({ theme: "dark" });
+  });
+
+  it("keeps an Osuna entry the user had before the switch went on", () => {
+    const user = SCOPED.replace('"openai/gpt-5"]', '"openai/gpt-5", "osuna/kimi-k3"]');
+    const { text, takeover } = settings({ text: user, model: "glm-5" });
+    expect(restoredText(text, takeover)).toBe(user);
+  });
+
+  it("moves an entry already naming the default, with a level or in other case, instead of adding one (magpie piTakes)", () => {
+    const user = SCOPED.replace('"openai/gpt-5"]', '"openai/gpt-5", "Osuna/GLM-5:high"]');
+    const { text, takeover } = settings({ text: user, model: "glm-5" });
+    expect(scopeOf(text)).toEqual([
+      "Osuna/GLM-5:high",
+      "anthropic/claude-sonnet-4-5",
+      "openai/gpt-5",
+    ]);
+    expect(restoredText(text, takeover)).toBe(user);
+  });
+
+  it("adds the default beside a glob that takes it in, so it is first", () => {
+    const user = SCOPED.replace('"openai/gpt-5"]', '"osuna/*"]');
+    const { text } = settings({ text: user, model: "glm-5" });
+    expect(scopeOf(text)).toEqual(["osuna/glm-5", "anthropic/claude-sonnet-4-5", "osuna/*"]);
   });
 });
 
 describe("Pi settings.json defaults picked in Pi", () => {
+  it("reads the model Pi starts on from enabledModels when the list leaves the default out (magpie piStartup)", () => {
+    const scoped = `{\n  "enabledModels": ["anthropic/claude-sonnet-4-5"]\n}\n`;
+    const { text, takeover } = settings({ text: scoped, model: "glm-5" });
+    expect(readPiCliPicks({ text, takeover })?.model).toBeNull();
+    // 用户在 Pi 里把清单换成只有另一个 Osuna 模型：Pi 从它起步。
+    const changed = text.replace(
+      /"enabledModels": \[[^\]]*\]/,
+      '"enabledModels": ["osuna/relay/kimi-k3:high", "anthropic/claude-sonnet-4-5"]',
+    );
+    expect(readPiCliPicks({ text: changed, takeover })?.model).toEqual({
+      now: "osuna/relay/kimi-k3",
+      isKept: false,
+    });
+  });
+
   it("reads another of Osuna's models picked in Pi as Pi's pick and leaves it on the next rewrite", () => {
-    const { text, takeover } = settings(USER_SETTINGS, "glm-5");
+    const { text, takeover } = settings({ text: USER_SETTINGS, model: "glm-5" });
     const changed = text.replace('"defaultModel": "glm-5"', '"defaultModel": "relay/kimi-k3"');
     expect(readPiCliPicks({ text: changed, takeover })?.model).toEqual({
       now: "osuna/relay/kimi-k3",
@@ -330,16 +390,21 @@ describe("Pi settings.json defaults picked in Pi", () => {
     expect(inspectPiSettings({ text: changed, takeover: followed })).toMatchObject({
       modifiedKeys: [],
     });
-    const rewritten = settings(changed, "glm-5", followed);
+    const rewritten = settings({ text: changed, model: "glm-5", takeover: followed });
     expect(JSON.parse(rewritten.text)).toMatchObject({ defaultModel: "relay/kimi-k3" });
     // 在 Osuna 里换默认模型就写回。
-    const again = settings(rewritten.text, "glm-5", rewritten.takeover, true);
+    const again = settings({
+      text: rewritten.text,
+      model: "glm-5",
+      takeover: rewritten.takeover,
+      shouldRewriteModel: true,
+    });
     expect(JSON.parse(again.text)).toMatchObject({ defaultModel: "glm-5" });
     expect(again.takeover.modelHeld).toBeUndefined();
   });
 
   it("reads a model outside Osuna with its provider, and a kept one stays after the switch goes off", () => {
-    const { text, takeover } = settings(USER_SETTINGS, "glm-5");
+    const { text, takeover } = settings({ text: USER_SETTINGS, model: "glm-5" });
     const changed = text
       .replace('"defaultProvider": "osuna"', '"defaultProvider": "openai"')
       .replace('"defaultModel": "glm-5"', '"defaultModel": "gpt-6"');

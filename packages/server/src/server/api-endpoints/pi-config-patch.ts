@@ -24,7 +24,7 @@ import {
   type OriginalFile,
   type OriginalValue,
 } from "./jsonc-edit.js";
-import type { PiModelEntry } from "./pi-model-entries.js";
+import { PI_THINKING_LEVELS, type PiModelEntry } from "./pi-model-entries.js";
 
 /*
  * Pi 的 models.json 与 settings.json 补丁（ADR 0004、0012；任务 10-16-pi-omp-endpoints）：只改 Osuna 负责的键，其余字节与注释不动。
@@ -77,6 +77,8 @@ export const PiSettingsTakeoverSchema = z.object({
   // 文件里的默认模型归 Pi（见 cli-model-hold.ts）：重写不碰这一对。
   modelHeld: CliModelHoldSchema.optional(),
   scope: PiScopePlacementSchema.optional(),
+  // 接管前 enabledModels 里用户自己就有的「osuna/…」条目：关开关时留着，只删 Osuna 加的。
+  userOsunaEntries: z.array(z.string()).optional(),
 });
 export type PiSettingsTakeover = z.infer<typeof PiSettingsTakeoverSchema>;
 
@@ -263,6 +265,7 @@ export function applyPiSettings(
       keys: draft.keys,
       ...(modelHeld === undefined ? {} : { modelHeld }),
       ...(placed.scope === null ? {} : { scope: placed.scope }),
+      userOsunaEntries: takeover ? (takeover.userOsunaEntries ?? []) : osunaEntriesIn(root),
     },
   };
 }
@@ -316,7 +319,7 @@ function writeThinking(draft: SettingsDraft, thinking: string | null): void {
  *   不拆开放回，免得拼出「原来的服务商 + Osuna 的模型名」。
  * - 默认思考档位还是 Osuna 写的就放回原值，用户改过的留着。
  * - enabledModels：挪到最前的默认模型挪回原位，再去掉指向 Osuna 的条目（服务商删了，它们什么也不指；magpie piScopeWithout），
- *   删空了整个删掉。
+ *   接管前用户自己就有的留着；删空了整个删掉。
  */
 export function restorePiSettings(input: {
   text: string | null;
@@ -342,8 +345,9 @@ export function restorePiSettings(input: {
   }
   const scope = root[SCOPE_KEY];
   if (isScopeList(scope)) {
+    const users = takeover.userOsunaEntries ?? [];
     const kept = unplaceScope(scope, takeover.scope ?? null).filter(
-      (pattern) => !namesOsunaModel(pattern),
+      (pattern) => !namesOsunaModel(pattern) || users.includes(pattern),
     );
     if (kept.length === 0) text = edit(text, [SCOPE_KEY], undefined, formatting);
     else if (!isDeepStrictEqual(kept, scope)) text = editScope({ text, list: kept, formatting });
@@ -367,8 +371,8 @@ export function inspectPiSettings(input: {
 }
 
 /**
- * Pi 自己存下、与 Osuna 记下的写入值不同的选择（照 magpie 的 Follow 与 effort 字段的 Get 读文件）：model 是 Pi 写法的
- * 「服务商/模型」（删掉了为 null），level 是 defaultThinkingLevel。没有接管记录或读不懂为 null。
+ * Pi 自己存下、与 Osuna 记下的写入值不同的选择（照 magpie 的 Follow 与 effort 字段的 Get 读文件）：model 是 Pi 新会话实际用的
+ * 「服务商/模型」（magpie piStartup，enabledModels 说了算；删掉了为 null），level 是 defaultThinkingLevel。没有接管记录或读不懂为 null。
  */
 export function readPiCliPicks(input: PiSettingsFile): CliPicks | null {
   const { takeover } = input;
@@ -376,9 +380,9 @@ export function readPiCliPicks(input: PiSettingsFile): CliPicks | null {
   const opened = openFile(input.text, "settings.json");
   if (opened.kind === "unparsable") return null;
   const { root } = opened;
-  const model = isPairChanged(root, takeover)
-    ? { now: piModelRef(root), isKept: takeover.modelHeld === "kept" }
-    : null;
+  const startup = piStartup(root);
+  const isChanged = isPairChanged(root, takeover) || startup !== piModelRef(root);
+  const model = isChanged ? { now: startup, isKept: takeover.modelHeld === "kept" } : null;
   const level = root[THINKING_KEY];
   return {
     model,
@@ -482,8 +486,71 @@ function isScopeList(value: unknown): value is string[] {
 
 /** 指着 Osuna 某个模型的条目（不含通配符的「osuna/…」）。 */
 function namesOsunaModel(pattern: string): boolean {
-  const isGlob = /[*?[]/.test(pattern);
-  return !isGlob && pattern.toLowerCase().startsWith(`${PI_PROVIDER_ID}/`);
+  return !isGlob(pattern) && pattern.toLowerCase().startsWith(`${PI_PROVIDER_ID}/`);
+}
+
+/** enabledModels 里现在指着 Osuna 模型的条目；没有清单为空。 */
+function osunaEntriesIn(root: Record<string, unknown>): string[] {
+  const scope = root[SCOPE_KEY];
+  return isScopeList(scope) ? scope.filter(namesOsunaModel) : [];
+}
+
+function isGlob(pattern: string): boolean {
+  return /[*?[]/.test(pattern);
+}
+
+/** 去掉条目末尾的「:档位」（Pi 的 provider/model:high）。 */
+function withoutLevel(pattern: string): string {
+  const at = pattern.lastIndexOf(":");
+  if (at < 0) return pattern;
+  return PI_THINKING_LEVELS.includes(pattern.slice(at + 1)) ? pattern.slice(0, at) : pattern;
+}
+
+/**
+ * Pi 的清单条目一定指着 ref（「服务商/模型」）（magpie piTakes）：同一个引用（带不带「:档位」都算），或是 ref、或它的模型 id
+ * 符合的通配符（Pi 的 *、? 与 [..]，不分大小写）。光秃秃的模型 id 不算。
+ */
+function piTakes(pattern: string, ref: string): boolean {
+  const bare = withoutLevel(pattern).trim().toLowerCase();
+  const target = ref.toLowerCase();
+  if (bare === target) return true;
+  if (!isGlob(pattern)) return false;
+  const matcher = globMatcher(bare);
+  const id = target.slice(target.indexOf("/") + 1);
+  return matcher.test(target) || matcher.test(id);
+}
+
+/** Go path.Match 的写法：* 与 ? 不跨「/」，[..] 是字符类。 */
+function globMatcher(glob: string): RegExp {
+  let source = "";
+  for (let index = 0; index < glob.length; index += 1) {
+    const char = glob.charAt(index);
+    if (char === "*") source += "[^/]*";
+    else if (char === "?") source += "[^/]";
+    else if (char === "[") {
+      const close = glob.indexOf("]", index + 1);
+      if (close < 0) source += "\\[";
+      else {
+        // 字符类原样用（Go 的 [^..] 与正则同义），只把反斜杠转义。
+        source += `[${glob.slice(index + 1, close).replace(/\\/g, "\\\\")}]`;
+        index = close;
+      }
+    } else source += char.replace(/[.+^${}()|\\]/g, "\\$&");
+  }
+  return new RegExp(`^${source}$`);
+}
+
+/**
+ * Pi 新会话用的模型（magpie piStartup）：清单收着默认模型（或没有清单）就是默认模型，否则是清单第一条——它只指一个模型时。
+ */
+function piStartup(root: Record<string, unknown>): string | null {
+  const ref = piModelRef(root);
+  const scope = root[SCOPE_KEY];
+  if (ref === null || !isScopeList(scope)) return ref;
+  if (scope.some((pattern) => piTakes(pattern, ref))) return ref;
+  const first = withoutLevel((scope[0] ?? "").trim());
+  if (isGlob(first) || !first.includes("/")) return ref;
+  return first;
 }
 
 /** 用户自己的清单：上次挪到最前的还在最前，就挪回原位（Osuna 加的拿掉）。 */
@@ -533,9 +600,12 @@ function placeScope(input: PlaceScopeInput): ScopePlacement {
   const user = unplaceScope(input.value, input.previous);
   const { front } = input;
   if (front === null) return { list: user, scope: null };
-  const at = user.indexOf(front);
-  const rest = at < 0 ? user : user.filter((_, index) => index !== at);
-  return { list: [front, ...rest], scope: { front, wasAt: at < 0 ? null : at } };
+  // 已有指着它的条目（可带「:档位」、大小写不同；magpie piTakes）就把那一条挪到最前，不再另加。
+  const at = user.findIndex((pattern) => !isGlob(pattern) && piTakes(pattern, front));
+  if (at < 0) return { list: [front, ...user], scope: { front, wasAt: null } };
+  const taken = user[at] ?? front;
+  const rest = user.filter((_, index) => index !== at);
+  return { list: [taken, ...rest], scope: { front: taken, wasAt: at } };
 }
 
 /**

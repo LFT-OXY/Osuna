@@ -1562,7 +1562,7 @@ export class ApiEndpointService {
   }
 
   /**
-   * Osuna 对话里 Pi 的接口模型的档位：Pi 给它写进 models.json 的那一条能选的档位（不会思考的不给档位，同 Osuna 的 Pi 对话）；
+   * Osuna 对话里 Pi 的接口模型的档位：Pi 给它写进 models.json 的那一条能选的档位（不会思考的只有 off）；
    * 新对话从默认思考档位起步，没设时从 Pi 的 medium 起，都按 piClamp 取模型跑得到的一档。
    */
   private piChatThinking(
@@ -1573,9 +1573,9 @@ export class ApiEndpointService {
     return (modelId) => {
       const source = sources.find((candidate) => candidate.id === modelId);
       if (!source) return {};
-      const thinking = piModelThinking(source);
-      const offered = piOfferedLevels(thinking);
-      if (!thinking.reasoning || offered.length === 0) return {};
+      // 不会思考的模型 Pi 只给 off 一档（magpie piSupported），照样列出。
+      const offered = piOfferedLevels(piModelThinking(source));
+      if (offered.length === 0) return {};
       return {
         thinkingOptions: thinkingOptionsOf({ levels: offered }),
         defaultThinkingOptionId: piClamp(chosen ?? PI_START_THINKING, offered),
