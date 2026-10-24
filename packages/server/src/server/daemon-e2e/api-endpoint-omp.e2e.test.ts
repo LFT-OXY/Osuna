@@ -63,7 +63,7 @@ interface OmpModel {
   thinking?: { mode: string; efforts: string[] };
 }
 
-describe.skipIf(process.platform === "win32")("OMP API endpoints over the daemon RPC", () => {
+describe("OMP API endpoints over the daemon RPC", () => {
   let daemon: TestPaseoDaemon;
   let client: DaemonClient;
   let root: string;
@@ -78,10 +78,12 @@ describe.skipIf(process.platform === "win32")("OMP API endpoints over the daemon
   beforeAll(async () => {
     guardDir = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-omp-guard-"));
     guardMark = path.join(guardDir, "spawned");
+    // POSIX 上找的是 sh 脚本，Windows 上按 PATHEXT 找到 .cmd：两边都放，守卫在哪都管用。
     for (const name of ["pi", "omp"]) {
       const script = path.join(guardDir, name);
       await writeFile(script, `#!/bin/sh\necho ${name} >> "${guardMark}"\nexit 1\n`);
       await chmod(script, 0o755);
+      await writeFile(`${script}.cmd`, `@echo ${name}>> "${guardMark}"\r\n@exit /b 1\r\n`);
     }
     pathBefore = process.env.PATH;
     process.env.PATH = `${guardDir}${path.delimiter}${pathBefore ?? ""}`;
@@ -392,7 +394,7 @@ theme: dark
     await createEndpoint();
     await client.apiEndpointSetAgentSettings({ provider: "omp", enabled: true });
     expect(await readFile(configPath, "utf8")).toContain(
-      "enabledModels: [osuna/glm-5, anthropic/claude-sonnet-4-5, openai/gpt-5]",
+      "enabledModels: [osuna/glm-5, anthropic/claude-sonnet-4-5, openai/gpt-5, osuna/**]",
     );
     await client.apiEndpointSetAgentSettings({
       provider: "omp",
@@ -403,6 +405,7 @@ theme: dark
       "osuna/relay/gpt-5",
       "anthropic/claude-sonnet-4-5",
       "openai/gpt-5",
+      "osuna/**",
     ]);
     const preview = await client.apiEndpointPreviewSwitchOff("omp");
     expect(preview.preview?.files.map((file) => [file.path, file.change])).toEqual([
@@ -416,7 +419,8 @@ theme: dark
     expect(await readFile(configPath, "utf8")).toBe(scoped);
   });
 
-  test("Osuna's provider stays on switch off while another role still names osuna/", async () => {
+  test("Osuna's provider stays on switch off while another role still names osuna/, with its wiring written afresh and its enabledModels entries left", async () => {
+    await writeFile(configPath, `${USER_CONFIG}enabledModels: [openai/gpt-5]\n`);
     await createEndpoint();
     await client.apiEndpointSetAgentSettings({ provider: "omp", enabled: true });
     const text = await readFile(configPath, "utf8");
@@ -428,15 +432,24 @@ theme: dark
       ),
     );
     const withProvider = await readFile(modelsPath, "utf8");
+    // 留下来的接线指错了地方：关开关时照 magpie 的 dropMagpie 重写一遍。
+    await writeFile(
+      modelsPath,
+      withProvider.replace(`${gatewayRoot()}/v1`, "http://127.0.0.1:1/v1"),
+    );
 
     const preview = await client.apiEndpointPreviewSwitchOff("omp");
-    expect(preview.preview?.files.map((file) => file.path)).toEqual(["~/.omp/agent/config.yml"]);
+    expect(preview.preview?.files.map((file) => file.path)).toEqual([
+      "~/.omp/agent/config.yml",
+      "~/.omp/agent/models.yml",
+    ]);
 
     await client.apiEndpointSetAgentSettings({ provider: "omp", enabled: false });
     expect(await readFile(modelsPath, "utf8")).toBe(withProvider);
     expect(await configYaml()).toMatchObject({
       modelRoles: { default: "anthropic/claude-sonnet-4-5" },
       retry: { fallbackChains: { default: ["osuna/relay/gpt-5"] } },
+      enabledModels: ["osuna/glm-5", "openai/gpt-5", "osuna/**"],
     });
   });
 

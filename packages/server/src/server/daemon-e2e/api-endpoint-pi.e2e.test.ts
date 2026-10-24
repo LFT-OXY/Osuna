@@ -64,7 +64,7 @@ function readJsonc(text: string): Record<string, unknown> {
   return JSON.parse(text.replace(/^\s*\/\/.*$/gm, "")) as Record<string, unknown>;
 }
 
-describe.skipIf(process.platform === "win32")("Pi API endpoints over the daemon RPC", () => {
+describe("Pi API endpoints over the daemon RPC", () => {
   let daemon: TestPaseoDaemon;
   let client: DaemonClient;
   let root: string;
@@ -79,10 +79,12 @@ describe.skipIf(process.platform === "win32")("Pi API endpoints over the daemon 
   beforeAll(async () => {
     guardDir = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-pi-guard-"));
     guardMark = path.join(guardDir, "spawned");
+    // POSIX 上找的是 sh 脚本，Windows 上按 PATHEXT 找到 .cmd：两边都放，守卫在哪都管用。
     for (const name of ["pi", "omp"]) {
       const script = path.join(guardDir, name);
       await writeFile(script, `#!/bin/sh\necho ${name} >> "${guardMark}"\nexit 1\n`);
       await chmod(script, 0o755);
+      await writeFile(`${script}.cmd`, `@echo ${name}>> "${guardMark}"\r\n@exit /b 1\r\n`);
     }
     pathBefore = process.env.PATH;
     process.env.PATH = `${guardDir}${path.delimiter}${pathBefore ?? ""}`;

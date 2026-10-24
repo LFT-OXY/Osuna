@@ -14,6 +14,7 @@ import {
   restoreOmpConfig,
   restoreOmpModels,
   type OmpMigration,
+  type OmpProviderBlock,
 } from "./omp-config-patch.js";
 import { ompModelEntry } from "./omp-model-entries.js";
 import {
@@ -77,6 +78,8 @@ export interface PiLikeModelsApplyInput {
 export interface PiLikeModelsRestoreInput extends PiFileState<PiModelsTakeover> {
   // 设置文件改回之后的内容：OMP 别处还用着 osuna/ 时服务商留着。
   settingsAfter: string | null;
+  // 服务商留着时按它重写接线；中转站不可用时为 null。
+  wiring: PiLikeProviderWiring | null;
 }
 
 export interface PiLikeCli {
@@ -132,31 +135,43 @@ export interface OmpCliOptions {
   takesMax: boolean;
 }
 
+interface OmpBlockInput {
+  wiring: PiLikeProviderWiring;
+  takesMax: boolean;
+}
+
+/** Osuna 写进 OMP models.yml 的 providers.osuna。 */
+function ompBlock(input: OmpBlockInput): OmpProviderBlock {
+  const { wiring, takesMax } = input;
+  return {
+    baseUrl: `${wiring.gatewayRoot}${PI_LIKE_GATEWAY_SUFFIX}`,
+    api: "openai-completions",
+    auth: "apiKey",
+    apiKey: wiring.token,
+    compat: { promptCacheSessionHeader: "x-session-affinity" },
+    models: wiring.sources.map((source) =>
+      ompModelEntry(source, { gatewayRoot: wiring.gatewayRoot, takesMax }),
+    ),
+  };
+}
+
 export function ompCli(options: OmpCliOptions): PiLikeCli {
   return {
     applyModels: (input) =>
       applyOmpModels({
         text: input.text,
         takeover: input.takeover,
-        block: {
-          baseUrl: `${input.wiring.gatewayRoot}${PI_LIKE_GATEWAY_SUFFIX}`,
-          api: "openai-completions",
-          auth: "apiKey",
-          apiKey: input.wiring.token,
-          compat: { promptCacheSessionHeader: "x-session-affinity" },
-          models: input.wiring.sources.map((source) =>
-            ompModelEntry(source, {
-              gatewayRoot: input.wiring.gatewayRoot,
-              takesMax: options.takesMax,
-            }),
-          ),
-        },
+        block: ompBlock({ wiring: input.wiring, takesMax: options.takesMax }),
       }),
     restoreModels: (input) =>
       restoreOmpModels({
         text: input.text,
         takeover: input.takeover,
         configAfter: input.settingsAfter,
+        block:
+          input.wiring === null
+            ? null
+            : ompBlock({ wiring: input.wiring, takesMax: options.takesMax }),
       }),
     inspectModels: inspectOmpModels,
     readGateway: readOmpGateway,

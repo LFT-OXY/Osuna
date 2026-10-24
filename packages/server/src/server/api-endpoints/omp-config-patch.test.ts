@@ -144,34 +144,52 @@ providers:
       text: first.text,
       takeover: first.takeover,
       configAfter: null,
+      block: BLOCK,
     });
     expect(restored).toEqual({ kind: "patched", text: USER_MODELS });
 
     const fresh = models(null);
     expect(
-      restoreOmpModels({ text: fresh.text, takeover: fresh.takeover, configAfter: null }),
+      restoreOmpModels({
+        text: fresh.text,
+        takeover: fresh.takeover,
+        configAfter: null,
+        block: BLOCK,
+      }),
     ).toEqual({ kind: "delete" });
   });
 
-  it("keeps Osuna's provider while another role or a fallback chain still names osuna/", () => {
+  it("keeps Osuna's provider while another role or a fallback chain still names osuna/, writing its wiring afresh", () => {
     const first = models(USER_MODELS);
+    // 留下来的接线指错了地方：照 magpie dropMagpie 的 writeMagpie 重写一遍。
+    const stale = first.text.replace(`${GATEWAY}/v1`, "http://127.0.0.1:1/api-endpoint-gateway/v1");
     const configAfter = `modelRoles:
   slow: osuna/glm-5:high
 `;
-    expect(restoreOmpModels({ text: first.text, takeover: first.takeover, configAfter })).toEqual({
-      kind: "kept",
-    });
+    expect(
+      restoreOmpModels({ text: stale, takeover: first.takeover, configAfter, block: BLOCK }),
+    ).toEqual({ kind: "kept", text: first.text });
     const chain = `retry:
   fallbackChains:
     default: [anthropic/claude-sonnet-4-5, osuna/glm-5]
 `;
     expect(
-      restoreOmpModels({ text: first.text, takeover: first.takeover, configAfter: chain }),
-    ).toEqual({ kind: "kept" });
+      restoreOmpModels({
+        text: first.text,
+        takeover: first.takeover,
+        configAfter: chain,
+        block: BLOCK,
+      }),
+    ).toEqual({ kind: "kept", text: first.text });
     // 只是平铺在 enabledModels 里的 osuna/ 条目跟着服务商走。
-    const plain = `enabledModels: [osuna/glm-5]\n`;
+    const plain = `enabledModels: [osuna/glm-5, osuna/**]\n`;
     expect(
-      restoreOmpModels({ text: first.text, takeover: first.takeover, configAfter: plain }),
+      restoreOmpModels({
+        text: first.text,
+        takeover: first.takeover,
+        configAfter: plain,
+        block: BLOCK,
+      }),
     ).toEqual({ kind: "patched", text: USER_MODELS });
   });
 
@@ -294,9 +312,68 @@ enabledModels:
   - osuna/relay/glm-5
   - anthropic/claude-sonnet-4-5
   - openai/gpt-5
+  - osuna/**
 theme: dark
 defaultThinkingLevel: xhigh
 `);
+  });
+
+  it("adds osuna/** once, and not where the user already chose which of Osuna's models the list takes", () => {
+    const first = config({ text: USER_CONFIG, model: "relay/glm-5" });
+    const second = config({ text: first.text, model: "kimi-k2", takeover: first.takeover });
+    expect(parse(second.text).enabledModels).toEqual([
+      "osuna/kimi-k2",
+      "anthropic/claude-sonnet-4-5",
+      "openai/gpt-5",
+      "osuna/**",
+    ]);
+    const own = config({
+      text: "enabledModels: [openai/gpt-5, osuna/relay/*]\n",
+      model: "relay/glm-5",
+    });
+    expect(parse(own.text).enabledModels).toEqual([
+      "osuna/relay/glm-5",
+      "openai/gpt-5",
+      "osuna/relay/*",
+    ]);
+    const levelled = config({
+      text: "enabledModels: [openai/gpt-5, osuna/kimi-k2:high]\n",
+      model: "glm-5",
+    });
+    expect(parse(levelled.text).enabledModels).toEqual([
+      "osuna/glm-5",
+      "openai/gpt-5",
+      "osuna/kimi-k2:high",
+    ]);
+  });
+
+  it("leaves enabledModels' osuna/ entries on switch off while another role still names osuna/", () => {
+    const first = config({ text: USER_CONFIG, model: "relay/glm-5" });
+    const withSlow = first.text.replace("  smol:", "  slow: osuna/kimi-k2\n  smol:");
+    const restored = restoreOmpConfig({ text: withSlow, takeover: first.takeover });
+    if (restored.kind !== "patched") throw new Error(`Expected a patch, got ${restored.kind}`);
+    expect(parse(restored.text)).toMatchObject({
+      modelRoles: { default: "anthropic/claude-sonnet-4-5", slow: "osuna/kimi-k2" },
+      enabledModels: [
+        "osuna/relay/glm-5",
+        "anthropic/claude-sonnet-4-5",
+        "openai/gpt-5",
+        "osuna/**",
+      ],
+    });
+  });
+
+  it("keeps the role's thinking level when the same model is written again", () => {
+    const first = config({ text: "modelRoles:\n  default: anthropic/x:high\n", model: "glm-5" });
+    const again = config({
+      text: first.text,
+      model: "glm-5",
+      thinking: "low",
+      takeover: first.takeover,
+    });
+    expect(parse(again.text).modelRoles.default).toBe("osuna/glm-5:high");
+    const third = config({ text: again.text, model: "glm-5", takeover: again.takeover });
+    expect(parse(third.text).modelRoles.default).toBe("osuna/glm-5:high");
   });
 
   it("carries the role's thinking level to the new model, as magpie does", () => {
@@ -328,7 +405,7 @@ defaultThinkingLevel: xhigh
   it("removes modelRoles and the list it emptied, and deletes a file it created", () => {
     const first = config({ text: "enabledModels: [osuna/relay/glm-5]\n", model: "relay/glm-5" });
     expect(first.text).toBe(
-      "enabledModels: [osuna/relay/glm-5]\nmodelRoles:\n  default: osuna/relay/glm-5\n",
+      "enabledModels: [osuna/relay/glm-5, osuna/**]\nmodelRoles:\n  default: osuna/relay/glm-5\n",
     );
     // 接管前就有的 osuna/ 条目是用户的，留着。
     expect(restoreOmpConfig({ text: first.text, takeover: first.takeover })).toEqual({

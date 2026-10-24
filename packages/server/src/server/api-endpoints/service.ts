@@ -159,6 +159,7 @@ import {
   PI_LIKE_PROVIDERS,
   type PiLikeCli,
   type PiLikeProvider,
+  type PiLikeProviderWiring,
 } from "./pi-like-config.js";
 import {
   ompClamp,
@@ -2522,6 +2523,18 @@ export class ApiEndpointService {
     };
   }
 
+  /**
+   * 关开关时服务商还要留着（OMP 别处还用着 osuna/）就照现在的中转站、口令与模型清单重写接线；
+   * 中转站不可用或没有口令时为 null，照原样留着。
+   */
+  private piKeptWiring(provider: PiLikeProvider): PiLikeProviderWiring | null {
+    const gatewayRoot = this.gatewayUrlFor(provider);
+    const token = this.store.readGatewayTokens()[provider];
+    const state = this.readStateForSnapshot();
+    if (gatewayRoot === null || token === undefined || state === null) return null;
+    return { gatewayRoot, token, sources: this.piSources(state) };
+  }
+
   /** Pi / OMP 的默认模型在 Osuna 的服务商上，模型文件里它的地址是中转站的。 */
   private piPointsAtGateway(input: PiGatewayCheck): boolean {
     const { files } = input;
@@ -2616,6 +2629,7 @@ export class ApiEndpointService {
         takeover: models,
         settingsAfter,
         cli: paths.cli,
+        wiring: this.piKeptWiring(provider),
       });
       const file = switchOffFileChange({
         path: filePath,
@@ -5688,6 +5702,7 @@ export class ApiEndpointService {
             takeover: modelsTakeover,
             settingsAfter,
             cli: files.cli,
+            wiring: this.piKeptWiring(provider),
           }),
         commit: (value) =>
           this.store.writePiModelsTakeover(provider, {
@@ -6398,6 +6413,8 @@ interface PiModelsRestorePlanInput extends Omit<
 > {
   // 设置文件改回之后的内容。
   settingsAfter: string | null;
+  // 服务商留着时按它重写接线；中转站不可用时为 null。
+  wiring: PiLikeProviderWiring | null;
 }
 
 /** 关掉后服务商是不是还留在模型文件里（OMP 别处还用着 osuna/）。 */
@@ -6411,14 +6428,17 @@ function piModelsRestorePlan(input: PiModelsRestorePlanInput): ConfigFilePlan<Pi
     text: input.text,
     takeover: input.takeover,
     settingsAfter: input.settingsAfter,
+    wiring: input.wiring,
   });
   if (result.kind === "unparsable") {
     throw unparsable({ filePath: input.filePath, detail: result.message, reason: result.reason });
   }
   let change: ConfigFileChange = { kind: "keep" };
-  if (result.kind === "patched") change = { kind: "write", text: result.text };
+  const isKept = result.kind === "kept";
+  const isRewritten = isKept && result.text !== input.text;
+  if (result.kind === "patched" || isRewritten) change = { kind: "write", text: result.text };
   if (result.kind === "delete") change = { kind: "delete" };
-  return { change, value: { isKept: result.kind === "kept" } };
+  return { change, value: { isKept } };
 }
 
 /** 写进接管记录的 reconnect；没有默认模型时不写。 */

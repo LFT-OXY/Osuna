@@ -141,8 +141,8 @@ export type PiConfigRestoreResult =
   // 接管前文件不存在，放回后又只剩一个空对象：把文件删掉。
   | { kind: "delete" }
   | { kind: "missing" }
-  // 服务商别处还用着（OMP 的别的角色、fallback 链等），文件不动。
-  | { kind: "kept" }
+  // 服务商别处还用着（OMP 的别的角色、fallback 链等），留着；text 是重写过接线的文件。
+  | { kind: "kept"; text: string }
   | PiConfigUnparsable;
 
 export type PiConfigInspection =

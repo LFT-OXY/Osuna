@@ -98,6 +98,8 @@ export interface OmpModelsRestoreInput {
   takeover: PiModelsTakeover;
   // 关开关后 config.yml 的内容：别处还用着 osuna/ 时服务商留着。
   configAfter: string | null;
+  // 服务商留着时重写成的样子；中转站不可用时为 null，照原样留着。
+  block: OmpProviderBlock | null;
 }
 
 export type OmpMigration = { kind: "migrated"; text: string } | PiConfigUnparsable;
@@ -151,7 +153,13 @@ export function restoreOmpModels(input: OmpModelsRestoreInput): PiConfigRestoreR
   if (input.text === null) return { kind: "missing" };
   const opened = openModels(input.text);
   if (opened.kind === "unparsable") return opened;
-  if (ompConfigUsesOsuna(input.configAfter)) return { kind: "kept" };
+  if (ompConfigUsesOsuna(input.configAfter)) {
+    // 别处还用着：服务商重写一遍（修好留下来的接线，magpie dropMagpie 的 writeMagpie），接管记录留着。
+    if (input.block === null) return { kind: "kept", text: input.text };
+    const existing = opened.providers?.[PI_PROVIDER_ID];
+    setBlock({ doc: opened.doc, existing, written: keptBlock({ existing, block: input.block }) });
+    return { kind: "kept", text: render(opened) };
+  }
   const { doc } = opened;
   restoreValue(doc, PROVIDER_PATH, input.takeover.provider.original);
   const providers: unknown = doc.getIn(["providers"]);
@@ -248,7 +256,8 @@ export function restoreOmpConfig(input: PiFileState<PiSettingsTakeover>): PiConf
   if (thinking && holds(root[THINKING_KEY], thinking.written)) {
     restoreValue(doc, [THINKING_KEY], thinking.original);
   }
-  unplaceOmpScope({ doc, takeover });
+  // 别处还用着 osuna/ 时服务商留着，enabledModels 里平铺的 osuna/ 条目也留着（magpie dropMagpie 不走 ompScopeWithout）。
+  if (!ompConfigUsesOsuna(render(opened))) unplaceOmpScope({ doc, takeover });
   return finishedRestore({ opened, originalFile: takeover.originalFile });
 }
 
@@ -436,7 +445,12 @@ function plainEntries(value: unknown): string[] {
 }
 
 function osunaEntriesIn(root: Record<string, unknown>): string[] {
-  return plainEntries(root[SCOPE_KEY]).filter(namesOsunaModel);
+  return plainEntries(root[SCOPE_KEY]).filter(isOsunaEntry);
+}
+
+/** Osuna 加、关开关时去掉的平铺条目：指着 Osuna 某个模型的，与 osuna/**（magpie ompScopeWithout）。 */
+function isOsunaEntry(pattern: string): boolean {
+  return namesOsunaModel(pattern) || isOsunaEvery(pattern);
 }
 
 interface RoleWrite {
@@ -452,11 +466,10 @@ function writeRole(input: RoleWrite): void {
   const { doc, root, keys, takeover } = input;
   const ref = `${PI_PROVIDER_ID}/${input.model}`;
   const current = roleValue(root);
+  // 原来的值带「:档位」时跟着新模型（magpie role 的 Set）；同一个模型重写（同步、改档位、再应用）照样留着它。
+  // Osuna 里没有单独清默认角色档位的地方，所以档位只会在 OMP 里清。
   let value = ref;
-  if (current !== null) {
-    const level = ompLevelSuffix(current.trim());
-    if (level !== "" && withoutOmpLevel(current.trim()) !== ref) value = `${ref}${level}`;
-  }
+  if (current !== null) value = `${ref}${ompLevelSuffix(current.trim())}`;
   const original = takeover?.keys[OMP_ROLE_KEY]?.original ?? originalValue(roles(root), "default");
   keys[OMP_ROLE_KEY] = { original, written: value };
   if (!isMap(doc.getIn([ROLES]))) doc.setIn([ROLES], doc.createNode({}));
@@ -528,6 +541,27 @@ interface ScopeEdit<Takeover> {
   takeover: Takeover;
 }
 
+// enabledModels 里收下 Osuna 全部模型的那一条（magpie ompEvery）：OMP 的 Bun.Glob 里 * 不跨「/」，要 **。
+const OSUNA_EVERY = `${PI_PROVIDER_ID}/**`;
+
+function isOsunaEvery(pattern: string): boolean {
+  return pattern.trim().toLowerCase() === OSUNA_EVERY;
+}
+
+/**
+ * 用户自己挑了清单收 Osuna 的哪些模型（magpie ompScopeOwnMagpie）：有带通配符或档位的 osuna/ 条目，
+ * 或有收下 model 的通配符。这时不加 osuna/**。
+ */
+function ownsOsunaScope(plain: readonly string[], model: string): boolean {
+  return plain.some((pattern) => {
+    const bare = withoutOmpLevel(pattern.trim());
+    const isGlobbed = isGlob(bare);
+    if (isGlobbed && ompTakes(bare, model)) return true;
+    const isLevelled = bare !== pattern.trim();
+    return isOsunaModel(bare.toLowerCase()) && (isGlobbed || isLevelled);
+  });
+}
+
 function placeOmpScope(input: ScopeEdit<PiSettingsTakeover | null>): PiScopePlacement | null {
   const items = readScopeItems(input.doc);
   // 只有按目录的条目时，别的目录不受它管，不碰（magpie 只认平铺的条目）。
@@ -545,9 +579,13 @@ function placeOmpScope(input: ScopeEdit<PiSettingsTakeover | null>): PiScopePlac
     front,
     takes: ompTakes,
   });
-  if (placed.list !== null && !isDeepStrictEqual(placed.list, items.list)) {
-    writeScopeItems(items, placed.list);
+  let next = placed.list;
+  // 默认模型之外，OMP 的模型选择也要看得到 Osuna 别的模型：清单末尾加 osuna/**（magpie ompScopeWith，#1769）。
+  if (next !== null && front !== null) {
+    const plain = next.filter((entry) => !entry.startsWith(ITEM_PLACEHOLDER));
+    if (!ownsOsunaScope(plain, front)) next = [...next, OSUNA_EVERY];
   }
+  if (next !== null && !isDeepStrictEqual(next, items.list)) writeScopeItems(items, next);
   return placed.scope;
 }
 
@@ -556,7 +594,7 @@ function unplaceOmpScope(input: ScopeEdit<PiSettingsTakeover>): void {
   if (items === null || !isScopeList(items.list)) return;
   const users = input.takeover.userOsunaEntries ?? [];
   const kept = unplaceScope(items.list, input.takeover.scope ?? null).filter(
-    (pattern) => !namesOsunaModel(pattern) || users.includes(pattern),
+    (pattern) => !isOsunaEntry(pattern) || users.includes(pattern),
   );
   if (kept.length === 0) input.doc.deleteIn([SCOPE_KEY]);
   else if (!isDeepStrictEqual(kept, items.list)) writeScopeItems(items, kept);
