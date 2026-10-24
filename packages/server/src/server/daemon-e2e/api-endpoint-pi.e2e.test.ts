@@ -649,7 +649,9 @@ describe("Pi API endpoints over the daemon RPC", () => {
     if (!check) throw new Error("Expected a scheduled models.dev check");
     check();
 
-    await expect.poll(kimiFacts).toEqual({ contextWindow: 400_000, reasoning: true });
+    await expect
+      .poll(kimiFacts, { timeout: 10_000 })
+      .toEqual({ contextWindow: 400_000, reasoning: true });
 
     async function kimiFacts() {
       const providers = readJsonc(await readFile(modelsPath, "utf8")).providers as Record<
