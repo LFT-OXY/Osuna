@@ -4,7 +4,7 @@
 
 **Blocked by:** 01
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 协议：新能力位挂在 `server_info.features.*` 上；Agent 设置的 provider 取值接受 `pi`；新字段都可选。旧 daemon 下新 App 不显示 Pi 的第三方接口设置；官方 Paseo 手机 App 照常。
 - [ ] 目录照 Osuna 现有的 Pi 规则（daemon 环境的 `PI_CODING_AGENT_DIR`，否则 `~/.pi/agent`）。

@@ -307,3 +307,4 @@ Pi 和 OMP 像 Claude Code、Codex 一样用第三方接口：
   - OMP 自定义 Anthropic 服务商不写 `auth` 时按 OAuth 组装请求。
 - **本机已有的 Pi / OMP 配置**：本机的 `~/.pi/agent`、`~/.omp/agent` 里已有用户的 `models.json` / `models.yml`，助手没有读过内容。界面验收用临时目录，涉及真实配置的验收由用户自己做或先取得同意。
 - **参考源码**：magpie `7597c132` 在 `/tmp/magpie-7597`，Pi 源码在 `/tmp/pi-mono-src`，OMP 源码在 `/tmp/omp-src`，都是只读的临时克隆。
+- **待另开工单**（工单 02 审查，用户 2026-10-24 决定）：设置页「已更新 just now」的相对时间来自全应用共用的英文时间工具，中文界面露出英文；不在本任务改，另开工单做时间文字本地化。
