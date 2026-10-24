@@ -54,6 +54,8 @@ const CLI_PATTERNS: Record<CliConfigProvider, RegExp> = {
   codex: /(^|\/)codex( |$)/,
   // Pi 是 node 跑的脚本（node …/bin/pi）；pi-mono 的 npm 包名里的 pi-coding-agent 不算。
   pi: /(^|\/)pi( |$)/,
+  // OMP 是编好的程序，也可能是 bun 跑的 npm 包（magpie 的 omp Notice）。
+  omp: /(^|\/)omp( |$)|@oh-my-pi\/pi-coding-agent/,
 };
 
 // 进程记录文件与配置由不同程序写，时钟取整不同，差一秒以内算同时（magpie 的 a second's slack）。
@@ -153,7 +155,7 @@ function codexCopyKind(commandLine: string): CopyKindOf {
   return { kind: "cli", app: null };
 }
 
-/** Pi 只有终端里的（Osuna 自己起的另外计数）。 */
+/** Pi、OMP 只有终端里的（Osuna 自己起的另外计数）。 */
 function piCopyKind(): CopyKindOf {
   return { kind: "cli", app: null };
 }
@@ -171,6 +173,7 @@ const COPY_KINDS: Record<CliConfigProvider, (commandLine: string) => CopyKindOf>
   claude: claudeCopyKind,
   codex: codexCopyKind,
   pi: piCopyKind,
+  omp: piCopyKind,
 };
 
 /** `app-server daemon <子命令>`（pid-update-loop……）：后台 app-server 起在旁边的帮手，不读模型列表，不用重开。 */
@@ -422,6 +425,7 @@ const AGENT_NAMES: Record<CliConfigProvider, string> = {
   claude: "Claude Code",
   codex: "Codex",
   pi: "Pi",
+  omp: "Oh My Pi",
 };
 
 /** 读状态时一个 CLI 的情况：配置所在目录、启动时读的那部分最近一次变了的时刻、Osuna 里那之前启动的会话数。 */
@@ -660,6 +664,7 @@ export class CliReopenHints {
       claude: this.hintsOf({ provider: "claude", subject: subjects.claude, seen }),
       codex: this.hintsOf({ provider: "codex", subject: subjects.codex, seen }),
       pi: this.hintsOf({ provider: "pi", subject: subjects.pi, seen }),
+      omp: this.hintsOf({ provider: "omp", subject: subjects.omp, seen }),
     };
   }
 

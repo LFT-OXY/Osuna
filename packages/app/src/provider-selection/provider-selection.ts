@@ -15,7 +15,7 @@ import type { DraftCommandTarget } from "@/hooks/use-agent-commands-query";
 import { i18n } from "@/i18n/i18next";
 import { compareMatchScores, scoreTextFields } from "@getpaseo/protocol/search/text-match";
 import { filterSelectableModels } from "./model-catalog";
-import { supportsApiEndpoints } from "@/api-endpoints";
+import { isPiLikeProvider, supportsApiEndpoints } from "@/api-endpoints";
 
 export interface ProviderSelectionModelRow {
   /**
@@ -130,10 +130,10 @@ export function selectableEntryModels(
 }
 
 /**
- * 对话里能选的按接口分组的模型：Osuna 对话换成接口模型的提供方。Pi 的模型 id 由主机写成 Pi 认得的 `osuna/…`。
+ * 对话里能选的按接口分组的模型：Osuna 对话换成接口模型的提供方。Pi、OMP 的模型 id 由主机写成它们认得的 `osuna/…`。
  */
 function chatEndpointGroups(entry: ProviderSnapshotEntry): ApiEndpointModelGroup[] | undefined {
-  const isEndpointChat = supportsApiEndpoints(entry.provider) || entry.provider === "pi";
+  const isEndpointChat = supportsApiEndpoints(entry.provider) || isPiLikeProvider(entry.provider);
   return isEndpointChat ? entry.apiEndpointModelGroups : undefined;
 }
 

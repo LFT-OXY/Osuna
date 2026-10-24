@@ -291,6 +291,28 @@ describe("findStaleCopies", () => {
     ).toEqual([{ kind: "cli", app: null, count: 2, since: hoursAgo(6) }]);
   });
 
+  test("OMP in a terminal, compiled or run by bun from its npm package", () => {
+    const processes = [
+      proc({ pid: 80, startedAt: hoursAgo(6), commandLine: `${home}/.bun/bin/omp` }),
+      proc({
+        pid: 81,
+        startedAt: hoursAgo(3),
+        commandLine: `bun ${home}/.bun/install/global/node_modules/@oh-my-pi/pi-coding-agent/src/cli.ts`,
+      }),
+      proc({ pid: 82, startedAt: hoursAgo(4), commandLine: "/usr/bin/ompx --help" }),
+      proc({ pid: 83, startedAt: hoursAgo(1), commandLine: "omp --continue" }),
+    ];
+    expect(
+      findStaleCopies({
+        provider: "omp",
+        processes,
+        changedAt: hoursAgo(2),
+        cliDir: `${home}/.omp/agent`,
+        ownPid: OWN_PID,
+      }),
+    ).toEqual([{ kind: "cli", app: null, count: 2, since: hoursAgo(6) }]);
+  });
+
   test("Claude Code in a terminal and in an editor", () => {
     const processes = [
       proc({ pid: 50, startedAt: hoursAgo(6), commandLine: "claude --resume" }),
@@ -563,6 +585,7 @@ describe("CliReopenHints", () => {
       claude: { cliDir: "/Users/me/.claude", changedAt: null, osunaSessions: 0 },
       codex: { cliDir: codexHome, changedAt: hoursAgo(2), osunaSessions: 0 },
       pi: { cliDir: "/Users/me/.pi/agent", changedAt: null, osunaSessions: 0 },
+      omp: { cliDir: "/Users/me/.omp/agent", changedAt: null, osunaSessions: 0 },
     };
   });
 
@@ -578,6 +601,7 @@ describe("CliReopenHints", () => {
     expect(await reopen.read()).toEqual({
       claude: [],
       pi: [],
+      omp: [],
       codex: [
         {
           kind: "app_server",
@@ -603,6 +627,7 @@ describe("CliReopenHints", () => {
     expect(await reopen.read()).toEqual({
       claude: [],
       pi: [],
+      omp: [],
       codex: [
         {
           kind: "app_server_restarted",

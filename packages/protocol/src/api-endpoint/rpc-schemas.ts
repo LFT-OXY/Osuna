@@ -35,6 +35,7 @@ const TEST_PROTOCOL_NAMES: Readonly<Record<string, string>> = {
   claude: "Anthropic Messages",
   codex: "OpenAI Responses",
   pi: "OpenAI Chat Completions",
+  omp: "OpenAI Chat Completions",
 };
 
 export function apiEndpointProtocolName(provider: string): string {

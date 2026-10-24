@@ -152,6 +152,7 @@ import { CheckoutDiffManager } from "./checkout-diff-manager.js";
 import { ScheduleService } from "./schedule/service.js";
 import { createUsageAgentBridge } from "./usage/agent-sessions.js";
 import { UsageService } from "./usage/service.js";
+import type { ModelPricePerMillion } from "./usage/pricing/service.js";
 import {
   API_ENDPOINT_GATEWAY_PATH,
   createApiEndpointGateway,
@@ -1064,7 +1065,9 @@ export async function createPaseoDaemon(
     isModelsDevAutoUpdate: () =>
       resolveUsagePricingSettings(daemonConfigStore.get().usage?.pricing).autoUpdate,
     // usageService 在下面创建；只在改写 Pi 的配置时调用，那时 daemon 已经启动。
-    modelPricePerMillion: (model) => usageService.pricePerMillion(model),
+    // 写明返回类型：两个服务互相引用，tsc 推不出来。
+    modelPricePerMillion: (model: string): ModelPricePerMillion | null =>
+      usageService.pricePerMillion(model),
     ...config.apiEndpoints,
   });
   function apiEndpointModelOverride(provider: AgentProvider): AgentModelDefinition[] | null {

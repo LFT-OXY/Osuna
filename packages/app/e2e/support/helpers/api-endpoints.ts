@@ -568,7 +568,7 @@ export async function seedApiEndpoint(
 
 /** 关掉每个 Agent 的总开关、删掉所有接口，让同一 worker 里的下一个用例从空开始。 */
 export async function resetApiEndpoints(client: ApiEndpointSeedClient): Promise<void> {
-  for (const provider of ["claude", "codex", "pi"]) {
+  for (const provider of ["claude", "codex", "pi", "omp"]) {
     await client.apiEndpointSetAgentSettings({ provider, enabled: false });
   }
   // 「保留 claude.ai 登录」与默认思考档位关着也记着，不清掉会带进下一个用例。
@@ -593,11 +593,13 @@ export async function resetApiEndpoints(client: ApiEndpointSeedClient): Promise<
     forcedSubagentModelId: null,
     allowsAnySubagentModel: false,
   });
-  await client.apiEndpointSetAgentSettings({
-    provider: "pi",
-    enabled: false,
-    defaultThinkingOptionId: null,
-  });
+  for (const provider of ["pi", "omp"]) {
+    await client.apiEndpointSetAgentSettings({
+      provider,
+      enabled: false,
+      defaultThinkingOptionId: null,
+    });
+  }
   // 长对话是整台主机的设置，同样会带进下一个用例。
   await client.apiEndpointSetLongConversations({ fullContext: false, compactAt: null });
   await client.apiEndpointSetDisabledModels({ models: [] });
@@ -622,6 +624,8 @@ async function forgetTakeovers(): Promise<void> {
     "takeover-codex.json",
     "takeover-pi-models.json",
     "takeover-pi-settings.json",
+    "takeover-omp-models.json",
+    "takeover-omp-config.json",
   ];
   for (const name of names) {
     const filePath = path.join(home, "api-endpoints", name);

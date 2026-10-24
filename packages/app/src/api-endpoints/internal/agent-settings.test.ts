@@ -894,3 +894,41 @@ describe("Pi's Use API endpoints block", () => {
     });
   });
 });
+
+describe("OMP's Use API endpoints block", () => {
+  it("picks the default model from OMP's groups, whose ids OMP names osuna/…", () => {
+    const shown = view({
+      provider: "omp",
+      enabled: true,
+      defaultModelId: "relay/glm-5",
+      defaultThinkingOptionId: "auto",
+      endpoints: [endpoint({ id: "relay", name: "Relay", models: [{ id: "glm-5" }] })],
+      endpointModelGroups: [
+        {
+          name: "Relay",
+          models: [
+            {
+              provider: "omp",
+              id: "osuna/relay/glm-5",
+              label: "glm-5",
+              thinkingOptions: [
+                { id: "auto", label: "Auto" },
+                { id: "high", label: "High" },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    expect(shown.defaultModel).toMatchObject({ id: "relay/glm-5", model: "glm-5" });
+    expect(shown.defaultThinking).toEqual({
+      value: "auto",
+      options: [
+        { id: "auto", label: "Auto" },
+        { id: "high", label: "High" },
+      ],
+      usesUltraCode: null,
+      lockedAt: null,
+    });
+  });
+});

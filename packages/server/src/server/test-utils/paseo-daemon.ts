@@ -249,6 +249,8 @@ async function prepareTestDaemonConfig(
       // 判断 Codex 登录方式的生产实现会起真的 Codex app-server：测试 daemon 一律换成固定答案（未登录），
       // 关心登录方式的用例自己传 readCodexSignIn。
       readCodexSignIn: async () => "signed_out" as const,
+      // 绝不跑真的 omp --version：缺省按版本不知道算，关心版本的用例自己传 readOmpCliVersion。
+      readOmpCliVersion: async () => null,
       // Claude Code 的托管设置：放在用例自己的 apiEndpoints 之前，传了 env 的用例也不会读到真实的系统目录。
       claudeManagedSettingsDir: path.join(paseoHomeRoot, "claude-managed"),
       // 绝不起开发者真实的登录 shell：缺省答「什么都没设」，关心它的用例自己传假的。

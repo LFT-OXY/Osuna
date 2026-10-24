@@ -156,6 +156,8 @@ export function ProviderDetail({
   const hostSupportsApiEndpoints = useHostFeature(serverId, "apiEndpoints");
   // COMPAT(apiEndpointPi): added in v0.17.0, remove gate after 2027-04-24.
   const hostSupportsPiApiEndpoints = useHostFeature(serverId, "apiEndpointPi");
+  // COMPAT(apiEndpointOmp): added in v0.17.0, remove gate after 2027-04-24.
+  const hostSupportsOmpApiEndpoints = useHostFeature(serverId, "apiEndpointOmp");
   // COMPAT(providerVersions): added in v0.14.0, remove gate after 2027-04-01.
   const hostSupportsProviderVersions = useHostFeature(serverId, "providerVersions");
   const { results: versionCheckResults } = useProviderVersionCheck(serverId, {
@@ -263,6 +265,7 @@ export function ProviderDetail({
       hostPlatform={hostPlatform}
       hostSupportsApiEndpoints={hostSupportsApiEndpoints}
       hostSupportsPiApiEndpoints={hostSupportsPiApiEndpoints}
+      hostSupportsOmpApiEndpoints={hostSupportsOmpApiEndpoints}
       hostSupportsProviderVersions={hostSupportsProviderVersions}
       discoveredModels={discoveredModels}
       additionalModels={additionalModels}

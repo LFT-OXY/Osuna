@@ -4233,6 +4233,10 @@ export const ServerInfoStatusPayloadSchema = z
         // 任务 10-16-pi-omp-endpoints：Pi 的「使用第三方接口」——set_agent_settings、preview_switch_off、keep_current_settings
         // 收 provider "pi"，列表的 agents、agentIssues 带 pi；daemon 改写 Pi 的 models.json 与 settings.json。
         apiEndpointPi: z.boolean().optional(),
+        // COMPAT(apiEndpointOmp): added in v0.17.0, remove gate after 2027-04-24.
+        // 任务 10-16-pi-omp-endpoints 工单 04：OMP 默认那套配置的「使用第三方接口」——同上几个 RPC 收 provider "omp"，
+        // 列表的 agents、agentIssues、reopenHints 带 omp；daemon 改写 OMP 的 models.yml 与 config.yml。
+        apiEndpointOmp: z.boolean().optional(),
         // COMPAT(providerVersions): added in v0.14.0, remove gate after 2027-04-01.
         // 快照带内置提供方的已装版本 version；daemon 支持 provider.version.check.* 与 provider.upgrade.*。
         providerVersions: z.boolean().optional(),

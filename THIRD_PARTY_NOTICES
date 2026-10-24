@@ -816,6 +816,18 @@ pi_api_test.go in internal/agent:
   packages/server/src/server/api-endpoints/pi-model-entries.test.ts
   packages/server/src/server/api-endpoints/pi-config-patch.ts
 
+OMP's models.yml entry for each model (its API, thinking mode and efforts, max
+offered as xhigh to an OMP before 16.4.0) follows ompProviderAt, ompTakesMax and
+ompModel in magpie's internal/agent/omp.go; the user's own keys kept inside
+Osuna's provider follow ompKept there and yamlKept in internal/agent/sync.go;
+keeping the provider while another role or fallback chain names it follows
+dropMagpie and ompRefKeys in omp.go; reading enabledModels entries follows
+ompTakes in internal/agent/omp_scope.go; carrying an older models.json over to
+YAML follows JSONToYAML in internal/edit/yaml.go:
+
+  packages/server/src/server/api-endpoints/omp-model-entries.ts
+  packages/server/src/server/api-endpoints/omp-config-patch.ts
+
 The gateway's ChatGPT backend path (relaying a Codex signed in with ChatGPT to
 the ChatGPT backend as it came, an API key's requests to the OpenAI API, and
 426 to a WebSocket handshake) follows CodexPath, codexBackend, codexUpstream,

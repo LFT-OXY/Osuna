@@ -11,6 +11,7 @@ import {
   type ApiEndpointNameDisplay,
 } from "@getpaseo/protocol/api-endpoint/endpoint-names";
 import { withoutDisabledEndpointModels } from "./disabled-models-list";
+import { isPiLikeProvider } from "./pi-like";
 import {
   endpointRowStatus,
   type CooldownRemaining,
@@ -394,7 +395,7 @@ export function selectAgentApiEndpointsView(input: {
   };
 }
 
-// Pi 对话里的接口模型 id 前面带 Pi 里 Osuna 服务商的名字（daemon 的 PI_PROVIDER_ID）。
+// Pi、OMP 对话里的接口模型 id 前面带它们里 Osuna 服务商的名字（daemon 的 PI_PROVIDER_ID）。
 const PI_OSUNA_PREFIX = "osuna/";
 
 interface SettingsModelGroupsInput {
@@ -402,10 +403,10 @@ interface SettingsModelGroupsInput {
   groups: ApiEndpointModelGroup[] | null;
 }
 
-/** 设置页按 Osuna 的模型 id（「接口标识/模型名」）挑默认模型：Pi 的分组 id 去掉 `osuna/`。 */
+/** 设置页按 Osuna 的模型 id（「接口标识/模型名」）挑默认模型：Pi、OMP 的分组 id 去掉 `osuna/`。 */
 function settingsModelGroups(input: SettingsModelGroupsInput): ApiEndpointModelGroup[] | null {
   const { provider, groups } = input;
-  if (provider !== "pi" || groups === null) return groups;
+  if (!isPiLikeProvider(provider) || groups === null) return groups;
   return groups.map((group) =>
     Object.assign({}, group, {
       models: group.models.map((model) =>

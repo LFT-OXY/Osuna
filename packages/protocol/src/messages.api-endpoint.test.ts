@@ -2064,6 +2064,20 @@ describe("API endpoint balance (apiEndpointBalance)", () => {
     expect(older.features?.apiEndpointBalance).toBeUndefined();
   });
 
+  it("parses a host that advertises apiEndpointOmp, and an older one without it", () => {
+    const base = { status: "server_info" as const, serverId: "srv_1" };
+    const current = ServerInfoStatusPayloadSchema.parse({
+      ...base,
+      features: { apiEndpointPi: true, apiEndpointOmp: true },
+    });
+    expect(current.features?.apiEndpointOmp).toBe(true);
+    const older = ServerInfoStatusPayloadSchema.parse({
+      ...base,
+      features: { apiEndpointPi: true },
+    });
+    expect(older.features?.apiEndpointOmp).toBeUndefined();
+  });
+
   it("parses a host that advertises apiEndpointPi, and an older one without it", () => {
     const base = { status: "server_info" as const, serverId: "srv_1" };
     const current = ServerInfoStatusPayloadSchema.parse({

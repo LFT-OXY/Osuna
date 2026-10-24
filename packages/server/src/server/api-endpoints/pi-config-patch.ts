@@ -69,7 +69,7 @@ const PiScopePlacementSchema = z.object({
   front: z.string(),
   wasAt: z.number().int().nonnegative().nullable(),
 });
-type PiScopePlacement = z.infer<typeof PiScopePlacementSchema>;
+export type PiScopePlacement = z.infer<typeof PiScopePlacementSchema>;
 
 export const PiSettingsTakeoverSchema = z.object({
   originalFile: OriginalFileSchema,
@@ -104,13 +104,16 @@ export interface PiStartupFiles {
   modelsText: string | null;
 }
 
-/** settings.json 现在的内容（null 为不存在）与接管记录。 */
-export interface PiSettingsFile {
+/** 一份文件现在的内容（null 为不存在）与它的接管记录（Pi 与 OMP 共用）。 */
+export interface PiFileState<Takeover> {
   text: string | null;
-  takeover: PiSettingsTakeover | null;
+  takeover: Takeover;
 }
 
-export interface PiSettingsKeepInput extends PiSettingsFile {
+/** settings.json 现在的内容与接管记录。 */
+export type PiSettingsFile = PiFileState<PiSettingsTakeover | null>;
+
+export interface PiSettingsKeepInput extends PiFileState<PiSettingsTakeover | null> {
   held: CliModelHold;
 }
 
@@ -138,6 +141,8 @@ export type PiConfigRestoreResult =
   // 接管前文件不存在，放回后又只剩一个空对象：把文件删掉。
   | { kind: "delete" }
   | { kind: "missing" }
+  // 服务商别处还用着（OMP 的别的角色、fallback 链等），文件不动。
+  | { kind: "kept" }
   | PiConfigUnparsable;
 
 export type PiConfigInspection =
@@ -178,10 +183,7 @@ export function applyPiModels(input: {
 }
 
 /** 关掉时的 models.json：providers.osuna 放回接管前的值，为它新建的 providers 空了就删掉。 */
-export function restorePiModels(input: {
-  text: string | null;
-  takeover: PiModelsTakeover;
-}): PiConfigRestoreResult {
+export function restorePiModels(input: PiFileState<PiModelsTakeover>): PiConfigRestoreResult {
   if (input.text === null) return { kind: "missing" };
   const opened = openModels(input.text);
   if (opened.kind === "unparsable") return opened;
@@ -197,10 +199,7 @@ export function restorePiModels(input: {
 }
 
 /** providers.osuna 的地址、口令或格式不再是 Osuna 写的（或整项没了）即算被外部改过。 */
-export function inspectPiModels(input: {
-  text: string | null;
-  takeover: PiModelsTakeover | null;
-}): PiConfigInspection {
+export function inspectPiModels(input: PiFileState<PiModelsTakeover | null>): PiConfigInspection {
   const opened = openModels(input.text);
   if (opened.kind === "unparsable") return opened;
   if (!input.takeover) return { kind: "parsed", modifiedKeys: [] };
@@ -252,6 +251,7 @@ export function applyPiSettings(
     value: written[SCOPE_KEY],
     previous: takeover?.scope ?? null,
     front: osunaRef(written),
+    takes: piTakes,
   });
   if (placed.list !== null && !isDeepStrictEqual(placed.list, written[SCOPE_KEY])) {
     draft.text = editScope({ text: draft.text, list: placed.list, formatting });
@@ -321,10 +321,7 @@ function writeThinking(draft: SettingsDraft, thinking: string | null): void {
  * - enabledModels：挪到最前的默认模型挪回原位，再去掉指向 Osuna 的条目（服务商删了，它们什么也不指；magpie piScopeWithout），
  *   接管前用户自己就有的留着；删空了整个删掉。
  */
-export function restorePiSettings(input: {
-  text: string | null;
-  takeover: PiSettingsTakeover;
-}): PiConfigRestoreResult {
+export function restorePiSettings(input: PiFileState<PiSettingsTakeover>): PiConfigRestoreResult {
   if (input.text === null) return { kind: "missing" };
   const opened = openFile(input.text, "settings.json");
   if (opened.kind === "unparsable") return opened;
@@ -356,10 +353,7 @@ export function restorePiSettings(input: {
 }
 
 /** 默认服务商或默认模型不再是 Osuna 记下的写入值（默认思考档位与 enabledModels 是 Pi 自己会存的，跟着走、不算）。 */
-export function inspectPiSettings(input: {
-  text: string | null;
-  takeover: PiSettingsTakeover | null;
-}): PiConfigInspection {
+export function inspectPiSettings(input: PiSettingsFile): PiConfigInspection {
   const opened = openFile(input.text, "settings.json");
   if (opened.kind === "unparsable") return opened;
   const recorded = input.takeover?.keys ?? {};
@@ -449,7 +443,7 @@ export function readPiModel(text: string | null): string | null {
 }
 
 /** 文件里的值还是记下的写入值（null 为没有这个键）。 */
-function holds(value: unknown, written: string | null): boolean {
+export function holds(value: unknown, written: string | null): boolean {
   return written === null ? value === undefined : value === written;
 }
 
@@ -476,7 +470,7 @@ function osunaRef(root: Record<string, unknown>): string | null {
 }
 
 /** Pi 当成清单读的 enabledModels：非空、全是字符串（magpie piScope）；别的样子 Pi 不按它挑模型，Osuna 也不碰。 */
-function isScopeList(value: unknown): value is string[] {
+export function isScopeList(value: unknown): value is string[] {
   return (
     Array.isArray(value) &&
     value.length > 0 &&
@@ -485,7 +479,7 @@ function isScopeList(value: unknown): value is string[] {
 }
 
 /** 指着 Osuna 某个模型的条目（不含通配符的「osuna/…」）。 */
-function namesOsunaModel(pattern: string): boolean {
+export function namesOsunaModel(pattern: string): boolean {
   return !isGlob(pattern) && pattern.toLowerCase().startsWith(`${PI_PROVIDER_ID}/`);
 }
 
@@ -495,12 +489,12 @@ function osunaEntriesIn(root: Record<string, unknown>): string[] {
   return isScopeList(scope) ? scope.filter(namesOsunaModel) : [];
 }
 
-function isGlob(pattern: string): boolean {
+export function isGlob(pattern: string): boolean {
   return /[*?[]/.test(pattern);
 }
 
 /** 去掉条目末尾的「:档位」（Pi 的 provider/model:high）。 */
-function withoutLevel(pattern: string): string {
+export function withoutLevel(pattern: string): string {
   const at = pattern.lastIndexOf(":");
   if (at < 0) return pattern;
   return PI_THINKING_LEVELS.includes(pattern.slice(at + 1)) ? pattern.slice(0, at) : pattern;
@@ -510,7 +504,7 @@ function withoutLevel(pattern: string): string {
  * Pi 的清单条目一定指着 ref（「服务商/模型」）（magpie piTakes）：同一个引用（带不带「:档位」都算），或是 ref、或它的模型 id
  * 符合的通配符（Pi 的 *、? 与 [..]，不分大小写）。光秃秃的模型 id 不算。
  */
-function piTakes(pattern: string, ref: string): boolean {
+export function piTakes(pattern: string, ref: string): boolean {
   const bare = withoutLevel(pattern).trim().toLowerCase();
   const target = ref.toLowerCase();
   if (bare === target) return true;
@@ -554,7 +548,7 @@ function piStartup(root: Record<string, unknown>): string | null {
 }
 
 /** 用户自己的清单：上次挪到最前的还在最前，就挪回原位（Osuna 加的拿掉）。 */
-function unplaceScope(list: readonly string[], previous: PiScopePlacement | null): string[] {
+export function unplaceScope(list: readonly string[], previous: PiScopePlacement | null): string[] {
   const user = [...list];
   if (previous === null || user[0] !== previous.front) return user;
   user.shift();
@@ -581,27 +575,29 @@ function editScope(input: ScopeEdit): string {
   return `${text.slice(0, node.offset)}${inline}${text.slice(node.offset + node.length)}`;
 }
 
-interface ScopePlacement {
+export interface ScopePlacement {
   // 要写进去的清单；null 为没有清单，不碰。
   list: string[] | null;
   scope: PiScopePlacement | null;
 }
 
 /** 先挪回上次的，再把 front 放到最前；front 为 null（默认服务商不是 Osuna）时只挪回。 */
-interface PlaceScopeInput {
-  // 文件里现在的 enabledModels。
+export interface PlaceScopeInput {
+  // 文件里现在的 enabledModels（OMP 的已换成只有字符串的清单）。
   value: unknown;
   previous: PiScopePlacement | null;
   front: string | null;
+  // 条目指不指着「服务商/模型」：Pi 是 piTakes，OMP 另认它的档位写法。
+  takes: (pattern: string, ref: string) => boolean;
 }
 
-function placeScope(input: PlaceScopeInput): ScopePlacement {
+export function placeScope(input: PlaceScopeInput): ScopePlacement {
   if (!isScopeList(input.value)) return { list: null, scope: null };
   const user = unplaceScope(input.value, input.previous);
   const { front } = input;
   if (front === null) return { list: user, scope: null };
   // 已有指着它的条目（可带「:档位」、大小写不同；magpie piTakes）就把那一条挪到最前，不再另加。
-  const at = user.findIndex((pattern) => !isGlob(pattern) && piTakes(pattern, front));
+  const at = user.findIndex((pattern) => !isGlob(pattern) && input.takes(pattern, front));
   if (at < 0) return { list: [front, ...user], scope: { front, wasAt: null } };
   const taken = user[at] ?? front;
   const rest = user.filter((_, index) => index !== at);
@@ -622,7 +618,7 @@ function keptBlock(input: { existing: unknown; block: PiProviderBlock }): Record
   return mergeTheirs({ have: input.existing, want: ours, whole: ["models"] });
 }
 
-function mergeTheirs(input: {
+export function mergeTheirs(input: {
   have: Record<string, unknown>;
   want: Record<string, unknown>;
   whole: readonly string[];
@@ -741,6 +737,6 @@ function syntaxError(input: { text: string; error: ParseError; name: string }): 
   };
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

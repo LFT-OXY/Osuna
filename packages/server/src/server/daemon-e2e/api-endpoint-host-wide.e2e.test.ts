@@ -172,6 +172,7 @@ describe("old per-agent endpoints are read as host-wide endpoints", () => {
       claude: { enabled: true, defaultModelId: "a2" },
       codex: { enabled: true, defaultModelId: "d2" },
       pi: { enabled: false, defaultModelId: null },
+      omp: { enabled: false, defaultModelId: null },
     });
     expect(
       claude.endpoints.map((endpoint) => ({
@@ -662,6 +663,7 @@ describe("clients without apiEndpointGateway get a single-endpoint projection", 
       claude: { enabled: true, defaultModelId: "b1" },
       codex: { enabled: true, defaultModelId: "a1" },
       pi: { enabled: false, defaultModelId: null },
+      omp: { enabled: false, defaultModelId: null },
     });
     expect(JSON.parse(await readFile(settingsPath, "utf8")).model).toBe("b1");
 

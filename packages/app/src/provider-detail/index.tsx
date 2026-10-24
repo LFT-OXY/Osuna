@@ -42,6 +42,8 @@ export interface ProviderDetailSurfaceProps {
   hostSupportsApiEndpoints: boolean;
   // COMPAT(apiEndpointPi): added in v0.17.0, remove gate after 2027-04-24. 主机声明了 Pi 的第三方接口。
   hostSupportsPiApiEndpoints: boolean;
+  // COMPAT(apiEndpointOmp): added in v0.17.0, remove gate after 2027-04-24. 主机声明了 OMP 的第三方接口。
+  hostSupportsOmpApiEndpoints: boolean;
   hostSupportsProviderVersions: boolean;
   discoveredModels: AgentModelDefinition[];
   additionalModels: ProviderProfileModel[];
@@ -157,6 +159,7 @@ export function ProviderDetailSurface({
   hostPlatform,
   hostSupportsApiEndpoints,
   hostSupportsPiApiEndpoints,
+  hostSupportsOmpApiEndpoints,
   hostSupportsProviderVersions,
   discoveredModels,
   additionalModels,
@@ -192,7 +195,11 @@ export function ProviderDetailSurface({
   // COMPAT(apiEndpoints): added in v0.13.0, remove gate after 2027-03-30.
   const showApiEndpoints =
     hostSupportsApiEndpoints &&
-    showsApiEndpointSettings({ provider, hostSupportsPi: hostSupportsPiApiEndpoints });
+    showsApiEndpointSettings({
+      provider,
+      hostSupportsPi: hostSupportsPiApiEndpoints,
+      hostSupportsOmp: hostSupportsOmpApiEndpoints,
+    });
   const providerSnapshotRefreshing = providerEntry?.status === "loading";
   const providerErrorMessage =
     providerEntry?.status === "error"

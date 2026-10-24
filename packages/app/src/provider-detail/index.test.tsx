@@ -146,6 +146,7 @@ function detailElement(overrides: Partial<ProviderDetailSurfaceProps>) {
       hostPlatform="darwin"
       hostSupportsApiEndpoints
       hostSupportsPiApiEndpoints
+      hostSupportsOmpApiEndpoints
       hostSupportsProviderVersions
       discoveredModels={[]}
       additionalModels={[]}
@@ -292,6 +293,19 @@ describe("ProviderDetailSurface", () => {
       provider: "pi",
       entries: [entry({ provider: "pi", label: "Pi" })],
       hostSupportsPiApiEndpoints: false,
+    });
+    expect(screen.queryByTestId("api-endpoints-slot")).toBeNull();
+  });
+
+  it("shows API endpoints on OMP's page only when the host supports them for OMP", () => {
+    renderDetail({ provider: "omp", entries: [entry({ provider: "omp", label: "Oh My Pi" })] });
+    expect(screen.getByTestId("api-endpoints-slot").textContent).toBe("Oh My Pi");
+    cleanup();
+
+    renderDetail({
+      provider: "omp",
+      entries: [entry({ provider: "omp", label: "Oh My Pi" })],
+      hostSupportsOmpApiEndpoints: false,
     });
     expect(screen.queryByTestId("api-endpoints-slot")).toBeNull();
   });

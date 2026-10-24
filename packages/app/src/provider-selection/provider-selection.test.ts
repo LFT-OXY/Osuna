@@ -566,6 +566,22 @@ describe("models grouped by API endpoint", () => {
     ]);
   });
 
+  it("OMP chats pick from its endpoint groups too, ids written the way OMP names Osuna's models", () => {
+    const omp: ProviderSnapshotEntry = {
+      ...entry,
+      provider: "omp",
+      label: "Oh My Pi",
+      models: [{ provider: "omp", id: "e2e/omp-model", label: "omp-model" }],
+      apiEndpointModelGroups: [
+        {
+          name: "Relay",
+          models: [{ provider: "omp", id: "osuna/relay/glm-5", label: "glm-5", isDefault: true }],
+        },
+      ],
+    };
+    expect(selectableEntryModels(omp)?.map((model) => model.id)).toEqual(["osuna/relay/glm-5"]);
+  });
+
   it("rows carry their endpoint group and never show the slashed id", () => {
     const [provider] = buildSelectableProviderSelectorProviders([entry]);
     const rows = provider.modelSelection.kind === "models" ? provider.modelSelection.rows : [];
