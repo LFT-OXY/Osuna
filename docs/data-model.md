@@ -711,7 +711,9 @@ A torn line is dropped on load. Three kinds, discriminated on `kind`
   turn its tokens went to when first seen. Claude Code and Codex name it by the reply id; Pi and
   OMP by the entry's `responseId`, else `<sessionId>/<entry id>`, since their entry ids repeat
   across sessions. `gatewayOnly: true` marks a Pi or OMP reply whose provider is `osuna`: its
-  tokens went to no bucket row (absent is false). A `cli` record no ledger row meets is a direct
+  tokens went to no bucket row (absent is false). `formerReplyId` is the `<sessionId>/<entry id>`
+  a daemon before that named such a reply by: a rewritten file read again replaces that record
+  in the Requests tab. A `cli` record no ledger row meets is a direct
   call in the Requests tab, unless it is `gatewayOnly`. Written whole again each time a later line corrects
   it; the last line of a `replyId` wins on load.
 - `merged` — `{ agent, replyId, at }`, written in the scan batch that moved the reply's tokens

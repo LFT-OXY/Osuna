@@ -6,6 +6,7 @@ import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { AGENT_PROVIDER_DEFINITIONS } from "@getpaseo/protocol/provider-manifest";
 import type {
   UsageEndpointBreakdown,
   UsageReport,
@@ -39,6 +40,14 @@ const PROJECT_DIR = "-work-demo";
 const SCAN_INTERVAL_MS = 50;
 const PROMPT_TEXT = "SECRET-PROMPT-TEXT please list the files";
 const REPLY_TEXT = "SECRET-REPLY-TEXT here are the files";
+
+// 只留用得到的 Claude Code 与 Codex：Pi、OMP 默认开着，读提供方快照时会起真的 pi / omp（守卫见 Pi / OMP 那组）。
+const USED_PROVIDERS = new Set(["claude", "codex"]);
+const OTHER_PROVIDERS_OFF = Object.fromEntries(
+  AGENT_PROVIDER_DEFINITIONS.filter((definition) => !USED_PROVIDERS.has(definition.id)).map(
+    (definition) => [definition.id, { enabled: false }],
+  ),
+);
 
 const UNPRICED = {
   autoUpdate: false,
@@ -332,6 +341,7 @@ async function start(
         ...createTestAgentClients(),
         claude: createTestAgentClient("claude", { nextSessionId: () => SESSION_ID }),
       },
+      providerOverrides: OTHER_PROVIDERS_OFF,
       usage: {
         roots: { claude: [claudeRoot], codex: [codexRoot], pi: [piRoot], omp: [ompRoot] },
         scanIntervalMs: SCAN_INTERVAL_MS,
@@ -2662,7 +2672,7 @@ const PI_CLI_TOTALS = totals(20, 100, 0, 28);
 
 type PiLikeCli = "pi" | "omp";
 
-/** Pi / OMP 打中转站 Chat 入口的一次调用：流式，读完整个回复；返回写回给 CLI 的编号。 */
+/** Pi / OMP 打中转站 Chat 入口的一次调用（流式），返回还没读的回复；编号用 piLikeReplyId 读。 */
 async function askPiLike(harness: Harness, cli: PiLikeCli): Promise<Response> {
   return fetch(`${harness.gateway}/v1/chat/completions`, {
     method: "POST",
@@ -2678,6 +2688,7 @@ async function askPiLike(harness: Harness, cli: PiLikeCli): Promise<Response> {
   });
 }
 
+/** 读完整个回复，返回中转站写回给 CLI 的 Chat 编号。 */
 async function piLikeReplyId(response: Response): Promise<string> {
   expect(response.status).toBe(200);
   const text = await response.text();

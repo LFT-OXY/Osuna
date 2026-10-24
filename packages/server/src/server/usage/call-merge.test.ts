@@ -36,6 +36,7 @@ const DELTA: UsageCallDelta = {
   turnKey: "p1",
   amounts: CLI,
   gatewayOnly: false,
+  formerReplyId: null,
 };
 
 const LEDGER_ROW: GatewayLedgerRow = {
@@ -336,5 +337,31 @@ describe("a Pi or OMP reply that went through the gateway", () => {
     expect(merge.listCalls()).toEqual([
       { kind: "direct", cli: expect.objectContaining({ replyId: "chatcmpl-77", cli: "pi" }) },
     ]);
+  });
+});
+
+describe("a Pi reply recorded before replies were named by responseId", () => {
+  // 工单 07 之前的 daemon 按 <会话>/<条目> 记下这次回复；会话文件被改写后整份重扫，同一回复按 responseId 再来一次。
+  const BEFORE: UsageCallDelta = { ...DELTA, cli: "pi", replyId: "sess-1/e1" };
+  const RESCANNED: UsageCallDelta = {
+    ...DELTA,
+    cli: "pi",
+    replyId: "resp_1",
+    formerReplyId: "sess-1/e1",
+  };
+
+  test("a rescan of the rewritten file lists the reply once, under its responseId, also after a restart", () => {
+    const disk: Disk = { buckets: [], records: [] };
+    const before = new UsageCallMerge();
+    flush(before, disk, scan(before, BEFORE));
+
+    const merge = restart(disk);
+    flush(merge, disk, scan(merge, RESCANNED));
+
+    for (const listed of [merge.listCalls(), restart(disk).listCalls()]) {
+      expect(listed).toEqual([
+        { kind: "direct", cli: expect.objectContaining({ cli: "pi", replyId: "resp_1" }) },
+      ]);
+    }
   });
 });

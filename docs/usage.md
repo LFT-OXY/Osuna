@@ -122,8 +122,10 @@ row, so with no ledger row to meet it is skipped and not listed; matched, it
 merges as above and the ledger's tokens move to its project, session and turn.
 Its turn is still counted from the log. Pi's `usage` and OMP's `model_usage`
 entries (a cache warm-up, a title, a role's side call) count like replies on
-their own provider and model; they name no reply id, so the `osuna` ones are
-left to the ledger. A Pi or OMP run straight from a terminal is counted the same
+their own provider and model; a compaction's, a branch summary's and a tool
+result's usage count on the provider and model in use. None of them names a
+reply id, so the `osuna` ones are left to the ledger. An entry with a negative
+count is dropped, as magpie drops it. A Pi or OMP run straight from a terminal is counted the same
 way: the gateway knows it by the token in its config, and its log is in the same
 directory.
 

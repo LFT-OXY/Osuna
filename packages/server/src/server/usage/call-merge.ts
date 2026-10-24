@@ -84,6 +84,9 @@ export class UsageCallMerge {
       }
       this.callOf(record.cli, record.replyId).cli = record;
     }
+    for (const call of Array.from(this.calls.values())) {
+      if (call.cli?.formerReplyId) this.dropFormer(call.cli.cli, call.cli.formerReplyId);
+    }
     for (const [key, call] of this.calls) {
       if (call.ledger && !call.settled) this.awaiting.add(key);
     }
@@ -101,7 +104,10 @@ export class UsageCallMerge {
       const key = callKey(delta.cli, delta.replyId);
       const call = this.callOf(delta.cli, delta.replyId);
       if (call.cli) addTotals(call.cli, delta.amounts);
-      else call.cli = cliCallOf(delta);
+      else {
+        call.cli = cliCallOf(delta);
+        if (delta.formerReplyId) this.dropFormer(delta.cli, delta.formerReplyId);
+      }
       touched.set(key, call.cli);
       if (call.settled && !delta.gatewayOnly) {
         pushAt({
@@ -262,6 +268,18 @@ export class UsageCallMerge {
     return new Map(Array.from(latest, ([id, entry]) => [id, entry.name]));
   }
 
+  /**
+   * A Pi or OMP reply a daemon before ticket 07 recorded under its entry name,
+   * read again from a rewritten file under its `responseId`: the old record is
+   * the same call, so the Requests list keeps only the new one. It never met a
+   * ledger row, which knows only the `responseId`.
+   */
+  // COMPAT(piReplyIdByResponseId): added in v0.16.0, remove after 2027-04-24.
+  private dropFormer(cli: UsageCli, formerReplyId: string): void {
+    const key = callKey(cli, formerReplyId);
+    if (!this.calls.get(key)?.ledger) this.calls.delete(key);
+  }
+
   private callOf(cli: UsageCli, replyId: string): MergedCall {
     const key = callKey(cli, replyId);
     let call = this.calls.get(key);
@@ -299,6 +317,7 @@ function cliCallOf(delta: UsageCallDelta): UsageCliCall {
     turnKey: delta.turnKey,
     ...delta.amounts,
     ...(delta.gatewayOnly ? { gatewayOnly: true } : {}),
+    ...(delta.formerReplyId ? { formerReplyId: delta.formerReplyId } : {}),
   };
 }
 

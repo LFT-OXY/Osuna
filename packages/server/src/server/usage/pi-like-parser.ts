@@ -53,6 +53,8 @@ export function createPiLikeParserState(input: {
     turnBackend: null,
     openTurn: null,
     attachAt: null,
+    usingProvider: null,
+    usingModel: null,
   };
 }
 
@@ -80,10 +82,12 @@ interface PiLikeEntry {
   cwd?: unknown;
   parentSession?: unknown;
   message?: unknown;
-  /** On Pi's `usage` and OMP's `model_usage` entries, which sit outside the conversation. */
+  /** On Pi's `usage` and OMP's `model_usage` entries, which sit outside the conversation, and on a model change. */
   provider?: unknown;
   model?: unknown;
   usage?: unknown;
+  /** Pi's model change names the model here; OMP's writes `<provider>/<model>` in `model`. */
+  modelId?: unknown;
 }
 
 /**
@@ -92,6 +96,18 @@ interface PiLikeEntry {
  * a `smol` role's auto-thinking). magpie counts both as calls.
  */
 const SIDE_CALL_TYPES = new Set(["usage", "model_usage"]);
+/** Summaries a CLI asked the model in use for, their usage naming neither provider nor model. */
+const SUMMARY_TYPES = new Set(["compaction", "branch_summary"]);
+
+/** An entry's call that names no reply id, with the provider and model it is counted on. */
+interface UnmatchableCall {
+  entry: PiLikeEntry;
+  provider: string | null;
+  model: string | null;
+  usage: unknown;
+  state: PiLikeParserState;
+  sink: UsageParseSink;
+}
 
 /** What one call the log wrote down cost, and where it ran. */
 interface LoggedCall {
@@ -101,6 +117,8 @@ interface LoggedCall {
   usage: Record<string, unknown>;
   /** Null when the entry names neither a reply id nor an entry id. */
   replyId: string | null;
+  /** The entry's own name when the reply is named by its `responseId` (UsageCallDelta). */
+  formerReplyId: string | null;
   timestamp: number;
 }
 
@@ -113,8 +131,24 @@ function consumeEntry(entry: PiLikeEntry, state: PiLikeParserState, sink: UsageP
   }
   if (isCopiedFromParent(state, at)) return;
   recordSpan(sink.span, at);
-  if (typeof entry.type === "string" && SIDE_CALL_TYPES.has(entry.type)) {
-    recordSideCall(entry, state, sink);
+  const entryType = asString(entry.type);
+  if (entryType === "model_change") {
+    switchModelTo(entry, state);
+    return;
+  }
+  if (entryType && SIDE_CALL_TYPES.has(entryType)) {
+    recordUnmatchableCall({
+      entry,
+      provider: asString(entry.provider),
+      model: asString(entry.model),
+      usage: entry.usage,
+      state,
+      sink,
+    });
+    return;
+  }
+  if (entryType && SUMMARY_TYPES.has(entryType)) {
+    recordOnModelInUse(entry, entry.usage, state, sink);
     return;
   }
   const message = asRecord(entry.message);
@@ -126,6 +160,7 @@ function consumeEntry(entry: PiLikeEntry, state: PiLikeParserState, sink: UsageP
     // A turn ends where the next prompt begins, so the open turn settles
     // against its own last entry rather than against this one.
     startTurn(entry, state, sink, timestamp);
+    recordOnModelInUse(entry, message.usage, state, sink);
     return;
   }
 
@@ -133,7 +168,11 @@ function consumeEntry(entry: PiLikeEntry, state: PiLikeParserState, sink: UsageP
   // and exit records both CLIs write around it are not part of its wall clock,
   // and a turn the CLI abandoned mid-tool measures to its last message too.
   advanceOpenTurn(state, timestamp);
-  if (role !== "assistant") return;
+  if (role !== "assistant") {
+    // A tool's result can carry the usage of a call the tool made.
+    recordOnModelInUse(entry, message.usage, state, sink);
+    return;
+  }
   recordAssistant({ message, entryId: asString(entry.id), state, sink, timestamp });
   const stopReason = asString(message.stopReason);
   // A response that stopped to run a tool is still inside its turn, and so is
@@ -218,11 +257,27 @@ function recordAssistant({
   // normalize the case it stores them in. A call through Osuna's gateway has
   // no backend of its own: the ledger says which endpoint answered.
   state.backend = isGatewayProvider(provider) ? null : (provider?.toLowerCase() ?? null);
-  const model = asString(message.model) ?? UNKNOWN_MODEL;
+  const namedModel = asString(message.model);
+  if (namedModel) {
+    state.usingProvider = provider;
+    state.usingModel = namedModel;
+  }
+  const model = namedModel ?? UNKNOWN_MODEL;
   // 回复编号：会话记录里的 responseId 是上游的回复编号，账本记的也是它；没有它的老记录用会话与条目编号。
   const responseId = asString(message.responseId);
-  const replyId = responseId ?? replyIdOfEntry(state, entryId);
-  recordCall({ provider, model, usage, replyId, timestamp }, state, sink);
+  const entryReplyId = replyIdOfEntry(state, entryId);
+  recordCall(
+    {
+      provider,
+      model,
+      usage,
+      replyId: responseId ?? entryReplyId,
+      formerReplyId: responseId ? entryReplyId : null,
+      timestamp,
+    },
+    state,
+    sink,
+  );
 
   const openTurn = state.openTurn;
   if (!openTurn || openTurn.model) return;
@@ -236,22 +291,54 @@ function recordAssistant({
 }
 
 /**
- * A `usage` or `model_usage` entry: counted like a reply on its own provider
- * and model, inside the turn it was written in, without moving the turn. It
- * names no reply id, so one through Osuna's gateway can never meet its ledger
- * row and is left to the ledger alone. One with no tokens (a failed call) is
+ * A call that names no reply id: a `usage` or `model_usage` entry on its own
+ * provider and model, or a summary's or a tool result's usage on the ones in
+ * use. Counted like a reply, inside the turn it was written in, without moving
+ * the turn. One through Osuna's gateway can never meet its ledger row and is
+ * left to the ledger alone. One with no model or no tokens (a failed call) is
  * no call, as in magpie.
  */
-function recordSideCall(entry: PiLikeEntry, state: PiLikeParserState, sink: UsageParseSink): void {
-  const usage = asRecord(entry.usage);
-  const model = asString(entry.model);
-  const provider = asString(entry.provider);
+function recordUnmatchableCall(input: UnmatchableCall): void {
+  const { entry, provider, model, state, sink } = input;
+  const usage = asRecord(input.usage);
   const timestamp = asTimestamp(entry.timestamp);
-  const replyId = replyIdOfEntry(state, asString(entry.id));
   if (!usage || !model || timestamp === null || isGatewayProvider(provider)) return;
-  const amounts = readUsageColumns(usage);
-  if (Object.values(amounts).every((value) => value === 0)) return;
-  recordCall({ provider, model, usage, replyId, timestamp }, state, sink);
+  if (Object.values(readUsageColumns(usage)).every((value) => value === 0)) return;
+  const replyId = replyIdOfEntry(state, asString(entry.id));
+  recordCall({ provider, model, usage, replyId, formerReplyId: null, timestamp }, state, sink);
+}
+
+function recordOnModelInUse(
+  entry: PiLikeEntry,
+  usage: unknown,
+  state: PiLikeParserState,
+  sink: UsageParseSink,
+): void {
+  recordUnmatchableCall({
+    entry,
+    provider: state.usingProvider,
+    model: state.usingModel,
+    usage,
+    state,
+    sink,
+  });
+}
+
+/** Pi writes `provider` and `modelId`; OMP writes `<provider>/<model>` in `model`. */
+function switchModelTo(entry: PiLikeEntry, state: PiLikeParserState): void {
+  const modelId = asString(entry.modelId);
+  if (modelId) {
+    state.usingProvider = asString(entry.provider);
+    state.usingModel = modelId;
+    return;
+  }
+  const named = asString(entry.model);
+  const slash = named?.indexOf("/") ?? -1;
+  if (!named || slash < 0) return;
+  const model = named.slice(slash + 1);
+  if (!model) return;
+  state.usingProvider = named.slice(0, slash) || null;
+  state.usingModel = model;
 }
 
 /**
@@ -260,10 +347,13 @@ function recordSideCall(entry: PiLikeEntry, state: PiLikeParserState, sink: Usag
  * reply id, project, session and turn for the merge to move it to (ADR 0014).
  */
 function recordCall(call: LoggedCall, state: PiLikeParserState, sink: UsageParseSink): void {
+  const amounts = readUsageColumns(call.usage);
+  // magpie 丢掉输入、输出、读缓存、写缓存任一列为负的条目。
+  const { input, cachedInput, cacheWrite, output } = amounts;
+  if ([input, cachedInput, cacheWrite, output].some((value) => value < 0)) return;
   const gatewayOnly = isGatewayProvider(call.provider);
   const backend = gatewayOnly ? null : (call.provider?.toLowerCase() ?? null);
   const identity = identityOf(state, backend);
-  const amounts = readUsageColumns(call.usage);
   const counted = gatewayOnly ? emptyTotals() : amounts;
   const bucket = toBucketStart(call.timestamp);
   if (identity.sessionId && identity.cwd && !gatewayOnly) {
@@ -291,6 +381,7 @@ function recordCall(call: LoggedCall, state: PiLikeParserState, sink: UsageParse
       turnKey: attachment?.turnKey ?? null,
       amounts,
       gatewayOnly,
+      formerReplyId: call.formerReplyId,
     });
   }
 }

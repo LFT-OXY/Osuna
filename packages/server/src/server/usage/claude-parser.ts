@@ -279,6 +279,7 @@ function pushUsage(
       turnKey: attachment?.turnKey ?? null,
       amounts,
       gatewayOnly: false,
+      formerReplyId: null,
     });
   }
 }
