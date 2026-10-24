@@ -70,7 +70,7 @@ export function selectHostEndpointsState(input: {
       endpointNamesUnreached: input.data.endpointNamesUnreached ?? [],
       // COMPAT(apiEndpointBalance): added in v0.17.0, remove fallback after 2027-04-22. 老主机不发；那时页面上不读余额，开关也不出。
       balanceAutoRefresh: input.data.balanceAutoRefresh ?? true,
-      // 老主机不发：只有默认那块。
+      // COMPAT(apiEndpointOmpProfiles): added in v0.17.0, remove fallback after 2027-04-24. 老主机不发：只有默认那块。
       ompProfiles: input.data.ompProfiles ?? [],
     };
   }

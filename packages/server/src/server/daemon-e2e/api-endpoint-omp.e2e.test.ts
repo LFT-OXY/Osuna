@@ -2,7 +2,7 @@ import { chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "n
 import os from "node:os";
 import path from "node:path";
 import { AGENT_PROVIDER_DEFINITIONS } from "@getpaseo/protocol/provider-manifest";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { parse } from "yaml";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
@@ -69,6 +69,12 @@ interface ChatModel {
 /** 选单里一个模型：id，默认模型后面标 (default)。 */
 function describeChoice(model: ChatModel): string {
   return `${model.id}${model.isDefault ? " (default)" : ""}`;
+}
+
+/** 在 Osuna 里开的一个对话。 */
+interface AgentToCreate {
+  provider: string;
+  title: string;
 }
 
 interface OmpModel {
@@ -157,6 +163,20 @@ describe("OMP API endpoints over the daemon RPC", () => {
     await client.close();
     await daemon.close();
     await startDaemon(start);
+  }
+
+  /**
+   * 在 Osuna 里开一个对话，会话的启动时刻记在一小时前（daemon 在同一进程里，只把 Date 拨回去）：之后的改写一定晚于它，
+   * 不靠两次之间隔了多久。
+   */
+  async function createAgentAnHourAgo(input: AgentToCreate): Promise<void> {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.now() - 60 * 60 * 1000);
+    try {
+      await client.createAgent({ provider: input.provider, cwd: root, title: input.title });
+    } finally {
+      vi.useRealTimers();
+    }
   }
 
   function gatewayRoot(): string {
@@ -585,8 +605,7 @@ theme: dark
   test("a rewrite lists the OMP agents open in Osuna to reopen", async () => {
     await createEndpoint();
     await client.apiEndpointSetAgentSettings({ provider: "omp", enabled: true });
-    await client.createAgent({ provider: "omp", cwd: root, title: "OMP agent" });
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await createAgentAnHourAgo({ provider: "omp", title: "OMP agent" });
     await client.apiEndpointSetAgentSettings({
       provider: "omp",
       enabled: true,
@@ -975,8 +994,7 @@ defaultThinkingLevel: high
     ]);
 
     // 在这套上开着的 Osuna 对话，改了这套才要重开。
-    await client.createAgent({ provider: "omp-work", cwd: root, title: "Work agent" });
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await createAgentAnHourAgo({ provider: "omp-work", title: "Work agent" });
     await client.apiEndpointSetAgentSettings({
       provider: "omp#work",
       enabled: true,
@@ -988,9 +1006,35 @@ defaultThinkingLevel: high
         kind: "osuna_sessions",
         count: 1,
         message:
-          "1 Oh My Pi (work) agent(s) in Osuna: reload each one (Reload agent in its tab's menu).",
+          "1 Oh My Pi · work agent(s) in Osuna: reload each one (Reload agent in its tab's menu).",
       },
     ]);
     expect(hints?.omp).toEqual([]);
+  });
+
+  test("a custom provider follows the block that rewrites the folder its OMP reads, and none when no block does", async () => {
+    await makeProfile("work");
+    await restartDaemon({
+      env: { OMP_PROFILE: "work" },
+      customProviders: {
+        "omp-work": { extends: "omp", label: "OMP Work", env: { OMP_PROFILE: "work" } },
+        // daemon 环境指向 work，「默认」块改写的是 work；它读 ~/.omp/agent，没有哪块管。
+        "omp-plain": { extends: "omp", label: "OMP Plain", env: { OMP_PROFILE: "default" } },
+      },
+    });
+    await createEndpoint();
+    await client.apiEndpointSetAgentSettings({ provider: "omp", enabled: true });
+    async function choices(provider: string): Promise<string[] | null> {
+      const snapshot = await client.getProvidersSnapshot();
+      const entry = snapshot.entries.find((candidate) => candidate.provider === provider);
+      return (
+        entry?.apiEndpointModelGroups?.flatMap((group) => group.models.map(describeChoice)) ?? null
+      );
+    }
+    await expect
+      .poll(() => choices("omp-work"), { timeout: 10_000 })
+      .toEqual(["osuna/relay/glm-5 (default)", "osuna/relay/gpt-5", "osuna/relay/claude-opus-5-5"]);
+    expect(await choices("omp-plain")).toBeNull();
+    expect(await readFile(configPath, "utf8")).toBe(USER_CONFIG);
   });
 });

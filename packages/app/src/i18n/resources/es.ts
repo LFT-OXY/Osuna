@@ -3411,9 +3411,9 @@ export const es: TranslationResources = {
       agent: {
         title: "Endpoints de API",
         useSwitch: "Usar endpoints de API",
-        // OMP 有命名配置时默认那块的标题，与命名配置那块里 CLI 的称呼。
+        // OMP 有命名配置时默认那块的标题，与命名配置那块里 CLI 的称呼（照 magpie 的 omp · work；以配置名收尾，中日文里不在全角括号后留空格）。
         defaultProfile: "Predeterminado",
-        profileAgent: "{{agent}} ({{profile}})",
+        profileAgent: "{{agent}} · {{profile}}",
         useHint:
           "Si lo activas, {{agent}} puede usar los modelos seleccionados de los endpoints activos en Endpoints de API. Desactívalo para volver al oficial.",
         noUsableEndpoint:

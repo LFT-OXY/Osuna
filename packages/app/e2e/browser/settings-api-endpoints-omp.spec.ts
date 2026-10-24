@@ -144,8 +144,8 @@ test("the switch writes OMP's default role and Osuna's provider, the default mod
   const toggle = section.getByTestId("agent-api-endpoints-switch");
 
   await test.step("on: OMP's default role is Osuna's first model", async () => {
-    // 没有命名配置时只有默认那一块，没有块标题。
-    await expect(section.getByTestId("agent-api-endpoints-block-omp-title")).toHaveCount(0);
+    // 没有命名配置时只有默认那一块，不分节、没有节标题。
+    await expect(page.getByTestId("agent-api-endpoints-profile-omp")).toHaveCount(0);
     await toggle.click();
     await expect(toggle).toBeChecked();
     await expect(section.getByTestId("agent-api-endpoints-default-model-trigger")).toHaveText(
@@ -389,19 +389,17 @@ test("each named OMP profile is a block of its own, whose switch and failures to
   await seedRelay();
   await openOmpPage(page);
   const section = agentSection(page);
-  const defaultBlock = section.getByTestId("agent-api-endpoints-block-omp");
-  const personal = section.getByTestId("agent-api-endpoints-block-omp#personal");
-  const work = section.getByTestId("agent-api-endpoints-block-omp#work");
+  const defaultBlock = section.getByTestId("agent-api-endpoints-profile-omp");
+  const personal = section.getByTestId("agent-api-endpoints-profile-omp#personal");
+  const work = section.getByTestId("agent-api-endpoints-profile-omp#work");
   const workToggle = work.getByTestId("agent-api-endpoints-switch");
 
   await test.step("the default block comes first, then one block per profile, each titled and off", async () => {
-    await expect(defaultBlock.getByTestId("agent-api-endpoints-block-omp-title")).toHaveText(
-      "Default",
-    );
-    await expect(personal.getByTestId("agent-api-endpoints-block-omp#personal-title")).toHaveText(
-      "personal",
-    );
-    await expect(work.getByTestId("agent-api-endpoints-block-omp#work-title")).toHaveText("work");
+    // 「第三方接口」是分组标题，每套一节，节标题依次是「默认」与配置名。
+    await expect(section.getByText("API endpoints", { exact: true })).toBeVisible();
+    await expect(defaultBlock.getByText("Default", { exact: true })).toBeVisible();
+    await expect(personal.getByText("personal", { exact: true })).toBeVisible();
+    await expect(work.getByText("work", { exact: true })).toBeVisible();
     for (const block of [defaultBlock, personal, work]) {
       await expect(block.getByTestId("agent-api-endpoints-switch")).not.toBeChecked();
     }
@@ -426,7 +424,7 @@ test("each named OMP profile is a block of its own, whose switch and failures to
     try {
       await page.getByTestId("agent-api-endpoints-default-option-relay-a/kimi-k2").click();
       await expect(work.getByTestId("agent-api-endpoints-error")).toContainText(
-        "Couldn't change the API endpoint settings for Oh My Pi (work)",
+        "Couldn't change the API endpoint settings for Oh My Pi · work",
       );
     } finally {
       await chmod(workDir, 0o700);
@@ -437,7 +435,7 @@ test("each named OMP profile is a block of its own, whose switch and failures to
 
   await test.step("switching work off previews work's files and puts its config.yml back", async () => {
     await workToggle.click();
-    await expect(page.getByText("Turn off API endpoints for Oh My Pi (work)?")).toBeVisible();
+    await expect(page.getByText("Turn off API endpoints for Oh My Pi · work?")).toBeVisible();
     await expect(
       inSheet(page, "switch-off-file-~/.omp/profiles/work/agent/config.yml"),
     ).toBeVisible();

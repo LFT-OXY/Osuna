@@ -90,9 +90,9 @@ const AGENT_NAMES: Record<ApiEndpointProvider, string> = {
   omp: "Oh My Pi",
 };
 
-/** 提示与报错里这份设置的 CLI 名字：OMP 的命名配置带上配置名，如 Oh My Pi (work)。 */
+/** 提示与报错里这份设置的 CLI 名字：OMP 的命名配置带上配置名，如 Oh My Pi · work（照 magpie 的 omp · work）。 */
 export function agentNameOf(key: ApiEndpointAgentKey): string {
-  if (isOmpProfileKey(key)) return `${AGENT_NAMES.omp} (${ompProfileNameOf(key)})`;
+  if (isOmpProfileKey(key)) return `${AGENT_NAMES.omp} · ${ompProfileNameOf(key)}`;
   return AGENT_NAMES[key];
 }
 

@@ -3380,9 +3380,9 @@ export const ja: TranslationResources = {
       agent: {
         title: "サードパーティ API",
         useSwitch: "サードパーティ API を使う",
-        // OMP 有命名配置时默认那块的标题，与命名配置那块里 CLI 的称呼。
+        // OMP 有命名配置时默认那块的标题，与命名配置那块里 CLI 的称呼（照 magpie 的 omp · work；以配置名收尾，中日文里不在全角括号后留空格）。
         defaultProfile: "既定",
-        profileAgent: "{{agent}}（{{profile}}）",
+        profileAgent: "{{agent}} · {{profile}}",
         useHint:
           "オンにすると、{{agent}} は「サードパーティ API」ページでオンになっているエンドポイントの選択済みモデルを使えます。オフにすると公式に戻ります。",
         noUsableEndpoint:

@@ -41,7 +41,12 @@ import { useEndpointBalances } from "./use-endpoint-balances";
 import { ApiEndpointBalanceSection } from "./balance-section";
 import { ApiEndpointRecentProblemsSection } from "./recent-problems-section";
 import { useEndpointRecentProblems } from "./use-endpoint-recent-problems";
-import { AgentApiEndpointsFrame, AgentApiEndpointsSection } from "./agent-section";
+import {
+  AgentApiEndpointsFrame,
+  AgentApiEndpointsProfileSection,
+  AgentApiEndpointsProfilesFrame,
+  AgentApiEndpointsSection,
+} from "./agent-section";
 import {
   agentSettingsBlocks,
   selectAgentApiEndpointsView,
@@ -138,25 +143,35 @@ function AgentApiEndpoints({
   if (state.status === "error") {
     return <AgentNotice text={state.message} />;
   }
-  // OMP 每套命名配置一块；只有默认那块时不显示块标题。
+  // OMP 每套命名配置一节；只有默认那块时照旧一节，不显示节标题。
   const blocks = agentSettingsBlocks({ provider, ompProfiles: state.ompProfiles });
-  const isTitled = blocks.length > 1;
+  const renderBlock = (block: AgentSettingsBlock) => (
+    <AgentApiEndpointsBlock
+      key={block.settingsKey}
+      serverId={serverId}
+      provider={provider}
+      providerLabel={providerLabel}
+      block={block}
+      state={state}
+      endpoints={endpoints}
+      now={now}
+    />
+  );
+  if (blocks.length === 1) {
+    return <AgentApiEndpointsFrame>{blocks.map(renderBlock)}</AgentApiEndpointsFrame>;
+  }
   return (
-    <AgentApiEndpointsFrame>
+    <AgentApiEndpointsProfilesFrame>
       {blocks.map((block) => (
-        <AgentApiEndpointsBlock
+        <AgentApiEndpointsProfileSection
           key={block.settingsKey}
-          serverId={serverId}
-          provider={provider}
-          providerLabel={providerLabel}
-          block={block}
-          isTitled={isTitled}
-          state={state}
-          endpoints={endpoints}
-          now={now}
-        />
+          title={block.profile ?? t("settings.apiEndpoints.agent.defaultProfile")}
+          testID={`agent-api-endpoints-profile-${block.settingsKey}`}
+        >
+          {renderBlock(block)}
+        </AgentApiEndpointsProfileSection>
       ))}
-    </AgentApiEndpointsFrame>
+    </AgentApiEndpointsProfilesFrame>
   );
 }
 
@@ -165,8 +180,6 @@ interface AgentApiEndpointsBlockProps {
   provider: string;
   providerLabel: string;
   block: AgentSettingsBlock;
-  // 有几块时每块带标题（默认那块叫「默认」，别的是配置名）。
-  isTitled: boolean;
   state: Extract<HostEndpointsLoadState, { status: "ready" }>;
   endpoints: UseHostEndpointsResult;
   now: Date;
@@ -178,7 +191,6 @@ function AgentApiEndpointsBlock({
   provider,
   providerLabel: cliLabel,
   block,
-  isTitled,
   state,
   endpoints,
   now,
@@ -187,13 +199,11 @@ function AgentApiEndpointsBlock({
   const router = useRouter();
   const { setAgentSettings, runIssueAction } = endpoints;
   const { settingsKey, profile } = block;
-  // 命名配置那块的文字里带上配置名，如「Oh My Pi（work）的默认模型」。
+  // 命名配置那块的文字里带上配置名，如「Oh My Pi · work 能用……」。
   const providerLabel =
     profile === null
       ? cliLabel
       : t("settings.apiEndpoints.agent.profileAgent", { agent: cliLabel, profile });
-  let title: string | null = null;
-  if (isTitled) title = profile ?? t("settings.apiEndpoints.agent.defaultProfile");
   // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove gate after 2027-04-18.
   const hasIssues = useHostFeature(serverId, "apiEndpointCliWiring");
   const { entries: providerEntries } = useProvidersSnapshot(serverId);
@@ -351,7 +361,6 @@ function AgentApiEndpointsBlock({
     <>
       <AgentApiEndpointsSection
         providerLabel={providerLabel}
-        title={title}
         testID={`agent-api-endpoints-block-${settingsKey}`}
         view={selectAgentApiEndpointsView({
           state,

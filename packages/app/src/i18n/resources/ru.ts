@@ -3390,9 +3390,9 @@ export const ru: TranslationResources = {
       agent: {
         title: "Сторонние API",
         useSwitch: "Использовать сторонние API",
-        // OMP 有命名配置时默认那块的标题，与命名配置那块里 CLI 的称呼。
+        // OMP 有命名配置时默认那块的标题，与命名配置那块里 CLI 的称呼（照 magpie 的 omp · work；以配置名收尾，中日文里不在全角括号后留空格）。
         defaultProfile: "По умолчанию",
-        profileAgent: "{{agent}} ({{profile}})",
+        profileAgent: "{{agent}} · {{profile}}",
         useHint:
           "Когда включено, {{agent}} может использовать выбранные модели включённых эндпоинтов со страницы «Сторонние API». Выключите, чтобы вернуться к официальному.",
         noUsableEndpoint:

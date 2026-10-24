@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Pressable, Text, View, type PressableStateCallbackType } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { ChevronRight } from "lucide-react-native";
+import { SettingsGroup } from "@/components/settings/headings/settings-group";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { PrimaryTextAlert } from "./primary-text-alert";
 import { Button } from "@/components/ui/button";
@@ -43,8 +44,6 @@ const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.for
 export interface AgentApiEndpointsSectionProps {
   // CLI 的名称，如 "Claude Code"；OMP 命名配置那块带配置名。
   providerLabel: string;
-  // 块标题：OMP 有命名配置时默认那块是「默认」，别的是配置名；只有一块时为 null。
-  title: string | null;
   testID: string;
   view: AgentApiEndpointsView;
   busy: boolean;
@@ -81,7 +80,6 @@ export interface AgentApiEndpointsSectionProps {
 
 export function AgentApiEndpointsSection({
   providerLabel,
-  title,
   testID,
   view,
   busy,
@@ -119,11 +117,6 @@ export function AgentApiEndpointsSection({
   }, [isRefusalRepeatedByIssue, view.issues]);
   return (
     <View style={styles.block} testID={testID}>
-      {title === null ? null : (
-        <Text style={styles.blockTitle} testID={`${testID}-title`}>
-          {title}
-        </Text>
-      )}
       {actionError ? (
         <View style={styles.alert}>
           <PrimaryTextAlert
@@ -247,12 +240,44 @@ export function AgentApiEndpointsSection({
   );
 }
 
-/** 区块外框；加载中、出错与主机太旧时也用它，标题位置不跳。OMP 的几块放在一起，块与块之间多空一些。 */
+/** 区块外框；加载中、出错与主机太旧时也用它，标题位置不跳。 */
 export function AgentApiEndpointsFrame({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
   return (
     <SettingsSection title={t("settings.apiEndpoints.agent.title")} testID="agent-api-endpoints">
-      <View style={styles.blocks}>{children}</View>
+      {children}
+    </SettingsSection>
+  );
+}
+
+/**
+ * OMP 有命名配置时的外框：「第三方接口」作分组标题，每套配置一节，节标题是「默认」或配置名（docs/design.md §7）。
+ */
+export function AgentApiEndpointsProfilesFrame({ children }: { children: React.ReactNode }) {
+  const { t } = useTranslation();
+  return (
+    <SettingsGroup title={t("settings.apiEndpoints.agent.title")} testID="agent-api-endpoints">
+      {children}
+    </SettingsGroup>
+  );
+}
+
+export interface AgentApiEndpointsProfileSectionProps {
+  // 「默认」或配置名。
+  title: string;
+  testID: string;
+  children: React.ReactNode;
+}
+
+/** OMP 一套配置的一节。 */
+export function AgentApiEndpointsProfileSection({
+  title,
+  testID,
+  children,
+}: AgentApiEndpointsProfileSectionProps) {
+  return (
+    <SettingsSection title={title} testID={testID}>
+      {children}
     </SettingsSection>
   );
 }
@@ -928,17 +953,8 @@ function ManageRow({ summary, onPress }: { summary: AgentEndpointsSummary; onPre
 }
 
 const styles = StyleSheet.create((theme) => ({
-  blocks: {
-    gap: theme.spacing[6],
-  },
   block: {
     gap: theme.spacing[3],
-  },
-  blockTitle: {
-    color: theme.colors.foreground,
-    ...theme.typeScale.body,
-    fontWeight: theme.fontWeight.medium,
-    marginLeft: theme.spacing[0.5],
   },
   alert: {
     marginBottom: theme.spacing[3],

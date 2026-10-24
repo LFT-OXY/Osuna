@@ -3424,9 +3424,9 @@ export const fr: TranslationResources = {
       agent: {
         title: "Points d'accès API",
         useSwitch: "Utiliser les points d'accès API",
-        // OMP 有命名配置时默认那块的标题，与命名配置那块里 CLI 的称呼。
+        // OMP 有命名配置时默认那块的标题，与命名配置那块里 CLI 的称呼（照 magpie 的 omp · work；以配置名收尾，中日文里不在全角括号后留空格）。
         defaultProfile: "Par défaut",
-        profileAgent: "{{agent}} ({{profile}})",
+        profileAgent: "{{agent}} · {{profile}}",
         useHint:
           "Activé, {{agent}} peut utiliser les modèles sélectionnés des points d'accès activés dans Points d'accès API. Désactivez-le pour revenir à l'officiel.",
         noUsableEndpoint:

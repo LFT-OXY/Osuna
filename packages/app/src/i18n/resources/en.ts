@@ -3409,9 +3409,9 @@ export const en = {
       agent: {
         title: "API endpoints",
         useSwitch: "Use API endpoints",
-        // OMP 有命名配置时默认那块的标题，与命名配置那块里 CLI 的称呼。
+        // OMP 有命名配置时默认那块的标题，与命名配置那块里 CLI 的称呼（照 magpie 的 omp · work；以配置名收尾，中日文里不在全角括号后留空格）。
         defaultProfile: "Default",
-        profileAgent: "{{agent}} ({{profile}})",
+        profileAgent: "{{agent}} · {{profile}}",
         useHint:
           "When on, {{agent}} can use the selected models of the endpoints that are on in API endpoints. Turn it off to go back to official.",
         noUsableEndpoint: "Turn on an endpoint in API endpoints and select its models first.",

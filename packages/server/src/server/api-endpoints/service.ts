@@ -179,6 +179,7 @@ import {
 import { resolveOmpSessionPaths } from "../agent/providers/omp/provider-config.js";
 import {
   isOmpProfileKey,
+  isOmpProfileName,
   listOmpProfiles,
   ompProfileAgentDir,
   ompProfileKey,
@@ -1464,8 +1465,9 @@ export class ApiEndpointService {
   }
 
   /**
-   * 跟随 OMP 某套配置设置的自定义提供方：继承 omp、env 里 OMP_PROFILE（没有它时 PI_PROFILE，照 OMP）指向的那套；
-   * 指向 daemon 环境已经指向的那套（或 default）的跟随默认那块。别的自定义提供方不跟随。
+   * 跟随 OMP 某套配置设置的自定义提供方：继承 omp、env 里给了 OMP_PROFILE 或 PI_PROFILE 的。它的 OMP 读哪个目录照 OMP 的规则
+   * （daemon 环境叠上它的 env），哪一块改写的正是这个目录就跟随哪一块；没有哪块管这个目录（如 daemon 环境指向了 work，
+   * 它却选 default）或配置名 OMP 不收时不跟随，走官方。
    */
   private followedAgentOf(providerId: string): CliConfigAgent | null {
     const override = this.providerOverrides()[providerId];
@@ -1473,14 +1475,12 @@ export class ApiEndpointService {
     const { OMP_PROFILE, PI_PROFILE } = override.env;
     const profile = (OMP_PROFILE ?? PI_PROFILE)?.trim();
     if (profile === undefined) return null;
-    const defaultDir = this.piLikeFiles("omp").agentDir;
-    const isDefault =
-      profile === "" ||
-      profile === "default" ||
-      ompProfileAgentDir({ env: this.env, homeDir: this.homeDir, name: profile }) === defaultDir;
-    if (isDefault) return "omp";
-    const key = ompProfileKey(profile);
-    return this.ompProfiles().includes(profile) ? key : null;
+    const isNamed = profile !== "" && profile !== "default";
+    if (isNamed && !isOmpProfileName(profile)) return null;
+    const env = { ...this.env, ...override.env };
+    const { agentDir } = resolveOmpSessionPaths({ env, homeDir: this.homeDir });
+    const blocks = this.piLikeAgents().filter((agent) => providerOfAgent(agent) === "omp");
+    return blocks.find((agent) => this.piLikeFiles(agent).agentDir === agentDir) ?? null;
   }
 
   /** Osuna 的模型选单与快照按哪份设置：内置的提供方是它自己，跟随某套 OMP 配置的自定义提供方是那一套。 */
