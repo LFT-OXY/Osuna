@@ -3398,8 +3398,11 @@ export class ApiEndpointService {
     // 收不收采样参数只认这家自己（按地址的主机名）在 models.dev 的条目，不借别家的目录。
     const hosts = endpoint.baseUrls.map((base) => hostOf(base.url));
     const takesSampling = this.modelsDev.takesSampling({ hosts, modelId });
+    // 会不会思考只有 models.dev 说（magpie catalog.Thinks）；只给 Pi 的 reasoning 用。
+    const thinks = this.modelsDev.facts(modelId).thinks;
     return {
       ...facts,
+      ...(thinks === undefined ? {} : { thinks }),
       ...(vendorEfforts === undefined ? {} : { vendorEfforts }),
       ...(noThinking ? { noThinking } : {}),
       ...(contextSet ? { contextSet } : {}),

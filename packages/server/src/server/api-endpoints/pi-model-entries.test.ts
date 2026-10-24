@@ -107,6 +107,20 @@ describe("a Pi model entry", () => {
     });
   });
 
+  it("lets Pi offer its own levels for a model that thinks with none known", () => {
+    const entry = piModelEntry(
+      {
+        id: "kimi-k3-max",
+        name: "Kimi K3 Max",
+        facts: { efforts: [], thinks: true },
+        format: "openai_chat",
+        cost: null,
+      },
+      ROOT,
+    );
+    expect(entry).toEqual({ id: "kimi-k3-max", name: "Kimi K3 Max", reasoning: true });
+  });
+
   it("asks a GPT on Responses with a five-minute cache", () => {
     const entry = piModelEntry(
       { id: "gpt-6", name: "GPT 6", facts: {}, format: "openai_responses", cost: null },

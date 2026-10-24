@@ -76,7 +76,9 @@ export function piBareFormat(
 export function piModelEntry(source: PiModelSource, gatewayRoot: string): PiModelEntry {
   const { id, facts } = source;
   const efforts = facts.efforts ?? [];
-  const entry: PiModelEntry = { id, name: source.name, reasoning: efforts.length > 0 };
+  // 会思考的模型档位不知道也让 Pi 给它的思考档位，中转站再贴合模型（magpie 的 m.Reasoning || len(m.Efforts) > 0）。
+  const reasoning = facts.thinks === true || efforts.length > 0;
+  const entry: PiModelEntry = { id, name: source.name, reasoning };
   if (source.format === "openai_responses") entry.api = "openai-responses";
   const isAnthropic = source.format === "anthropic_messages";
   if (isAnthropic) {

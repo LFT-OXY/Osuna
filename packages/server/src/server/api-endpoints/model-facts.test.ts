@@ -50,6 +50,7 @@ describe("models.dev facts", () => {
       output: 128_000,
       efforts: ["low", "medium", "high", "xhigh", "max"],
       images: false,
+      thinks: true,
     });
   });
 
@@ -60,6 +61,7 @@ describe("models.dev facts", () => {
       output: 32_768,
       efforts: [],
       images: false,
+      thinks: false,
     });
   });
 
@@ -77,6 +79,7 @@ describe("models.dev facts", () => {
       output: 256,
       efforts: [],
       images: false,
+      thinks: false,
     });
   });
 
@@ -91,8 +94,9 @@ describe("models.dev facts", () => {
       output: 64_000,
       efforts: [],
       images: false,
+      thinks: false,
     });
-    expect(lookupModelFacts(index, "b")).toEqual({ efforts: [], images: false });
+    expect(lookupModelFacts(index, "b")).toEqual({ efforts: [], images: false, thinks: false });
   });
 
   test("a model sees images when most providers serving it take image input; a tie is known not to", () => {
@@ -107,6 +111,23 @@ describe("models.dev facts", () => {
     expect(lookupModelFacts(index, "glm-5v").images).toBe(true);
     expect(lookupModelFacts(index, "deepseek-v4").images).toBe(false);
     expect(lookupModelFacts(index, "unlisted").images).toBeUndefined();
+  });
+
+  test("a model thinks when most providers say it reasons or give it levels, levels known or not", () => {
+    const index = indexModelsDev({
+      a: { models: { "kimi-k3-max": { reasoning: true }, "glm-5": { reasoning: false } } },
+      b: { models: { "kimi-k3-max": { reasoning: true }, "glm-5": { reasoning: true } } },
+      c: {
+        models: {
+          "glm-5": {},
+          "deepseek-v4": { reasoning_options: [{ type: "effort", values: ["high"] }] },
+        },
+      },
+    });
+    expect(lookupModelFacts(index, "kimi-k3-max")).toMatchObject({ efforts: [], thinks: true });
+    expect(lookupModelFacts(index, "glm-5").thinks).toBe(false);
+    expect(lookupModelFacts(index, "deepseek-v4").thinks).toBe(true);
+    expect(lookupModelFacts(index, "unlisted").thinks).toBeUndefined();
   });
 
   test("the endpoint's own list says first whether a model sees images; models.dev fills it in", () => {
