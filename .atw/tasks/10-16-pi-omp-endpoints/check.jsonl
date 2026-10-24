@@ -1,0 +1,14 @@
+{"file": ".atw/tasks/10-16-pi-omp-endpoints/research/decisions.md", "reason": "两轮访谈的全部决定（Q1–Q12）、照 magpie 的细则与出处，判断实现是否越界、是否照 magpie"}
+{"file": ".atw/tasks/10-16-magpie-osuna-gaps/prd.md", "reason": "总任务的跨子任务规矩：身份如实、协议、测试约束、不碰真实 CLI 配置"}
+{"file": "docs/adr/0004-api-endpoint-rewrites-cli-config.md", "reason": "CLI 配置改写规则：只动自有键、记录并恢复原值、原子替换、解析不了不写，适用于 Pi / OMP 的四个文件"}
+{"file": "docs/adr/0007-api-endpoints-route-through-daemon-gateway.md", "reason": "中转站只服务本机、每个提供方一个开关、旧客户端投影不变"}
+{"file": "docs/adr/0010-codex-wiring-and-gateway-caller-recognition.md", "reason": "中转站认调用方的规则，Chat 入口按口令认 Pi / OMP"}
+{"file": "docs/adr/0012-cli-config-rewrite-follows-the-cli.md", "reason": "默认模型跟随 CLI、外部改动与再打开的情况表"}
+{"file": "docs/adr/0014-gateway-ledger-merges-with-cli-logs.md", "reason": "账本与会话记录的合并、Pi / OMP 跳过 osuna 条目的规则"}
+{"file": "docs/glossary.md", "reason": "OMP profile、Model roles、Use API endpoints、Default model 等界面名词"}
+{"file": ".atw/spec/server/backend/index.md", "reason": "daemon 侧规范入口：中转站、配置改写、用量都在 server"}
+{"file": ".atw/spec/server/backend/persistence.md", "reason": "接管记录、副本与原子写的持久化规则"}
+{"file": ".atw/spec/server/backend/rpc-and-protocol.md", "reason": "可选新字段与 server_info.features 能力位的写法"}
+{"file": ".atw/spec/server/backend/testing.md", "reason": "daemon 端到端测试、本机假上游、临时配置目录"}
+{"file": ".atw/spec/app/frontend/index.md", "reason": "Pi / OMP 设置页、OMP 配置分块、模型角色区的界面规范"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "浏览器测试与失败状态的测法"}
