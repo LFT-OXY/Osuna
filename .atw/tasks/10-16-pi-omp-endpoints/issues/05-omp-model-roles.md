@@ -4,7 +4,7 @@
 
 **Blocked by:** 04
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] Agent 设置新增可选的「模型角色」字段（每个角色一个模型取值和一个思考档位），只对 OMP 有意义；旧客户端照常。
 - [ ] 设了的角色写进 `config.yml` 的 `modelRoles.<role>`，带思考档位时写成 `osuna/<模型>:<档位>`；角色键照 OMP：task、smol、slow、plan、vision、advisor、commit、tiny、memory。清空的角色放回原值或删掉。
