@@ -1,5 +1,5 @@
 // 从别的软件导入（Import）照 magpie（https://github.com/yetone/magpie，7597c132）的 internal/provider/importapps.go、
-// import_codex.go、import_opencode.go 与 internal/gui/importapps.go 的指纹。
+// import_codex.go、import_opencode.go 与 internal/gui/importapps.go 的指纹；Gemini 地址照 7ea0e047（geminiCLIBase）与 319b86fe。
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import { createHmac } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
@@ -18,6 +18,7 @@ import { isErrnoException } from "../../utils/errno.js";
 import {
   AZURE_TEMPLATE_ID,
   API_ENDPOINT_TEMPLATES,
+  GOOGLE_TEMPLATE_ID,
   findTemplate,
   isAzureHost,
 } from "./templates.js";
@@ -266,15 +267,17 @@ interface FormatUrls {
   chat: string;
   responses: string;
   anthropic: string;
+  gemini: string;
 }
 
-const NO_URLS: FormatUrls = { chat: "", responses: "", anthropic: "" };
+const NO_URLS: FormatUrls = { chat: "", responses: "", anthropic: "", gemini: "" };
 
 function formatUrlsOf(urls: FormatUrls): ImportBaseUrl[] {
   const byFormat: Record<ApiEndpointRequestFormat, string> = {
     anthropic_messages: urls.anthropic,
     openai_chat: urls.chat,
     openai_responses: urls.responses,
+    gemini: urls.gemini,
   };
   return API_ENDPOINT_REQUEST_FORMATS.flatMap((format) =>
     byFormat[format] === "" ? [] : [{ format, url: byFormat[format] }],
@@ -311,10 +314,11 @@ function imported(input: {
     chat: cleanBase(input.urls.chat),
     responses: cleanBase(input.urls.responses),
     anthropic: cleanBase(input.urls.anthropic),
+    gemini: cleanBase(input.urls.gemini),
   };
   const problem = urlProblem({ urls, context: input.context });
   if (problem !== null) return { kind: "skip", reason: problem };
-  if (urls.chat === "" && urls.responses === "" && urls.anthropic === "") {
+  if (urls.chat === "" && urls.responses === "" && urls.anthropic === "" && urls.gemini === "") {
     return { kind: "skip", reason: "no_base_url" };
   }
   const found: FoundEndpoint = {
@@ -338,7 +342,7 @@ function urlProblem(input: {
   context: ImportReadContext;
 }): ImportSkipReason | null {
   const { urls } = input;
-  for (const raw of [urls.chat, urls.responses, urls.anthropic]) {
+  for (const raw of [urls.chat, urls.responses, urls.anthropic, urls.gemini]) {
     if (raw === "") continue;
     if (!URL.canParse(raw)) return "invalid_base_url";
     const url = new URL(raw);
@@ -377,7 +381,9 @@ function placeAtTemplate(input: {
   const preset = match.place;
   found.templateId = preset.templateId;
   found.region = preset.region;
-  found.baseUrls = preset.baseUrls;
+  // 模板只换 Chat、Responses、Anthropic 三种地址，Gemini 地址照原样留着（magpie imported）。
+  const gemini = found.baseUrls.filter(({ format }) => format === "gemini");
+  found.baseUrls = [...preset.baseUrls, ...gemini];
   const lower = input.givenName.toLowerCase();
   if (lower === "" || lower === "default") found.name = preset.name;
 }
@@ -399,13 +405,17 @@ interface TemplatePlace {
 /**
  * 地址在哪个模板（或它的一个区域、套餐）的主机上，是不是正好是它那几个地址（magpie presetAt）。本机模板不算。
  */
+const TEMPLATE_MATCHED_FORMATS = ["anthropic_messages", "openai_chat", "openai_responses"] as const;
+type TemplateMatchedFormat = (typeof TEMPLATE_MATCHED_FORMATS)[number];
+
 /** 地址正好是模板（或它的区域、套餐）的：那个位置；只在它的主机上：模板与对上的区域（没有为 null）。 */
 type TemplateMatch =
   | { kind: "exact"; place: TemplatePlace }
   | { kind: "near"; templateId: string; region: string | null };
 
 function templateAt(urls: FormatUrls): TemplateMatch | null {
-  const given: Record<ApiEndpointRequestFormat, string> = {
+  // 只按这三种对模板（magpie presetAt）：只有 Gemini 地址的一条按「自定义」。
+  const given: Record<TemplateMatchedFormat, string> = {
     anthropic_messages: urls.anthropic,
     openai_chat: urls.chat,
     openai_responses: urls.responses,
@@ -415,7 +425,7 @@ function templateAt(urls: FormatUrls): TemplateMatch | null {
     const ownHosts = new Set(own.map(({ url }) => hostOf(url)));
     let hit = false;
     let exact = true;
-    for (const format of API_ENDPOINT_REQUEST_FORMATS) {
+    for (const format of TEMPLATE_MATCHED_FORMATS) {
       const url = given[format];
       if (url === "") continue;
       if (ownHosts.has(hostOf(url))) hit = true;
@@ -726,14 +736,37 @@ function ccSwitchEntry(entry: CcEntry): ReadOutcome {
     case "codex":
       return codexSwitchEntry({ settings, name });
     case "gemini":
-      // Osuna 还没有 Gemini 格式与 Google 模板（子任务 7）。
-      if (textOf(env, "GEMINI_API_KEY", "GOOGLE_API_KEY") === "") {
-        return { kind: "skip", reason: "sign_in" };
-      }
-      return { kind: "skip", reason: "gemini_unsupported" };
+      return geminiSwitchEntry({ env, name });
     default:
       return otherSwitchEntry({ settings, name });
   }
+}
+
+/**
+ * Gemini CLI 的一条：给了 GOOGLE_GEMINI_BASE_URL 的是说 Gemini 格式的中转服务，地址进 Gemini 地址；没给的是 Google 自己，
+ * 按 Google Gemini 模板（没有 key 的是 Gemini CLI 自己的登录）。
+ */
+function geminiSwitchEntry(input: { env: Loose; name: string }): ReadOutcome {
+  const { env } = input;
+  const key = textOf(env, "GEMINI_API_KEY", "GOOGLE_API_KEY");
+  const base = textOf(env, "GOOGLE_GEMINI_BASE_URL");
+  let urls: FormatUrls = { ...NO_URLS, gemini: geminiCliBase(base) };
+  if (base === "") {
+    if (key === "") return { kind: "skip", reason: "sign_in" };
+    urls = urlsOf(findTemplate(GOOGLE_TEMPLATE_ID)?.baseUrls ?? []);
+  }
+  const model = textOf(env, "GEMINI_MODEL");
+  return { kind: "read", name: input.name, key, urls, models: model === "" ? [] : [model] };
+}
+
+/**
+ * Gemini CLI 的 GOOGLE_GEMINI_BASE_URL 换成 Gemini 地址（magpie geminiCLIBase）：CLI 每个请求都在它后面加版本 v1beta，
+ * Osuna 的 Gemini 地址里带着版本，所以补上；已经以 /v1beta 结尾的不动。
+ */
+function geminiCliBase(raw: string): string {
+  const url = raw.trim().replace(/\/+$/, "");
+  if (url === "" || url.endsWith("/v1beta")) return url;
+  return `${url}/v1beta`;
 }
 
 function codexSwitchEntry(input: { settings: Loose; name: string }): ReadOutcome {
@@ -936,10 +969,11 @@ function codexCatalogModels(input: {
 
 // ---- Alma ------------------------------------------------------------------
 
-// Alma 内置的服务商类型对应的模板（Google 等子任务 7）。
+// Alma 内置的服务商类型对应的模板。
 const ALMA_TEMPLATES: Record<string, string> = {
   openai: "openai",
   anthropic: "anthropic",
+  google: "google",
   deepseek: "deepseek",
   openrouter: "openrouter",
   moonshot: "moonshot",
@@ -1013,7 +1047,7 @@ function almaEntry(row: z.infer<typeof AlmaRowSchema>, context: ImportReadContex
   return entry;
 }
 
-/** Alma 的一条按类型与格式落在哪种格式的地址上；登录、Gemini、没有地址的 Azure 读不了。 */
+/** Alma 的一条按类型与格式落在哪种格式的地址上；登录、没有地址的 Azure 读不了。 */
 function almaUrls(input: {
   row: z.infer<typeof AlmaRowSchema>;
   type: string;
@@ -1030,8 +1064,9 @@ function almaUrls(input: {
   if (format === "anthropic" || type === "anthropic") {
     return { kind: "urls", urls: { ...NO_URLS, anthropic: base } };
   }
+  // 说 Gemini 格式的中转服务：Alma 的地址里已带版本（它的 google 默认 …/v1beta），照原样。
   const isGemini = format === "gemini" || (type === "google" && base !== "");
-  if (isGemini) return { kind: "skip", reason: "gemini_unsupported" };
+  if (isGemini) return { kind: "urls", urls: { ...NO_URLS, gemini: base } };
   const isResponses = Boolean(row.is_response_api) || format === "openai-responses";
   if (isResponses) return { kind: "urls", urls: { ...NO_URLS, responses: base } };
   return { kind: "urls", urls: { ...NO_URLS, chat: base } };
@@ -1044,6 +1079,7 @@ function urlsOf(baseUrls: readonly { format: string; url: string }[]): FormatUrl
     chat: of("openai_chat"),
     responses: of("openai_responses"),
     anthropic: of("anthropic_messages"),
+    gemini: of("gemini"),
   };
 }
 
@@ -1063,6 +1099,7 @@ const OPENCODE_TEMPLATES: Record<string, string> = {
   "opencode-go": "opencode-go",
   openai: "openai",
   anthropic: "anthropic",
+  google: "google",
   deepseek: "deepseek",
   xai: "xai",
   moonshotai: "moonshot",
@@ -1101,10 +1138,6 @@ function readOpenCodeAuth(filePath: string, context: ImportReadContext): ImportE
       continue;
     }
     if (auth.type !== "api") continue;
-    if (providerId === "google") {
-      out.push(skipped({ ref: providerId, from, name, reason: "gemini_unsupported" }));
-      continue;
-    }
     if (template === null) {
       out.push(skipped({ ref: providerId, from, name, reason: "no_base_url" }));
       continue;

@@ -2,7 +2,6 @@
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import {
   API_ENDPOINT_DETECT_MAX_MODELS,
-  API_ENDPOINT_REQUEST_FORMATS,
   type ApiEndpointFormatDetection,
   type ApiEndpointRequestFormat,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
@@ -54,8 +53,16 @@ interface FormatProbe {
   matches(body: unknown): boolean;
 }
 
+/** 能探测的格式：Gemini 的探测在工单 05（10-16-gemini-upstream）补上，在那之前检测、测试都不问 Gemini 地址。 */
+export const PROBED_FORMATS = ["anthropic_messages", "openai_chat", "openai_responses"] as const;
+export type ProbedFormat = (typeof PROBED_FORMATS)[number];
+
+export function isProbedFormat(format: ApiEndpointRequestFormat): format is ProbedFormat {
+  return (PROBED_FORMATS as readonly string[]).includes(format);
+}
+
 // 和中转站请求上游时一样：Anthropic 地址两种认证头都带，OpenAI 两种以 /v1 结尾。
-const FORMAT_PROBES: Record<ApiEndpointRequestFormat, FormatProbe> = {
+const FORMAT_PROBES: Record<ProbedFormat, FormatProbe> = {
   anthropic_messages: {
     path: "/v1/messages",
     keys: "both",
@@ -98,7 +105,7 @@ const VERSION_SEGMENT = /\/v\d+[a-z]*$/i;
  * 每种格式的建议地址：整段粘进来的接口地址先剪到 base；Anthropic 取不带 /v1 的根（CLI 自己拼 /v1/messages），
  * OpenAI 两种以版本段结尾，没有就补 /v1。
  */
-export function suggestedBaseUrls(baseUrl: string): Record<ApiEndpointRequestFormat, string> {
+export function suggestedBaseUrls(baseUrl: string): Record<ProbedFormat, string> {
   let base = baseUrl.trim().replace(/\/+$/, "");
   for (const suffix of PASTED_ENDPOINT_SUFFIXES) {
     if (base.endsWith(suffix)) base = base.slice(0, -suffix.length);
@@ -165,7 +172,7 @@ export async function detectUpstreamFormats(input: {
     const outcome = rejected ? rejectedOutcome : unlistedOutcome;
     return {
       kind: "result",
-      results: API_ENDPOINT_REQUEST_FORMATS.map((format) => ({
+      results: PROBED_FORMATS.map((format) => ({
         format,
         url: urls[format],
         ...outcome,
@@ -197,12 +204,12 @@ async function probeAll(args: {
     sentNameOf: (modelId: string) => string;
     extras: RequestExtras;
   };
-  urls: Record<ApiEndpointRequestFormat, string>;
-  modelFor: (format: ApiEndpointRequestFormat) => string | null;
+  urls: Record<ProbedFormat, string>;
+  modelFor: (format: ProbedFormat) => string | null;
 }): Promise<DetectOutcome> {
   const { input, urls, modelFor } = args;
   const results = await Promise.all(
-    API_ENDPOINT_REQUEST_FORMATS.map((format) => {
+    PROBED_FORMATS.map((format) => {
       const modelId = modelFor(format);
       return probeUpstreamFormat({
         format,
@@ -224,7 +231,7 @@ async function probeAll(args: {
 
 /** 用一个模型向一种格式的地址发一条最小对话请求，回这种格式的检测结果。 */
 export async function probeUpstreamFormat(input: {
-  format: ApiEndpointRequestFormat;
+  format: ProbedFormat;
   baseUrl: string;
   // 没 key 的接口为 null，不带认证头。
   apiKey: string | null;

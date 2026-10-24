@@ -55,7 +55,8 @@ interface Protocol {
   render(reply: Reply, output: { model: string; request: GatewayRequest }): Record<string, unknown>;
 }
 
-const PROTOCOLS: Record<ApiEndpointRequestFormat, Protocol> = {
+// Gemini 只做上游方向，翻译在工单 02（10-16-gemini-upstream）补上；在那之前中转站不会挑 Gemini 地址（routing.ts）。
+const PROTOCOLS: Record<Exclude<ApiEndpointRequestFormat, "gemini">, Protocol> = {
   anthropic_messages: {
     parse: parseAnthropicRequest,
     build: buildAnthropicRequest,
@@ -80,5 +81,6 @@ const PROTOCOLS: Record<ApiEndpointRequestFormat, Protocol> = {
 };
 
 export function protocolOf(format: ApiEndpointRequestFormat): Protocol {
+  if (format === "gemini") throw new Error("Gemini translation is not available yet");
   return PROTOCOLS[format];
 }

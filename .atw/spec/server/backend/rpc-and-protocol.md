@@ -35,7 +35,52 @@ Config-shaped schemas that the daemon also persists live in leaf modules, not in
 - "Never narrow" guards messages some released Osuna version can send or parse. A message upstream introduced after Osuna's last release and that Osuna has not shipped yet (v0.11.0-beta.1's `usage.list_reports.*`, narrowed to a `status` discriminated union in beta.3) may change shape when the upstream merge brings the change; take it as-is, and say so in the merge ticket and PR body because the checklist line "new fields are optional" reads as failed. The old message it replaced (`provider.usage.list`) keeps its shape.
 - An optional field the daemon adds to a response is permanent wire shape, not a shim: no `COMPAT` tag. Only the client's capability check (`features.gatewayLedger` in `usage-screen.tsx`) carries `COMPAT(...) remove gate after <date>`.
 - A new kind of row that an old client's schema can't express (it requires a string, or an enum without your value) gets an optional boolean marker, and the required fields get placeholders. The usage report's unknown project is the shape: `unknown: true` with `rootPath: ""` and `kind: "directory"` only to satisfy old parsers. The placeholders live in one constant on the daemon (`UNKNOWN_PROJECT`, `server/usage/project-attribution.ts`); the app tests only the marker (`isUnknownUsageProject`). Never recognise the row by `rootPath === ""`.
+- A required field that stops meaning anything is still sent: the daemon sends its neutral value forever and the tag says clients stop reading it, never "remove". `ignoredGemini` on the import-link preview is the shape: `z.boolean()` required, the daemon always sends `false` since Gemini URLs land in `baseUrls` (`service.ts` `previewImportLink`). Dropping it makes every older client's preview fail to parse.
+- An enum value only an older daemon sends (`gemini_unsupported`, `gemini_only`) stays in the protocol list with a `COMPAT` tag; the client maps it to `"unknown"` in its reader (`importSkipReasonOf`, `importLinkRefusalOf`) and its copy is deleted from every locale. Don't keep translations for values the current daemon can't produce.
 - Read `docs/protocol-compatibility.md` before touching `packages/protocol`.
+
+## Scenario: adding an API endpoint request format
+
+### 1. Scope / Trigger
+- Trigger: a value is added to `API_ENDPOINT_REQUEST_FORMATS` (`gemini`, task `10-16-gemini-upstream`). The wire `format` is a string, but the store is a closed `z.enum` and many daemon tables are `Record<ApiEndpointRequestFormat, …>`.
+
+### 2. Signatures
+- `API_ENDPOINT_REQUEST_FORMATS` (protocol) — append, never reorder: stored `baseUrls` follow its order.
+- `server_info.features.<flag>` (`apiEndpointGemini`) gates the client.
+- `templateBaseUrl({ templateId, format, url })` (`templates.ts`) is the single per-format normalisation on save and import (`geminiBaseUrl` for Gemini).
+- `keyHeadersAt` (`request-extras.ts`) picks the auth header per format (`KeyHeaders` `"googApiKey"` → `x-goog-api-key`).
+
+### 3. Contracts
+- Exhaustive `Record`/`switch` sites fail typecheck and must each get the new value; lists that drive behaviour (`TRANSLATION_ORDER` in `routing.ts`, `TEMPLATE_MATCHED_FORMATS` in `import-apps.ts`, `CLI_TEST_POLICIES`) don't and must be read by hand.
+- Where only some formats are supported yet, narrow the type instead of adding a fake branch: `PROBED_FORMATS` / `ProbedFormat` in `upstream-detect.ts` makes every caller of `probeUpstreamFormat` filter (`isProbedFormat`).
+- Client: the add dialog (`ConnectionFormOptions.canUseGemini`) and the endpoint page's Connection rows (`showsGemini`) are both gated by the flag; a host without it never shows the field or a "Not set" row.
+
+### 4. Validation & Error Matrix
+- Two URLs of one format → `invalid_input` "Only one <format> base URL is allowed"; unknown format → `invalid_input`.
+- An old Osuna file reader meets the new value → it can't read `endpoints.json` (closed enum); documented in `docs/data-model.md`, no shim.
+
+### 5. Good/Base/Bad Cases
+- Good: Gemini-only endpoint saves, is normalised (`relay.example` → `https://relay.example/v1beta`), listed, imported.
+- Base: endpoint with Chat + Gemini before the gateway speaks Gemini → gateway picks Chat.
+- Bad: a newer client with a format-less older Osuna client saving the same endpoint → whole-replace `baseUrls` drops the new format (accepted, G16).
+
+### 6. Tests Required
+- daemon e2e (`api-endpoint-host-wide.e2e.test.ts`): save alone, normalised, listed, duplicate refused, feature flag on.
+- daemon e2e (`api-endpoint-import.e2e.test.ts`): CC Switch / Alma / link carry the URL; same-host match says `added`.
+- app unit (`connection-form-model.test.ts`): field present only with the flag; save request carries it.
+- browser: a host with the flag hidden (`hideHostFeature`) shows no field and no row.
+
+### 7. Wrong vs Correct
+#### Wrong
+```ts
+const FORMAT_PROBES: Record<ApiEndpointRequestFormat, FormatProbe> = { ..., gemini: { path: "", ... } }; // fake probe
+```
+#### Correct
+```ts
+export const PROBED_FORMATS = ["anthropic_messages", "openai_chat", "openai_responses"] as const;
+const FORMAT_PROBES: Record<ProbedFormat, FormatProbe> = { ... };
+// callers: if (!isProbedFormat(format)) return …; — removed when the probe lands
+```
 
 ## Scenario: optional request field gated by a daemon feature flag
 

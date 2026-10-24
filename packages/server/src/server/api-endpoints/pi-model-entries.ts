@@ -48,8 +48,8 @@ export interface PiModelSource {
 }
 
 /**
- * 某一家的一个模型问中转站用的格式：「只用这种格式」钉了就按它；GPT 一类、这家有 Responses 地址走 Responses；
- * Claude、这家有 Anthropic 地址走 Anthropic；其余 Chat。`served` 是这家给这个模型的格式。
+ * 某一家的一个模型问中转站用的格式：「只用这种格式」钉了就按它（钉的是 Gemini 时 Pi 不说 Gemini，按 Chat 问，magpie Native）；
+ * GPT 一类、这家有 Responses 地址走 Responses；Claude、这家有 Anthropic 地址走 Anthropic；其余 Chat。`served` 是这家给这个模型的格式。
  */
 export function piEndpointFormat(input: {
   modelId: string;
@@ -57,6 +57,7 @@ export function piEndpointFormat(input: {
   pinned: ApiEndpointRequestFormat | null;
 }): ApiEndpointRequestFormat {
   const { modelId, served } = input;
+  if (input.pinned === "gemini") return "openai_chat";
   if (input.pinned !== null) return input.pinned;
   if (isOpenAIModel(modelId) && served.includes("openai_responses")) return "openai_responses";
   if (isClaudeModel(modelId) && served.includes("anthropic_messages")) return "anthropic_messages";

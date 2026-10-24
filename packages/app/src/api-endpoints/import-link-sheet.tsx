@@ -491,11 +491,6 @@ function BaseUrlList({ preview }: { preview: ApiEndpointImportLinkPreview }) {
           </Text>
         </View>
       ))}
-      {preview.ignoredGemini ? (
-        <Text variant="caption" color="foregroundMuted" testID="api-endpoint-import-link-gemini">
-          {t("settings.apiEndpoints.importLink.geminiIgnored")}
-        </Text>
-      ) : null}
     </View>
   );
 }
@@ -522,6 +517,8 @@ function formatLabel(t: ReturnType<typeof useTranslation>["t"], format: string):
       return t("settings.apiEndpoints.formats.openai_chat");
     case "openai_responses":
       return t("settings.apiEndpoints.formats.openai_responses");
+    case "gemini":
+      return t("settings.apiEndpoints.formats.gemini");
     default:
       return format;
   }

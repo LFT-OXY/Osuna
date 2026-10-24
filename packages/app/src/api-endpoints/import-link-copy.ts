@@ -25,7 +25,7 @@ function fieldLabel(t: TFunction, field: string | undefined): string {
     case "responses":
       return t("settings.apiEndpoints.formats.openai_responses");
     case "gemini":
-      return "Gemini";
+      return t("settings.apiEndpoints.formats.gemini");
     default:
       return field ?? "";
   }

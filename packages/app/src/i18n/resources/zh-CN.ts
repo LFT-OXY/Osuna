@@ -2516,6 +2516,7 @@ export const zhCN: TranslationResources = {
         anthropic_messages: "Anthropic",
         openai_chat: "OpenAI Chat",
         openai_responses: "OpenAI Responses",
+        gemini: "Gemini",
       },
       status: {
         available: "可用",
@@ -2593,7 +2594,6 @@ export const zhCN: TranslationResources = {
           invalid_base_url: "接口地址无效",
           points_at_osuna: "指向的是 Osuna 自己",
           no_api_key: "没有 API key",
-          gemini_unsupported: "Osuna 还不支持 Gemini 格式",
           no_azure_endpoint: "没有 Azure OpenAI 地址",
           unknown: "不能导入",
         },
@@ -2619,7 +2619,6 @@ export const zhCN: TranslationResources = {
         baseUrls: "地址",
         models_one: "{{count}} 个模型",
         models_other: "{{count}} 个模型",
-        geminiIgnored: "链接里的 Gemini 格式地址没有用上：Osuna 还不支持 Gemini 格式。",
         replaces: "会替换你的 {{name}}，连同它的 key。",
         add: "添加",
         replace: "替换",
@@ -2642,7 +2641,6 @@ export const zhCN: TranslationResources = {
           bad_url: "它的 {{field}} 格式地址不是单纯的地址：不能带账号、查询串或片段。",
           needs_https: "它的 {{field}} 格式地址必须用 https。http 只能指向这台电脑或局域网。",
           no_base_url: "它没有给出任何地址。",
-          gemini_only: "它只给了 Gemini 格式地址，Osuna 还不能用。",
           bad_key: "它带的 key 不像 key：超过 4096 字节，或含控制字符。",
           bad_icon: "它的图标必须是公网主机上的 https 图片。",
           unknown: "Osuna 读不懂它。",
@@ -2941,18 +2939,20 @@ export const zhCN: TranslationResources = {
           anthropic_messages: "Anthropic 格式地址",
           openai_chat: "OpenAI Chat 格式地址",
           openai_responses: "OpenAI Responses 格式地址",
+          gemini: "Gemini 格式地址",
+        },
+        formatUrlHint: {
+          gemini: "填到 …/v1beta 一级，key 放在 x-goog-api-key 请求头。",
         },
         detection: {
           ok: "检测通过",
           not_detected: "未检测到",
           auth_failed: "key 无效",
         },
-        footer:
-          "key 只填一次，三种格式（Anthropic、OpenAI Chat、OpenAI Responses）共用。保存后进入这个接口的详情页，已拉好上游模型供挑选。",
+        footer: "key 只填一次，各格式共用。保存后进入这个接口的详情页，已拉好上游模型供挑选。",
         footerKeyOptional:
-          "key 选填：填了三种格式（Anthropic、OpenAI Chat、OpenAI Responses）共用，不填就不带 key。保存后进入这个接口的详情页，已拉好上游模型供挑选。",
-        footerFetched:
-          "保存时一起存下拉到的清单和「模型」里选的模型；key 由 Anthropic、OpenAI Chat、OpenAI Responses 三种格式共用。",
+          "key 选填：填了各格式共用，不填就不带 key。保存后进入这个接口的详情页，已拉好上游模型供挑选。",
+        footerFetched: "保存时一起存下拉到的清单和「模型」里选的模型；key 由各格式共用。",
         models: "模型",
         modelsHint: "模型 id，用逗号分隔，保存时选上。",
         modelsPlaceholder: "如：gpt-5.5, claude-sonnet-5",
@@ -2983,7 +2983,7 @@ export const zhCN: TranslationResources = {
       detail: {
         connection: "连接",
         connectionInfo:
-          "key 三种格式共用。每次请求：Agent 自己的格式这家有就原样转发；Claude 模型有 Anthropic 地址时一律走它（保住缓存）；都没有就由 Osuna 翻译。",
+          "key 各格式共用。每次请求：Agent 自己的格式这家有就原样转发；Claude 模型有 Anthropic 地址时一律走它（保住缓存）；都没有就由 Osuna 翻译。",
         edit: "编辑",
         formatNotSet: "未填，不用这种格式",
         noKey: "未保存",

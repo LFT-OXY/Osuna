@@ -2527,6 +2527,7 @@ export const ptBR: TranslationResources = {
         anthropic_messages: "Anthropic",
         openai_chat: "OpenAI Chat",
         openai_responses: "OpenAI Responses",
+        gemini: "Gemini",
       },
       status: {
         available: "Disponível",
@@ -2606,7 +2607,6 @@ export const ptBR: TranslationResources = {
           invalid_base_url: "A URL base não é válida",
           points_at_osuna: "Aponta para o próprio Osuna",
           no_api_key: "Não tem chave de API",
-          gemini_unsupported: "O Osuna ainda não fala o formato Gemini",
           no_azure_endpoint: "Não tem endpoint do Azure OpenAI",
           unknown: "Não dá para importar",
         },
@@ -2632,8 +2632,6 @@ export const ptBR: TranslationResources = {
         baseUrls: "URLs base",
         models_one: "{{count}} modelo",
         models_other: "{{count}} modelos",
-        geminiIgnored:
-          "A URL base Gemini do link não é usada: o Osuna ainda não suporta o formato Gemini.",
         replaces: "Substitui seu {{name}}, inclusive a chave.",
         add: "Adicionar",
         replace: "Substituir",
@@ -2660,7 +2658,6 @@ export const ptBR: TranslationResources = {
           needs_https:
             "A URL base de {{field}} precisa usar https. Com http só se chega a este computador ou à rede local.",
           no_base_url: "Ele não dá nenhuma URL base.",
-          gemini_only: "Ele só dá uma URL base Gemini, que o Osuna ainda não usa.",
           bad_key: "A chave não é uma chave: passa de 4096 bytes ou tem caracteres de controle.",
           bad_icon: "O ícone precisa ser uma imagem https em um host público.",
           unknown: "O Osuna não conseguiu ler.",
@@ -2973,6 +2970,10 @@ export const ptBR: TranslationResources = {
           anthropic_messages: "URL base de Anthropic",
           openai_chat: "URL base de OpenAI Chat",
           openai_responses: "URL base de OpenAI Responses",
+          gemini: "URL base de Gemini",
+        },
+        formatUrlHint: {
+          gemini: "Preencha até o nível …/v1beta. A chave vai no cabeçalho x-goog-api-key.",
         },
         detection: {
           ok: "Detectado",
@@ -2980,11 +2981,11 @@ export const ptBR: TranslationResources = {
           auth_failed: "Chave recusada",
         },
         footer:
-          "A chave é digitada uma vez e compartilhada pelos três formatos (Anthropic, OpenAI Chat, OpenAI Responses). Ao salvar, a página do endpoint abre com os modelos já buscados para escolher.",
+          "A chave é digitada uma vez e compartilhada por todos os formatos. Ao salvar, a página do endpoint abre com os modelos já buscados para escolher.",
         footerKeyOptional:
-          "A chave é opcional: preenchida, é compartilhada pelos três formatos (Anthropic, OpenAI Chat, OpenAI Responses); sem ela, nenhuma chave é enviada. Ao salvar, a página do endpoint abre com os modelos já buscados para escolher.",
+          "A chave é opcional: preenchida, é compartilhada por todos os formatos; sem ela, nenhuma chave é enviada. Ao salvar, a página do endpoint abre com os modelos já buscados para escolher.",
         footerFetched:
-          "Ao salvar, a lista buscada e os modelos escolhidos em Modelos também são guardados; a chave é compartilhada por Anthropic, OpenAI Chat e OpenAI Responses.",
+          "Ao salvar, a lista buscada e os modelos escolhidos em Modelos também são guardados; a chave é compartilhada por todos os formatos.",
         models: "Modelos",
         modelsHint: "Ids de modelo separados por vírgulas. Eles são selecionados ao salvar.",
         modelsPlaceholder: "ex.: gpt-5.5, claude-sonnet-5",
@@ -3015,7 +3016,7 @@ export const ptBR: TranslationResources = {
       detail: {
         connection: "Conexão",
         connectionInfo:
-          "Uma chave para os três formatos. Em cada solicitação: se este endpoint tem o formato do próprio agente, a solicitação passa sem mudanças; modelos Claude usam o endereço da Anthropic sempre que houver um, para manter o cache de prompts; caso contrário, o Osuna traduz.",
+          "Uma chave para todos os formatos. Em cada solicitação: se este endpoint tem o formato do próprio agente, a solicitação passa sem mudanças; modelos Claude usam o endereço da Anthropic sempre que houver um, para manter o cache de prompts; caso contrário, o Osuna traduz.",
         edit: "Editar",
         formatNotSet: "Não definido, este formato não é usado",
         noKey: "Não salva",

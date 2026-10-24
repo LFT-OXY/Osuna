@@ -233,6 +233,32 @@ test.describe("Import links", () => {
     expect((await client.apiEndpointList("claude")).endpoints).toHaveLength(0);
   });
 
+  test("a link with a Gemini base URL alone lists it and adds it; one over plain http is refused", async ({
+    page,
+  }) => {
+    await openApiEndpointsPage(page);
+    const params = new URLSearchParams({
+      name: "Gemini Link",
+      gemini: `${relay.origin}/gem/v1beta`,
+      key: RELAY_KEY,
+    });
+    await openLink(page, `paseo://import?${params.toString()}`);
+    const sheet = linkSheet(page);
+    await expect(sheet).toContainText("Gemini");
+    await expect(sheet).toContainText(`${relay.origin}/gem/v1beta`);
+    await expect(sheet).not.toContainText("Gemini format");
+    await sheet.getByTestId("api-endpoint-import-link-add").click();
+    await expect(page.getByText("Gemini Link added")).toBeVisible();
+    const listed = (await client.apiEndpointList("claude")).endpoints;
+    expect(listed[0]?.baseUrls).toEqual([{ format: "gemini", url: `${relay.origin}/gem/v1beta` }]);
+
+    await openLink(page, "paseo://import?name=Plain&gemini=http://relay.example/v1beta");
+    await expect(linkSheet(page).getByTestId("api-endpoint-import-link-refused")).toContainText(
+      "This link can't be imported. Its Gemini base URL must use https.",
+    );
+    await expect(linkSheet(page).getByTestId("api-endpoint-import-link-add")).toHaveCount(0);
+  });
+
   test("an Add the host turns down stays in the dialog and says why", async ({ page }) => {
     await answerImportRpc(page, {
       type: "provider.api_endpoint.import_link",

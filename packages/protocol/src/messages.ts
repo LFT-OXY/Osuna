@@ -4240,6 +4240,10 @@ export const ServerInfoStatusPayloadSchema = z
         // 任务 10-16-pi-omp-endpoints 工单 04：OMP 默认那套配置的「使用第三方接口」——同上几个 RPC 收 provider "omp"，
         // 列表的 agents、agentIssues、reopenHints 带 omp；daemon 改写 OMP 的 models.yml 与 config.yml。
         apiEndpointOmp: z.boolean().optional(),
+        // COMPAT(apiEndpointGemini): added in v0.17.0, remove gate after 2027-04-24.
+        // 任务 10-16-gemini-upstream：请求格式多一种 gemini（一家最多四个地址），保存、详情、导入都带 Gemini 地址；
+        // 客户端没看到它时不显示 Gemini 地址框与 Gemini 格式选项。
+        apiEndpointGemini: z.boolean().optional(),
         // COMPAT(providerVersions): added in v0.14.0, remove gate after 2027-04-01.
         // 快照带内置提供方的已装版本 version；daemon 支持 provider.version.check.* 与 provider.upgrade.*。
         providerVersions: z.boolean().optional(),

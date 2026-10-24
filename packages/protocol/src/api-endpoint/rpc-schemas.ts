@@ -52,12 +52,13 @@ export type ApiEndpointModelMapping = z.infer<typeof ApiEndpointModelMappingSche
 
 /**
  * 请求格式：发给上游的请求用哪种协议格式，与模型家族无关。线上是字符串，
- * 以后新增格式时老客户端照常解析；daemon 只认下面三种。
+ * 以后新增格式时老客户端照常解析；daemon 只认下面四种。gemini 要 daemon 声明 apiEndpointGemini。
  */
 export const API_ENDPOINT_REQUEST_FORMATS = [
   "anthropic_messages",
   "openai_chat",
   "openai_responses",
+  "gemini",
 ] as const;
 export type ApiEndpointRequestFormat = (typeof API_ENDPOINT_REQUEST_FORMATS)[number];
 
@@ -1738,8 +1739,8 @@ export type ApiEndpointDetectBalanceUrlResponse = z.infer<
  * 从别的软件导入（Import）：daemon 只读地读本机别的软件的配置（ADR 0013）。每条发现照 Osuna 会加的那家给出，
  * key 打码，原文留在 daemon，导入时按指纹找回。线上的 status、skip、off 是字符串，daemon 以后多一种老客户端照样解析。
  * status：new（新的）、added（已添加）、name_taken（名称已被占用）、other_key（同一家、key 不同）。
- * skip：读到了却不能导入的原因（sign_in、no_base_url、invalid_base_url、points_at_osuna、no_api_key、gemini_unsupported、
- * no_azure_endpoint）；off：默认不选的原因（turned_off：在那个软件里关着）。
+ * skip：读到了却不能导入的原因（sign_in、no_base_url、invalid_base_url、points_at_osuna、no_api_key、
+ * no_azure_endpoint；gemini_unsupported 是老 daemon 发的）；off：默认不选的原因（turned_off：在那个软件里关着）。
  */
 export const API_ENDPOINT_IMPORT_STATUSES = ["new", "added", "name_taken", "other_key"] as const;
 export type ApiEndpointImportStatus = (typeof API_ENDPOINT_IMPORT_STATUSES)[number];
@@ -1750,6 +1751,7 @@ export const API_ENDPOINT_IMPORT_SKIP_REASONS = [
   "invalid_base_url",
   "points_at_osuna",
   "no_api_key",
+  // COMPAT(apiEndpointGemini): added in v0.17.0, remove after 2027-04-24. 老 daemon 跳过 Gemini 条目时发，新 daemon 不发。
   "gemini_unsupported",
   "no_azure_endpoint",
 ] as const;
@@ -1925,7 +1927,7 @@ export type ApiEndpointImportResponse = z.infer<typeof ApiEndpointImportResponse
  * not_import_link：不是 paseo://import 链接；unknown_template；vertex（Google Vertex AI 要用自己的 Google Cloud 项目加）；
  * unknown_region；no_name（没有 preset= 也没有 name=）；no_id（名称里没有字母或数字可做标识）；
  * bad_url（不是一个地址：读不懂、没有主机、带账号、查询串或片段）；needs_https（公网地址不是 https）；
- * no_base_url（没有任何地址）；gemini_only（只有 Gemini 地址，Osuna 还不能用）；bad_key（超过 4096 字节或带控制字符）；
+ * no_base_url（没有任何地址）；gemini_only（老 daemon 发：只有 Gemini 地址）；bad_key（超过 4096 字节或带控制字符）；
  * bad_icon（图片地址不是公网主机上的 https）。
  */
 export const API_ENDPOINT_IMPORT_LINK_REFUSALS = [
@@ -1938,6 +1940,7 @@ export const API_ENDPOINT_IMPORT_LINK_REFUSALS = [
   "bad_url",
   "needs_https",
   "no_base_url",
+  // COMPAT(apiEndpointGemini): added in v0.17.0, remove after 2027-04-24. 老 daemon 拒收只有 Gemini 地址的链接时发，新 daemon 不发。
   "gemini_only",
   "bad_key",
   "bad_icon",
@@ -1947,7 +1950,7 @@ export type ApiEndpointImportLinkRefusal = (typeof API_ENDPOINT_IMPORT_LINK_REFU
 /**
  * 导入链接要加的那家，给确认框看（照 magpie renderImport）：hosts 是对话与 key 会发往的主机；key 是链接里带的（没有为 null）；
  * replaces 是会被它替换的那家（照 magpie Find(id)；没有为 null）；keysUrl 是去拿 key 的页面（链接没带 key 时出「去拿 key」）；
- * ignoredGemini：链接里的 Gemini 地址没用上（Osuna 还没有 Gemini 格式）。
+ * ignoredGemini：老 daemon 用来说链接里的 Gemini 地址没用上；新 daemon 收下 Gemini 地址，恒为 false。
  * icon 是 catalog= 对上的内置图标名；iconPending：链接给了 icon= 图片，主机已经开始取，客户端用 import_link_icon 要它
  * （取到了就用它，不等它也能添加）。
  */
@@ -1961,6 +1964,8 @@ export const ApiEndpointImportLinkPreviewSchema = z.object({
   region: z.string().nullable(),
   keysUrl: z.string().nullable(),
   replaces: ApiEndpointNameRefSchema.nullable(),
+  // COMPAT(apiEndpointGemini): added in v0.17.0; after 2027-04-24 clients stop reading it. 字段是必填的，老客户端要它才解析得了，
+  // daemon 一直发 false，不删。
   ignoredGemini: z.boolean(),
   icon: z.string().nullable().optional(),
   iconPending: z.boolean().optional(),

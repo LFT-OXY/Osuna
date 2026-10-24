@@ -491,6 +491,8 @@ function ConnectionSheet({
   const hasBalance = useHostFeature(serverId, "apiEndpointBalance");
   // COMPAT(gatewayLedger): added in v0.17.0, remove gate after 2027-04-23.
   const hasLedger = useHostFeature(serverId, "gatewayLedger");
+  // COMPAT(apiEndpointGemini): added in v0.17.0, remove gate after 2027-04-24. 老主机存不了 Gemini 地址。
+  const hasGemini = useHostFeature(serverId, "apiEndpointGemini");
   const templates = useEndpointTemplates({ serverId, enabled: hasManagement });
   const handlePick = useCallback(
     (templateId: string | null) =>
@@ -541,6 +543,7 @@ function ConnectionSheet({
       canSetRequestExtras={hasManagement}
       canSetBalance={hasManagement && hasBalance}
       canSetPriceMultiplier={hasManagement && hasLedger}
+      canUseGemini={hasGemini}
       templates={templates.status === "ready" ? templates.templates : []}
       onBack={sheet.backToPicker ? handleBack : null}
       onSave={endpoints.save}
@@ -1011,6 +1014,8 @@ function ApiEndpointDetailSections({
   }, [endpoint, hasManagement, modelTestsState]);
   // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove gate after 2027-04-18.
   const hasCliWiring = useHostFeature(serverId, "apiEndpointCliWiring");
+  // COMPAT(apiEndpointGemini): added in v0.17.0, remove gate after 2027-04-24. 老主机没有 Gemini 地址。
+  const hasGemini = useHostFeature(serverId, "apiEndpointGemini");
   // 「自己能联网搜索」只在有 Anthropic 或 Responses 地址时算数（ADR 0009）。
   const canSearchWeb = (endpoint.baseUrls ?? []).some(
     (entry) => entry.format === "anthropic_messages" || entry.format === "openai_responses",
@@ -1061,6 +1066,7 @@ function ApiEndpointDetailSections({
       <ApiEndpointConnectionSection
         endpoint={endpoint}
         isKeyOptional={hasManagement}
+        showsGemini={hasGemini}
         testResults={detail.testResults}
         onEdit={onEdit}
       />

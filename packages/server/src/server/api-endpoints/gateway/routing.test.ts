@@ -413,6 +413,25 @@ describe("which request format an endpoint is asked in", () => {
     ).toBe("anthropic_messages");
   });
 
+  test("a Gemini base URL is not asked yet: another format is, and Gemini alone is none", () => {
+    expect(
+      chooseRequestFormat({
+        agentFormat: "anthropic_messages",
+        model: "gemini-3-pro",
+        formats: ["openai_chat", "gemini"],
+        formatOrder: null,
+      }),
+    ).toBe("openai_chat");
+    expect(
+      chooseRequestFormat({
+        agentFormat: "anthropic_messages",
+        model: "gemini-3-pro",
+        formats: ["gemini"],
+        formatOrder: null,
+      }),
+    ).toBeNull();
+  });
+
   test("without the agent's own format it is translated to Chat first", () => {
     expect(
       chooseRequestFormat({

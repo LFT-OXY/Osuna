@@ -80,6 +80,8 @@ export interface ApiEndpointConnectionSheetProps {
   canSetBalance: boolean;
   // 主机声明了 gatewayLedger：「高级」里能设价格倍率。
   canSetPriceMultiplier: boolean;
+  // 主机声明了 apiEndpointGemini：有 Gemini 地址框。
+  canUseGemini: boolean;
   // 主机给的模板清单（老主机为空）：新建时按 seed 的模板填好，编辑从模板加的接口时能切区域或套餐。
   templates: readonly ApiEndpointTemplate[];
   // 从模板列表进来时回到列表；其余为 null。
@@ -107,6 +109,7 @@ const URL_PLACEHOLDERS: Record<ApiEndpointRequestFormat, string> = {
   anthropic_messages: "https://relay.example.com",
   openai_chat: "https://relay.example.com/v1",
   openai_responses: "https://relay.example.com/v1",
+  gemini: "https://relay.example.com/v1beta",
 };
 
 /**
@@ -123,6 +126,7 @@ export function ApiEndpointConnectionSheet({
   canSetRequestExtras,
   canSetBalance,
   canSetPriceMultiplier,
+  canUseGemini,
   templates,
   onBack,
   onSave,
@@ -167,6 +171,7 @@ export function ApiEndpointConnectionSheet({
       canSetRequestExtras,
       canSetBalance,
       canSetPriceMultiplier,
+      canUseGemini,
       templates,
     },
   );
@@ -1839,6 +1844,7 @@ function FormatUrlField({
   return (
     <Field
       label={t(`settings.apiEndpoints.form.formatUrl.${format}`)}
+      hint={format === "gemini" ? t("settings.apiEndpoints.form.formatUrlHint.gemini") : undefined}
       error={field.invalid ? t("settings.apiEndpoints.form.urlInvalid") : null}
       testID={`api-endpoint-connection-url-field-${format}`}
     >

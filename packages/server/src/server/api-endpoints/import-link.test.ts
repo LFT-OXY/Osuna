@@ -139,20 +139,25 @@ describe("parseImportLink", () => {
     expect(parseImportLink(link({ ...base, catalog: "../evil" })).icon).toBeNull();
   });
 
-  it("refuses a link with no base URL, and one with only a Gemini URL", () => {
+  it("refuses a link with no base URL", () => {
     expect(refusalOf(link({ name: "X" })).reason).toBe("no_base_url");
     expect(refusalOf("paseo://import?preset=azure").reason).toBe("no_base_url");
-    expect(refusalOf(link({ name: "G", gemini: "https://relay.example/v1beta" })).reason).toBe(
-      "gemini_only",
-    );
   });
 
-  it("ignores a Gemini URL beside others, but still refuses a bad one", () => {
+  it("takes a Gemini URL alone or beside others, but still refuses a bad one", () => {
+    const alone = parseImportLink(link({ name: "G", gemini: "https://relay.example/v1beta/" }));
+    expect(alone.baseUrls).toEqual([{ format: "gemini", url: "https://relay.example/v1beta" }]);
     const parsed = parseImportLink(
       link({ name: "X", chat: "https://relay.example/v1", gemini: "https://relay.example/v1beta" }),
     );
-    expect(parsed.baseUrls).toEqual([{ format: "openai_chat", url: "https://relay.example/v1" }]);
-    expect(parsed.ignoredGemini).toBe(true);
+    expect(parsed.baseUrls).toEqual([
+      { format: "openai_chat", url: "https://relay.example/v1" },
+      { format: "gemini", url: "https://relay.example/v1beta" },
+    ]);
+    expect(refusalOf(link({ name: "G", gemini: "http://relay.example/v1beta" }))).toEqual({
+      reason: "needs_https",
+      params: { field: "gemini" },
+    });
     expect(
       refusalOf(link({ name: "X", chat: "https://r.example/v1", gemini: "not-a-url" })),
     ).toEqual({

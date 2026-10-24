@@ -271,7 +271,8 @@ function closeness(input: {
   return score;
 }
 
-// 没有 Agent 自己格式的地址时，按这个顺序取第一个能用的格式翻译过去。
+// 没有 Agent 自己格式的地址时，按这个顺序取第一个能用的格式翻译过去。Gemini 地址在工单 02（10-16-gemini-upstream）
+// 接上翻译之前不在其中：只有 Gemini 地址的接口暂时挑不出格式、照常换下一家。
 const TRANSLATION_ORDER: ApiEndpointRequestFormat[] = [
   "openai_chat",
   "openai_responses",

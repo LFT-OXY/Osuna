@@ -65,11 +65,12 @@ export abstract class JsonEventTidy implements ReplyTidy {
   }
 }
 
-// 回复里写模型名的地方：Anthropic 的 message_start 与整份回复，Responses 的 response.* 事件与整份回复。
+// 回复里写模型名的地方：Anthropic 的 message_start 与整份回复，Responses 的 response.* 事件与整份回复，Gemini 的 modelVersion。
 const MODEL_PATHS: Readonly<Record<PassedReplyFormat, JSONPath[]>> = {
   anthropic_messages: [["message", "model"], ["model"]],
   openai_responses: [["response", "model"], ["model"]],
   openai_chat: [["model"]],
+  gemini: [["modelVersion"]],
 };
 
 /**

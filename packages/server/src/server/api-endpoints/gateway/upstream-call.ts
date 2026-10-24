@@ -52,7 +52,8 @@ const MAX_REPLAYS = 8;
 export const EMPTY_REPLY = "an empty reply (the model answered nothing; try again)";
 
 // Anthropic 地址按 Claude Code 的规则拼 /v1/messages；OpenAI 两种地址按 SDK 的规则以 /v1 结尾。
-const UPSTREAM_PATHS: Record<ApiEndpointRequestFormat, string> = {
+// Gemini 的模型在路径里，拼法在工单 02（10-16-gemini-upstream）补上；在那之前中转站不会挑 Gemini 地址（routing.ts）。
+const UPSTREAM_PATHS: Record<Exclude<ApiEndpointRequestFormat, "gemini">, string> = {
   anthropic_messages: "/v1/messages",
   openai_chat: "/chat/completions",
   openai_responses: "/responses",
@@ -65,6 +66,7 @@ export function upstreamUrl(input: {
   suffix?: string;
   query?: string;
 }): URL {
+  if (input.format === "gemini") throw new Error("Gemini upstream URLs are not available yet");
   const base = input.baseUrl.trim().replace(/\/+$/, "");
   return new URL(`${base}${UPSTREAM_PATHS[input.format]}${input.suffix ?? ""}${input.query ?? ""}`);
 }

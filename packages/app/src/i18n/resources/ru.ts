@@ -2524,6 +2524,7 @@ export const ru: TranslationResources = {
         anthropic_messages: "Anthropic",
         openai_chat: "OpenAI Chat",
         openai_responses: "OpenAI Responses",
+        gemini: "Gemini",
       },
       status: {
         available: "Доступен",
@@ -2604,7 +2605,6 @@ export const ru: TranslationResources = {
           invalid_base_url: "Базовый URL недействителен",
           points_at_osuna: "Указывает на сам Osuna",
           no_api_key: "Нет API-ключа",
-          gemini_unsupported: "Osuna пока не поддерживает формат Gemini",
           no_azure_endpoint: "Нет эндпоинта Azure OpenAI",
           unknown: "Нельзя импортировать",
         },
@@ -2631,8 +2631,6 @@ export const ru: TranslationResources = {
         baseUrls: "Базовые URL",
         models_one: "Моделей: {{count}}",
         models_other: "Моделей: {{count}}",
-        geminiIgnored:
-          "Базовый URL Gemini из ссылки не используется: Osuna пока не поддерживает формат Gemini.",
         replaces: "Заменит ваш {{name}} вместе с ключом.",
         add: "Добавить",
         replace: "Заменить",
@@ -2659,7 +2657,6 @@ export const ru: TranslationResources = {
           needs_https:
             "Её базовый URL {{field}} должен использовать https. По http можно обращаться только к этому компьютеру или локальной сети.",
           no_base_url: "В ней нет ни одного базового URL.",
-          gemini_only: "В ней только базовый URL Gemini, который Osuna пока не может использовать.",
           bad_key:
             "Её ключ не похож на ключ: он длиннее 4096 байт или содержит управляющие символы.",
           bad_icon: "Её значок должен быть https-картинкой на публичном хосте.",
@@ -2970,6 +2967,10 @@ export const ru: TranslationResources = {
           anthropic_messages: "Базовый URL Anthropic",
           openai_chat: "Базовый URL OpenAI Chat",
           openai_responses: "Базовый URL OpenAI Responses",
+          gemini: "Базовый URL Gemini",
+        },
+        formatUrlHint: {
+          gemini: "Укажите его до уровня …/v1beta. Ключ отправляется в заголовке x-goog-api-key.",
         },
         detection: {
           ok: "Определён",
@@ -2977,11 +2978,11 @@ export const ru: TranslationResources = {
           auth_failed: "Ключ отклонён",
         },
         footer:
-          "Ключ вводится один раз и общий для всех трёх форматов (Anthropic, OpenAI Chat, OpenAI Responses). После сохранения откроется страница эндпоинта с уже полученными моделями для выбора.",
+          "Ключ вводится один раз и общий для всех форматов. После сохранения откроется страница эндпоинта с уже полученными моделями для выбора.",
         footerKeyOptional:
-          "Ключ необязателен: если он введён, он общий для всех трёх форматов (Anthropic, OpenAI Chat, OpenAI Responses), без него ключ не отправляется. После сохранения откроется страница эндпоинта с уже полученными моделями для выбора.",
+          "Ключ необязателен: если он введён, он общий для всех форматов, без него ключ не отправляется. После сохранения откроется страница эндпоинта с уже полученными моделями для выбора.",
         footerFetched:
-          "При сохранении сохранятся и полученный список, и модели, выбранные в «Моделях»; ключ общий для Anthropic, OpenAI Chat и OpenAI Responses.",
+          "При сохранении сохранятся и полученный список, и модели, выбранные в «Моделях»; ключ общий для всех форматов.",
         models: "Модели",
         modelsHint: "Id моделей через запятую. Они будут выбраны при сохранении.",
         modelsPlaceholder: "например, gpt-5.5, claude-sonnet-5",
@@ -3012,7 +3013,7 @@ export const ru: TranslationResources = {
       detail: {
         connection: "Подключение",
         connectionInfo:
-          "Один ключ для всех трёх форматов. При каждом запросе: если у эндпоинта есть собственный формат агента, запрос уходит без изменений; модели Claude всегда идут через адрес Anthropic, если он есть, чтобы сохранить кеш промптов; иначе Osuna переводит запрос.",
+          "Один ключ для всех форматов. При каждом запросе: если у эндпоинта есть собственный формат агента, запрос уходит без изменений; модели Claude всегда идут через адрес Anthropic, если он есть, чтобы сохранить кеш промптов; иначе Osuna переводит запрос.",
         edit: "Изменить",
         formatNotSet: "Не задан, этот формат не используется",
         noKey: "Не сохранён",

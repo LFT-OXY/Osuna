@@ -422,7 +422,8 @@ export function useEndpointDetail(input: {
 
   const testConnection = useCallback(() => {
     if (!client) return;
-    const addresses = formatAddresses(endpoint);
+    // Gemini 地址的测试在工单 05（10-16-gemini-upstream）补上。
+    const addresses = formatAddresses(endpoint).filter(({ format }) => format !== "gemini");
     setTestResults(
       Object.fromEntries(addresses.map((address) => [address.format, { kind: "testing" }])),
     );

@@ -226,8 +226,11 @@ export function refusesBothKeyHeaders(input: { status: number; text: string }): 
   return BOTH_KEY_HEADERS_WORDS.some((words) => text.includes(words));
 }
 
-/** key 放在哪个请求头：两个都放、只放 x-api-key、只放 Authorization: Bearer、只放 Azure 的 api-key。 */
-export type KeyHeaders = "both" | "xApiKey" | "bearer" | "apiKey";
+/**
+ * key 放在哪个请求头：两个都放、只放 x-api-key、只放 Authorization: Bearer、只放 Azure 的 api-key、
+ * 只放 Gemini 的 x-goog-api-key（Google 把 Bearer 当 OAuth 令牌拒掉）。
+ */
+export type KeyHeaders = "both" | "xApiKey" | "bearer" | "apiKey" | "googApiKey";
 
 /**
  * 发给这家时 key 放哪：先按 keyHeadersAt（模板、格式、Anthropic 自己的地址、用户选的）；两个都放时，
@@ -256,6 +259,7 @@ export function keyHeaderValues(input: {
   const { apiKey, keys } = input;
   if (apiKey === null) return {};
   if (keys === "apiKey") return { "api-key": apiKey };
+  if (keys === "googApiKey") return { "x-goog-api-key": apiKey };
   const headers: Record<string, string> = {};
   if (keys !== "xApiKey") headers.authorization = `Bearer ${apiKey}`;
   if (keys !== "bearer") headers["x-api-key"] = apiKey;

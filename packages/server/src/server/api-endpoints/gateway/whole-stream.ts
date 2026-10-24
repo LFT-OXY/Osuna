@@ -12,7 +12,10 @@ import { listOf } from "./translation/object-root.js";
  * 放进流它们的事件里，不经中间格式。Chat 不会直通（Agent 只说 Anthropic 与 Responses），只认不写。
  */
 
-/** 这个协议的整份回复：Anthropic 的 message、Responses 的 response、Chat 每个 choice 都带 message 的 completion。 */
+/**
+ * 这个协议的整份回复：Anthropic 的 message、Responses 的 response、Chat 每个 choice 都带 message 的 completion、
+ * Gemini 带 candidates 的 GenerateContentResponse。
+ */
 export function isWholeReply(format: ApiEndpointRequestFormat, body: unknown): boolean {
   if (!isRecord(body)) return false;
   switch (format) {
@@ -22,6 +25,8 @@ export function isWholeReply(format: ApiEndpointRequestFormat, body: unknown): b
       return body.object === "response" && Array.isArray(body.output);
     case "openai_chat":
       return isChatCompletion(body.choices);
+    case "gemini":
+      return Array.isArray(body.candidates);
   }
 }
 
@@ -36,7 +41,7 @@ export interface WholeEvent {
   data: Record<string, unknown>;
 }
 
-/** 整份回复照这个协议的流说一遍的事件；不是这个协议的整份回复为 null。直通只有 Agent 说的两种格式，Chat 不会来。 */
+/** 整份回复照这个协议的流说一遍的事件；不是这个协议的整份回复为 null。直通只有 Agent 说的两种格式，Chat、Gemini 不会来。 */
 export function wholeEvents(format: ApiEndpointRequestFormat, body: unknown): WholeEvent[] | null {
   if (!isRecord(body) || !isWholeReply(format, body)) return null;
   switch (format) {
@@ -45,6 +50,7 @@ export function wholeEvents(format: ApiEndpointRequestFormat, body: unknown): Wh
     case "openai_responses":
       return responsesWholeEvents(body);
     case "openai_chat":
+    case "gemini":
       return null;
   }
 }

@@ -14,6 +14,7 @@ import {
   CODEX_ONLY,
   CODEX_SAMPLE,
   connectApiEndpointClient,
+  hideHostFeature,
   hideManagementCapability,
   openApiEndpointsPage,
   RELAY_ACCOUNT_TOKEN,
@@ -2365,7 +2366,7 @@ test.describe("Templates", () => {
       const [left, right, next] = await templateTileOriginsInOneFrame(page, [
         "anthropic",
         "openai",
-        "deepseek",
+        "google",
       ]);
       expect(right?.y ?? Infinity).toBe(left?.y ?? 0);
       expect(next?.x ?? Infinity).toBe(left?.x ?? 0);
@@ -2943,6 +2944,90 @@ test.describe("Templates", () => {
     await page.getByTestId("api-endpoint-detail-menu").filter({ visible: true }).click();
     await expect(page.getByTestId("api-endpoint-detail-edit-connection")).toBeVisible();
     await expect(page.getByTestId("api-endpoint-detail-add-another")).toHaveCount(0);
+  });
+});
+
+test.describe("A Gemini base URL", () => {
+  function geminiUrl(page: Page): Locator {
+    return page.getByTestId("api-endpoint-connection-url-gemini");
+  }
+
+  test("the add dialog has a Gemini base URL field; an endpoint with it alone saves after a failed try, and its page shows it", async ({
+    page,
+  }) => {
+    const host = await failConnectionSave(page);
+    await openApiEndpointsPage(page);
+    await page.getByTestId("api-endpoints-empty-add").click();
+    await page.getByTestId("api-endpoint-template-custom").click();
+    const field = page.getByTestId("api-endpoint-connection-url-field-gemini");
+    await expect(field).toContainText("Gemini base URL");
+    await expect(page.getByTestId("api-endpoint-connection-url-field-gemini-hint")).toHaveText(
+      "Fill in the …/v1beta level. The key is sent in the x-goog-api-key header.",
+    );
+    await expect(geminiUrl(page)).toHaveAttribute("placeholder", /\/v1beta$/);
+
+    await page.getByTestId("api-endpoint-connection-name").fill("Gemini Relay");
+    await page.getByTestId("api-endpoint-connection-api-key").fill(RELAY_KEY);
+    await geminiUrl(page).fill(`${relay.origin}/gem/v1beta`);
+    const save = page.getByTestId("api-endpoint-connection-save");
+
+    await test.step("a failed save keeps the form and says why", async () => {
+      await save.click();
+      await expect(page.getByTestId("api-endpoint-connection-error")).toHaveText(
+        "EACCES: permission denied",
+      );
+      await expect(geminiUrl(page)).toHaveValue(`${relay.origin}/gem/v1beta`);
+      expect((await client.apiEndpointList("claude")).endpoints).toEqual([]);
+    });
+
+    await test.step("trying again saves it, and the endpoint's page shows the Gemini base URL", async () => {
+      host.failing = false;
+      await save.click();
+      await expect(connectionForm(page)).toHaveCount(0);
+      await expect(headerTitle(page)).toHaveText("Gemini Relay");
+      const listed = await client.apiEndpointList("claude");
+      expect(listed.endpoints[0]?.baseUrls).toEqual([
+        { format: "gemini", url: `${relay.origin}/gem/v1beta` },
+      ]);
+      await expect(
+        page.getByTestId("api-endpoint-connection-row-gemini").filter({ visible: true }),
+      ).toContainText(`${relay.origin}/gem/v1beta`);
+    });
+  });
+
+  test("a host without apiEndpointGemini shows no Gemini base URL, in the dialog or on the page", async ({
+    page,
+  }) => {
+    await hideHostFeature(page, "apiEndpointGemini");
+    const endpointId = await seedApiEndpoint(client, {
+      name: "Relay",
+      baseUrls: [{ format: "openai_chat", url: `${relay.origin}/good/v1` }],
+      models: ["gpt-5"],
+      apiKey: RELAY_KEY,
+    });
+    await openApiEndpointsPage(page);
+    await row(page, endpointId).click();
+    await expect(
+      page.getByTestId("api-endpoint-connection-row-openai_chat").filter({ visible: true }),
+    ).toBeVisible();
+    await expect(page.getByTestId("api-endpoint-connection-row-gemini")).toHaveCount(0);
+    await page.getByTestId("api-endpoint-edit-connection").filter({ visible: true }).click();
+    await expect(page.getByTestId("api-endpoint-connection-url-openai_chat")).toBeVisible();
+    await expect(geminiUrl(page)).toHaveCount(0);
+  });
+
+  test("the template list has Google Gemini, which fills its Chat-compatible address", async ({
+    page,
+  }) => {
+    await openApiEndpointsPage(page);
+    await page.getByTestId("api-endpoints-empty-add").click();
+    await page.getByTestId("api-endpoint-template-search").fill("Gemini");
+    const google = page.getByTestId("api-endpoint-template-google");
+    await expect(google).toContainText("Google Gemini");
+    await google.click();
+    await expect(page.getByTestId("api-endpoint-connection-url-openai_chat")).toHaveValue(
+      "https://generativelanguage.googleapis.com/v1beta/openai",
+    );
   });
 });
 
@@ -6149,6 +6234,39 @@ test.describe("Import from other apps", () => {
     await expect(list).toContainText("Team Relay");
     await expect(list).toContainText("My Codex Relay");
     await expect(list).toContainText("My Relay");
+  });
+
+  test("a Gemini CLI entry at a relay comes in on its Gemini base URL", async ({ page }) => {
+    await mkdir(path.join(importHome, ".cc-switch"), { recursive: true });
+    await writeFile(
+      path.join(importHome, ".cc-switch", "config.json"),
+      JSON.stringify({
+        gemini: {
+          providers: {
+            relay: {
+              name: "Gemini Relay",
+              settingsConfig: {
+                env: { GOOGLE_GEMINI_BASE_URL: `${relay.origin}/gem`, GEMINI_API_KEY: RELAY_KEY },
+              },
+            },
+          },
+        },
+      }),
+    );
+    await openApiEndpointsPage(page);
+    await page.getByTestId("api-endpoints-import-button").click();
+    const entry = importItem(page, "gemini/relay");
+    await expect(entry).toContainText("Gemini Relay");
+    await expect(entry).toContainText("New");
+    await expect(entry).toContainText(new URL(relay.origin).host);
+    await expect(importSheet(page)).not.toContainText("Gemini format");
+    await page.getByTestId("api-endpoint-import-submit").click();
+    await expect(importSheet(page)).toHaveCount(0);
+    await expect(page.getByText("Imported 1: Gemini Relay")).toBeVisible();
+    const listed = await client.apiEndpointList("claude");
+    expect(listed.endpoints[0]?.baseUrls).toEqual([
+      { format: "gemini", url: `${relay.origin}/gem/v1beta` },
+    ]);
   });
 
   for (const language of ["en", "zh-CN"] as const) {

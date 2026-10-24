@@ -8,10 +8,11 @@ import type {
   ApiEndpointTemplateRegion,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { KeyHeaders } from "./gateway/refusals.js";
+import { geminiBaseUrl } from "./gemini-base-url.js";
 
 /*
  * 内置模板（Template）：随 daemon 版本走，不联网下载，经 list_templates 发给客户端。
- * 收录 magpie 的 57 个里去掉 5 个决策模型、Remote magpie、Google Vertex AI 之后的；Google Gemini 等子任务 7。
+ * 收录 magpie 的 57 个里去掉 5 个决策模型、Remote magpie、Google Vertex AI 之后的。
  * 顺序即列表里的顺序。
  * 国际站与中国站各是一个模板，中国站的 id 是国际站的加 `-cn`（照 magpie），客户端合成一行。
  */
@@ -90,6 +91,7 @@ const VOLCENGINE_PLAN_MODELS = [
 
 export const BEDROCK_TEMPLATE_ID = "bedrock";
 export const AZURE_TEMPLATE_ID = "azure";
+export const GOOGLE_TEMPLATE_ID = "google";
 
 // 按 AWS 控制台与 key 所在区域的写法，用区域代码命名。
 const BEDROCK_REGIONS = [
@@ -135,6 +137,17 @@ const VENDORS: ApiEndpointTemplate[] = [
     responses: "https://api.openai.com/v1",
     website: "https://platform.openai.com",
     keysUrl: "https://platform.openai.com/api-keys",
+  }),
+  // 照 magpie 只给 Chat 兼容地址：Gemini 地址（generateContent）留给中转服务与自定义的。
+  template({
+    id: GOOGLE_TEMPLATE_ID,
+    name: "Google Gemini",
+    group: "vendor",
+    modelsDevIds: ["google"],
+    chat: "https://generativelanguage.googleapis.com/v1beta/openai",
+    note: "Gemini Developer API",
+    website: "https://aistudio.google.com",
+    keysUrl: "https://aistudio.google.com/apikey",
   }),
   template({
     id: "deepseek",
@@ -1183,6 +1196,7 @@ export function templateBaseUrl(input: {
   format: string;
   url: string;
 }): string {
+  if (input.format === "gemini") return geminiBaseUrl(input.url);
   const isAzureOpenAi =
     input.templateId === AZURE_TEMPLATE_ID && input.format !== "anthropic_messages";
   return isAzureOpenAi ? azureResourceBaseUrl(input.url) : input.url;

@@ -93,6 +93,7 @@ const zhCNEnglishAllowlist = {
     "settings.apiEndpoints.formats.anthropic_messages",
     "settings.apiEndpoints.formats.openai_chat",
     "settings.apiEndpoints.formats.openai_responses",
+    "settings.apiEndpoints.formats.gemini",
   ],
   // 提供方自己定的功能名（Claude Code 的 Ultra Code）。
   providerFeatures: ["settings.apiEndpoints.agent.ultraCode"],

@@ -432,7 +432,12 @@ const PI_START_THINKING = "medium";
 
 /** 挑默认模型时从 CLI 配置与接管记录里读的那些。 */
 type CliPickInput = Omit<DefaultModelPickInput, "state" | "provider">;
-import { detectUpstreamFormats, pickProbeModel, probeUpstreamFormat } from "./upstream-detect.js";
+import {
+  detectUpstreamFormats,
+  isProbedFormat,
+  pickProbeModel,
+  probeUpstreamFormat,
+} from "./upstream-detect.js";
 import { DETECT_EACH_DEFAULTS, detectEachModel, type DetectEachLimits } from "./detect-models.js";
 import {
   cachedCodexVersion,
@@ -4555,7 +4560,8 @@ export class ApiEndpointService {
       region: parsed.region,
       keysUrl: parsed.keysUrl,
       replaces,
-      ignoredGemini: parsed.ignoredGemini,
+      // COMPAT(apiEndpointGemini): added in v0.17.0. 必填字段，老客户端要它；Gemini 地址已收进 baseUrls，一直发 false。
+      ignoredGemini: false,
       icon: parsed.icon,
       iconPending: iconUrl !== null,
     };
@@ -4926,6 +4932,18 @@ export class ApiEndpointService {
     input: ApiEndpointTestConnectionInput,
     signal: AbortSignal,
   ): Promise<ApiEndpointTestConnectionResult> {
+    // Gemini 地址的测试在工单 05（10-16-gemini-upstream）补上。
+    if (!isProbedFormat(format)) {
+      return {
+        ok: false,
+        status: null,
+        durationMs: 0,
+        error: {
+          code: "upstream_error",
+          message: "Testing a Gemini base URL is not supported yet",
+        },
+      };
+    }
     const place = this.upstreamPlace(input);
     const { templateId } = place;
     const baseUrl = upstreamBaseUrl({ place, format, raw: input.baseUrl });
@@ -7474,7 +7492,9 @@ function testAttempts(input: { endpoint: StoredApiEndpoint; modelId: string }): 
   ];
   return ordered.flatMap((format) => {
     const url = endpoint.baseUrls.find((entry) => entry.format === format)?.url;
-    return url === undefined ? [] : [{ format, baseUrl: url.replace(/\/+$/, "") }];
+    // Gemini 地址的测试在工单 05（10-16-gemini-upstream）补上。
+    if (url === undefined || !isProbedFormat(format)) return [];
+    return [{ format, baseUrl: url.replace(/\/+$/, "") }];
   });
 }
 

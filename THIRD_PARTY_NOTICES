@@ -1352,6 +1352,15 @@ and renderImport in internal/gui/assets/app.js:
   packages/server/src/server/api-endpoints/import-link.test.ts
   packages/app/src/api-endpoints/import-link-sheet.tsx
 
+A Gemini base URL kept as its base (trimmed, https:// added to a bare host, a
+method or model-list URL pasted whole cut back, /v1beta added to a bare host)
+follows GeminiBase in magpie's internal/provider/gemini_api.go, with its tests
+taken from gemini_api_test.go; a Gemini CLI relay imported from CC Switch with
+/v1beta added follows geminiCLIBase in internal/provider/importapps.go:
+
+  packages/server/src/server/api-endpoints/gemini-base-url.ts
+  packages/server/src/server/api-endpoints/gemini-base-url.test.ts
+
 An endpoint's price multiplier (from 0 to 1000 in steps of 0.001; a save that
 leaves it out keeps it and null clears it; empty in the editor is the list
 price, a comma read as the decimal point; a table price scaled by it and a

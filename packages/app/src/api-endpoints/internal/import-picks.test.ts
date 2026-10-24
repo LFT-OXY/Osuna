@@ -7,6 +7,7 @@ import {
   choosePick,
   importChoices,
   importRequests,
+  importSkipReasonOf,
   initialImportPicks,
   pickedCount,
   renamePick,
@@ -134,5 +135,13 @@ describe("import picks", () => {
     expect(sourcePickState({ source: only, picks: all })).toEqual({ pickable: 5, on: 5 });
     const none = setSourcePicks({ source: only, picks: all, on: false });
     expect(sourcePickState({ source: only, picks: none })).toEqual({ pickable: 5, on: 0 });
+  });
+});
+
+describe("importSkipReasonOf", () => {
+  it("knows the daemon's reasons and calls an older daemon's Gemini skip unknown", () => {
+    expect(importSkipReasonOf(item({ skip: "sign_in" }))).toBe("sign_in");
+    expect(importSkipReasonOf(item({ skip: "gemini_unsupported" }))).toBe("unknown");
+    expect(importSkipReasonOf(item({ skip: "brand_new" }))).toBe("unknown");
   });
 });

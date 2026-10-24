@@ -19,8 +19,11 @@ export function importItemStatusOf(item: ApiEndpointImportItem): ApiEndpointImpo
 /** 读不了的原因；认不出的为 unknown。 */
 export function importSkipReasonOf(
   item: ApiEndpointImportItem,
-): ApiEndpointImportSkipReason | "unknown" {
-  return API_ENDPOINT_IMPORT_SKIP_REASONS.find((reason) => reason === item.skip) ?? "unknown";
+): Exclude<ApiEndpointImportSkipReason, "gemini_unsupported"> | "unknown" {
+  const reason = API_ENDPOINT_IMPORT_SKIP_REASONS.find((known) => known === item.skip);
+  // COMPAT(apiEndpointGemini): added in v0.17.0, remove after 2027-04-24. 只有老 daemon 发它，不另给说法。
+  if (reason === undefined || reason === "gemini_unsupported") return "unknown";
+  return reason;
 }
 
 /** 名称撞上时的两种进来法：留着两家（新增一家）或替换原来那家。改了名就只能新增。 */
