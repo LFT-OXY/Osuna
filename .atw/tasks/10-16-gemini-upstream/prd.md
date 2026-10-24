@@ -224,7 +224,7 @@
 - [x] 自动识别多 Gemini 一行，回成功网页的地址不被认成 Gemini；测试连接、逐个模型支持 Gemini；拉清单翻页拉全、去 `models/` 前缀、只留能对话的、带上下文与输出上限。
 - [x] 导入 CC Switch、Alma、导入链接时收下 Gemini 地址；同一家不重复导入；「还不支持 Gemini」的提示不再出现。
 - [x] Google Gemini 模板出现在模板清单里，地址是 Chat 兼容地址。
-- [ ] 官方 Paseo 手机 App 与旧客户端照常工作；旧客户端保存带 Gemini 地址的接口时的行为已核实并写进 PR 说明。
+- [x] 官方 Paseo 手机 App 与旧客户端照常工作；旧客户端保存带 Gemini 地址的接口时的行为已核实并写进 PR 说明。
 - [x] 界面验收（UI and Design 一节）逐条有截图；9 种语言的 i18n 测试通过。
 - [x] 文档：`docs/glossary.md` 相关条目已核对；ADR 0007、0008、0009、0013 加了修改说明；`docs/data-model.md` 写明 `gemini` 与回退风险；`THIRD_PARTY_NOTICES` 与借鉴文件的 MIT 声明齐全。
 - [ ] typecheck、lint 通过；改到的测试文件本机通过；PR 的 CI 通过（已知常红的 Nix 两项除外）。
