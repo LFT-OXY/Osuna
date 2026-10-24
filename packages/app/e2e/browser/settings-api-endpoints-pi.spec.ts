@@ -1,5 +1,5 @@
 import { mkdtempSync } from "node:fs";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Locator } from "@playwright/test";
@@ -145,13 +145,42 @@ test("the switch writes Pi's default provider and model, the default model can c
     ]);
   });
 
-  await test.step("picking another default model rewrites settings.json", async () => {
+  await test.step("the options list the bare names and each endpoint's models", async () => {
     await section.getByTestId("agent-api-endpoints-default-model-trigger").click();
-    await page.getByTestId("agent-api-endpoints-default-option-kimi-k2").click();
+    for (const [id, label] of [
+      ["glm-5", "glm-5"],
+      ["kimi-k2", "kimi-k2"],
+      ["relay-a/glm-5", "glm-5 (Relay A)"],
+      ["relay-a/kimi-k2", "kimi-k2 (Relay A)"],
+    ]) {
+      await expect(page.getByTestId(`agent-api-endpoints-default-option-${id}`)).toHaveText(label);
+    }
+  });
+
+  await test.step("a failed save stays in place and leaves Pi's default", async () => {
+    await chmod(piDir, 0o500);
+    try {
+      await page.getByTestId("agent-api-endpoints-default-option-relay-a/kimi-k2").click();
+      await expect(section.getByTestId("agent-api-endpoints-error")).toContainText(
+        "Couldn't change the API endpoint settings for Pi",
+      );
+    } finally {
+      await chmod(piDir, 0o700);
+    }
     await expect(section.getByTestId("agent-api-endpoints-default-model-trigger")).toHaveText(
-      "kimi-k2",
+      "glm-5",
     );
-    await expect.poll(piDefaultModel).toBe("kimi-k2");
+    expect(await piDefaultModel()).toBe("glm-5");
+    await section.getByRole("button", { name: "Dismiss" }).click();
+  });
+
+  await test.step("picking one endpoint's model writes it as Pi's default", async () => {
+    await section.getByTestId("agent-api-endpoints-default-model-trigger").click();
+    await page.getByTestId("agent-api-endpoints-default-option-relay-a/kimi-k2").click();
+    await expect(section.getByTestId("agent-api-endpoints-default-model-trigger")).toHaveText(
+      "kimi-k2 (Relay A)",
+    );
+    await expect.poll(piDefaultModel).toBe("relay-a/kimi-k2");
   });
 
   await test.step("switching off lists Pi's default provider and model, then puts them back", async () => {
@@ -164,7 +193,7 @@ test("the switch writes Pi's default provider and model, the default model can c
     ]);
     await expect(settingsFile.getByTestId("switch-off-line-now")).toHaveText([
       'Now: "defaultProvider": "osuna",',
-      'Now: "defaultModel": "kimi-k2",',
+      'Now: "defaultModel": "relay-a/kimi-k2",',
     ]);
     await expect(inSheet(page, `switch-off-file-${modelsPath}`)).toBeVisible();
     await inSheet(page, "switch-off-confirm").click();

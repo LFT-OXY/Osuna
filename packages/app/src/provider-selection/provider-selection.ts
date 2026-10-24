@@ -15,6 +15,7 @@ import type { DraftCommandTarget } from "@/hooks/use-agent-commands-query";
 import { i18n } from "@/i18n/i18next";
 import { compareMatchScores, scoreTextFields } from "@getpaseo/protocol/search/text-match";
 import { filterSelectableModels } from "./model-catalog";
+import { supportsApiEndpoints } from "@/api-endpoints";
 
 export interface ProviderSelectionModelRow {
   /**
@@ -124,8 +125,16 @@ export function selectableEntryModels(
   entry: ProviderSnapshotEntry | null | undefined,
 ): AgentModelDefinition[] | null {
   if (!entry) return null;
-  const groupedModels = entry.apiEndpointModelGroups?.flatMap((group) => group.models);
+  const groupedModels = chatEndpointGroups(entry)?.flatMap((group) => group.models);
   return filterSelectableModels(groupedModels ?? entry.models ?? null);
+}
+
+/**
+ * 对话里能选的按接口分组的模型：只有 Osuna 对话换成接口模型的提供方。Pi 的分组只给设置页挑默认模型，
+ * 对话里还是 Pi 自己的模型（Pi 要 `osuna/` 开头的写法，工单 03 接上）。
+ */
+function chatEndpointGroups(entry: ProviderSnapshotEntry): ApiEndpointModelGroup[] | undefined {
+  return supportsApiEndpoints(entry.provider) ? entry.apiEndpointModelGroups : undefined;
 }
 
 function buildApiEndpointGroupRows(input: {
@@ -164,7 +173,7 @@ function buildEntryModelSelection(
   entry: ProviderSnapshotEntry,
   label: string,
 ): ProviderModelSelection {
-  const groups = entry.apiEndpointModelGroups;
+  const groups = chatEndpointGroups(entry);
   if (groups && groups.length > 0) {
     return {
       kind: "models",

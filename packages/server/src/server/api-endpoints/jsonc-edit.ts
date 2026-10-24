@@ -2,10 +2,12 @@ import {
   applyEdits,
   format,
   modify,
+  parse as parseJsonc,
   type Edit,
   type FormattingOptions,
   type JSONPath,
 } from "jsonc-parser";
+import { z } from "zod";
 
 /*
  * 按 JSONC 改 CLI 配置的通用办法（Claude Code 的 settings.json、Pi 的 models.json 与 settings.json 共用）：
@@ -13,6 +15,36 @@ import {
  */
 
 const BOM = "\uFEFF";
+
+const JSONC_OPTIONS = { allowTrailingComma: true, disallowComments: false };
+
+/** 接管前一个负责的键的值：有（原样记下）或没有。 */
+export const OriginalValueSchema = z.discriminatedUnion("present", [
+  z.object({ present: z.literal(true), value: z.unknown() }),
+  z.object({ present: z.literal(false) }),
+]);
+export type OriginalValue = z.infer<typeof OriginalValueSchema>;
+
+// 接管前整个文件的样子：不存在、空对象（留原文，恢复成空时逐字节还原）、或有内容。
+export const OriginalFileSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("absent") }),
+  z.object({ kind: z.literal("empty"), text: z.string() }),
+  z.object({ kind: z.literal("content") }),
+]);
+export type OriginalFile = z.infer<typeof OriginalFileSchema>;
+
+export function classifyOriginalFile(text: string | null): OriginalFile {
+  if (text === null) return { kind: "absent" };
+  const { body } = splitBom(text);
+  if (body.trim() === "") return { kind: "empty", text };
+  const parsed: unknown = parseJsonc(body, [], JSONC_OPTIONS);
+  const isEmptyObject =
+    typeof parsed === "object" &&
+    parsed !== null &&
+    !Array.isArray(parsed) &&
+    Object.keys(parsed).length === 0;
+  return isEmptyObject ? { kind: "empty", text } : { kind: "content" };
+}
 
 /** 开头的 BOM 读时摘下、写回时放回。 */
 export interface BomSplit {

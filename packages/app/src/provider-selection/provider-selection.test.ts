@@ -545,6 +545,21 @@ describe("models grouped by API endpoint", () => {
     ]);
   });
 
+  it("Pi keeps its own models in chat: its groups only feed the settings page for now", () => {
+    const pi: ProviderSnapshotEntry = {
+      ...entry,
+      provider: "pi",
+      label: "Pi",
+      models: [{ provider: "pi", id: "anthropic/claude-sonnet-4-5", label: "Claude Sonnet 4.5" }],
+    };
+    expect(selectableEntryModels(pi)?.map((model) => model.id)).toEqual([
+      "anthropic/claude-sonnet-4-5",
+    ]);
+    const [provider] = buildSelectableProviderSelectorProviders([pi]);
+    const rows = provider.modelSelection.kind === "models" ? provider.modelSelection.rows : [];
+    expect(rows.map((row) => row.modelId)).toEqual(["anthropic/claude-sonnet-4-5"]);
+  });
+
   it("rows carry their endpoint group and never show the slashed id", () => {
     const [provider] = buildSelectableProviderSelectorProviders([entry]);
     const rows = provider.modelSelection.kind === "models" ? provider.modelSelection.rows : [];

@@ -3,6 +3,7 @@
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type { ModelPricePerMillion } from "../usage/pricing/service.js";
 import { isClaudeModel } from "./gateway/routing.js";
 import { thinksAdaptivelyOnly } from "./gateway/translation/anthropic.js";
 import { publishedOutput, type EndpointModelFacts } from "./model-facts.js";
@@ -18,12 +19,8 @@ import { isOpenAIModel } from "./templates.js";
 // Pi 的 7 档思考（pi-ai 的 EXTENDED_THINKING_LEVELS，magpie piLevels）。
 export const PI_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 
-export interface PiModelCost {
-  input: number;
-  output: number;
-  cacheRead: number;
-  cacheWrite: number;
-}
+/** 写进 Pi 的 cost：每百万 token 的美元价（价格表的列，不带是不是用户自设）。 */
+export type PiModelCost = Omit<ModelPricePerMillion, "isOverride">;
 
 export interface PiModelEntry {
   id: string;

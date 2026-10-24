@@ -9,12 +9,17 @@ import {
   type ParseError,
 } from "jsonc-parser";
 import { z } from "zod";
+import type { ClaudeSettingsUnparsableReason } from "./claude-settings-patch.js";
 import {
+  classifyOriginalFile,
+  detectFormatting,
+  edit,
+  OriginalFileSchema,
   OriginalValueSchema,
-  type ClaudeSettingsUnparsableReason,
+  splitBom,
+  type OriginalFile,
   type OriginalValue,
-} from "./claude-settings-patch.js";
-import { detectFormatting, edit, splitBom } from "./jsonc-edit.js";
+} from "./jsonc-edit.js";
 import type { PiModelEntry } from "./pi-model-entries.js";
 
 /*
@@ -25,19 +30,12 @@ import type { PiModelEntry } from "./pi-model-entries.js";
  * - models.json 的 providers.osuna：中转站 /v1 地址、openai-completions、Pi 的中转站口令、compat.sendSessionAffinityHeaders
  *   与模型清单。用户在这一项里自己加的键与 compat 值留着（照 magpie piBlockKept），models 整份是 Osuna 的。
  *   关掉时放回接管前的值（多半是没有），为它新建的 providers 空了就删掉。
- * - settings.json 的 defaultProvider（osuna）与 defaultModel：关掉时还是 Osuna 写的值才放回原值，开着期间用户自己改过的留着。
+ * - settings.json 的 defaultProvider（osuna）与 defaultModel：两个键是 Pi 的一个默认模型，一起放回（照 magpie 的 Disconnect）。
+ *   关掉时默认服务商还是 Osuna、或两个键都还是 Osuna 写的，就放回接管前的一对；用户开着期间换成了别家的模型，两个都留着。
  * 接管前文件不存在、关掉后只剩空对象就删掉文件；接管前是空对象的逐字节放回。
  */
 
 export const PI_PROVIDER_ID = "osuna";
-
-// 接管前整个文件的样子（同 Claude Code 的 settings.json）。
-const OriginalFileSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("absent") }),
-  z.object({ kind: z.literal("empty"), text: z.string() }),
-  z.object({ kind: z.literal("content") }),
-]);
-type OriginalFile = z.infer<typeof OriginalFileSchema>;
 
 export const PiModelsTakeoverSchema = z.object({
   originalFile: OriginalFileSchema,
@@ -101,13 +99,9 @@ export function applyPiModels(input: {
   block: PiProviderBlock;
   takeover: PiModelsTakeover | null;
 }): PiConfigPatchResult<PiModelsTakeover> {
-  const opened = openFile(input.text, "models.json");
+  const opened = openModels(input.text);
   if (opened.kind === "unparsable") return opened;
-  const { bom, text, root, formatting } = opened;
-  if (root.providers !== undefined && !isRecord(root.providers)) {
-    return keyNotObject("models.json", "providers");
-  }
-  const providers = root.providers;
+  const { bom, text, providers, formatting } = opened;
   const existing = providers?.[PI_PROVIDER_ID];
   const written = keptBlock({ existing, block: input.block });
   return {
@@ -130,15 +124,12 @@ export function restorePiModels(input: {
   takeover: PiModelsTakeover;
 }): PiConfigRestoreResult {
   if (input.text === null) return { kind: "missing" };
-  const opened = openFile(input.text, "models.json");
+  const opened = openModels(input.text);
   if (opened.kind === "unparsable") return opened;
-  const { bom, formatting, root } = opened;
-  if (root.providers !== undefined && !isRecord(root.providers)) {
-    return keyNotObject("models.json", "providers");
-  }
+  const { bom, formatting } = opened;
   let text = restoreValue(opened.text, PROVIDER_PATH, input.takeover.provider.original, formatting);
   if (input.takeover.providersCreated) {
-    const providers = readRoot(text).providers;
+    const { providers } = readObject(text);
     if (isRecord(providers) && Object.keys(providers).length === 0) {
       text = edit(text, ["providers"], undefined, formatting);
     }
@@ -151,23 +142,27 @@ export function inspectPiModels(input: {
   text: string | null;
   takeover: PiModelsTakeover | null;
 }): PiConfigInspection {
-  const opened = openFile(input.text, "models.json");
+  const opened = openModels(input.text);
   if (opened.kind === "unparsable") return opened;
   if (!input.takeover) return { kind: "parsed", modifiedKeys: [] };
-  const providers = opened.root.providers;
-  const block = isRecord(providers) ? providers[PI_PROVIDER_ID] : undefined;
+  const block = opened.providers?.[PI_PROVIDER_ID];
   const { written } = input.takeover.provider;
   const isChanged =
     !isRecord(block) || ROUTING_FIELDS.some((field) => block[field] !== written[field]);
   return { kind: "parsed", modifiedKeys: isChanged ? [PROVIDER_PATH.join(".")] : [] };
 }
 
+/** models.json 里 providers.osuna 写的中转站地址与口令。 */
+export interface PiGatewayAddress {
+  baseUrl: string;
+  apiKey: string;
+}
+
 /** models.json 里 providers.osuna 现在写的地址与口令；没有或读不懂为 null。 */
-export function readPiGateway(text: string | null): { baseUrl: string; apiKey: string } | null {
-  const opened = openFile(text, "models.json");
+export function readPiGateway(text: string | null): PiGatewayAddress | null {
+  const opened = openModels(text);
   if (opened.kind === "unparsable") return null;
-  const providers = opened.root.providers;
-  const block = isRecord(providers) ? providers[PI_PROVIDER_ID] : undefined;
+  const block = opened.providers?.[PI_PROVIDER_ID];
   if (!isRecord(block)) return null;
   const { baseUrl, apiKey } = block;
   if (typeof baseUrl !== "string" || typeof apiKey !== "string") return null;
@@ -204,7 +199,11 @@ export function applyPiSettings(input: {
   };
 }
 
-/** 关掉时的 settings.json：还是 Osuna 写的值的键放回原值，用户开着期间改过的留着。 */
+/**
+ * 关掉时的 settings.json（照 magpie 的 Disconnect：默认模型这一项是 Osuna 写的、或指着 Osuna 的模型就清掉，放回接通前的）：
+ * 默认服务商还是 osuna，或两个键都还是 Osuna 写的值，两个键一起放回原值；用户开着期间换成了别家的模型就都留着。
+ * 不拆开放回，免得拼出「原来的服务商 + Osuna 的模型名」。
+ */
 export function restorePiSettings(input: {
   text: string | null;
   takeover: PiSettingsTakeover;
@@ -213,10 +212,14 @@ export function restorePiSettings(input: {
   const opened = openFile(input.text, "settings.json");
   if (opened.kind === "unparsable") return opened;
   const { bom, root, formatting } = opened;
+  const records = Object.entries(input.takeover.keys);
+  const isAllWritten = records.every(([key, record]) => root[key] === record.written);
+  const isOnOsuna = root.defaultProvider === PI_PROVIDER_ID;
   let text = opened.text;
-  for (const [key, record] of Object.entries(input.takeover.keys)) {
-    if (root[key] !== record.written) continue;
-    text = restoreValue(text, [key], record.original, formatting);
+  if (isOnOsuna || isAllWritten) {
+    for (const [key, record] of records) {
+      text = restoreValue(text, [key], record.original, formatting);
+    }
   }
   return finishedRestore({ bom, text, originalFile: input.takeover.originalFile });
 }
@@ -296,7 +299,7 @@ type OpenedFile =
       bom: string;
       // 摘掉 BOM 的正文；文件不存在或是空白时为 "{}\n"。
       text: string;
-      root: Record<string, unknown> & { providers?: Record<string, unknown> };
+      root: Record<string, unknown>;
       formatting: FormattingOptions;
     }
   | PiConfigUnparsable;
@@ -317,19 +320,27 @@ function openFile(text: string | null, name: string): OpenedFile {
       reason: { code: "root_not_object" },
     };
   }
-  return {
-    kind: "parsed",
-    bom,
-    text: base,
-    root: value as OpenedRoot,
-    formatting: detectFormatting(base),
-  };
+  return { kind: "parsed", bom, text: base, root: value, formatting: detectFormatting(base) };
 }
 
-type OpenedRoot = Record<string, unknown> & { providers?: Record<string, unknown> };
+/** models.json 另要 providers 是对象（没有也行）。 */
+type OpenedModels =
+  | (Extract<OpenedFile, { kind: "parsed" }> & { providers: Record<string, unknown> | undefined })
+  | PiConfigUnparsable;
 
-function readRoot(text: string): OpenedRoot {
-  return parseJsonc(text, [], JSONC_OPTIONS) as OpenedRoot;
+function openModels(text: string | null): OpenedModels {
+  const opened = openFile(text, "models.json");
+  if (opened.kind === "unparsable") return opened;
+  const { providers } = opened.root;
+  if (providers === undefined) return { ...opened, providers: undefined };
+  if (!isRecord(providers)) return keyNotObject("models.json", "providers");
+  return { ...opened, providers };
+}
+
+/** 只在已校验过的文本上调用；万一不是对象按空对象算。 */
+function readObject(text: string): Record<string, unknown> {
+  const value: unknown = parseJsonc(text, [], JSONC_OPTIONS);
+  return isRecord(value) ? value : {};
 }
 
 function finishedRestore(input: {
@@ -339,21 +350,11 @@ function finishedRestore(input: {
 }): PiConfigRestoreResult {
   const { originalFile } = input;
   // 负责的都拿走后只剩空对象：按接管前的样子收回。
-  if (Object.keys(readRoot(input.text)).length === 0) {
+  if (Object.keys(readObject(input.text)).length === 0) {
     if (originalFile.kind === "absent") return { kind: "delete" };
     if (originalFile.kind === "empty") return { kind: "patched", text: originalFile.text };
   }
   return { kind: "patched", text: `${input.bom}${input.text}` };
-}
-
-function classifyOriginalFile(text: string | null): OriginalFile {
-  if (text === null) return { kind: "absent" };
-  const { body } = splitBom(text);
-  if (body.trim() === "") return { kind: "empty", text };
-  const parsed: unknown = parseJsonc(body, [], JSONC_OPTIONS);
-  return isRecord(parsed) && Object.keys(parsed).length === 0
-    ? { kind: "empty", text }
-    : { kind: "content" };
 }
 
 function originalValue(container: Record<string, unknown> | undefined, key: string): OriginalValue {

@@ -280,6 +280,12 @@ interface CliSync {
   shouldRewriteModel?: boolean;
 }
 
+/** 改写一份 CLI 配置时算出的接管记录，与改写前的原始字节（首次改写时拿去做副本）。 */
+interface TakeoverWrite<Takeover> {
+  takeover: Takeover;
+  current: Buffer | null;
+}
+
 /** 把中转站写进 CLI 配置：要写的内容，与 CLI 自己换过的模型要不要写回。 */
 interface CliEndpointWrite {
   wiring: CliWiring;
@@ -1527,7 +1533,7 @@ export class ApiEndpointService {
    */
   activeModelGroups(provider: string): ApiEndpointModelGroup[] | null {
     const state = this.readStateForSnapshot();
-    const supported = findChatProvider(provider);
+    const supported = findProvider(provider);
     if (!state || !supported) return null;
     const agent = state.agents[supported];
     if (!agent.enabled) return null;
@@ -1539,7 +1545,8 @@ export class ApiEndpointService {
       if (isNamed) return id === agent.defaultModelId;
       return model.id === agent.defaultModelId;
     }
-    const thinkingOf = this.chatThinking(state, supported);
+    // Pi 的分组只给设置页挑默认模型（「接口标识/模型名」），还没有思考档位与对话里的模型（工单 03）。
+    const thinkingOf = supported === "pi" ? () => ({}) : this.chatThinking(state, supported);
     function toDefinition(entry: EndpointGroupModel, label: string): AgentModelDefinition {
       const { id } = entry;
       const isDefault = !defaultMarked && isDefaultEntry(entry);
@@ -3292,7 +3299,7 @@ export class ApiEndpointService {
         name: bareLabels[index] ?? model.id,
         facts: first ? this.modelFacts(first, model.id) : {},
         format: piBareFormat(members.map((endpoint) => this.piFormatAt(endpoint, model.id))),
-        cost: first ? this.piCost(first, model.id) : null,
+        cost: this.piBareCost(members, model.id),
       };
     });
     const named = endpointModelGroups(listed).flatMap((group) => {
@@ -3334,6 +3341,17 @@ export class ApiEndpointService {
       baseUrls: endpoint.baseUrls,
     });
     return piEndpointFormat({ modelId, served, pinned: pin.kind === "pinned" ? pin.format : null });
+  }
+
+  /**
+   * 光秃秃的名字的价：提供它的每一家都知道价且一样才有（magpie EntryPriceIn 对分组的做法），中转站接给哪家事先不知道。
+   */
+  private piBareCost(members: StoredApiEndpoint[], modelId: string): PiModelCost | null {
+    const costs = members.map((endpoint) => this.piCost(endpoint, modelId));
+    const [first] = costs;
+    if (first === undefined || first === null) return null;
+    const isSame = costs.every((cost) => cost !== null && isDeepStrictEqual(cost, first));
+    return isSame ? first : null;
   }
 
   /** 这家这个模型每百万 token 的价：价格表的乘这家的价格倍率，用户自己设的照原价；不知道为 null。 */
@@ -5183,7 +5201,7 @@ export class ApiEndpointService {
     const filePath = this.resolvePiModelsPath();
     const record = this.store.readPiModelsTakeover();
     let createdBackup: string | null = null;
-    this.writeConfigFile<{ takeover: PiModelsTakeover; current: Buffer | null }>({
+    this.writeConfigFile<TakeoverWrite<PiModelsTakeover>>({
       filePath,
       compute: (text, current) => {
         const result = applyPiModels({
@@ -5224,7 +5242,7 @@ export class ApiEndpointService {
     const filePath = this.resolvePiSettingsPath();
     const record = this.store.readPiSettingsTakeover();
     let createdBackup: string | null = null;
-    this.writeConfigFile<{ takeover: PiSettingsTakeover; current: Buffer | null }>({
+    this.writeConfigFile<TakeoverWrite<PiSettingsTakeover>>({
       filePath,
       compute: (text, current) => {
         const result = applyPiSettings({ text, model, takeover: record.takeover });
@@ -5755,7 +5773,7 @@ function findProvider(provider: string): CliConfigProvider | undefined {
   return CLI_CONFIG_PROVIDERS.find((candidate) => candidate === provider);
 }
 
-/** Osuna 对话里换成接口模型的提供方（模型清单、分组、接口名显示方式等快照字段）；Pi 的还没接上（工单 03）。 */
+/** Osuna 对话里换成接口模型的提供方（模型清单、接口名显示方式等快照字段）；Pi 的还没接上（工单 03），它的分组只给设置页。 */
 type ChatModelProvider = Exclude<CliConfigProvider, "pi">;
 
 function findChatProvider(provider: string): ChatModelProvider | undefined {

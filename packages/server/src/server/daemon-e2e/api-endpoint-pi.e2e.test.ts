@@ -217,6 +217,27 @@ describe.skipIf(process.platform === "win32")("Pi API endpoints over the daemon 
     });
   });
 
+  test("Pi's snapshot carries the endpoint groups for its default model, with no thinking levels yet", async () => {
+    await createEndpoint();
+    await client.apiEndpointSetAgentSettings({ provider: "pi", enabled: true });
+    async function piGroups(): Promise<string[] | null> {
+      const snapshot = await client.getProvidersSnapshot();
+      const entry = snapshot.entries.find((candidate) => candidate.provider === "pi");
+      const groups = entry?.apiEndpointModelGroups;
+      if (!groups) return null;
+      const rows: string[] = [];
+      for (const group of groups) {
+        for (const model of group.models) {
+          rows.push(`${group.name} ${model.id}${model.thinkingOptions ? " thinks" : ""}`);
+        }
+      }
+      return rows;
+    }
+    await expect
+      .poll(piGroups, { timeout: 10_000 })
+      .toEqual(["Relay relay/glm-5", "Relay relay/gpt-5", "Relay relay/claude-opus-5-5"]);
+  });
+
   test("the switch-off preview lists Pi's default provider and model and Osuna's provider", async () => {
     await createEndpoint();
     await client.apiEndpointSetAgentSettings({ provider: "pi", enabled: true });
@@ -250,23 +271,39 @@ describe.skipIf(process.platform === "win32")("Pi API endpoints over the daemon 
     );
   });
 
-  test("a default the user changed in Pi while the switch was on stays after it goes off", async () => {
+  test("a default the user moved to another provider in Pi while the switch was on stays after it goes off", async () => {
     await createEndpoint();
     await client.apiEndpointSetAgentSettings({ provider: "pi", enabled: true });
     const text = await readFile(settingsPath, "utf8");
     await writeFile(
       settingsPath,
-      text.replace('"defaultModel": "glm-5"', '"defaultModel": "gpt-5"'),
+      text
+        .replace('"defaultProvider": "osuna"', '"defaultProvider": "openai"')
+        .replace('"defaultModel": "glm-5"', '"defaultModel": "gpt-5"'),
     );
 
     await client.apiEndpointSetAgentSettings({ provider: "pi", enabled: false });
 
     expect(JSON.parse(await readFile(settingsPath, "utf8"))).toEqual({
-      defaultProvider: "anthropic",
+      defaultProvider: "openai",
       defaultModel: "gpt-5",
       theme: "dark",
       packages: ["npm:pi-mcp-adapter"],
     });
+  });
+
+  test("another of Osuna's models picked in Pi goes back to the user's own default with its provider", async () => {
+    await createEndpoint();
+    await client.apiEndpointSetAgentSettings({ provider: "pi", enabled: true });
+    const text = await readFile(settingsPath, "utf8");
+    await writeFile(
+      settingsPath,
+      text.replace('"defaultModel": "glm-5"', '"defaultModel": "relay/gpt-5"'),
+    );
+
+    await client.apiEndpointSetAgentSettings({ provider: "pi", enabled: false });
+
+    expect(await readFile(settingsPath, "utf8")).toBe(USER_SETTINGS);
   });
 
   test("Pi files that did not exist are created and removed again", async () => {

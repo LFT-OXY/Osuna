@@ -20,7 +20,15 @@ import {
 import { claudeModelName } from "./claude-model-name.js";
 import { claudeDashed } from "./claude-spelling.js";
 import { CliModelHoldSchema, type CliModelHold, type CliPicks } from "./cli-model-hold.js";
-import { detectFormatting, edit, splitBom } from "./jsonc-edit.js";
+import {
+  classifyOriginalFile,
+  detectFormatting,
+  edit,
+  OriginalFileSchema,
+  OriginalValueSchema,
+  splitBom,
+  type OriginalValue,
+} from "./jsonc-edit.js";
 
 /*
  * Claude Code 的 ~/.claude/settings.json 补丁：只改 Osuna 负责的键，其余字节不动。
@@ -73,12 +81,6 @@ const AUTO_MODE_SERVER_KEY = "CLAUDE_CODE_AUTO_MODE_SERVER";
 // 按模型提示的归属规则写的 env 键：文件里没有、或还是 Osuna 上次写的值，才归 Osuna。
 const OWNED_WHILE_UNTOUCHED_ENV_KEYS = [...CLAUDE_HINT_ENV_KEYS, AUTO_MODE_SERVER_KEY];
 
-export const OriginalValueSchema = z.discriminatedUnion("present", [
-  z.object({ present: z.literal(true), value: z.unknown() }),
-  z.object({ present: z.literal(false) }),
-]);
-export type OriginalValue = z.infer<typeof OriginalValueSchema>;
-
 // 默认思考档位写过的一个键：JSON 路径、接管前的值、写进去的值（null 为拿掉）。
 const ThinkingKeyRecordSchema = z.object({
   path: z.array(z.string()),
@@ -93,14 +95,6 @@ const ThinkingRecordSchema = z.object({
   created: z.array(z.array(z.string())),
 });
 type ThinkingRecord = z.infer<typeof ThinkingRecordSchema>;
-
-// 接管前整个文件的样子：不存在、空对象（留原文，恢复成空时逐字节还原）、或有内容。
-const OriginalFileSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("absent") }),
-  z.object({ kind: z.literal("empty"), text: z.string() }),
-  z.object({ kind: z.literal("content") }),
-]);
-type OriginalFile = z.infer<typeof OriginalFileSchema>;
 
 const ModelPickerOptionSchema = z.object({
   model: z.string(),
@@ -963,16 +957,6 @@ export function keepClaudeCliModel(input: {
   }
   const model = { ...takeover.model, written: fileModel(settings), held: input.held };
   return { ...takeover, model };
-}
-
-function classifyOriginalFile(text: string | null): OriginalFile {
-  if (text === null) return { kind: "absent" };
-  const { body } = splitBom(text);
-  if (body.trim() === "") return { kind: "empty", text };
-  const parsed: unknown = parseJsonc(body, [], JSONC_OPTIONS);
-  return isRecord(parsed) && Object.keys(parsed).length === 0
-    ? { kind: "empty", text }
-    : { kind: "content" };
 }
 
 interface ParsedSettings {

@@ -148,16 +148,28 @@ describe("Pi settings.json", () => {
     });
   });
 
-  it("keeps a default the user changed while the switch was on", () => {
+  it("puts both keys back when the user only picked another of Osuna's models", () => {
     const { text, takeover } = settings(USER_SETTINGS, "glm-5");
-    const changed = text.replace('"defaultModel": "glm-5"', '"defaultModel": "gpt-6"');
+    const changed = text.replace('"defaultModel": "glm-5"', '"defaultModel": "relay/kimi-k3"');
     expect(inspectPiSettings({ text: changed, takeover })).toMatchObject({
       modifiedKeys: ["defaultModel"],
     });
+    // 分开放回会拼出 anthropic/relay/kimi-k3：Pi 里没有这个模型。
+    expect(restorePiSettings({ text: changed, takeover })).toEqual({
+      kind: "patched",
+      text: USER_SETTINGS,
+    });
+  });
+
+  it("keeps a default the user moved to another provider while the switch was on", () => {
+    const { text, takeover } = settings(USER_SETTINGS, "glm-5");
+    const changed = text
+      .replace('"defaultProvider": "osuna"', '"defaultProvider": "openai"')
+      .replace('"defaultModel": "glm-5"', '"defaultModel": "gpt-6"');
     const restored = restorePiSettings({ text: changed, takeover });
     if (restored.kind !== "patched") throw new Error("Expected a patch");
     expect(JSON.parse(restored.text)).toEqual({
-      defaultProvider: "anthropic",
+      defaultProvider: "openai",
       defaultModel: "gpt-6",
       theme: "dark",
     });
