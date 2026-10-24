@@ -53,6 +53,7 @@ import { ModelFactsSchema } from "./model-facts.js";
  * - import-fingerprint-key.json：导入指纹的 HMAC 密钥，第一次扫描时随机取，重启后指纹不变、已忽略的发现照样认得（import-apps.ts）；
  * - endpoint-snapshots.json：每家接口最后的名字、价格倍率与是否已删除，用量页按接口编号显示名字，删掉的也认得；
  * - icons/：「自定义」加的接口自选的图片，按内容起名，没有接口用就删（endpoint-icons.ts）；
+ * - gemini-signatures/：直转 Chat 时 Gemini 的思考签名，按内容摘要起名，90 天没读就删（gateway/gemini-signatures.ts）；
  * - backups/：首次改写前的完整副本，只供手动找回。
  * endpoints.json、keys.json、gateway-tokens.json 写坏时用上一份好的 .bak（last-good.ts）；
  * 接管记录不这样做：拿旧记录去恢复 CLI 配置可能恢复错值，读不懂照旧报错。

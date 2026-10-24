@@ -8,6 +8,7 @@
 
 import http, { type IncomingHttpHeaders } from "node:http";
 import os from "node:os";
+import path from "node:path";
 import type { Request, RequestHandler, Response } from "express";
 import type pino from "pino";
 import { applyEdits, modify } from "jsonc-parser";
@@ -106,6 +107,7 @@ import { RequestShapeError, estimateInputTokens, type GatewayRequest } from "./t
 import { protocolOf } from "./translation/protocols.js";
 import { decodeAgentBody, readAgentBody, readRawBody } from "./request-body.js";
 import { liftMessageTools } from "./message-tools.js";
+import { GeminiSignatureStore, chatCallSignatures } from "./gemini-signatures.js";
 import { joinToolRuns, orphanedToolOutputs, pairToolItems } from "./translation/responses.js";
 import {
   ANSWERED_BY_HEADER,
@@ -226,6 +228,9 @@ export function createApiEndpointGateway(options: {
     ownUserAgent: `Osuna/${options.daemonVersion}`,
     cliSamples: new CliHeaderSamples({ store, logger }),
     ledger: options.ledger,
+    signatures: new GeminiSignatureStore(
+      path.join(options.paseoHome, "api-endpoints", "gemini-signatures"),
+    ),
   };
   const chatgpt: ChatGptBackend = {
     bases: {
@@ -655,6 +660,8 @@ interface Failover {
   // 「按 Claude Code / Codex 的样子测」用的 CLI 请求头样本（ADR 0013）。
   cliSamples: CliHeaderSamples;
   ledger: GatewayLedger;
+  // 直转 Chat 时 Gemini 的思考签名（gemini-signatures.ts）。
+  signatures: GeminiSignatureStore;
 }
 
 /** 读出 Agent 的请求体与模型名，按模型名找到候选；读不了或找不到时已按 Agent 协议回了错误，返回 null。 */
@@ -1069,8 +1076,13 @@ async function handleAgentRequest(input: {
   const body = withAgentEffort({ body: routed.body, format: input.format, fixedEffort });
   const parsed = body === routed.body ? routed.parsed : parseJson(body.toString("utf8"));
   const mended = mendedBody(input.format, body);
-  // 翻译读的是修补过的请求，和直通发出去的一样。
-  const translatable = mended === body ? parsed : parseJson(mended.toString("utf8"));
+  // 翻译读的是修补过的请求，和直通发出去的一样；只是 Chat 调用 id 里藏的 Gemini 签名先取下（直通时才用得上）。
+  const translatable = translatableOf({
+    format: input.format,
+    mended,
+    parsed: mended === body ? parsed : null,
+    signatures: input.failover.signatures,
+  });
   const { refusals } = input.failover;
   let passable: AskableCandidate[];
   try {
@@ -1300,6 +1312,20 @@ function mendedBody(format: ApiEndpointRequestFormat, body: Buffer): Buffer {
       ? liftMessageTools(text)
       : pairToolItems(orphanedToolOutputs(joinToolRuns(text)));
   return mended === text ? body : Buffer.from(mended);
+}
+
+/** 翻译读的请求：修补过的请求；Chat 的调用 id 去掉 Gemini 签名（gemini-signatures.ts）。parsed 是已经解析好的。 */
+function translatableOf(input: {
+  format: ApiEndpointRequestFormat;
+  mended: Buffer;
+  parsed: unknown;
+  signatures: GeminiSignatureStore;
+}): unknown {
+  const text = input.mended.toString("utf8");
+  const parsed = input.parsed ?? parseJson(text);
+  if (input.format !== "openai_chat") return parsed;
+  const unsigned = chatCallSignatures({ text, gemini: false, store: input.signatures });
+  return unsigned === text ? parsed : parseJson(unsigned);
 }
 
 type PlannedAttempts =
@@ -1796,6 +1822,7 @@ function askOnce(input: EndpointAsk): Promise<AttemptOutcome> {
     refusals: refused,
     keepAlive: input.keepAlive,
     sessionId: sessionForExtraBody(input),
+    signatures: input.failover.signatures,
   };
   if (candidate.translated === null) {
     return attemptEndpoint({
@@ -1953,8 +1980,15 @@ function sendRest(input: {
   return message;
 }
 
-function agentPath(path: string): AgentPath | null {
-  return Object.hasOwn(AGENT_PATHS, path) ? AGENT_PATHS[path as keyof typeof AGENT_PATHS] : null;
+function agentPath(requestPath: string): AgentPath | null {
+  switch (requestPath) {
+    case "/v1/messages":
+    case "/v1/responses":
+    case "/v1/chat/completions":
+      return AGENT_PATHS[requestPath];
+    default:
+      return null;
+  }
 }
 
 /** 认不出路径时（拒收、/v1/models）按请求头猜：带 anthropic-version 的是 Claude Code。 */

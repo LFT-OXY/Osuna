@@ -1,4 +1,4 @@
-// 写在文字里的工具调用转成真调用移植自 magpie（https://github.com/yetone/magpie，internal/gateway/textcalls.go 的 textCallAt、parseTextCalls、cutMark、hermesCall、paramCall、glmCall、dsmlCall、callArgs、escapeRawControls 与 textCallSee）
+// 写在文字里的工具调用转成真调用移植自 magpie（https://github.com/yetone/magpie，internal/gateway/textcalls.go 的 textCallAt、parseTextCalls、cutMark、hermesCall、paramCall、glmCall、dsmlCall、callArgs、escapeRawControls 与 textCallSee；直转 Chat 的流与整份回复见 ../chat-reply-tidy.ts）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { isRecord, parseJson } from "../../upstream-http.js";
@@ -87,7 +87,7 @@ interface CallStart {
 }
 
 /** 写进文字的调用从哪开始（没有为 -1）；没有时结尾有几个字符可能是还没写完的开头。 */
-function textCallAt(text: string): CallStart {
+export function textCallAt(text: string): CallStart {
   const found = TEXT_CALL_MARKS.map((mark) => text.indexOf(mark)).filter((at) => at >= 0);
   if (found.length > 0) return { at: Math.min(...found), tail: 0 };
   const tails = TEXT_CALL_MARKS.map((tag) => partialTagAtEnd({ text, tag }));
@@ -114,7 +114,7 @@ function cutMark(text: string): string {
  * 只有标签没有别的（magpie #823：整个回复只有 <tool_call></｜DSML｜parameter></｜DSML｜invoke></）也算，标签丢掉——
  * 留给 Agent、被模型读回去，它会照样写下一个调用。
  */
-function parseTextCalls(input: CallText): ParsedCalls | null {
+export function parseTextCalls(input: CallText): ParsedCalls | null {
   const { names } = input;
   const calls: WrittenCall[] = [];
   let text = input.text;

@@ -250,6 +250,8 @@ async function start(
     chatTwo?: FakeUpstream;
     responses?: FakeUpstream;
     cooldownsNow?: () => number;
+    // 第一家 Chat 地址的接口选的模型；缺省 deepseek-v3。
+    chatModels?: string[];
   } = {},
 ): Promise<Harness> {
   const root = await mkdtemp(path.join(os.tmpdir(), "paseo-gateway-chat-"));
@@ -270,7 +272,7 @@ async function start(
           id: "ep_chat",
           name: "Relay Chat",
           baseUrls: [{ format: "openai_chat", url: `${options.chat?.url ?? nobody}/v1` }],
-          models: ["deepseek-v3"],
+          models: options.chatModels ?? ["deepseek-v3"],
         }),
         endpoint({
           id: "ep_chat_two",
@@ -764,5 +766,110 @@ describe("the gateway's OpenAI Chat entrance", () => {
     const other = await toolTurn("pi-session-2");
     expect(other.headers.get("x-osuna-api-endpoint")).toBe("relay-chat");
     await other.text();
+  });
+
+  test("passed straight from a Chat endpoint: empty fields are tidied and a call written into the text becomes a call", async () => {
+    const written = '<tool_call>{"name": "read", "arguments": {"path": "a.txt"}}</tool_call>';
+    const upstream = await startUpstream((_request, res) =>
+      sse(res, [
+        {
+          data: {
+            id: "chatcmpl-w",
+            choices: [
+              {
+                index: 0,
+                delta: { content: `let me look ${written}`, reasoning_content: "" },
+                finish_reason: "",
+              },
+            ],
+          },
+        },
+        { data: { id: "chatcmpl-w", choices: [{ index: 0, delta: {}, finish_reason: "stop" }] } },
+        { data: "[DONE]" },
+      ]),
+    );
+    const harness = await start({ chat: upstream });
+    const response = await chat(harness, {
+      model: "deepseek-v3",
+      messages: HI,
+      tools: [{ type: "function", function: { name: "read", parameters: {} } }],
+    });
+    const text = await response.text();
+    expect(text).not.toContain('"reasoning_content":""');
+    expect(text).not.toContain('"finish_reason":""');
+    expect(deltas(text, "content").join("")).toBe("let me look ");
+    expect(deltas(text, "tool_calls")).toMatchObject([
+      [{ index: 0, type: "function", function: { name: "read", arguments: '{"path":"a.txt"}' } }],
+    ]);
+    const finishes = chunks(text)
+      .flatMap((chunk) => chunk.choices ?? [])
+      .map((choice) => choice.finish_reason);
+    expect(finishes.filter((finish) => finish != null)).toEqual(["tool_calls"]);
+  });
+
+  test("a Gemini call's thought signature rides in the id Pi is given and goes back to Gemini, not to others", async () => {
+    const signature = Buffer.alloc(2000, 9).toString("base64");
+    const gemini = await startUpstream((request, res) => {
+      const asked = JSON.parse(request.body) as { messages: unknown[] };
+      if (asked.messages.length > 1) return chatReply(res);
+      sse(res, [
+        {
+          data: {
+            id: "chatcmpl-g",
+            choices: [
+              {
+                index: 0,
+                delta: {
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: "call_g1",
+                      type: "function",
+                      function: { name: "read", arguments: "{}" },
+                      extra_content: { google: { thought_signature: signature } },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        },
+        {
+          data: {
+            id: "chatcmpl-g",
+            choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }],
+          },
+        },
+        { data: "[DONE]" },
+      ]);
+    });
+    const harness = await start({ chat: gemini, chatModels: ["gemini-3-pro"] });
+    const first = await chat(harness, { model: "gemini-3-pro", messages: HI });
+    const calls = deltas(await first.text(), "tool_calls") as { id: string }[][];
+    const id = calls[0]![0]!.id;
+    expect(id).toMatch(/^call_g1__tsk16__/);
+    expect(id.length).toBeLessThan(60);
+
+    const again = await chat(harness, {
+      model: "gemini-3-pro",
+      messages: [
+        ...HI,
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [{ id, type: "function", function: { name: "read", arguments: "{}" } }],
+        },
+        { role: "tool", tool_call_id: id, content: "a b" },
+      ],
+    });
+    await again.text();
+    const sent = JSON.parse(gemini.requests[1]!.body) as {
+      messages: { tool_calls?: Record<string, unknown>[]; tool_call_id?: string }[];
+    };
+    expect(sent.messages[1]!.tool_calls![0]).toMatchObject({
+      id: "call_g1",
+      extra_content: { google: { thought_signature: signature } },
+    });
+    expect(sent.messages[2]!.tool_call_id).toBe("call_g1");
   });
 });

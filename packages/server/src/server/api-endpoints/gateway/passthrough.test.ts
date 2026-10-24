@@ -294,6 +294,26 @@ describe("a Pi or Oh My Pi request passed through to a Chat endpoint (magpie dev
     ).toEqual([undefined, undefined, "look first", undefined, " ", undefined, undefined]);
   });
 
+  test("Mistral: an earlier turn's reasoning becomes its thinking part, and no reasoning is added to tool turns (#494)", () => {
+    const sent = JSON.parse(
+      passedThrough({
+        body,
+        model: "deepseek-v4",
+        format: "openai_chat",
+        baseUrl: "https://api.mistral.ai/v1",
+      }),
+    );
+    expect(sent.messages[2]).toEqual({
+      role: "assistant",
+      content: [{ type: "thinking", thinking: [{ type: "text", text: "look first" }] }],
+      tool_calls: turns[2]!.tool_calls,
+    });
+    for (const message of sent.messages) {
+      expect(message).not.toHaveProperty("reasoning_content");
+      expect(message).not.toHaveProperty("reasoning");
+    }
+  });
+
   test("a request with nothing to change goes byte for byte", () => {
     const plain = '{"model":"kimi-k2", "messages":[{"role":"user","content":"hi"}]}';
     expect(passedThrough({ body: plain, model: "kimi-k2", format: "openai_chat" })).toBe(plain);
