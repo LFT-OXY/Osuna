@@ -1394,3 +1394,26 @@ PR #16 并入后在主工作树拉取 main、重装依赖并重建，核对同�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 43: 10-16-gemini-upstream 验收、开 PR #30、修 CI、合并后归档
+<!-- atw-session: v=2 fp=fb41c77c6dcd3c43 -->
+
+**Date**: 2026-10-25
+**Task**: 10-16-gemini-upstream 验收、开 PR #30、修 CI、合并后归档
+**Package**: app
+
+### Summary
+
+逐条验收 12 条完成标准：typecheck/lint 通过，改到的 921 个测试本机全过，27 张截图与文档核对；开 PR #30 写明旧客户端保存会丢 Gemini 地址（G16）；CI 挂在协议测试拿 gemini 当未知格式，换成 vertex 后全绿；用户合并后在 main 上勾最后一条并归档。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3afaed04e` | chore(task): 10-16-gemini-upstream acceptance check |
+| `cff8cacca` | test(protocol): 拒收未知格式的用例换成 vertex（gemini 已是请求格式） |
+
+### Status
+
+[OK] **Completed**
