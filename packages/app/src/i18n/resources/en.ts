@@ -3409,6 +3409,9 @@ export const en = {
       agent: {
         title: "API endpoints",
         useSwitch: "Use API endpoints",
+        // OMP 有命名配置时默认那块的标题，与命名配置那块里 CLI 的称呼（照 magpie 的 omp · work；以配置名收尾，中日文里不在全角括号后留空格）。
+        defaultProfile: "Default",
+        profileAgent: "{{agent}} · {{profile}}",
         useHint:
           "When on, {{agent}} can use the selected models of the endpoints that are on in API endpoints. Turn it off to go back to official.",
         noUsableEndpoint: "Turn on an endpoint in API endpoints and select its models first.",
@@ -3455,6 +3458,32 @@ export const en = {
           "Sums up past conversations into {{agent}}'s memories in the background. Only used while {{agent}}'s memories feature is on; Osuna doesn't turn it on.",
         memoryModelUnset: "{{agent}}'s own",
         memoryModelPick: "Memory model for {{agent}}",
+        modelRoles: {
+          title: "Model roles",
+          hint: "Pick a model for each kind of work in {{agent}}. A role left empty is up to {{agent}}.",
+          modelPick: "Model for {{role}}",
+          thinkingPick: "Thinking for {{role}}",
+          unsetModel: "Empty",
+          unsetThinking: "Session level",
+          roles: {
+            task: "Subagent (task)",
+            smol: "Small tasks (smol)",
+            slow: "Hard problems (slow)",
+            plan: "Planning (plan)",
+            vision: "Images (vision)",
+            advisor: "Advisor (advisor)",
+            commit: "Commit messages (commit)",
+            tiny: "Tiny tasks (tiny)",
+            memory: "Memory (memory)",
+          },
+          unset: {
+            default: "When empty: same as the default model ({{model}})",
+            ompPicks: "When empty: {{agent}} picks one itself",
+            slow: "When empty: the Hard problems model ({{model}})",
+            smol: "When empty: the Small tasks model ({{model}})",
+            tiny: "When empty: the Tiny tasks model ({{model}})",
+          },
+        },
         forcedSubagentModel: "Forced Subagent model",
         forcedSubagentModelHint:
           "Every Subagent runs on it, whichever model the main conversation names. Codex's config is left as it is.",

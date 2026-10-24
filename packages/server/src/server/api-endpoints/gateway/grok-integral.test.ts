@@ -160,6 +160,32 @@ describe("a Grok reply passed through has its calls' whole numbers written whole
     );
   });
 
+  test("a Chat stream, cut anywhere: each call's argument deltas", () => {
+    const chunk = (index: number, args: string) =>
+      `data: {"id":"chatcmpl-1","choices":[{"index":0,"delta":{"tool_calls":[{"index":${index},"function":{"arguments":${JSON.stringify(args)}}}]}}]}`;
+    const lines = (pieces: [string, string, string]) => [
+      `data: {"id":"chatcmpl-1","choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"exec_command","arguments":""}},{"index":1,"id":"call_2","type":"function","function":{"name":"write_stdin","arguments":""}}]}}]}`,
+      chunk(0, pieces[0]),
+      chunk(1, pieces[1]),
+      chunk(0, pieces[2]),
+      `data: {"id":"chatcmpl-1","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}`,
+      "data: [DONE]",
+    ];
+    const stream = sse(lines([`{"yield_time_ms":2500.`, `{"session_id":17277.0}`, `0}`]));
+    const want = sse(lines([`{"yield_time_ms":2500`, `{"session_id":17277}`, `}`]));
+    for (const chunks of splits(stream)) {
+      expect(tidied({ format: "openai_chat", stream: true, chunks })).toBe(want);
+    }
+  });
+
+  test("a whole Chat reply: the message's call arguments", () => {
+    const reply = (args: string) =>
+      `{"id":"chatcmpl-1","object":"chat.completion","model":"grok-4.6","choices":[{"index":0,"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call_1","type":"function","function":{"name":"exec_command","arguments":${JSON.stringify(args)}}}]},"finish_reason":"tool_calls"}]}`;
+    expect(tidied({ format: "openai_chat", stream: false, chunks: [reply(ARGS)] })).toBe(
+      reply(WHOLE),
+    );
+  });
+
   test("a stream without calls goes byte for byte", () => {
     const stream = sse([
       `event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"2500.0"}}`,

@@ -86,6 +86,12 @@ export const USAGE_CLI_CALL_SCHEMA = z.object({
   cacheWrite: z.number().int(),
   output: z.number().int(),
   reasoning: z.number().int(),
+  // 会话记录说这次调用经过了 Osuna 中转站（Pi / OMP 的服务商 osuna）：token 只算账本，对不上账本的不算也不列。
+  // 没有它就是 false，之前写的记录都没有。
+  gatewayOnly: z.boolean().optional(),
+  // COMPAT(piReplyIdByResponseId): 工单 07 起 Pi / OMP 的回复按 responseId 命名，这里记下之前的名字
+  // （<sessionId>/<条目编号>），整份重扫时替掉旧记录；remove after 2027-04-24.
+  formerReplyId: z.string().optional(),
 });
 export type UsageCliCall = z.infer<typeof USAGE_CLI_CALL_SCHEMA>;
 

@@ -3350,6 +3350,9 @@ export const zhCN: TranslationResources = {
       agent: {
         title: "第三方接口",
         useSwitch: "使用第三方接口",
+        // OMP 有命名配置时默认那块的标题，与命名配置那块里 CLI 的称呼（照 magpie 的 omp · work；以配置名收尾，中日文里不在全角括号后留空格）。
+        defaultProfile: "默认",
+        profileAgent: "{{agent}} · {{profile}}",
         useHint: "打开后，{{agent}} 能用「第三方接口」页里开着的接口的已选模型；关掉就回到官方。",
         noUsableEndpoint: "先到「第三方接口」页开启一家并选好模型。",
         gatewayRequiresTcp:
@@ -3391,6 +3394,32 @@ export const zhCN: TranslationResources = {
           "在后台把过去的对话整理成 {{agent}} 的记忆。只在 {{agent}} 的记忆功能打开时有用，Osuna 不会替你打开",
         memoryModelUnset: "{{agent}} 自己的",
         memoryModelPick: "{{agent}} 的记忆模型",
+        modelRoles: {
+          title: "模型角色",
+          hint: "给 {{agent}} 的各种用途单独挑模型；空着的角色交给 {{agent}} 自己。",
+          modelPick: "{{role}}的模型",
+          thinkingPick: "{{role}}的思考档位",
+          unsetModel: "空着",
+          unsetThinking: "跟会话",
+          roles: {
+            task: "Subagent（task）",
+            smol: "小任务（smol）",
+            slow: "难题（slow）",
+            plan: "规划（plan）",
+            vision: "看图（vision）",
+            advisor: "顾问（advisor）",
+            commit: "提交说明（commit）",
+            tiny: "极小任务（tiny）",
+            memory: "记忆（memory）",
+          },
+          unset: {
+            default: "空着时同默认模型（{{model}}）",
+            ompPicks: "空着时由 {{agent}} 自己挑",
+            slow: "空着时用难题的模型（{{model}}）",
+            smol: "空着时用小任务的模型（{{model}}）",
+            tiny: "空着时用极小任务的模型（{{model}}）",
+          },
+        },
         forcedSubagentModel: "强制 Subagent 模型",
         forcedSubagentModelHint: "不管主对话指定哪个模型，Subagent 都用它；不改 Codex 的配置",
         forcedSubagentModelUnset: "不强制",

@@ -1,11 +1,12 @@
 import { randomBytes } from "node:crypto";
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { AGENT_PROVIDER_DEFINITIONS } from "@getpaseo/protocol/provider-manifest";
 import type {
   UsageEndpointBreakdown,
   UsageReport,
@@ -28,6 +29,8 @@ const KEY_B = "sk-real-key-beta-SECRET";
 const KEY_C = "sk-real-key-gamma-SECRET";
 const KEY_D = "sk-real-key-delta-SECRET";
 const CODEX_TOKEN = "gateway-token-codex-0123456789";
+const PI_TOKEN = "gateway-token-pi-0123456789";
+const OMP_TOKEN = "gateway-token-omp-0123456789";
 // ChatGPT 登录的 Codex 带的令牌（假的）：只转给假 ChatGPT 后端。
 const CHATGPT_SIGN_IN = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ1c2VyIn0.c2lnbmF0dXJl";
 // Codex 的线程编号：会话记录的文件名与会话头都用它。
@@ -37,6 +40,14 @@ const PROJECT_DIR = "-work-demo";
 const SCAN_INTERVAL_MS = 50;
 const PROMPT_TEXT = "SECRET-PROMPT-TEXT please list the files";
 const REPLY_TEXT = "SECRET-REPLY-TEXT here are the files";
+
+// 只留用得到的 Claude Code 与 Codex：Pi、OMP 默认开着，读提供方快照时会起真的 pi / omp（守卫见 Pi / OMP 那组）。
+const USED_PROVIDERS = new Set(["claude", "codex"]);
+const OTHER_PROVIDERS_OFF = Object.fromEntries(
+  AGENT_PROVIDER_DEFINITIONS.filter((definition) => !USED_PROVIDERS.has(definition.id)).map(
+    (definition) => [definition.id, { enabled: false }],
+  ),
+);
 
 const UNPRICED = {
   autoUpdate: false,
@@ -201,6 +212,8 @@ interface Harness {
   root: string;
   claudeRoot: string;
   codexRoot: string;
+  piRoot: string;
+  ompRoot: string;
   usageDir: string;
   replies: Record<UpstreamName, Respond>;
   restart: () => Promise<void>;
@@ -238,6 +251,8 @@ async function start(
   await mkdir(path.join(claudeRoot, PROJECT_DIR), { recursive: true });
   const codexRoot = path.join(root, "codex-sessions");
   await mkdir(path.join(codexRoot, "2026", "10", "23"), { recursive: true });
+  const piRoot = path.join(root, "pi-sessions");
+  const ompRoot = path.join(root, "omp-sessions");
   const replies: Record<UpstreamName, Respond> = {
     a: anthropicStream(options.messageId ?? "msg_gw_1"),
     b: responsesStream("resp_gw_1"),
@@ -301,7 +316,9 @@ async function start(
       },
     },
     "keys.json": { keys: { ep_a: KEY_A, ep_b: KEY_B, ep_c: KEY_C, ep_d: KEY_D } },
-    "gateway-tokens.json": { tokens: { claude: CLAUDE_TOKEN, codex: CODEX_TOKEN } },
+    "gateway-tokens.json": {
+      tokens: { claude: CLAUDE_TOKEN, codex: CODEX_TOKEN, pi: PI_TOKEN, omp: OMP_TOKEN },
+    },
   };
   for (const [name, value] of Object.entries(files)) {
     await writeFile(path.join(endpointsDir, name), JSON.stringify(value, null, 2));
@@ -324,8 +341,9 @@ async function start(
         ...createTestAgentClients(),
         claude: createTestAgentClient("claude", { nextSessionId: () => SESSION_ID }),
       },
+      providerOverrides: OTHER_PROVIDERS_OFF,
       usage: {
-        roots: { claude: [claudeRoot], codex: [codexRoot], pi: [], omp: [] },
+        roots: { claude: [claudeRoot], codex: [codexRoot], pi: [piRoot], omp: [ompRoot] },
         scanIntervalMs: SCAN_INTERVAL_MS,
         pricing: options.pricing ?? UNPRICED,
         ...(options.now ? { now: options.now } : {}),
@@ -348,6 +366,8 @@ async function start(
     root,
     claudeRoot,
     codexRoot,
+    piRoot,
+    ompRoot,
     usageDir: path.join(root, ".paseo", "usage"),
     replies,
     restart: async () => {
@@ -2635,5 +2655,318 @@ describe("the Speed card", () => {
 
     await harness.restart();
     expect(relayA(await waitForTimed(harness, 2))).toEqual(before);
+  });
+});
+
+/*
+ * Pi / OMP（任务 10-16-pi-omp-endpoints 工单 07）：fetch 扮演 Pi、OMP 带各自口令打中转站的 Chat 入口，
+ * 临时目录里放假的会话记录，服务商写 Osuna 写进它们配置的 `osuna`，回复编号即记录里的 responseId。
+ * 从不运行真的 Pi / OMP，也不碰 ~/.pi、~/.omp。
+ */
+const PI_SESSION = "01a0b317-7777-7000-8000-000000000007";
+const OMP_SESSION = "01a0953b-8888-7000-8000-000000000008";
+// 假 Chat 上游（接口 C）回的编号，中转站原样写回给 CLI。
+const CHAT_REPLY_ID = "chatcmpl-77";
+// 会话记录里同一个回复记的数，与账本不同：合并后取账本。
+const PI_CLI_TOTALS = totals(20, 100, 0, 28);
+
+type PiLikeCli = "pi" | "omp";
+
+/** Pi / OMP 打中转站 Chat 入口的一次调用（流式），返回还没读的回复；编号用 piLikeReplyId 读。 */
+async function askPiLike(harness: Harness, cli: PiLikeCli): Promise<Response> {
+  return fetch(`${harness.gateway}/v1/chat/completions`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${cli === "pi" ? PI_TOKEN : OMP_TOKEN}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "deepseek-v3",
+      stream: true,
+      messages: [{ role: "user", content: PROMPT_TEXT }],
+    }),
+  });
+}
+
+/** 读完整个回复，返回中转站写回给 CLI 的 Chat 编号。 */
+async function piLikeReplyId(response: Response): Promise<string> {
+  expect(response.status).toBe(200);
+  const text = await response.text();
+  expect(text).toContain(REPLY_TEXT);
+  const first = text
+    .split("\n")
+    .find((line) => line.startsWith("data: {"))
+    ?.slice("data: ".length);
+  return (JSON.parse(first ?? "{}") as { id?: string }).id ?? "";
+}
+
+/** 会话记录里的一个条目：经过中转站的回复、直连的回复，或 Pi 的 usage / OMP 的 model_usage。 */
+type PiLikeLogged =
+  | {
+      kind: "reply";
+      provider: string;
+      model: string;
+      totals: UsageTokenTotals;
+      responseId?: string;
+    }
+  | { kind: "side"; provider: string; model: string; totals: UsageTokenTotals };
+
+/** 照 Pi / OMP 的样子写一个会话：会话头（OMP 前面有标题行）、用户一行、再是各条目；最后一条结束这一轮。 */
+async function writePiLikeSession(
+  harness: Harness,
+  input: { cli: PiLikeCli; sessionId: string; entries: PiLikeLogged[] },
+): Promise<void> {
+  const at = Date.now();
+  const stamp = (offset: number) => new Date(at + offset * 1000).toISOString();
+  const usageOf = (one: UsageTokenTotals) => ({
+    input: one.input,
+    output: one.output,
+    cacheRead: one.cachedInput,
+    cacheWrite: one.cacheWrite,
+    totalTokens: one.input + one.output + one.cachedInput + one.cacheWrite,
+    ...(input.cli === "pi" ? { reasoning: one.reasoning } : { reasoningTokens: one.reasoning }),
+  });
+  const lines: unknown[] = [
+    ...(input.cli === "omp" ? [{ type: "title", v: 1, title: "", updatedAt: stamp(0) }] : []),
+    { type: "session", version: 3, id: input.sessionId, timestamp: stamp(0), cwd: "/work/demo" },
+    {
+      type: "message",
+      id: "e0",
+      parentId: null,
+      timestamp: stamp(1),
+      message: { role: "user", content: "<prompt text>" },
+    },
+  ];
+  for (const [index, entry] of input.entries.entries()) {
+    const base = { id: `e${index + 1}`, parentId: `e${index}`, timestamp: stamp(index + 2) };
+    if (entry.kind === "side") {
+      lines.push({
+        ...base,
+        type: input.cli === "pi" ? "usage" : "model_usage",
+        ...(input.cli === "pi" ? { kind: "cache_warm" } : { purpose: "title", role: "tiny" }),
+        provider: entry.provider,
+        model: entry.model,
+        usage: usageOf(entry.totals),
+      });
+      continue;
+    }
+    lines.push({
+      ...base,
+      type: "message",
+      message: {
+        role: "assistant",
+        content: "<redacted>",
+        provider: entry.provider,
+        model: entry.model,
+        usage: usageOf(entry.totals),
+        stopReason: index === input.entries.length - 1 ? "stop" : "toolUse",
+        ...(entry.responseId ? { responseId: entry.responseId } : {}),
+      },
+    });
+  }
+  const root = input.cli === "pi" ? harness.piRoot : harness.ompRoot;
+  const dir = path.join(root, "--work-demo--");
+  await mkdir(dir, { recursive: true });
+  await writeFile(
+    path.join(dir, `${stamp(0).replace(/[:.]/g, "-")}_${input.sessionId}.jsonl`),
+    `${lines.map((line) => JSON.stringify(line)).join("\n")}\n`,
+  );
+}
+
+/** 合并完后只剩会话记录的项目，没有未知项目。 */
+function isDemoProject(project: UsageReport["projects"][number]): boolean {
+  return project.rootPath === "/work/demo";
+}
+
+/** 经过中转站（服务商 osuna）的那次回复。 */
+function viaGateway(responseId: string = CHAT_REPLY_ID): PiLikeLogged {
+  return {
+    kind: "reply",
+    provider: "osuna",
+    model: "deepseek-v3",
+    totals: PI_CLI_TOTALS,
+    responseId,
+  };
+}
+
+/** 直连别家的回复，老版本没写 responseId：算「官方」。 */
+const DIRECT_REPLY: PiLikeLogged = {
+  kind: "reply",
+  provider: "anthropic",
+  model: "kimi-k2",
+  totals: OLD_TOTALS,
+};
+
+describe("the gateway ledger merged with Pi's and OMP's logs", () => {
+  // 守卫：PATH 最前面放会留下记号并失败的 pi 与 omp，真的 CLI 被起就能看出来。
+  let guardDir = "";
+  let guardMark = "";
+  let pathBefore: string | undefined;
+
+  beforeEach(async () => {
+    guardDir = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-ledger-pi-guard-"));
+    guardMark = path.join(guardDir, "spawned");
+    for (const name of ["pi", "omp"]) {
+      const script = path.join(guardDir, name);
+      await writeFile(script, `#!/bin/sh\necho ${name} >> "${guardMark}"\nexit 1\n`);
+      await chmod(script, 0o755);
+      await writeFile(`${script}.cmd`, `@echo ${name}>> "${guardMark}"\r\n@exit /b 1\r\n`);
+    }
+    pathBefore = process.env.PATH;
+    process.env.PATH = `${guardDir}${path.delimiter}${pathBefore ?? ""}`;
+  });
+
+  afterEach(async () => {
+    process.env.PATH = pathBefore;
+    await expect(stat(guardMark)).rejects.toMatchObject({ code: "ENOENT" });
+    await rm(guardDir, { recursive: true, force: true });
+  });
+
+  test("Pi: the ledger first, then the log: counted once at the endpoint and Official, in the log's project, session and turn, and listed", async () => {
+    const harness = await start();
+    expect(await piLikeReplyId(await askPiLike(harness, "pi"))).toBe(CHAT_REPLY_ID);
+    await waitForLedgerRow(harness.usageDir, CHAT_REPLY_ID);
+    await writePiLikeSession(harness, {
+      cli: "pi",
+      sessionId: PI_SESSION,
+      entries: [viaGateway(), DIRECT_REPLY],
+    });
+
+    const all = sum(CHAT_TOTALS, OLD_TOTALS);
+    const report = await waitForReport(
+      harness,
+      (candidate) =>
+        sameTotals(candidate.summary.totals, all) &&
+        candidate.projects[0]?.rootPath === "/work/demo",
+    );
+    expect(report.endpoints).toEqual([
+      endpointGroup("ep_c", "Relay C", CHAT_TOTALS, billable(CHAT_TOTALS) / billable(all)),
+      endpointGroup(null, null, OLD_TOTALS, billable(OLD_TOTALS) / billable(all)),
+    ]);
+    expect(report.projects.map((project) => [project.rootPath, project.totals])).toEqual([
+      ["/work/demo", all],
+    ]);
+    const { sessions } = await harness.client.usageSessionsList(ALL_TIME);
+    expect(sessions.map((session) => [session.cli, session.sessionId, session.totals])).toEqual([
+      ["pi", PI_SESSION, all],
+    ]);
+    expect(await turnUsage(harness.usageDir)).toEqual([
+      { turnKey: "e0", endpointId: "ep_c", totals: CHAT_TOTALS },
+      { turnKey: "e0", endpointId: null, totals: OLD_TOTALS },
+    ]);
+
+    const page = await harness.client.usageRequestsList(requestsOf());
+    expect(page.requests).toEqual([
+      expect.objectContaining({
+        cli: "pi",
+        through: "direct",
+        model: "kimi-k2",
+        totals: OLD_TOTALS,
+        replyId: `${PI_SESSION}/e2`,
+      }),
+      expect.objectContaining({
+        cli: "pi",
+        through: "gateway",
+        model: "deepseek-v3",
+        endpointId: "ep_c",
+        totals: CHAT_TOTALS,
+        replyId: CHAT_REPLY_ID,
+        sessionId: PI_SESSION,
+        project: expect.objectContaining({ rootPath: "/work/demo", displayName: "demo" }),
+      }),
+    ]);
+  });
+
+  test("OMP: the log first, a restart, then the ledger: still counted once at the endpoint, and its model_usage through the gateway only by the ledger", async () => {
+    const harness = await start();
+    await writePiLikeSession(harness, {
+      cli: "omp",
+      sessionId: OMP_SESSION,
+      entries: [
+        { kind: "side", provider: "osuna", model: "deepseek-v3", totals: totals(4, 0, 0, 2) },
+        { kind: "side", provider: "Anthropic", model: "kimi-k2", totals: OLD_TOTALS },
+        viaGateway(),
+      ],
+    });
+    // 会话记录先被扫描：经过中转站的两条什么都不算，只有直连的 model_usage 算「官方」。
+    const logOnly = await waitForReport(harness, (candidate) =>
+      sameTotals(candidate.summary.totals, OLD_TOTALS),
+    );
+    expect(logOnly.endpoints).toEqual([endpointGroup(null, null, OLD_TOTALS, 1)]);
+
+    await harness.restart();
+    expect(await piLikeReplyId(await askPiLike(harness, "omp"))).toBe(CHAT_REPLY_ID);
+
+    const all = sum(CHAT_TOTALS, OLD_TOTALS);
+    const report = await waitForReport(
+      harness,
+      (candidate) =>
+        sameTotals(candidate.summary.totals, all) && candidate.projects.every(isDemoProject),
+    );
+    expect(report.endpoints).toEqual([
+      endpointGroup("ep_c", "Relay C", CHAT_TOTALS, billable(CHAT_TOTALS) / billable(all)),
+      endpointGroup(null, null, OLD_TOTALS, billable(OLD_TOTALS) / billable(all)),
+    ]);
+    const { sessions } = await harness.client.usageSessionsList(ALL_TIME);
+    expect(sessions.map((session) => [session.cli, session.sessionId, session.totals])).toEqual([
+      ["omp", OMP_SESSION, all],
+    ]);
+    expect(await turnUsage(harness.usageDir)).toEqual([
+      { turnKey: "e0", endpointId: "ep_c", totals: CHAT_TOTALS },
+      { turnKey: "e0", endpointId: null, totals: OLD_TOTALS },
+    ]);
+    // 再起一次：没有要再挪的。
+    await harness.restart();
+    const again = await waitForReport(harness, (candidate) =>
+      sameTotals(candidate.summary.totals, all),
+    );
+    expect(again.endpoints.map((group) => [group.endpointId, group.totals])).toEqual([
+      ["ep_c", CHAT_TOTALS],
+      [null, OLD_TOTALS],
+    ]);
+  });
+
+  test("a gateway reply no ledger row matches is counted nowhere and not listed; a failed Pi request is listed and is the endpoint's problem", async () => {
+    const harness = await start();
+    await writePiLikeSession(harness, {
+      cli: "pi",
+      sessionId: PI_SESSION,
+      entries: [viaGateway("chatcmpl-never-recorded"), DIRECT_REPLY],
+    });
+    const report = await waitForReport(harness, (candidate) =>
+      sameTotals(candidate.summary.totals, OLD_TOTALS),
+    );
+    expect(report.endpoints).toEqual([endpointGroup(null, null, OLD_TOTALS, 1)]);
+
+    harness.replies.c = (res) => {
+      res.writeHead(500, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: { message: "upstream overloaded" } }));
+    };
+    expect((await askPiLike(harness, "pi")).status).toBeGreaterThanOrEqual(500);
+
+    const page = await waitForRequests(harness, (candidate) => candidate.total === 2);
+    // 两条谁新谁旧取决于假会话记录的时间，这里不管顺序。
+    expect(page.requests).toHaveLength(2);
+    expect(page.requests).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          cli: "pi",
+          through: "gateway",
+          status: "failed",
+          endpointId: "ep_c",
+          error: "Relay C: upstream overloaded",
+        }),
+        expect.objectContaining({ cli: "pi", through: "direct", replyId: `${PI_SESSION}/e2` }),
+      ]),
+    );
+    const problems = await waitForProblems(harness, "ep_c", (candidate) => candidate.length === 1);
+    expect(problems).toEqual([
+      expect.objectContaining({
+        id: expect.stringMatching(/^pi:/),
+        model: "deepseek-v3",
+        reason: expect.stringContaining("upstream overloaded"),
+        status: "failed",
+      }),
+    ]);
   });
 });

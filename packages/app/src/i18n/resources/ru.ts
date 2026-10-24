@@ -3390,6 +3390,9 @@ export const ru: TranslationResources = {
       agent: {
         title: "Сторонние API",
         useSwitch: "Использовать сторонние API",
+        // OMP 有命名配置时默认那块的标题，与命名配置那块里 CLI 的称呼（照 magpie 的 omp · work；以配置名收尾，中日文里不在全角括号后留空格）。
+        defaultProfile: "По умолчанию",
+        profileAgent: "{{agent}} · {{profile}}",
         useHint:
           "Когда включено, {{agent}} может использовать выбранные модели включённых эндпоинтов со страницы «Сторонние API». Выключите, чтобы вернуться к официальному.",
         noUsableEndpoint:
@@ -3438,6 +3441,32 @@ export const ru: TranslationResources = {
           "В фоне сводит прошлые разговоры в память {{agent}}. Используется, только пока функция памяти {{agent}} включена; Osuna её не включает.",
         memoryModelUnset: "Своя у {{agent}}",
         memoryModelPick: "Модель памяти для {{agent}}",
+        modelRoles: {
+          title: "Роли моделей",
+          hint: "Выберите модель для каждого вида работы в {{agent}}. Пустую роль решает {{agent}}.",
+          modelPick: "Модель для роли «{{role}}»",
+          thinkingPick: "Рассуждение для роли «{{role}}»",
+          unsetModel: "Пусто",
+          unsetThinking: "Как в сессии",
+          roles: {
+            task: "Subagent (task)",
+            smol: "Мелкие задачи (smol)",
+            slow: "Сложные задачи (slow)",
+            plan: "Планирование (plan)",
+            vision: "Изображения (vision)",
+            advisor: "Советник (advisor)",
+            commit: "Сообщения коммитов (commit)",
+            tiny: "Крошечные задачи (tiny)",
+            memory: "Память (memory)",
+          },
+          unset: {
+            default: "Если пусто: как модель по умолчанию ({{model}})",
+            ompPicks: "Если пусто: {{agent}} выбирает сам",
+            slow: "Если пусто: модель сложных задач ({{model}})",
+            smol: "Если пусто: модель мелких задач ({{model}})",
+            tiny: "Если пусто: модель крошечных задач ({{model}})",
+          },
+        },
         forcedSubagentModel: "Принудительная модель Subagent",
         forcedSubagentModelHint:
           "Все Subagents работают на ней, какую бы модель ни указал основной диалог. Настройки Codex не меняются.",

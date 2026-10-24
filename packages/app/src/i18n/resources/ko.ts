@@ -3363,6 +3363,9 @@ export const ko: TranslationResources = {
       agent: {
         title: "서드파티 API",
         useSwitch: "서드파티 API 사용",
+        // OMP 有命名配置时默认那块的标题，与命名配置那块里 CLI 的称呼（照 magpie 的 omp · work；以配置名收尾，中日文里不在全角括号后留空格）。
+        defaultProfile: "기본",
+        profileAgent: "{{agent}} · {{profile}}",
         useHint:
           "켜면 {{agent}}에서 「서드파티 API」 페이지에서 켜 둔 엔드포인트의 선택된 모델을 쓸 수 있습니다. 끄면 공식으로 돌아갑니다.",
         noUsableEndpoint: "먼저 「서드파티 API」 페이지에서 엔드포인트를 켜고 모델을 선택하세요.",
@@ -3410,6 +3413,32 @@ export const ko: TranslationResources = {
           "지난 대화를 백그라운드에서 {{agent}}의 메모리로 정리합니다. {{agent}}의 메모리 기능이 켜져 있을 때만 쓰이며, Osuna는 이 기능을 켜지 않습니다.",
         memoryModelUnset: "{{agent}} 기본값",
         memoryModelPick: "{{agent}}의 메모리 모델",
+        modelRoles: {
+          title: "모델 역할",
+          hint: "{{agent}}의 용도별로 모델을 고릅니다. 비워 둔 역할은 {{agent}}가 정합니다.",
+          modelPick: "{{role}} 모델",
+          thinkingPick: "{{role}} 생각 단계",
+          unsetModel: "비움",
+          unsetThinking: "세션 따름",
+          roles: {
+            task: "Subagent(task)",
+            smol: "작은 작업(smol)",
+            slow: "어려운 문제(slow)",
+            plan: "계획(plan)",
+            vision: "이미지(vision)",
+            advisor: "조언자(advisor)",
+            commit: "커밋 메시지(commit)",
+            tiny: "아주 작은 작업(tiny)",
+            memory: "메모리(memory)",
+          },
+          unset: {
+            default: "비우면: 기본 모델과 같음({{model}})",
+            ompPicks: "비우면: {{agent}}가 직접 고름",
+            slow: "비우면: 어려운 문제 모델({{model}})",
+            smol: "비우면: 작은 작업 모델({{model}})",
+            tiny: "비우면: 아주 작은 작업 모델({{model}})",
+          },
+        },
         forcedSubagentModel: "강제 Subagent 모델",
         forcedSubagentModelHint:
           "메인 대화가 어떤 모델을 지정하든 모든 Subagent가 이 모델로 실행됩니다. Codex 설정은 그대로 둡니다.",

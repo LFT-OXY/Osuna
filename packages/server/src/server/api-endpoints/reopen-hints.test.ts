@@ -268,6 +268,72 @@ describe("findStaleCopies", () => {
     ).toEqual([]);
   });
 
+  test("Pi in a terminal, but not Osuna's own Pi sessions", () => {
+    const processes = [
+      proc({ pid: 70, startedAt: hoursAgo(6), commandLine: "node /opt/homebrew/bin/pi" }),
+      proc({ pid: 71, startedAt: hoursAgo(3), commandLine: `${home}/.local/bin/pi --continue` }),
+      {
+        pid: 72,
+        parentPid: OWN_PID,
+        startedAt: hoursAgo(5),
+        commandLine: "node /opt/homebrew/bin/pi --mode rpc",
+      },
+      proc({ pid: 73, startedAt: hoursAgo(4), commandLine: "/opt/homebrew/bin/pip install x" }),
+    ];
+    expect(
+      findStaleCopies({
+        provider: "pi",
+        processes,
+        changedAt: hoursAgo(2),
+        cliDir: `${home}/.pi/agent`,
+        ownPid: OWN_PID,
+      }),
+    ).toEqual([{ kind: "cli", app: null, count: 2, since: hoursAgo(6) }]);
+  });
+
+  test("OMP in a terminal, compiled or run by bun from its npm package", () => {
+    const processes = [
+      proc({ pid: 80, startedAt: hoursAgo(6), commandLine: `${home}/.bun/bin/omp` }),
+      proc({
+        pid: 81,
+        startedAt: hoursAgo(3),
+        commandLine: `bun ${home}/.bun/install/global/node_modules/@oh-my-pi/pi-coding-agent/src/cli.ts`,
+      }),
+      proc({ pid: 82, startedAt: hoursAgo(4), commandLine: "/usr/bin/ompx --help" }),
+      proc({ pid: 83, startedAt: hoursAgo(1), commandLine: "omp --continue" }),
+    ];
+    expect(
+      findStaleCopies({
+        provider: "omp",
+        processes,
+        changedAt: hoursAgo(2),
+        cliDir: `${home}/.omp/agent`,
+        ownPid: OWN_PID,
+      }),
+    ).toEqual([{ kind: "cli", app: null, count: 2, since: hoursAgo(6) }]);
+  });
+
+  test("an OMP copy run with --profile belongs to that profile, one without to the default block", () => {
+    const processes = [
+      proc({ pid: 90, startedAt: hoursAgo(6), commandLine: "omp --profile work" }),
+      proc({
+        pid: 91,
+        startedAt: hoursAgo(5),
+        commandLine: "/opt/homebrew/bin/omp --profile=work -c",
+      }),
+      proc({ pid: 92, startedAt: hoursAgo(4), commandLine: "omp --profile personal" }),
+      proc({ pid: 93, startedAt: hoursAgo(3), commandLine: "omp --continue" }),
+    ];
+    const look = (provider: "omp" | "omp#work", cliDir: string) =>
+      findStaleCopies({ provider, processes, changedAt: hoursAgo(2), cliDir, ownPid: OWN_PID });
+    expect(look("omp#work", `${home}/.omp/profiles/work/agent`)).toEqual([
+      { kind: "cli", app: null, count: 2, since: hoursAgo(6) },
+    ]);
+    expect(look("omp", `${home}/.omp/agent`)).toEqual([
+      { kind: "cli", app: null, count: 1, since: hoursAgo(3) },
+    ]);
+  });
+
   test("Claude Code in a terminal and in an editor", () => {
     const processes = [
       proc({ pid: 50, startedAt: hoursAgo(6), commandLine: "claude --resume" }),
@@ -539,6 +605,8 @@ describe("CliReopenHints", () => {
     subjects = {
       claude: { cliDir: "/Users/me/.claude", changedAt: null, osunaSessions: 0 },
       codex: { cliDir: codexHome, changedAt: hoursAgo(2), osunaSessions: 0 },
+      pi: { cliDir: "/Users/me/.pi/agent", changedAt: null, osunaSessions: 0 },
+      omp: { cliDir: "/Users/me/.omp/agent", changedAt: null, osunaSessions: 0 },
     };
   });
 
@@ -553,6 +621,8 @@ describe("CliReopenHints", () => {
     reopen.start();
     expect(await reopen.read()).toEqual({
       claude: [],
+      pi: [],
+      omp: [],
       codex: [
         {
           kind: "app_server",
@@ -577,6 +647,8 @@ describe("CliReopenHints", () => {
     ]);
     expect(await reopen.read()).toEqual({
       claude: [],
+      pi: [],
+      omp: [],
       codex: [
         {
           kind: "app_server_restarted",
@@ -642,6 +714,27 @@ describe("CliReopenHints", () => {
         kind: "claude_live_env",
         message:
           "Claude Code picks up newly written environment variables right away; removed variables, the model and the thinking level take effect only once a session is reopened.",
+      },
+    ]);
+  });
+
+  test("Pi's hints list its Osuna agents and terminal copies started before the change", async () => {
+    subjects.codex = { cliDir: codexHome, changedAt: null, osunaSessions: 0 };
+    subjects.pi = { cliDir: "/Users/me/.pi/agent", changedAt: hoursAgo(2), osunaSessions: 1 };
+    fake.processes = [
+      proc({ pid: 10, startedAt: hoursAgo(3), commandLine: "node /usr/local/bin/pi" }),
+    ];
+    expect((await hints().read()).pi).toEqual([
+      {
+        kind: "osuna_sessions",
+        count: 1,
+        message: "1 Pi agent(s) in Osuna: reload each one (Reload agent in its tab's menu).",
+      },
+      {
+        kind: "cli",
+        count: 1,
+        since: hoursAgo(3).toISOString(),
+        message: "1 × Pi in a terminal, started 3 hours ago: quit it and start it again.",
       },
     ]);
   });

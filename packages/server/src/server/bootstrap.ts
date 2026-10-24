@@ -152,6 +152,7 @@ import { CheckoutDiffManager } from "./checkout-diff-manager.js";
 import { ScheduleService } from "./schedule/service.js";
 import { createUsageAgentBridge } from "./usage/agent-sessions.js";
 import { UsageService } from "./usage/service.js";
+import type { ModelPricePerMillion } from "./usage/pricing/service.js";
 import {
   API_ENDPOINT_GATEWAY_PATH,
   createApiEndpointGateway,
@@ -1060,9 +1061,15 @@ export async function createPaseoDaemon(
     countSessionsStartedBefore: (input) => agentManager.countLiveAgentsStartedBefore(input),
     // 执行 CLI 自己的命令、问 CLI 怎么登录都用用户配的命令。
     providerRuntimeSettings: (provider) => config.agentProviderSettings?.[provider],
+    // 继承 omp、给了 OMP_PROFILE 的自定义提供方跟随那套 OMP 配置的「使用第三方接口」设置。
+    providerOverrides: () => config.providerOverrides,
     // models.dev 是价格表之外的另一次主动下载，归同一个自动更新开关管（docs/usage.md）。
     isModelsDevAutoUpdate: () =>
       resolveUsagePricingSettings(daemonConfigStore.get().usage?.pricing).autoUpdate,
+    // usageService 在下面创建；只在改写 Pi 的配置时调用，那时 daemon 已经启动。
+    // 写明返回类型：两个服务互相引用，tsc 推不出来。
+    modelPricePerMillion: (model: string): ModelPricePerMillion | null =>
+      usageService.pricePerMillion(model),
     ...config.apiEndpoints,
   });
   function apiEndpointModelOverride(provider: AgentProvider): AgentModelDefinition[] | null {
@@ -1086,6 +1093,7 @@ export async function createPaseoDaemon(
       subagentThinking: (provider) => apiEndpointService.subagentThinkingOptions(provider),
       sideModelOptions: (provider) => apiEndpointService.sideModelOptions(provider),
       apiEndpointNameDisplay: (provider) => apiEndpointService.endpointNameDisplay(provider),
+      ompProfileModelGroups: (provider) => apiEndpointService.ompProfileModelGroups(provider),
     },
   });
   const providerSnapshotManager = agentProviderRuntime.snapshotManager;

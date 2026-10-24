@@ -7,6 +7,7 @@
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { randomBytes, randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import type { IncomingHttpHeaders } from "node:http";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -81,7 +82,7 @@ import {
   normalizeOpenAICompatibleBaseUrl,
   probeCodexVersion,
 } from "../agent/providers/codex-app-server-agent.js";
-import type { ProviderRuntimeSettings } from "../agent/provider-launch-config.js";
+import type { ProviderOverride, ProviderRuntimeSettings } from "../agent/provider-launch-config.js";
 import {
   CLAUDE_CLOUD_SWITCH_KEYS,
   claudeManagedSettingsFiles,
@@ -134,6 +135,57 @@ import {
   type CodexConfigTakeover,
   type CodexSubagentWiring,
 } from "./codex-config-patch.js";
+import {
+  followedModelRoles,
+  modelRoleWiring,
+  takesModelRoles,
+  withModelRolesChanged,
+  type ModelRolesChange,
+} from "./omp-model-roles.js";
+import {
+  PI_PROVIDER_ID,
+  type PiLikeRoleWiring,
+  type PiModelsTakeover,
+  type PiSettingsTakeover,
+  type PiSettingsWiring,
+} from "./pi-config-patch.js";
+import {
+  piBareFormat,
+  piClamp,
+  piEndpointFormat,
+  piModelThinking,
+  piOfferedLevels,
+  PI_THINKING_LEVELS,
+  type PiModelCost,
+  type PiModelSource,
+} from "./pi-model-entries.js";
+import {
+  isPiLike,
+  ompCli,
+  PI_CLI,
+  PI_LIKE_GATEWAY_SUFFIX,
+  PI_LIKE_PROVIDERS,
+  type PiLikeCli,
+  type PiLikeAgent,
+  type PiLikeProviderWiring,
+} from "./pi-like-config.js";
+import {
+  ompClamp,
+  ompEfforts,
+  ompTakesMax,
+  OMP_DEFAULT_THINKING_LEVELS,
+  OMP_START_THINKING,
+} from "./omp-model-entries.js";
+import { resolveOmpSessionPaths } from "../agent/providers/omp/provider-config.js";
+import {
+  isOmpProfileKey,
+  isOmpProfileName,
+  listOmpProfiles,
+  ompProfileAgentDir,
+  ompProfileKey,
+  ompProfileNameOf,
+} from "./omp-profiles.js";
+import { resolveProviderCliVersion } from "../agent/provider-cli-version.js";
 import {
   buildCodexModelCatalog,
   codexDefaultLevel,
@@ -226,13 +278,22 @@ import {
 } from "./host-endpoints.js";
 import {
   API_ENDPOINT_PROVIDERS,
+  CLI_CONFIG_PROVIDERS,
   ApiEndpointStore,
   ApiEndpointsFileUnparsableError,
   endpointNameDisplayOf,
+  agentNameOf,
+  agentSettingsOf,
+  providerOfAgent,
+  storedOmpProfileKeys,
+  type ApiEndpointAgentKey,
   type ApiEndpointProvider,
   type ApiEndpointState,
+  type CliConfigAgent,
+  type CliConfigProvider,
   type EndpointSnapshot,
   type GatewayTokens,
+  type PiModelsTakeoverFile,
   type StoredAccessKey,
   type StoredApiEndpoint,
 } from "./store.js";
@@ -248,11 +309,111 @@ import {
 
 /** 让一个 Agent 的 CLI 配置跟上：wiring 为 null 时切回官方；agent 是落下后的设置，切回官方时记下它的默认模型（again）。 */
 interface CliSync {
-  provider: ApiEndpointProvider;
+  provider: ApiEndpointAgentKey;
   wiring: CliWiring | null;
   agent: ApiEndpointAgentSettings;
   // CLI 自己换过的模型也写回默认模型（「重新应用」、在 Osuna 里换了默认模型）；省略为留着 CLI 的。
   shouldRewriteModel?: boolean;
+}
+
+/** 改写一份 CLI 配置时算出的接管记录，与改写前的原始字节（首次改写时拿去做副本）。 */
+interface TakeoverWrite<Takeover> {
+  takeover: Takeover;
+  current: Buffer | null;
+}
+
+/** 按 Pi / OMP 让默认模型跑的那一档显示默认思考档位。 */
+interface PiAgentShown {
+  state: ApiEndpointState;
+  provider: PiLikeAgent;
+  agent: ApiEndpointAgentSettings;
+}
+
+interface PiChatThinkingInput {
+  state: ApiEndpointState;
+  provider: PiLikeAgent;
+  // 设置里的默认思考档位；没设为 null。
+  chosen: string | null;
+}
+
+interface PiOfferedInput {
+  state: ApiEndpointState;
+  provider: PiLikeAgent;
+  modelId: string;
+}
+
+interface PiSourceLevelsInput {
+  provider: PiLikeAgent;
+  source: PiModelSource;
+}
+
+interface PiInspection {
+  provider: PiLikeAgent;
+  // 开关关着时不比对接管记录，只看读不读得懂。
+  enabled: boolean;
+}
+
+interface PiGatewayCheck {
+  files: PiLikeFiles;
+  // 设置文件现在的内容；null 为不存在。
+  settingsText: string | null;
+}
+
+/** 写进 Pi / OMP 设置文件的默认设置，与 CLI 自己换过的默认模型要不要写回。 */
+interface PiSettingsWrite {
+  provider: PiLikeAgent;
+  wiring: PiSettingsWiring;
+  shouldRewriteModel: boolean;
+}
+
+/** 把中转站写进 Pi / OMP 的配置。 */
+interface PiEndpointWrite extends CliEndpointWrite {
+  provider: PiLikeAgent;
+}
+
+/** 写 Pi / OMP 的模型文件。 */
+interface PiModelsWrite {
+  files: PiLikeFiles;
+  wiring: CliWiring;
+}
+
+/** 设置文件写不成时把模型文件退回写之前：原来的字节（null 为不存在）与接管记录。 */
+interface PiModelsPutBack {
+  files: PiLikeFiles;
+  bytes: Buffer | null;
+  record: PiModelsTakeoverFile;
+}
+
+/** Pi / OMP 切回官方；defaultModelId 记进再打开时放回的默认模型。 */
+interface PiOfficialRestore {
+  provider: PiLikeAgent;
+  defaultModelId: string | null;
+}
+
+/** Pi / OMP 的两份文件在哪、按哪家的写法改。 */
+interface PiLikeFiles {
+  provider: PiLikeAgent;
+  agentDir: string;
+  // Osuna 改写的模型文件（Pi 的 models.json，OMP 的 models.yml，只有 models.yaml 时是它）。
+  modelsPath: string;
+  // 设置文件（Pi 的 settings.json，OMP 的 config.yml / config.yaml）。
+  settingsPath: string;
+  // 只有它、没有模型文件时先迁移过来的旧文件（OMP 的 models.json）；Pi 为 null。
+  legacyModelsPath: string | null;
+  cli: PiLikeCli;
+}
+
+/** 一份设置的模型分组：按哪份设置，模型记在哪个提供方名下。 */
+interface ModelGroupsInput {
+  state: ApiEndpointState;
+  agentKey: CliConfigAgent;
+  providerId: string;
+}
+
+/** OMP 的一套配置（默认那套或一套命名配置）与它的 agent 目录。 */
+interface OmpFilesInput {
+  provider: PiLikeAgent;
+  agentDir: string;
 }
 
 /** 把中转站写进 CLI 配置：要写的内容，与 CLI 自己换过的模型要不要写回。 */
@@ -266,6 +427,8 @@ type ChatThinking = Pick<AgentModelDefinition, "thinkingOptions" | "defaultThink
 
 // 没设默认思考档位时 Osuna 的 Claude 新对话起步的档位，同 Claude 自定义模型（agent/providers/claude/model-manifest.ts）。
 const CLAUDE_START_THINKING = "high";
+// 没设默认思考档位时 Pi 新会话起步的档位（pi-mono coding-agent 的 DEFAULT_THINKING_LEVEL）。
+const PI_START_THINKING = "medium";
 
 /** 挑默认模型时从 CLI 配置与接管记录里读的那些。 */
 type CliPickInput = Omit<DefaultModelPickInput, "state" | "provider">;
@@ -324,7 +487,11 @@ import {
   type StoreIconFailure,
 } from "./endpoint-icons.js";
 import { isErrnoException } from "../../utils/errno.js";
-import { REAL_PRICING_TIMERS, type UsagePricingTimers } from "../usage/pricing/service.js";
+import {
+  REAL_PRICING_TIMERS,
+  type ModelPricePerMillion,
+  type UsagePricingTimers,
+} from "../usage/pricing/service.js";
 import {
   fetchUpstreamModels,
   type ListedModel,
@@ -474,6 +641,7 @@ const DEFAULT_UPSTREAM_TIMEOUT_MS = 15_000;
 const VIA_OSUNA = "via Osuna";
 // Codex 的自定义 provider 地址要带上它，Claude Code 的不带。
 const CODEX_GATEWAY_SUFFIX = "/v1";
+// Pi 的服务商地址同样是中转站的 /v1（Chat 与 Responses 都在它下面）。
 // 保存后当场拉清单最多等这么久（照 magpie），过了就照常回保存的结果。
 const SAVE_LIST_TIMEOUT_MS = 8_000;
 // 导入链接给的图标图片最多等这么久，过了就用默认图标。
@@ -603,6 +771,8 @@ export interface ApiEndpointAgentSettingsInput {
   // 强制 Subagent 模型与「Codex Subagent 可用任意模型」，只给 Codex；省略即不变，模型 null 为不设。
   forcedSubagentModelId?: string | null;
   allowsAnySubagentModel?: boolean;
+  // OMP 的模型角色，只给 OMP：给出的角色设成这个模型与档位，null 为清空，没给的不变；省略即不变。
+  modelRoles?: ModelRolesChange;
 }
 
 /** 改完的设置；打开总开关且没指定默认模型时另有默认模型是怎么挑的。 */
@@ -669,6 +839,12 @@ export interface ApiEndpointTestModelsInput {
   method?: string;
 }
 
+/** 某提供方下某时刻之前启动、还活着的会话。 */
+export interface SessionsStartedBefore {
+  provider: string;
+  before: Date;
+}
+
 export interface ApiEndpointServiceOptions {
   paseoHome: string;
   logger: pino.Logger;
@@ -697,13 +873,16 @@ export interface ApiEndpointServiceOptions {
   homeDir?: string;
   now?: () => Date;
   // 某个 Agent 的总开关、默认模型、可用模型或指向的接口变了之后调用；daemon 据此刷新该提供方的快照。
-  onActiveEndpointChanged?: (provider: ApiEndpointProvider) => void;
+  // OMP 命名配置的设置变了时，是跟随它的自定义提供方（followersOf）。
+  onActiveEndpointChanged?: (provider: string) => void;
   // 某家接口的价格倍率改了：用量的估算成本随之变，客户端要重读。
   onPriceMultipliersChanged?: () => void;
   // 该提供方下还活着的 Agent session 数；改写 CLI 配置会影响到它们，列表查询时带给 App 写进确认框。
   countLiveSessions: (provider: ApiEndpointProvider) => number;
-  // 该提供方下 before 之前启动、还活着的 Agent session 数：提示区说它们要重开才用上新设置。
-  countSessionsStartedBefore: (input: { provider: ApiEndpointProvider; before: Date }) => number;
+  // 该提供方（含自定义提供方）下 before 之前启动、还活着的 Agent session 数：提示区说它们要重开才用上新设置。
+  countSessionsStartedBefore: (input: SessionsStartedBefore) => number;
+  // config.json 里的自定义提供方：继承 omp、env 里给了 OMP_PROFILE 的跟随那套命名配置的设置。缺省为没有。
+  providerOverrides?: () => Record<string, ProviderOverride> | undefined;
   // 列本机进程、执行 CLI 自己的命令（reopen-hints.ts）、读系统代理（codex-proxy.ts）；
   // 缺省用真的，测试一律换成假的（真的在测试里一造就抛错）。
   hostProcesses?: HostProcesses;
@@ -714,6 +893,9 @@ export interface ApiEndpointServiceOptions {
   // 本机 Codex CLI 自报的版本（没有 Codex 样本时「按 Codex 的样子测」用，magpie codexCLIVersion）；缺省：有
   // providerRuntimeSettings 时先读 npm 包、读不到才跑 `codex --version`，没有时不查。测试一律换成假的，绝不跑真的 codex。
   readCodexCliVersion?: () => Promise<string | null>;
+  // 本机 OMP 自报的版本（16.4.0 以前 models.yml 不收 max，magpie ompVersion）；缺省：有 providerRuntimeSettings 时跑
+  // 用户配的 `omp --version`，没有时不查（按版本不知道算）。测试一律换成假的，绝不跑真的 omp。
+  readOmpCliVersion?: () => Promise<string | null>;
   upstreamTimeoutMs?: number;
   connectionTestTimeoutMs?: number;
   // 测试模型的并发与时限；缺省 4 个、单个 20 秒、整批 3 分钟（model-tests.ts），测试换成短的。
@@ -753,6 +935,9 @@ export interface ApiEndpointServiceOptions {
   // 问 Codex 自己是怎么登录的（ADR 0010）；测试换成固定答案。缺省：有 providerRuntimeSettings 时
   // 问临时 app-server 的 account/read，没有时按判断不出处理。
   readCodexSignIn?: ReadCodexSignIn;
+  // 一个模型每百万 token 的美元价（价格表或用户设的价，override 是用户设的、不乘倍率）；写进 Pi 的模型资料（cost）。
+  // 缺省不知道价格，不写。
+  modelPricePerMillion?: (model: string) => ModelPricePerMillion | null;
   // 改写 CLI 配置时，落下接管记录之后、替换前重读比对之前调用。
   // 只给进程内 daemon 测试模拟「别的工具同时在改这份文件」，生产不传。
   beforeConfigRecheck?: (filePath: string) => void;
@@ -785,6 +970,7 @@ export type ApiEndpointServiceOverrides = Pick<
   | "modelTestTimers"
   | "readCodexSignIn"
   | "readCodexCliVersion"
+  | "readOmpCliVersion"
   // 只给进程内 daemon 测试换时钟：接口服务与中转站记请求的时刻共用它。
   | "now"
   | "readCliUse"
@@ -877,7 +1063,7 @@ interface AgentIssue extends ApiEndpointAgentIssue {
  * 以及 ChatGPT 接法下 CC Switch 镜像表的地址，见 isCodexMirrorKey）。
  * 其余负责的键被改仍只算 modified_externally，不进提示区。
  */
-const ROUTING_KEYS: Record<ApiEndpointProvider, readonly string[]> = {
+const ROUTING_KEYS: Record<CliConfigProvider, readonly string[]> = {
   claude: ["env.ANTHROPIC_BASE_URL", "env.ANTHROPIC_AUTH_TOKEN"],
   codex: [
     "model_provider",
@@ -885,9 +1071,10 @@ const ROUTING_KEYS: Record<ApiEndpointProvider, readonly string[]> = {
     "openai_base_url",
     `model_providers.${CODEX_API_ENDPOINT_PROVIDER_ID}`,
   ],
+  // Pi 的默认服务商与模型是它自己会换的选择，换成接口以外的按「模型被换掉」提示（同 Codex 的 model）。
+  pi: [`providers.${PI_PROVIDER_ID}`],
+  omp: [`providers.${PI_PROVIDER_ID}`],
 };
-
-const AGENT_NAMES: Record<ApiEndpointProvider, string> = { claude: "Claude Code", codex: "Codex" };
 
 // 问登录 shell 的变量：云平台开关与代理变量一次问齐（magpie proc 的 shellVars 连同 ProxyVars），共用一分钟的答案。
 const LOGIN_SHELL_KEYS: readonly string[] = [...CLAUDE_CLOUD_SWITCH_KEYS, ...CODEX_PROXY_ENV_KEYS];
@@ -927,6 +1114,7 @@ export type ApiEndpointListResult = Required<
     | "endpointNameDisplay"
     | "endpointNamesUnreached"
     | "balanceAutoRefresh"
+    | "ompProfiles"
   >
 >;
 
@@ -939,6 +1127,10 @@ type CliWiring = ClaudeGatewayWiring & {
   endpointModels: string[];
   // Codex 的记忆模型（已是写给 Codex 的写法）；null 为没设，Claude Code 恒为 null。
   memoryModel: string | null;
+  // Pi / OMP 模型文件里 providers.osuna 的模型清单的来源；别的 Agent 恒为空。
+  piSources: PiModelSource[];
+  // OMP 设了的模型角色；别的 Agent 恒为空。
+  modelRoles: PiLikeRoleWiring[];
 };
 
 /** CLI 配置里上次写进去的中转站地址与口令。 */
@@ -970,10 +1162,11 @@ export class ApiEndpointService {
   private readonly readLoginShellEnv: ReadLoginShellEnv;
   private readonly reachesGateway: (base: string) => Promise<boolean>;
   private readonly now: () => Date;
-  private readonly onActiveEndpointChanged: (provider: ApiEndpointProvider) => void;
+  private readonly onActiveEndpointChanged: (provider: string) => void;
   private readonly onPriceMultipliersChanged: (() => void) | undefined;
   private readonly countLiveSessions: (provider: ApiEndpointProvider) => number;
   private readonly countSessionsStartedBefore: ApiEndpointServiceOptions["countSessionsStartedBefore"];
+  private readonly readProviderOverrides: ApiEndpointServiceOptions["providerOverrides"];
   private readonly reopenHints: CliReopenHints;
   private readonly codexProxy: CodexProxyCheck;
   private readonly proxyEnv: ProxyEnv;
@@ -983,6 +1176,7 @@ export class ApiEndpointService {
   private readonly detectEachLimits: DetectEachLimits;
   private readonly modelTestTimers: UsagePricingTimers;
   private readonly beforeConfigRecheck: ((filePath: string) => void) | undefined;
+  private readonly modelPricePerMillion: ApiEndpointServiceOptions["modelPricePerMillion"];
   private readonly cooldowns: EndpointCooldowns;
   private readonly retiredModels: RetiredModels;
   private readonly sightings: GatewaySightings;
@@ -991,6 +1185,10 @@ export class ApiEndpointService {
   private readonly codexSeenVersion = new SeenCodexVersion();
   // 本机 Codex CLI 的版本隔一阵才重新问一次（magpie codexVersionCache 的 10 分钟）。
   private codexCliVersionCache: { at: number; version: string | null } | null = null;
+  private readonly readOmpCliVersion: (() => Promise<string | null>) | null;
+  // 本机 OMP 的版本，同样隔一阵才重新问；没问过或问不到为 null（按旧的 OMP 写 models.yml）。
+  private ompVersion: string | null = null;
+  private ompVersionAt: number | null = null;
   private readonly readCliUse: ReadCliUse;
   // daemon（和它里面的中转站）起来的时刻：之前中转站没收到说明不了什么。
   private readonly startedAt: Date;
@@ -1060,6 +1258,7 @@ export class ApiEndpointService {
     this.onPriceMultipliersChanged = options.onPriceMultipliersChanged;
     this.countLiveSessions = options.countLiveSessions;
     this.countSessionsStartedBefore = options.countSessionsStartedBefore;
+    this.readProviderOverrides = options.providerOverrides;
     let adapter = options.hostProcesses ?? null;
     // 真的适配器用到时才造：测试里一造就抛错。
     const hostProcesses = (): HostProcesses => {
@@ -1075,8 +1274,16 @@ export class ApiEndpointService {
     this.reopenHints = new CliReopenHints({
       hostProcesses,
       subjects: () => ({
+        ...Object.fromEntries(
+          this.ompProfiles().map((name) => {
+            const key = ompProfileKey(name);
+            return [key, this.reopenSubject(key)];
+          }),
+        ),
         claude: this.reopenSubject("claude"),
         codex: this.reopenSubject("codex"),
+        pi: this.reopenSubject("pi"),
+        omp: this.reopenSubject("omp"),
       }),
       timers: options.reopenHintsTimers ?? REAL_PRICING_TIMERS,
       now: this.now,
@@ -1101,10 +1308,12 @@ export class ApiEndpointService {
     ({ limits: this.modelTestLimits, timers: this.modelTestTimers } = modelTestSetup(options));
     this.detectEachLimits = { ...DETECT_EACH_DEFAULTS, ...options.detectEach };
     this.beforeConfigRecheck = options.beforeConfigRecheck;
+    this.modelPricePerMillion = options.modelPricePerMillion;
     this.cooldowns = options.cooldowns;
     this.retiredModels = options.retiredModels;
     this.sightings = options.sightings;
     this.readCodexCliVersion = codexCliVersionReader(options);
+    this.readOmpCliVersion = ompCliVersionReader(options);
     this.readCliUse = options.readCliUse ?? readCliUse;
     this.startedAt = this.now();
     this.icons = new EndpointIcons({ endpointsDir: this.store.endpointsDir, now: this.now });
@@ -1160,27 +1369,29 @@ export class ApiEndpointService {
     await this.followCodexSignIn();
     await this.exclusive(() => this.followCliPicks());
     const state = this.readState();
-    const enabled = state.agents[supported].enabled;
-    const statuses: Record<ApiEndpointProvider, ApiEndpointFileStatus> = {
-      claude: this.inspectClaude(state.agents.claude),
-      codex: this.inspectCodex(state.agents.codex.enabled),
-    };
-    for (const agentProvider of API_ENDPOINT_PROVIDERS) {
+    const enabled = agentSettingsOf(state, supported).enabled;
+    const cliAgents = this.cliAgents();
+    const statuses = new Map<CliConfigAgent, ApiEndpointFileStatus>(
+      cliAgents.map((agent) => [agent, this.inspectCli(state, agent)]),
+    );
+    const statusOf = (agent: CliConfigAgent) =>
+      statuses.get(agent) ?? this.inspectCli(state, agent);
+    for (const agentProvider of cliAgents) {
       const replaced = this.modelReplacedIssue(state, agentProvider);
-      if (replaced) statuses[agentProvider].issues.push(replaced);
+      if (replaced) statusOf(agentProvider).issues.push(replaced);
     }
     // 读不懂的 config.toml 照 magpie 两条都说：「读不懂」说改不了配置，这条说查不了 multi_agent_v2。
     const multiAgentV2 = this.codexMultiAgentV2Issue(state);
-    if (multiAgentV2 !== null) statuses.codex.issues.push(multiAgentV2);
+    if (multiAgentV2 !== null) statusOf("codex").issues.push(multiAgentV2);
     // 托管地址与云平台开关：要问代理与登录 shell，只在列表里查（ADR 0012）。
     if (state.agents.claude.enabled) {
-      statuses.claude.issues.push(...(await this.claudeBypassIssues()));
+      statusOf("claude").issues.push(...(await this.claudeBypassIssues()));
     }
     // 照 magpie：设置本身有问题时先说那个，没有问题再看 Codex 是不是被代理挡住，都没有才看是不是被绕过。
-    for (const agentProvider of API_ENDPOINT_PROVIDERS) {
-      const issues = statuses[agentProvider].issues;
+    for (const agentProvider of cliAgents) {
+      const issues = statusOf(agentProvider).issues;
       const isSettingsRight = issues.every((issue) => NOTICE_CODES.has(issue.code));
-      const isChecked = state.agents[agentProvider].enabled && isSettingsRight;
+      const isChecked = agentSettingsOf(state, agentProvider).enabled && isSettingsRight;
       if (!isChecked) continue;
       if (agentProvider === "codex") {
         const proxied = await this.codexProxiedIssue();
@@ -1192,31 +1403,105 @@ export class ApiEndpointService {
       const bypassed = this.bypassedIssue(agentProvider);
       if (bypassed !== null) issues.push(bypassed);
     }
-    const status = statuses[supported];
+    const status = statusOf(supported);
     const reopenHints = await this.reopenHints.read();
     return {
       endpoints: state.endpoints.map((endpoint) => this.toWire(state, endpoint, supported)),
       activeEndpointId: agentTargetEndpoint(state, supported)?.id ?? null,
-      agents: this.shownAgents(state),
+      agents: Object.fromEntries(cliAgents.map((agent) => [agent, this.shownAgent(state, agent)])),
       health: status.health,
       cliBaseUrl: enabled ? null : status.baseUrl,
       runningSessionCount: this.countLiveSessions(supported),
       gatewayUnavailable: this.gatewayUnavailable(),
-      agentIssues: { claude: statuses.claude.issues, codex: statuses.codex.issues },
+      agentIssues: Object.fromEntries(cliAgents.map((agent) => [agent, statusOf(agent).issues])),
       reopenHints,
       longConversations: state.longConversations ?? {},
       disabledModels: state.disabledModels ?? [],
       endpointNameDisplay: endpointNameDisplayOf(state),
       endpointNamesUnreached: this.endpointNamesUnreached(state),
       balanceAutoRefresh: state.balanceAutoRefresh !== false,
+      ompProfiles: this.ompProfiles(),
     };
+  }
+
+  /** 一个 CLI 的配置文件现在的情况（Claude Code、Codex、Pi 与 OMP 的每套配置各看各的）。 */
+  private inspectCli(state: ApiEndpointState, agent: CliConfigAgent): ApiEndpointFileStatus {
+    const { enabled } = agentSettingsOf(state, agent);
+    if (agent === "claude") return this.inspectClaude(state.agents.claude);
+    if (agent === "codex") return this.inspectCodex(enabled);
+    return this.inspectPi({ provider: agent, enabled });
+  }
+
+  /** config.json 里的自定义提供方；没有为空。 */
+  private providerOverrides(): Record<string, ProviderOverride> {
+    return this.readProviderOverrides?.() ?? {};
+  }
+
+  /** 电脑上的 OMP 命名配置（daemon 环境已经指向的那套不算），按名字排。 */
+  private ompProfiles(): string[] {
+    return listOmpProfiles({ env: this.env, homeDir: this.homeDir });
+  }
+
+  /** Osuna 改写其 CLI 配置的每份设置：四个提供方，加上电脑上 OMP 的每套命名配置。 */
+  private cliAgents(): CliConfigAgent[] {
+    return [...CLI_CONFIG_PROVIDERS, ...this.ompProfiles().map(ompProfileKey)];
+  }
+
+  /** Pi、OMP 默认那套与 OMP 的每套命名配置。 */
+  private piLikeAgents(): PiLikeAgent[] {
+    return [...PI_LIKE_PROVIDERS, ...this.ompProfiles().map(ompProfileKey)];
+  }
+
+  /** 设置 RPC 收的键：提供方，或电脑上现有的一套 OMP 命名配置（omp#<名字>）。 */
+  private requireCliAgent(key: string): CliConfigAgent {
+    const agent = this.cliAgents().find((candidate) => candidate === key);
+    if (agent === undefined) {
+      throw new ApiEndpointRequestError({
+        code: "unsupported_provider",
+        message: `API endpoints are not supported for provider '${key}'`,
+      });
+    }
+    return agent;
+  }
+
+  /**
+   * 跟随 OMP 某套配置设置的自定义提供方：继承 omp、env 里给了 OMP_PROFILE 或 PI_PROFILE 的。它的 OMP 读哪个目录照 OMP 的规则
+   * （daemon 环境叠上它的 env），哪一块改写的正是这个目录就跟随哪一块；没有哪块管这个目录（如 daemon 环境指向了 work，
+   * 它却选 default）或配置名 OMP 不收时不跟随，走官方。
+   */
+  private followedAgentOf(providerId: string): CliConfigAgent | null {
+    const override = this.providerOverrides()[providerId];
+    if (override?.extends !== "omp" || override.env === undefined) return null;
+    const { OMP_PROFILE, PI_PROFILE } = override.env;
+    const profile = (OMP_PROFILE ?? PI_PROFILE)?.trim();
+    if (profile === undefined) return null;
+    const isNamed = profile !== "" && profile !== "default";
+    if (isNamed && !isOmpProfileName(profile)) return null;
+    const env = { ...this.env, ...override.env };
+    const { agentDir } = resolveOmpSessionPaths({ env, homeDir: this.homeDir });
+    const blocks = this.piLikeAgents().filter((agent) => providerOfAgent(agent) === "omp");
+    return blocks.find((agent) => this.piLikeFiles(agent).agentDir === agentDir) ?? null;
+  }
+
+  /** Osuna 的模型选单与快照按哪份设置：内置的提供方是它自己，跟随某套 OMP 配置的自定义提供方是那一套。 */
+  private snapshotAgentOf(providerId: string): CliConfigAgent | null {
+    return findProvider(providerId) ?? this.followedAgentOf(providerId);
+  }
+
+  /** 用这份设置开对话的提供方：它自己（命名配置没有），与跟随它的自定义提供方。 */
+  private providersFollowing(agent: CliConfigAgent): string[] {
+    const own = isOmpProfileKey(agent) ? [] : [agent];
+    const custom = Object.keys(this.providerOverrides()).filter(
+      (providerId) => !findProvider(providerId) && this.followedAgentOf(providerId) === agent,
+    );
+    return [...own, ...custom];
   }
 
   /**
    * 刚改写了配置的 CLI：记下改写时刻；在后台看一次要重开谁，Codex 共用的后台 app-server 还是改动之前的设置、
    * 没人连着就重启它，不等它。
    */
-  private recordCliRewrites(synced: ApiEndpointProvider[]): void {
+  private recordCliRewrites(synced: CliConfigAgent[]): void {
     // 这之前 CLI 的使用不再算「被绕过」（「重新应用」也走这里）。
     const rewrittenAt = this.now();
     for (const provider of synced) this.store.recordCliRewrite({ provider, at: rewrittenAt });
@@ -1258,16 +1543,20 @@ export class ApiEndpointService {
   }
 
   /** 一个 CLI 要重开谁的依据：配置目录、启动时读的那部分最近一次变了的时刻、Osuna 里那之前启动的会话数。 */
-  private reopenSubject(provider: ApiEndpointProvider): ReopenHintsSubject {
-    const cliDir = path.dirname(this.resolveCliConfigPath(provider));
-    const changedAt = this.cliChangedAt(provider);
+  private reopenSubject(agent: CliConfigAgent): ReopenHintsSubject {
+    const cliDir = path.dirname(this.resolveCliConfigPath(agent));
+    const changedAt = this.cliChangedAt(agent);
     if (changedAt === null) return { cliDir, changedAt, osunaSessions: 0 };
-    const osunaSessions = this.countSessionsStartedBefore({ provider, before: changedAt });
+    // 用这份设置开的会话：它自己的，与跟随它的自定义提供方的。
+    const osunaSessions = this.providersFollowing(agent).reduce(
+      (count, provider) => count + this.countSessionsStartedBefore({ provider, before: changedAt }),
+      0,
+    );
     return { cliDir, changedAt, osunaSessions };
   }
 
   /** Osuna 改写过的 CLI 启动时读的那部分最近一次变了的时刻；Osuna 从没改写过它为 null（不是 Osuna 的事）。 */
-  private cliChangedAt(provider: ApiEndpointProvider): Date | null {
+  private cliChangedAt(provider: ApiEndpointAgentKey): Date | null {
     if (this.store.readCliRewrittenAt(provider) === null) return null;
     const { changedAt, remember } = cliChangedAt({
       startup: this.cliStartupReads(provider),
@@ -1285,13 +1574,25 @@ export class ApiEndpointService {
   }
 
   /** CLI 启动时读的文件与其中 Osuna 写的那部分（magpie startsWith）；Codex 连同 Osuna 的模型目录。 */
-  private cliStartupReads(provider: ApiEndpointProvider): CliStartupReads {
+  private cliStartupReads(provider: ApiEndpointAgentKey): CliStartupReads {
     const configPath = this.resolveCliConfigPath(provider);
     const text = this.readForReopenHints({
       file: configPath,
       read: () => readOptionalFile(configPath)?.toString("utf8") ?? null,
     });
     if (provider === "claude") return { files: [configPath], reads: readClaudeStartupReads(text) };
+    if (isPiLike(provider)) {
+      const files = this.piLikeFiles(provider);
+      const modelsPath = files.modelsPath;
+      const modelsText = this.readForReopenHints({
+        file: modelsPath,
+        read: () => readOptionalFile(modelsPath)?.toString("utf8") ?? null,
+      });
+      return {
+        files: [configPath, modelsPath],
+        reads: files.cli.readStartupReads({ settingsText: text, modelsText }),
+      };
+    }
     const catalog =
       this.readForReopenHints({
         file: this.store.codexModelCatalogPath,
@@ -1336,12 +1637,12 @@ export class ApiEndpointService {
       const tokens = nextGatewayTokens(state, current);
       if (!sameTokens(tokens, current)) this.store.writeGatewayTokens(tokens);
       if (url === null) {
-        if (API_ENDPOINT_PROVIDERS.some((provider) => state.agents[provider].enabled)) {
+        if (isAnyAgentOn(state)) {
           this.logger.warn("API endpoints are on, but the daemon listens on a socket");
         }
         return;
       }
-      for (const provider of API_ENDPOINT_PROVIDERS) {
+      for (const provider of this.cliAgents()) {
         try {
           this.reconcileCli(state, provider, tokens, url);
         } catch (error) {
@@ -1352,6 +1653,10 @@ export class ApiEndpointService {
     });
     // 先按上次的接法对账，不让启动等 Codex；登录方式变了再在后台改写。
     void this.followCodexSignIn();
+    // OMP 的版本同样在后台问，收不收 max 和上次写的不同再重写。
+    void this.followOmpVersion().catch((error: unknown) => {
+      this.logger.warn({ err: error }, "Failed to follow the installed OMP version");
+    });
   }
 
   activeEndpointId(provider: string): string | null {
@@ -1360,14 +1665,7 @@ export class ApiEndpointService {
 
   agentSettings(provider: string): ApiEndpointAgentSettings {
     const state = this.readState();
-    return this.shownAgent(state, requireProvider(provider));
-  }
-
-  /** 每个 Agent 回给客户端的设置（shownAgent）。 */
-  private shownAgents(
-    state: ApiEndpointState,
-  ): Record<ApiEndpointProvider, ApiEndpointAgentSettings> {
-    return { claude: this.shownAgent(state, "claude"), codex: this.shownAgent(state, "codex") };
+    return this.shownAgent(state, this.requireCliAgent(provider));
   }
 
   /**
@@ -1377,9 +1675,10 @@ export class ApiEndpointService {
    */
   private shownAgent(
     state: ApiEndpointState,
-    provider: ApiEndpointProvider,
+    provider: ApiEndpointAgentKey,
   ): ApiEndpointAgentSettings {
-    const agent = state.agents[provider];
+    const agent = agentSettingsOf(state, provider);
+    if (isPiLike(provider)) return this.shownPiAgent({ state, provider, agent });
     if (provider !== "claude") return agent;
     const levels = this.claudeLevels(state, agent);
     const chosen = agent.defaultThinkingOptionId ?? null;
@@ -1390,10 +1689,23 @@ export class ApiEndpointService {
     return { ...agent, ...thinking, ...ultraCode };
   }
 
+  /**
+   * Pi / OMP 的默认思考档位按 CLI 让默认模型跑的那一档显示（magpie 的 effort 字段 Get：piClamp；OMP 照它自己的贴合），
+   * 设置本身不改。
+   */
+  private shownPiAgent(input: PiAgentShown): ApiEndpointAgentSettings {
+    const { state, provider, agent } = input;
+    const chosen = agent.defaultThinkingOptionId ?? null;
+    if (chosen === null || agent.defaultModelId === null) return agent;
+    const offered = this.piOffered({ state, provider, modelId: agent.defaultModelId });
+    if (offered.length === 0) return agent;
+    return { ...agent, defaultThinkingOptionId: piLikeClamp({ provider, level: chosen, offered }) };
+  }
+
   /** 老客户端眼里当前启用的接口；官方模式、不支持的提供方或文件读不懂时为 null。 */
   activeEndpoint(provider: string): ApiEndpointRef | null {
     const state = this.readStateForSnapshot();
-    const supported = findProvider(provider);
+    const supported = this.snapshotAgentOf(provider);
     if (!state || !supported) return null;
     const endpoint = agentTargetEndpoint(state, supported);
     return endpoint ? { id: endpoint.id, name: endpoint.name } : null;
@@ -1405,9 +1717,9 @@ export class ApiEndpointService {
    */
   activeModels(provider: string): AgentModelDefinition[] | null {
     const state = this.readStateForSnapshot();
-    const supported = findProvider(provider);
+    const supported = this.snapshotAgentOf(provider);
     if (!state || !supported) return null;
-    const agent = state.agents[supported];
+    const agent = agentSettingsOf(state, supported);
     if (!agent.enabled) return null;
     // 指定了某一家的默认模型，在老客户端的光秃秃列表里标它的模型名。
     const defaultModel = bareDefaultModel(state, agent.defaultModelId);
@@ -1417,8 +1729,8 @@ export class ApiEndpointService {
     return models.map((model, index) =>
       Object.assign(
         {
-          provider: supported,
-          id: model.id,
+          provider,
+          id: chatModelId(supported, model.id),
           label: labels[index] ?? model.id,
           isDefault: model.id === defaultModel,
         },
@@ -1434,10 +1746,11 @@ export class ApiEndpointService {
    */
   private chatThinking(
     state: ApiEndpointState,
-    provider: ApiEndpointProvider,
+    provider: ApiEndpointAgentKey,
   ): (modelId: string) => ChatThinking {
-    const agent = state.agents[provider];
+    const agent = agentSettingsOf(state, provider);
     const chosen = agent.defaultThinkingOptionId ?? null;
+    if (isPiLike(provider)) return this.piChatThinking({ state, provider, chosen });
     const codexOwn = provider === "codex" ? this.codexReasoningEffort() : null;
     return (modelId) => {
       const levels = this.thinkingLevelsFor({ state, provider, modelId });
@@ -1459,6 +1772,47 @@ export class ApiEndpointService {
     };
   }
 
+  /**
+   * Osuna 对话里 Pi / OMP 的接口模型的档位：CLI 给它写进模型文件的那一条能选的档位；新对话从默认思考档位起步，
+   * 没设时从 CLI 自己的缺省起（Pi 的 medium、OMP 的 high），都按 CLI 的贴合取模型跑得到的一档。
+   */
+  private piChatThinking(input: PiChatThinkingInput): (modelId: string) => ChatThinking {
+    const { state, provider, chosen } = input;
+    const sources = this.piSources(state);
+    const start = provider === "pi" ? PI_START_THINKING : OMP_START_THINKING;
+    return (modelId) => {
+      const source = sources.find((candidate) => candidate.id === modelId);
+      if (!source) return {};
+      const offered = this.piSourceLevels({ provider, source });
+      if (offered.length === 0) return {};
+      return {
+        thinkingOptions: thinkingOptionsOf({ levels: offered }),
+        defaultThinkingOptionId: piLikeClamp({ provider, level: chosen ?? start, offered }),
+      };
+    };
+  }
+
+  /** CLI 给这个接口模型能选的档位；不是 Osuna 写给它的模型时为空。 */
+  private piOffered(input: PiOfferedInput): string[] {
+    const { state, provider, modelId } = input;
+    const source = this.piSources(state).find((candidate) => candidate.id === modelId);
+    return source ? this.piSourceLevels({ provider, source }) : [];
+  }
+
+  /**
+   * 写进模型文件的那一条在 CLI 里能选的档位：Pi 的不会思考的只有 off 一档（magpie piSupported）；
+   * OMP 的是 thinking.efforts，前面加 auto（OMP 每轮自己挑），不会思考的没有。
+   */
+  private piSourceLevels(input: PiSourceLevelsInput): string[] {
+    const { provider, source } = input;
+    if (provider === "pi") return piOfferedLevels(piModelThinking(source));
+    const efforts = ompEfforts({
+      efforts: source.facts.efforts ?? [],
+      takesMax: ompTakesMax(this.ompVersion),
+    });
+    return efforts.length === 0 ? [] : ["auto", ...efforts];
+  }
+
   /** 第三方接口的默认思考档位是 max 时，Claude Code 的每个会话都锁在 max（CLAUDE_CODE_EFFORT_LEVEL 盖过每次选的档位）。 */
   lockedThinkingOptionId(provider: string): string | null {
     const state = this.readStateForSnapshot();
@@ -1474,11 +1828,32 @@ export class ApiEndpointService {
    */
   activeModelGroups(provider: string): ApiEndpointModelGroup[] | null {
     const state = this.readStateForSnapshot();
-    const supported = findProvider(provider);
+    const supported = this.snapshotAgentOf(provider);
     if (!state || !supported) return null;
-    const agent = state.agents[supported];
+    return this.modelGroupsOf({ state, agentKey: supported, providerId: provider });
+  }
+
+  /**
+   * OMP 每套开着的命名配置的分组（同 activeModelGroups），按 omp#<名字>，给 OMP 设置页那一块挑默认模型与思考档位；
+   * 不是 OMP、一套都没开或文件读不懂时为 null。
+   */
+  ompProfileModelGroups(provider: string): Record<string, ApiEndpointModelGroup[]> | null {
+    const state = this.readStateForSnapshot();
+    if (!state || findProvider(provider) !== "omp") return null;
+    const groups: Record<string, ApiEndpointModelGroup[]> = {};
+    for (const name of this.ompProfiles()) {
+      const agentKey = ompProfileKey(name);
+      const own = this.modelGroupsOf({ state, agentKey, providerId: provider });
+      if (own !== null) groups[agentKey] = own;
+    }
+    return Object.keys(groups).length === 0 ? null : groups;
+  }
+
+  /** 一份设置开着时的分组；模型的 provider 写成 providerId（请求快照的提供方）。关着为 null。 */
+  private modelGroupsOf(input: ModelGroupsInput): ApiEndpointModelGroup[] | null {
+    const { state, agentKey, providerId: provider } = input;
+    const agent = agentSettingsOf(state, agentKey);
     if (!agent.enabled) return null;
-    const agentProvider = supported;
     // 默认模型指定了某一家就标那一家，否则标含它的第一家。
     const isNamed = namedDefaultModel(state, agent.defaultModelId) !== null;
     let defaultMarked = false;
@@ -1486,12 +1861,13 @@ export class ApiEndpointService {
       if (isNamed) return id === agent.defaultModelId;
       return model.id === agent.defaultModelId;
     }
-    const thinkingOf = this.chatThinking(state, supported);
+    const thinkingOf = this.chatThinking(state, agentKey);
     function toDefinition(entry: EndpointGroupModel, label: string): AgentModelDefinition {
       const { id } = entry;
       const isDefault = !defaultMarked && isDefaultEntry(entry);
       if (isDefault) defaultMarked = true;
-      return { provider: agentProvider, id, label, isDefault, ...thinkingOf(id) };
+      const chatId = chatModelId(agentKey, id);
+      return { provider, id: chatId, label, isDefault, ...thinkingOf(id) };
     }
     return endpointModelGroups(this.served(state)).map((group) => {
       const labels = this.groupModelLabels(group);
@@ -1796,7 +2172,7 @@ export class ApiEndpointService {
       const supported = requireProvider(provider);
       const state = this.readState();
       if (endpointId === null) {
-        const agent = state.agents[supported];
+        const agent = agentSettingsOf(state, supported);
         await this.commit(
           state,
           { ...state, agents: { ...state.agents, [supported]: { ...agent, enabled: false } } },
@@ -1814,7 +2190,7 @@ export class ApiEndpointService {
           message: "This endpoint has no models selected",
         });
       }
-      const defaultModelId = projectedDefaultModelId(state.agents[supported], endpoint);
+      const defaultModelId = projectedDefaultModelId(agentSettingsOf(state, supported), endpoint);
       const next = await this.commit(
         state,
         {
@@ -1822,7 +2198,7 @@ export class ApiEndpointService {
           endpoints: withEndpoint(state.endpoints, { ...endpoint, enabled: true }),
           agents: {
             ...state.agents,
-            [supported]: { ...state.agents[supported], enabled: true, defaultModelId },
+            [supported]: { ...agentSettingsOf(state, supported), enabled: true, defaultModelId },
           },
         },
         { rewrite: supported },
@@ -1840,7 +2216,7 @@ export class ApiEndpointService {
     input: ApiEndpointAgentSettingsInput,
   ): Promise<ApiEndpointAgentSettingsResult> {
     return this.exclusiveFollowing(async () => {
-      const supported = requireProvider(provider);
+      const supported = this.requireCliAgent(provider);
       const setsClaudeAiLogin = input.keepsClaudeAiLogin !== undefined;
       if (setsClaudeAiLogin && supported !== "claude") {
         throw new ApiEndpointRequestError({
@@ -1849,13 +2225,14 @@ export class ApiEndpointService {
         });
       }
       if (supported === "codex" && input.enabled) await this.checkCodexSignIn();
+      if (providerOfAgent(supported) === "omp" && input.enabled) await this.readOmpVersion();
       const state = this.readState();
       const requested = input.defaultModelId?.trim();
       const pick = input.enabled && !requested ? this.pickDefaultModel(state, supported) : null;
       const enabledOrOff = input.enabled
         ? enabledAgentSettings({ state, provider: supported, requested, pick })
         : // 关掉总开关从不被拒；默认模型留着，下次打开时还能用就沿用。
-          { ...state.agents[supported], enabled: false };
+          { ...agentSettingsOf(state, supported), enabled: false };
       const withLogin = setsClaudeAiLogin
         ? { ...enabledOrOff, keepsClaudeAiLogin: input.keepsClaudeAiLogin }
         : enabledOrOff;
@@ -1871,11 +2248,17 @@ export class ApiEndpointService {
         agent: withThinking,
         requested: input.usesUltraCode,
       });
-      const agent = this.withSideModels({
+      const withSides = this.withSideModels({
         state,
         provider: supported,
         agent: withUltraCode,
         requested: input,
+      });
+      const agent = withRequestedModelRoles({
+        state,
+        provider: supported,
+        agent: withSides,
+        change: input.modelRoles,
       });
       const reapply = input.enabled && input.reapply === true;
       const next = await this.commit(
@@ -1901,7 +2284,7 @@ export class ApiEndpointService {
    */
   private withDefaultThinking(input: {
     state: ApiEndpointState;
-    provider: ApiEndpointProvider;
+    provider: ApiEndpointAgentKey;
     agent: ApiEndpointAgentSettings;
     requested: string | null | undefined;
   }): ApiEndpointAgentSettings {
@@ -1916,6 +2299,17 @@ export class ApiEndpointService {
       });
     }
     if (provider === "codex") return { ...agent, defaultThinkingOptionId: requested };
+    // Pi 照 magpie 收它的 7 档之一，OMP 收 auto 与它的 6 档，跑的时候各自贴合模型。
+    if (isPiLike(provider)) {
+      const levels = provider === "pi" ? PI_THINKING_LEVELS : OMP_DEFAULT_THINKING_LEVELS;
+      if (!levels.includes(requested)) {
+        throw new ApiEndpointRequestError({
+          code: "invalid_input",
+          message: `${agentNameOf(provider)}'s default thinking is one of ${levels.join(", ")}, not ${requested}`,
+        });
+      }
+      return { ...agent, defaultThinkingOptionId: requested };
+    }
     const levels = this.claudeLevels(state, agent);
     if (!levels.includes(requested)) {
       throw new ApiEndpointRequestError({
@@ -1929,7 +2323,7 @@ export class ApiEndpointService {
   /** 开关 Ultra Code（照 magpie 的 ultracode 字段）：只有 Claude Code；打开要求默认模型支持 xhigh。省略时不变。 */
   private withUltraCode(input: {
     state: ApiEndpointState;
-    provider: ApiEndpointProvider;
+    provider: ApiEndpointAgentKey;
     agent: ApiEndpointAgentSettings;
     requested: boolean | undefined;
   }): ApiEndpointAgentSettings {
@@ -1961,12 +2355,12 @@ export class ApiEndpointService {
   /** 默认模型是这个模型时默认思考档位能选的档位；资料按中转站先发给的那家查。 */
   private thinkingLevelsFor(input: {
     state: ApiEndpointState;
-    provider: ApiEndpointProvider;
+    provider: ApiEndpointAgentKey;
     modelId: string;
   }): string[] {
     const { state, provider, modelId } = input;
     return defaultThinkingLevels({
-      provider,
+      provider: providerOfAgent(provider),
       modelId,
       facts: this.startModelFacts(state, modelId),
     });
@@ -2102,7 +2496,7 @@ export class ApiEndpointService {
    */
   private withSideModels(input: {
     state: ApiEndpointState;
-    provider: ApiEndpointProvider;
+    provider: ApiEndpointAgentKey;
     agent: ApiEndpointAgentSettings;
     requested: ApiEndpointAgentSettingsInput;
   }): ApiEndpointAgentSettings {
@@ -2121,6 +2515,13 @@ export class ApiEndpointService {
       throw new ApiEndpointRequestError({
         code: "invalid_input",
         message: "Only Codex has a memory model",
+      });
+    }
+    const setsSubagent = subagentModelId !== undefined || subagentThinkingOptionId !== undefined;
+    if (setsSubagent && isPiLike(provider)) {
+      throw new ApiEndpointRequestError({
+        code: "invalid_input",
+        message: "Only Claude Code and Codex have a Subagent model",
       });
     }
     let agent = this.withCodexSubagentRouting(input);
@@ -2150,7 +2551,7 @@ export class ApiEndpointService {
    */
   private withCodexSubagentRouting(input: {
     state: ApiEndpointState;
-    provider: ApiEndpointProvider;
+    provider: ApiEndpointAgentKey;
     agent: ApiEndpointAgentSettings;
     requested: ApiEndpointAgentSettingsInput;
   }): ApiEndpointAgentSettings {
@@ -2205,9 +2606,12 @@ export class ApiEndpointService {
    */
   private pickDefaultModel(
     state: ApiEndpointState,
-    provider: ApiEndpointProvider,
+    provider: ApiEndpointAgentKey,
   ): DefaultModelPick | null {
-    const cli = provider === "claude" ? this.claudePickInput() : this.codexPickInput();
+    let cli: CliPickInput;
+    if (provider === "claude") cli = this.claudePickInput();
+    else if (isPiLike(provider)) cli = this.piPickInput(provider);
+    else cli = this.codexPickInput();
     return pickDefaultModel({ state, provider, ...cli });
   }
 
@@ -2243,6 +2647,47 @@ export class ApiEndpointService {
     };
   }
 
+  /** Pi 现在的默认模型（settings.json）；Pi 自己没有缺省模型可言。 */
+  private piPickInput(provider: PiLikeAgent): CliPickInput {
+    const files = this.piLikeFiles(provider);
+    const text = readOptionalFile(files.settingsPath)?.toString("utf8") ?? null;
+    return {
+      cliModel: files.cli.readModel(text),
+      ownDefaultModel: null,
+      isWired: this.piPointsAtGateway({ files, settingsText: text }),
+      reconnect: this.store.readPiSettingsTakeover(provider).reconnect ?? null,
+      joinsOwnModel: false,
+      writesEndpointName: false,
+    };
+  }
+
+  /**
+   * 关开关时服务商还要留着（OMP 别处还用着 osuna/）就照现在的中转站、口令与模型清单重写接线；
+   * 中转站不可用或没有口令时为 null，照原样留着。
+   */
+  private piKeptWiring(provider: PiLikeAgent): PiLikeProviderWiring | null {
+    const gatewayRoot = this.gatewayUrlFor(provider);
+    // OMP 的各套配置共用 OMP 的口令。
+    const token = this.store.readGatewayTokens()[providerOfAgent(provider)];
+    const state = this.readStateForSnapshot();
+    if (gatewayRoot === null || token === undefined || state === null) return null;
+    return { gatewayRoot, token, sources: this.piSources(state) };
+  }
+
+  /** Pi / OMP 的默认模型在 Osuna 的服务商上，模型文件里它的地址是中转站的。 */
+  private piPointsAtGateway(input: PiGatewayCheck): boolean {
+    const { files } = input;
+    const gatewayUrl = this.gatewayUrlFor(files.provider);
+    if (gatewayUrl === null) return false;
+    const models = files.cli.readGateway(
+      readOptionalFile(files.modelsPath)?.toString("utf8") ?? null,
+    );
+    const isDefault = files.cli.isDefaultOnOsuna(input.settingsText);
+    const isGateway =
+      trimTrailingSlashes(models?.baseUrl ?? "") === `${gatewayUrl}${PI_LIKE_GATEWAY_SUFFIX}`;
+    return isDefault && isGateway;
+  }
+
   /** settings.json 现在指向中转站（官方模式下也查，例如「保留当前设置」之后）。 */
   private claudePointsAtGateway(): boolean {
     const gatewayUrl = this.gatewayUrlFor("claude");
@@ -2270,16 +2715,74 @@ export class ApiEndpointService {
    */
   previewSwitchOff(provider: string): Promise<ApiEndpointSwitchOffPreview> {
     return this.exclusive(() => {
-      const supported = requireProvider(provider);
-      const agent = this.readState().agents[supported];
-      const file = agent.enabled ? this.switchOffFile(supported, agent.defaultModelId) : null;
-      const files = file === null ? [] : [file];
+      const supported = this.requireCliAgent(provider);
+      const agent = agentSettingsOf(this.readState(), supported);
+      const files = agent.enabled ? this.switchOffFiles(supported, agent.defaultModelId) : [];
       return { files };
     });
   }
 
+  private switchOffFiles(
+    provider: ApiEndpointAgentKey,
+    defaultModelId: string | null,
+  ): ApiEndpointSwitchOffFile[] {
+    if (isPiLike(provider)) return this.piSwitchOffFiles({ provider, defaultModelId });
+    const file = this.switchOffFile(provider, defaultModelId);
+    return file === null ? [] : [file];
+  }
+
+  /** Pi / OMP 的两份文件：先设置文件（默认模型等），再模型文件（Osuna 的服务商）。 */
+  private piSwitchOffFiles(input: PiOfficialRestore): ApiEndpointSwitchOffFile[] {
+    const { provider, defaultModelId } = input;
+    const paths = this.piLikeFiles(provider);
+    const files: ApiEndpointSwitchOffFile[] = [];
+    const settings = this.store.readPiSettingsTakeover(provider).takeover;
+    const settingsBefore = readOptionalFile(paths.settingsPath)?.toString("utf8") ?? null;
+    let settingsAfter = settingsBefore;
+    if (settings) {
+      const filePath = paths.settingsPath;
+      const plan = piSettingsRestorePlan({
+        filePath,
+        text: settingsBefore,
+        takeover: settings,
+        defaultModelId,
+        cli: paths.cli,
+      });
+      if (plan.change.kind === "write") settingsAfter = plan.change.text;
+      if (plan.change.kind === "delete") settingsAfter = null;
+      const file = switchOffFileChange({
+        path: filePath,
+        homeDir: this.homeDir,
+        before: settingsBefore,
+        after: plan.change,
+      });
+      if (file !== null) files.push(file);
+    }
+    const models = this.store.readPiModelsTakeover(provider).takeover;
+    if (models) {
+      const filePath = paths.modelsPath;
+      const before = readOptionalFile(filePath)?.toString("utf8") ?? null;
+      const plan = piModelsRestorePlan({
+        filePath,
+        text: before,
+        takeover: models,
+        settingsAfter,
+        cli: paths.cli,
+        wiring: this.piKeptWiring(provider),
+      });
+      const file = switchOffFileChange({
+        path: filePath,
+        homeDir: this.homeDir,
+        before,
+        after: plan.change,
+      });
+      if (file !== null) files.push(file);
+    }
+    return files;
+  }
+
   private switchOffFile(
-    provider: ApiEndpointProvider,
+    provider: ApiEndpointAgentKey,
     defaultModelId: string | null,
   ): ApiEndpointSwitchOffFile | null {
     if (provider === "claude") {
@@ -2314,10 +2817,10 @@ export class ApiEndpointService {
    */
   keepCurrentSettings(input: KeepCurrentSettingsInput): Promise<ApiEndpointAgentSettings> {
     return this.exclusive(async () => {
-      const supported = requireProvider(input.provider);
+      const supported = this.requireCliAgent(input.provider);
       await this.followCliPicks();
       const state = this.readState();
-      const agent = state.agents[supported];
+      const agent = agentSettingsOf(state, supported);
       if (!agent.enabled) return agent;
       // 「模型被换掉」的保留当前设置：CLI 现在的模型记作它自己的，不再提示，总开关照开（照 magpie 的 Keep）。
       if (input.code === "model_replaced") {
@@ -2339,8 +2842,18 @@ export class ApiEndpointService {
   }
 
   /** 把 CLI 配置里现在的模型记作 CLI 自己的（跟过去的，或保留当前设置后不再提示的）：重写不碰它。 */
-  private keepCliModel(input: { provider: ApiEndpointProvider; held: CliModelHold }): void {
+  private keepCliModel(input: { provider: ApiEndpointAgentKey; held: CliModelHold }): void {
     const { provider, held } = input;
+    if (isPiLike(provider)) {
+      const files = this.piLikeFiles(provider);
+      const record = this.store.readPiSettingsTakeover(provider);
+      const text = readOptionalFile(files.settingsPath)?.toString("utf8") ?? null;
+      const takeover = files.cli.keepCliModel({ text, takeover: record.takeover, held });
+      if (!isDeepStrictEqual(takeover, record.takeover)) {
+        this.store.writePiSettingsTakeover(provider, { ...record, takeover });
+      }
+      return;
+    }
     if (provider === "claude") {
       const record = this.store.readClaudeTakeover();
       const text = readOptionalFile(this.resolveClaudeSettingsPath())?.toString("utf8") ?? null;
@@ -2360,7 +2873,13 @@ export class ApiEndpointService {
   }
 
   /** CLI 配置里自己存下的选择；没开开关、没有接管记录或读不懂时为 null。 */
-  private readCliPicks(provider: ApiEndpointProvider): CliPicks | null {
+  private readCliPicks(provider: ApiEndpointAgentKey): CliPicks | null {
+    if (isPiLike(provider)) {
+      const files = this.piLikeFiles(provider);
+      const text = readOptionalFile(files.settingsPath)?.toString("utf8") ?? null;
+      const takeover = this.store.readPiSettingsTakeover(provider).takeover;
+      return files.cli.readCliPicks({ text, takeover });
+    }
     if (provider === "claude") {
       const text = readOptionalFile(this.resolveClaudeSettingsPath())?.toString("utf8") ?? null;
       return readClaudeCliPicks({ text, takeover: this.store.readClaudeTakeover().takeover });
@@ -2375,11 +2894,19 @@ export class ApiEndpointService {
    */
   private followedModel(input: {
     state: ApiEndpointState;
-    provider: ApiEndpointProvider;
+    provider: ApiEndpointAgentKey;
     cliModel: string | null;
   }): string | null {
     const { state, provider, cliModel } = input;
     if (cliModel === null) return null;
+    // Pi / OMP 的写法是「服务商/模型」：只有 Osuna 写给它的模型（osuna/ 后面原样是接口模型的 id）。
+    if (isPiLike(provider)) {
+      const id = cliModel.startsWith(`${PI_PROVIDER_ID}/`)
+        ? cliModel.slice(PI_PROVIDER_ID.length + 1)
+        : null;
+      const isServed = this.piSources(state).some((source) => source.id === id);
+      return isServed ? id : null;
+    }
     const isChatGptWiredCodex = provider === "codex" && this.isCodexChatGptWired();
     if (isChatGptWiredCodex) {
       const named = endpointModelGroups(state).flatMap((group) => group.models);
@@ -2401,7 +2928,7 @@ export class ApiEndpointService {
    * 跟随默认模型的字段（模型提示、modelSettings 档位、Codex 模型目录）随之重写。写不成只记日志。
    */
   private async followCliPicks(): Promise<void> {
-    for (const provider of API_ENDPOINT_PROVIDERS) {
+    for (const provider of this.cliAgents()) {
       try {
         await this.followCliPicksOf(provider);
       } catch (error) {
@@ -2411,14 +2938,16 @@ export class ApiEndpointService {
     }
   }
 
-  private async followCliPicksOf(provider: ApiEndpointProvider): Promise<void> {
+  private async followCliPicksOf(provider: ApiEndpointAgentKey): Promise<void> {
     const state = this.readStateForSnapshot();
     const isWired =
-      state?.agents[provider].enabled === true && this.gatewayUrlFor(provider) !== null;
+      state !== null &&
+      agentSettingsOf(state, provider).enabled &&
+      this.gatewayUrlFor(provider) !== null;
     if (!state || !isWired) return;
     const picks = this.readCliPicks(provider);
     if (!picks) return;
-    const before = state.agents[provider];
+    const before = agentSettingsOf(state, provider);
     const followed = this.followedCliPicks({ state, provider, picks });
     const { agent } = followed;
     // 先落下跟过去的设置，再记模型归 CLI：落不下时记录不动，下次照样跟。
@@ -2440,11 +2969,11 @@ export class ApiEndpointService {
    */
   private followedCliPicks(input: {
     state: ApiEndpointState;
-    provider: ApiEndpointProvider;
+    provider: ApiEndpointAgentKey;
     picks: CliPicks;
   }): FollowedCliPicks {
     const { state, provider, picks } = input;
-    let agent = state.agents[provider];
+    let agent = agentSettingsOf(state, provider);
     let held: CliModelHold | null = null;
     if (picks.model) {
       const followed = this.followedModel({ state, provider, cliModel: picks.model.now });
@@ -2469,6 +2998,13 @@ export class ApiEndpointService {
       agent = this.followedCodexSide({ state, agent, picks });
     } else if (picks.subagent) {
       agent = followedSubagent({ state, agent, now: picks.subagent.now });
+    }
+    if (picks.roles) {
+      agent = followedModelRoles({
+        agent,
+        picks: picks.roles,
+        followedModel: (cliModel) => this.followedModel({ state, provider, cliModel }),
+      });
     }
     const isEffortOriginalForgotten =
       provider === "codex" && isLevelChanged && picks.level === null;
@@ -2536,9 +3072,9 @@ export class ApiEndpointService {
   /** 「模型被换掉」：CLI 自己换成了哪家接口都没有的模型，还没保留过（ADR 0012）。 */
   private modelReplacedIssue(
     state: ApiEndpointState,
-    provider: ApiEndpointProvider,
+    provider: ApiEndpointAgentKey,
   ): AgentIssue | null {
-    const agent = state.agents[provider];
+    const agent = agentSettingsOf(state, provider);
     if (!agent.enabled) return null;
     const picks = this.readCliPicks(provider);
     const model = picks?.model;
@@ -2547,19 +3083,30 @@ export class ApiEndpointService {
     if (this.followedModel({ state, provider, cliModel: model.now }) !== null) return null;
     const isChatGptOwnModel = provider === "codex" && this.isCodexChatGptWired();
     if (isChatGptOwnModel) return null;
-    const file =
-      provider === "claude" ? this.resolveClaudeSettingsPath() : this.resolveCodexConfigPath();
+    const file = this.resolveCliConfigPath(provider);
     const now = model.now ?? "";
-    const shown = model.now ?? `${AGENT_NAMES[provider]}'s own default`;
+    const shown = model.now ?? `${agentNameOf(provider)}'s own default`;
     return {
       code: "model_replaced",
       params: { file, model: now, defaultModel: agent.defaultModelId ?? "" },
-      message: `${AGENT_NAMES[provider]}'s model was changed to ${shown} in ${file}, and none of your enabled API endpoints serve it`,
+      message: `${agentNameOf(provider)}'s model was changed to ${shown} in ${file}, and none of your enabled API endpoints serve it`,
     };
   }
 
   /** 忘掉接管记录（备份留着，只供手动找回）；返回放回去的办法。 */
-  private forgetTakeover(provider: ApiEndpointProvider): { undo: () => void } {
+  private forgetTakeover(provider: ApiEndpointAgentKey): { undo: () => void } {
+    if (isPiLike(provider)) {
+      const models = this.store.readPiModelsTakeover(provider);
+      const settings = this.store.readPiSettingsTakeover(provider);
+      this.store.writePiModelsTakeover(provider, { ...models, takeover: null });
+      this.store.writePiSettingsTakeover(provider, { ...settings, takeover: null });
+      return {
+        undo: () => {
+          this.store.writePiModelsTakeover(provider, models);
+          this.store.writePiSettingsTakeover(provider, settings);
+        },
+      };
+    }
     if (provider === "claude") {
       const record = this.store.readClaudeTakeover();
       this.store.writeClaudeTakeover({ ...record, takeover: null });
@@ -2713,8 +3260,8 @@ export class ApiEndpointService {
   /** 选择器里接口名的显示方式；官方模式、不支持的提供方或文件读不懂时返回 null。 */
   endpointNameDisplay(provider: string): ApiEndpointNameDisplay | null {
     const state = this.readStateForSnapshot();
-    const supported = findProvider(provider);
-    if (!state || !supported || !state.agents[supported].enabled) return null;
+    const supported = this.snapshotAgentOf(provider);
+    if (!state || !supported || !agentSettingsOf(state, supported).enabled) return null;
     return endpointNameDisplayOf(state);
   }
 
@@ -2734,7 +3281,7 @@ export class ApiEndpointService {
     options: {
       keys?: Record<string, string>;
       // 老客户端的「重新应用」：内容没变也重写这个 Agent 的 CLI 配置，盖掉外部改动。
-      rewrite?: ApiEndpointProvider;
+      rewrite?: ApiEndpointAgentKey;
       // 这次变更是跟着 CLI 自己存下的选择：默认模型变了也不写回 CLI 配置里的模型。
       isFollowingCli?: boolean;
     } = {},
@@ -2748,8 +3295,9 @@ export class ApiEndpointService {
     });
     const settled = this.settleThinking({ previous, next: { ...proposed, agents } });
     const next = this.settleSubagentThinking(settled);
-    for (const provider of API_ENDPOINT_PROVIDERS) {
-      if (!previous.agents[provider].enabled && next.agents[provider].enabled) {
+    const cliAgents = this.cliAgents();
+    for (const provider of cliAgents) {
+      if (!agentSettingsOf(previous, provider).enabled && agentSettingsOf(next, provider).enabled) {
         this.requireGateway();
       }
     }
@@ -2758,9 +3306,9 @@ export class ApiEndpointService {
 
     // 不在 TCP 上监听、CLI 配置也从没指向过中转站的开着的 Agent：没有地址可写，留到下次以 TCP 启动时对账；
     // 打开总开关在上面已经拒绝，这里只放过关接口、删模型这类连带改动。
-    const unreachable = (provider: ApiEndpointProvider) =>
-      next.agents[provider].enabled && this.gatewayUrlFor(provider) === null;
-    const changed = API_ENDPOINT_PROVIDERS.filter(
+    const unreachable = (provider: ApiEndpointAgentKey) =>
+      agentSettingsOf(next, provider).enabled && this.gatewayUrlFor(provider) === null;
+    const changed = cliAgents.filter(
       (provider) =>
         !unreachable(provider) &&
         (provider === options.rewrite ||
@@ -2769,7 +3317,7 @@ export class ApiEndpointService {
     );
     const catalogBefore = this.store.readCodexModelCatalog();
     const catalog = next.agents.codex.enabled ? this.codexModelCatalog(next) : null;
-    const synced: ApiEndpointProvider[] = [];
+    const synced: CliConfigAgent[] = [];
     try {
       // 先有目录文件，config.toml 才指向它。
       if (catalog !== null && catalog !== catalogBefore) this.store.writeCodexModelCatalog(catalog);
@@ -2777,7 +3325,7 @@ export class ApiEndpointService {
         this.syncCli({
           provider,
           wiring: this.cliWiring(next, provider, tokens),
-          agent: next.agents[provider],
+          agent: agentSettingsOf(next, provider),
           shouldRewriteModel: shouldRewriteCliModel({ previous, next, provider, options }),
         });
         synced.push(provider);
@@ -2789,7 +3337,7 @@ export class ApiEndpointService {
           this.syncCli({
             provider,
             wiring: this.cliWiring(previous, provider, previousTokens),
-            agent: previous.agents[provider],
+            agent: agentSettingsOf(previous, provider),
           });
         } catch (revertError) {
           this.logger.error({ err: revertError, provider }, "Failed to revert CLI config");
@@ -2829,12 +3377,21 @@ export class ApiEndpointService {
         multiplierBefore.get(endpoint.id) !== endpoint.priceMultiplier,
     );
     if (repriced) this.onPriceMultipliersChanged?.();
-    for (const provider of API_ENDPOINT_PROVIDERS) {
-      if (agentFingerprint(previous, provider) !== agentFingerprint(next, provider)) {
-        this.onActiveEndpointChanged(provider);
+    for (const agent of this.cliAgents()) {
+      if (agentFingerprint(previous, agent) !== agentFingerprint(next, agent)) {
+        this.announceAgentChanged(agent);
       }
     }
     if (!usesModelFacts(previous) && usesModelFacts(next)) this.modelsDev.wake();
+  }
+
+  /**
+   * 这份设置变了：用它开对话的提供方（含跟随它的自定义提供方）刷新快照；OMP 的命名配置另刷新 OMP 的
+   * （它的条目带各套的分组，ompProfileModelGroups）。
+   */
+  private announceAgentChanged(agent: CliConfigAgent): void {
+    const providers = new Set([providerOfAgent(agent), ...this.providersFollowing(agent)]);
+    for (const provider of providers) this.onActiveEndpointChanged(provider);
   }
 
   private syncCli(input: CliSync): void {
@@ -2844,6 +3401,8 @@ export class ApiEndpointService {
       this.restoreOfficial(provider, agent.defaultModelId);
     } else if (provider === "codex") {
       this.writeCodexEndpoint({ wiring, shouldRewriteModel });
+    } else if (isPiLike(provider)) {
+      this.writePiEndpoint({ provider, wiring, shouldRewriteModel });
     } else {
       this.writeClaudeEndpoint({ wiring, shouldRewriteModel });
     }
@@ -2855,7 +3414,7 @@ export class ApiEndpointService {
    */
   private reconcileCli(
     state: ApiEndpointState,
-    provider: ApiEndpointProvider,
+    provider: ApiEndpointAgentKey,
     tokens: GatewayTokens,
     url: string,
   ): void {
@@ -2882,12 +3441,22 @@ export class ApiEndpointService {
     const isUpToDate = written?.url === url && written.token === wiring.token;
     const isRewired = provider === "codex" && this.codexWiringChanged();
     if (isUpToDate && !isPickerUnrecorded && !isHintUnrecorded && !isRewired) return;
-    this.syncCli({ provider, wiring, agent: state.agents[provider] });
+    this.syncCli({ provider, wiring, agent: agentSettingsOf(state, provider) });
     this.logger.info({ provider }, "CLI config pointed at the API endpoint gateway");
   }
 
   /** 没有接管、或记录是旧版本直接指向接口时写的（地址不是中转站）为 null。 */
-  private writtenGateway(provider: ApiEndpointProvider): WrittenGateway | null {
+  private writtenGateway(provider: ApiEndpointAgentKey): WrittenGateway | null {
+    if (isPiLike(provider)) {
+      const written = this.store.readPiModelsTakeover(provider).takeover?.provider.written;
+      const { baseUrl, apiKey } = written ?? {};
+      const isGateway =
+        typeof baseUrl === "string" &&
+        baseUrl.endsWith(`${API_ENDPOINT_GATEWAY_PATH}${PI_LIKE_GATEWAY_SUFFIX}`) &&
+        typeof apiKey === "string";
+      if (!isGateway) return null;
+      return { url: baseUrl.slice(0, -PI_LIKE_GATEWAY_SUFFIX.length), token: apiKey };
+    }
     if (provider === "claude") {
       const env = this.store.readClaudeTakeover().takeover?.env;
       const url = env?.ANTHROPIC_BASE_URL?.written;
@@ -2905,20 +3474,20 @@ export class ApiEndpointService {
   }
 
   /** 写进 CLI 配置的中转站地址：绑定的地址；不在 TCP 上监听时沿用上次写进去的。 */
-  private gatewayUrlFor(provider: ApiEndpointProvider): string | null {
+  private gatewayUrlFor(provider: ApiEndpointAgentKey): string | null {
     if (this.gateway.kind === "bound") return this.gateway.url;
     return this.writtenGateway(provider)?.url ?? null;
   }
 
   private cliWiring(
     state: ApiEndpointState,
-    provider: ApiEndpointProvider,
+    provider: ApiEndpointAgentKey,
     tokens: GatewayTokens,
   ): CliWiring | null {
-    const agent = state.agents[provider];
+    const agent = agentSettingsOf(state, provider);
     if (!agent.enabled || agent.defaultModelId === null) return null;
     const baseUrl = this.gatewayUrlFor(provider);
-    const token = tokens[provider];
+    const token = tokens[providerOfAgent(provider)];
     if (baseUrl === null) throw this.gatewayError();
     // nextGatewayTokens 给每个开着的 Agent 都发了口令。
     if (token === undefined) throw new Error(`No gateway token for ${provider}`);
@@ -2933,17 +3502,18 @@ export class ApiEndpointService {
       defaultThinking: agent.defaultThinkingOptionId ?? null,
       ultraCode: provider === "claude" ? (agent.usesUltraCode ?? null) : null,
       ...this.sideModels(state, provider),
+      modelRoles: modelRoleWiring(agent),
     };
   }
 
   /** 后台小任务模型、Subagent 与记忆模型写给 CLI 的样子；没设为 null。 */
   private sideModels(
     state: ApiEndpointState,
-    provider: ApiEndpointProvider,
+    provider: ApiEndpointAgentKey,
   ): Pick<CliWiring, "backgroundModel" | "subagent" | "memoryModel"> {
     if (provider === "claude")
       return { ...this.claudeSideModels(state, provider), memoryModel: null };
-    const agent = state.agents[provider];
+    const agent = agentSettingsOf(state, provider);
     const subagentModelId = agent.subagentModelId ?? null;
     const memoryModelId = agent.memoryModelId ?? null;
     const effort = agent.subagentThinkingOptionId ?? null;
@@ -2963,9 +3533,9 @@ export class ApiEndpointService {
    */
   private claudeSideModels(
     state: ApiEndpointState,
-    provider: ApiEndpointProvider,
+    provider: ApiEndpointAgentKey,
   ): Pick<CliWiring, "backgroundModel" | "subagent"> {
-    const agent = state.agents[provider];
+    const agent = agentSettingsOf(state, provider);
     const none = { backgroundModel: null, subagent: null };
     if (provider !== "claude" || agent.defaultModelId === null) return none;
     const backgroundModelId = agent.backgroundModelId ?? null;
@@ -3001,8 +3571,8 @@ export class ApiEndpointService {
     const state = this.readStateForSnapshot();
     const supported = findProvider(provider);
     if (!state || !supported) return null;
-    const agent = state.agents[supported];
-    if (!agent.enabled || agent.defaultModelId === null) return null;
+    const agent = agentSettingsOf(state, supported);
+    if (isPiLike(supported) || !agent.enabled || agent.defaultModelId === null) return null;
     if (supported === "codex") {
       // 档位不清楚时照 magpie 给 low、medium、high、xhigh。
       const levels = this.codexSubagentLevels(state, agent);
@@ -3027,17 +3597,26 @@ export class ApiEndpointService {
    */
   private cliModels(
     state: ApiEndpointState,
-    provider: ApiEndpointProvider,
+    provider: ApiEndpointAgentKey,
     defaultModelId: string,
   ): Pick<
     CliWiring,
-    "model" | "modelPicker" | "hintEnv" | "compactYieldsToOwn" | "endpointModels"
+    "model" | "modelPicker" | "hintEnv" | "compactYieldsToOwn" | "endpointModels" | "piSources"
   > {
+    if (isPiLike(provider)) {
+      return {
+        model: defaultModelId,
+        modelPicker: [],
+        hintEnv: {},
+        endpointModels: [],
+        piSources: this.piSources(state),
+      };
+    }
     if (provider !== "claude") {
       const endpointModels = endpointModelGroups(this.served(state)).flatMap((group) =>
         group.models.map(({ id }) => id),
       );
-      return { model: defaultModelId, modelPicker: [], hintEnv: {}, endpointModels };
+      return { model: defaultModelId, modelPicker: [], hintEnv: {}, endpointModels, piSources: [] };
     }
     const listed = this.served(state);
     const named = endpointModelGroups(listed).flatMap((group) => {
@@ -3092,6 +3671,101 @@ export class ApiEndpointService {
       hintEnv: hints.env,
       compactYieldsToOwn: hints.compactYieldsToOwn,
       endpointModels: [],
+      piSources: [],
+    };
+  }
+
+  /**
+   * Pi / OMP 模型文件里每个模型的来源（id、显示名、资料、格式与价格），顺序同写进去的清单（prd「写进 Pi 配置的内容」）：
+   * 同 Codex 的 /model，先是光秃秃的名字，再是每家的「接口标识/模型名」，去掉已下线与已禁用的；按接口名显示方式给每家的模型名
+   * 带上接口名（同名在整份清单里算）。每个模型写成什么样见 pi-model-entries.ts、omp-model-entries.ts。
+   */
+  private piSources(state: ApiEndpointState): PiModelSource[] {
+    const listed = this.served(state);
+    const bare = usableModels(listed);
+    const bareLabels = this.bareModelLabels(listed, bare);
+    const sources: PiModelSource[] = bare.map((model, index) => {
+      const members = listed.endpoints.filter(
+        (endpoint) => endpoint.enabled && endpoint.models.some((own) => own.id === model.id),
+      );
+      const first = members[0];
+      return {
+        id: model.id,
+        name: bareLabels[index] ?? model.id,
+        facts: first ? this.modelFacts(first, model.id) : {},
+        format: piBareFormat(members.map((endpoint) => this.piFormatAt(endpoint, model.id))),
+        cost: this.piBareCost(members, model.id),
+      };
+    });
+    const named = endpointModelGroups(listed).flatMap((group) => {
+      const labels = this.groupModelLabels(group);
+      return group.models.map(({ id, model }, index) => ({
+        endpoint: group.endpoint,
+        id,
+        modelId: model.id,
+        label: labels[index] ?? model.id,
+      }));
+    });
+    const shows = showsEndpointNames({
+      display: endpointNameDisplayOf(state),
+      names: [...sources.map((source) => source.name), ...named.map((entry) => entry.label)],
+    }).slice(sources.length);
+    named.forEach((entry, index) => {
+      const { endpoint, modelId } = entry;
+      sources.push({
+        id: entry.id,
+        name: shows[index] ? `${entry.label} (${endpoint.name})` : entry.label,
+        facts: this.modelFacts(endpoint, modelId),
+        format: this.piFormatAt(endpoint, modelId),
+        cost: this.piCost(endpoint, modelId),
+      });
+    });
+    return sources;
+  }
+
+  /** 这家这个模型 Pi 问中转站用的格式：这家给它的格式与「只用这种格式」。 */
+  private piFormatAt(endpoint: StoredApiEndpoint, modelId: string): ApiEndpointRequestFormat {
+    const served = servedFormats({
+      templateId: endpoint.templateId,
+      baseUrls: endpoint.baseUrls,
+      model: modelId,
+    });
+    const pin = pinnedFormat({
+      settings: endpoint.modelSettings,
+      modelId,
+      baseUrls: endpoint.baseUrls,
+    });
+    return piEndpointFormat({ modelId, served, pinned: pin.kind === "pinned" ? pin.format : null });
+  }
+
+  /**
+   * 光秃秃的名字的价：提供它的每一家都知道价且一样才有（magpie EntryPriceIn 对分组的做法），中转站接给哪家事先不知道。
+   */
+  private piBareCost(members: StoredApiEndpoint[], modelId: string): PiModelCost | null {
+    const costs = members.map((endpoint) => this.piCost(endpoint, modelId));
+    const [first] = costs;
+    if (first === undefined || first === null) return null;
+    const isSame = costs.every((cost) => cost !== null && isDeepStrictEqual(cost, first));
+    return isSame ? first : null;
+  }
+
+  /** 这家这个模型每百万 token 的价：价格表的乘这家的价格倍率，用户自己设的照原价；不知道为 null。 */
+  private piCost(endpoint: StoredApiEndpoint, modelId: string): PiModelCost | null {
+    const price =
+      this.modelPricePerMillion?.(
+        upstreamModelName({
+          settings: endpoint.modelSettings,
+          modelId,
+        }),
+      ) ?? null;
+    if (price === null) return null;
+    const multiplier = price.isOverride ? 1 : (endpoint.priceMultiplier ?? 1);
+    const scaled = (value: number) => Number((value * multiplier).toFixed(10));
+    return {
+      input: scaled(price.input),
+      output: scaled(price.output),
+      cacheRead: scaled(price.cacheRead),
+      cacheWrite: scaled(price.cacheWrite),
     };
   }
 
@@ -3119,8 +3793,11 @@ export class ApiEndpointService {
     // 收不收采样参数只认这家自己（按地址的主机名）在 models.dev 的条目，不借别家的目录。
     const hosts = endpoint.baseUrls.map((base) => hostOf(base.url));
     const takesSampling = this.modelsDev.takesSampling({ hosts, modelId });
+    // 会不会思考只有 models.dev 说（magpie catalog.Thinks）；只给 Pi 的 reasoning 用。
+    const thinks = this.modelsDev.facts(modelId).thinks;
     return {
       ...facts,
+      ...(thinks === undefined ? {} : { thinks }),
       ...(vendorEfforts === undefined ? {} : { vendorEfforts }),
       ...(noThinking ? { noThinking } : {}),
       ...(contextSet ? { contextSet } : {}),
@@ -3196,6 +3873,36 @@ export class ApiEndpointService {
   }
 
   /**
+   * 模型资料变了或有模型下线、恢复：开着的 Pi / OMP 跟着重写模型文件的模型清单（设置文件照接管记录写，CLI 自己换过的不碰）。
+   * 不给 agents 时 Pi 与 OMP 的每套配置都看。Osuna 的服务商被外部改过时不动，留给提示区；写不成只记日志，不挡调用方。
+   */
+  private rewritePiModels(state: ApiEndpointState, agents?: PiLikeAgent[]): void {
+    for (const agent of agents ?? this.piLikeAgents()) {
+      this.rewritePiModelsOf(state, agent);
+    }
+  }
+
+  private rewritePiModelsOf(state: ApiEndpointState, provider: PiLikeAgent): void {
+    if (!agentSettingsOf(state, provider).enabled || this.gatewayUrlFor(provider) === null) return;
+    const isRerouted = this.inspectPi({ provider, enabled: true }).issues.some(
+      (issue) => issue.code === "not_through_gateway",
+    );
+    if (isRerouted) {
+      this.logger.info({ provider }, "Models file changed outside Osuna; model list left as it is");
+      return;
+    }
+    try {
+      this.syncCli({
+        provider,
+        wiring: this.cliWiring(state, provider, this.store.readGatewayTokens()),
+        agent: agentSettingsOf(state, provider),
+      });
+    } catch (error) {
+      this.logger.warn({ err: error, provider }, "Failed to rewrite the Pi-like model list");
+    }
+  }
+
+  /**
    * 中转站记下或恢复了已下线模型（含满一周到期）：走「接口变了」的流程，重写 Codex 模型目录与
    * Claude Code 的模型选择列表，再通知客户端刷新开着总开关的 Agent。接口与默认模型都不动。
    */
@@ -3205,8 +3912,9 @@ export class ApiEndpointService {
       if (!state) return;
       this.rewriteCodexCatalog(state);
       this.rewriteClaudeHints(state);
-      for (const provider of API_ENDPOINT_PROVIDERS) {
-        if (state.agents[provider].enabled) this.onActiveEndpointChanged(provider);
+      this.rewritePiModels(state);
+      for (const agent of this.cliAgents()) {
+        if (agentSettingsOf(state, agent).enabled) this.announceAgentChanged(agent);
       }
     });
   }
@@ -3218,6 +3926,7 @@ export class ApiEndpointService {
       if (!state) return;
       this.rewriteCodexCatalog(state);
       this.rewriteClaudeHints(state);
+      this.rewritePiModels(state);
     });
   }
 
@@ -3298,14 +4007,14 @@ export class ApiEndpointService {
   /** CLI 配置里会写进去的一切；前后不同才改写文件。 */
   private cliFingerprint(
     state: ApiEndpointState,
-    provider: ApiEndpointProvider,
+    provider: ApiEndpointAgentKey,
     tokens: GatewayTokens,
   ): string {
-    const agent = state.agents[provider];
+    const agent = agentSettingsOf(state, provider);
     if (!agent.enabled || agent.defaultModelId === null) return "official";
     return JSON.stringify([
       this.gatewayUrlFor(provider),
-      tokens[provider] ?? null,
+      tokens[providerOfAgent(provider)] ?? null,
       provider === "claude" && agent.keepsClaudeAiLogin === true,
       this.cliModels(state, provider, agent.defaultModelId),
       provider === "claude" && someEndpointSearchesWeb(state),
@@ -3313,6 +4022,7 @@ export class ApiEndpointService {
       agent.defaultThinkingOptionId ?? null,
       agent.usesUltraCode ?? null,
       this.sideModels(state, provider),
+      agent.modelRoles ?? null,
     ]);
   }
 
@@ -4161,6 +4871,11 @@ export class ApiEndpointService {
       ) {
         this.rewriteClaudeHints(next);
       }
+      const changed = this.piLikeAgents().filter(
+        (agent) =>
+          this.cliFingerprint(state, agent, tokens) !== this.cliFingerprint(next, agent, tokens),
+      );
+      this.rewritePiModels(next, changed);
     });
   }
 
@@ -4188,9 +4903,9 @@ export class ApiEndpointService {
     const { templateId } = this.upstreamPlace(input);
     const outcome = await testUpstreamConnection({
       provider: supported,
-      // Codex 和写进 config.toml 的 base_url 一样补 /v1。
+      // Codex、Pi 和写进 config.toml、models.json 的地址一样补 /v1。
       baseUrl:
-        supported === "codex" ? (normalizeOpenAICompatibleBaseUrl(baseUrl) ?? baseUrl) : baseUrl,
+        supported === "claude" ? baseUrl : (normalizeOpenAICompatibleBaseUrl(baseUrl) ?? baseUrl),
       apiKey,
       templateId,
       modelId,
@@ -4476,6 +5191,41 @@ export class ApiEndpointService {
     return { kind: "cli", client: method, headers };
   }
 
+  /** 问一遍本机 OMP 的版本（十分钟内问过就不再问），记在 ompVersion 上；问不到记为 null。 */
+  private async readOmpVersion(): Promise<void> {
+    const read = this.readOmpCliVersion;
+    if (read === null) return;
+    const now = this.now().getTime();
+    const at = this.ompVersionAt;
+    if (at !== null && now - at < CODEX_CLI_VERSION_TTL_MS) return;
+    try {
+      this.ompVersion = await read();
+    } catch (error) {
+      this.logger.warn({ err: error }, "Failed to read the installed OMP version");
+      this.ompVersion = null;
+    }
+    this.ompVersionAt = now;
+  }
+
+  /**
+   * OMP 有一套配置开着时问一遍它的版本；收不收 max 变了就重写各套 models.yml 的模型清单（OMP 升级、或启动时还不知道版本）。
+   */
+  private async followOmpVersion(): Promise<void> {
+    const state = this.readStateForSnapshot();
+    const ompAgents = this.piLikeAgents().filter((agent) => providerOfAgent(agent) === "omp");
+    const isOmpOn = ompAgents.some(
+      (agent) => state !== null && agentSettingsOf(state, agent).enabled,
+    );
+    if (!isOmpOn) return;
+    const before = ompTakesMax(this.ompVersion);
+    await this.readOmpVersion();
+    if (ompTakesMax(this.ompVersion) === before) return;
+    await this.exclusive(() => {
+      const current = this.readStateForSnapshot();
+      if (current) this.rewritePiModels(current, ompAgents);
+    });
+  }
+
   /** 本机 Codex CLI 的版本，十分钟内问过就用上次的；问不到为 null。 */
   private async installedCodexVersion(): Promise<string | null> {
     const read = this.readCodexCliVersion;
@@ -4582,6 +5332,55 @@ export class ApiEndpointService {
     });
   }
 
+  /** Pi 的 agent 目录，同 Osuna 起 Pi 的规则（pi/agent.ts）：daemon 环境的 PI_CODING_AGENT_DIR（~ 是家目录），缺省 ~/.pi/agent。 */
+  private resolvePiAgentDir(): string {
+    const configured = this.env.PI_CODING_AGENT_DIR?.trim();
+    if (!configured) return path.join(this.homeDir, ".pi", "agent");
+    if (configured === "~") return this.homeDir;
+    if (configured.startsWith("~/")) return path.resolve(this.homeDir, configured.slice(2));
+    return path.resolve(configured);
+  }
+
+  /**
+   * Pi / OMP 的两份文件。OMP 默认那套的目录照 Osuna 起 OMP 的规则（omp/provider-config.ts，同 OMP 的 pi-utils dirs.ts）；
+   * 文件先 .yml，只有 .yaml 时用它（OMP 读 .yml，没有才读 .yaml），只有旧的 models.json 时先迁移。
+   */
+  private piLikeFiles(provider: PiLikeAgent): PiLikeFiles {
+    if (isOmpProfileKey(provider)) {
+      const name = ompProfileNameOf(provider);
+      return this.ompFiles({
+        provider,
+        agentDir: ompProfileAgentDir({ env: this.env, homeDir: this.homeDir, name }),
+      });
+    }
+    if (provider === "pi") {
+      const agentDir = this.resolvePiAgentDir();
+      return {
+        provider,
+        agentDir,
+        modelsPath: path.join(agentDir, "models.json"),
+        settingsPath: path.join(agentDir, "settings.json"),
+        legacyModelsPath: null,
+        cli: PI_CLI,
+      };
+    }
+    const { agentDir } = resolveOmpSessionPaths({ env: this.env, homeDir: this.homeDir });
+    return this.ompFiles({ provider, agentDir });
+  }
+
+  /** OMP 一套配置的两份文件：都在它的 agent 目录里。 */
+  private ompFiles(input: OmpFilesInput): PiLikeFiles {
+    const { provider, agentDir } = input;
+    return {
+      provider,
+      agentDir,
+      modelsPath: yamlFileIn(agentDir, "models"),
+      settingsPath: yamlFileIn(agentDir, "config"),
+      legacyModelsPath: path.join(agentDir, "models.json"),
+      cli: ompCli({ takesMax: ompTakesMax(this.ompVersion) }),
+    };
+  }
+
   /** 与终端 hooks 安装器同一套规则：CODEX_HOME 优先，缺省 ~/.codex。 */
   resolveCodexConfigPath(): string {
     const hooksPath = resolveAgentHookConfigPath(codexAgentHookProvider, {
@@ -4634,8 +5433,10 @@ export class ApiEndpointService {
     }
   }
 
-  private restoreOfficial(provider: ApiEndpointProvider, defaultModelId: string | null): void {
-    if (provider === "codex") {
+  private restoreOfficial(provider: ApiEndpointAgentKey, defaultModelId: string | null): void {
+    if (isPiLike(provider)) {
+      this.restorePiOfficial({ provider, defaultModelId });
+    } else if (provider === "codex") {
       this.restoreCodexOfficial(defaultModelId);
     } else {
       this.restoreClaudeOfficial(defaultModelId);
@@ -4876,6 +5677,243 @@ export class ApiEndpointService {
       this.logger.info({ configPath }, "Kept Codex provider table pointed at the gateway");
   }
 
+  /**
+   * Pi / OMP：先模型文件（Osuna 的服务商得先在），再设置文件；设置文件写不成时模型文件与它的接管记录退回去，
+   * 两份要么都指向中转站，要么都不动。
+   */
+  private writePiEndpoint(input: PiEndpointWrite): void {
+    const { wiring, provider } = input;
+    const files = this.piLikeFiles(provider);
+    const before = {
+      bytes: readOptionalFile(files.modelsPath),
+      record: this.store.readPiModelsTakeover(provider),
+    };
+    this.writePiModels({ files, wiring });
+    try {
+      this.writePiSettings({
+        provider,
+        wiring: {
+          model: wiring.model,
+          thinking: wiring.defaultThinking,
+          roles: wiring.modelRoles,
+        },
+        shouldRewriteModel: input.shouldRewriteModel,
+      });
+    } catch (error) {
+      this.putPiModelsBack({ files, ...before });
+      throw error;
+    }
+    this.logger.info(
+      { provider, dir: files.agentDir },
+      "Pi-like CLI config pointed at the API endpoint gateway",
+    );
+  }
+
+  private writePiModels(input: PiModelsWrite): void {
+    const { files, wiring } = input;
+    const { provider, modelsPath: filePath } = files;
+    const record = this.store.readPiModelsTakeover(provider);
+    let createdBackup: string | null = null;
+    this.writeConfigFile<TakeoverWrite<PiModelsTakeover>>({
+      filePath,
+      compute: (text, current) => {
+        const result = files.cli.applyModels({
+          text: text ?? this.migratedModels(files),
+          wiring: { gatewayRoot: wiring.baseUrl, token: wiring.token, sources: wiring.piSources },
+          takeover: record.takeover,
+        });
+        if (result.kind === "unparsable") {
+          throw unparsable({ filePath, detail: result.message, reason: result.reason });
+        }
+        return {
+          change: { kind: "write", text: result.text },
+          value: { takeover: result.takeover, current },
+        };
+      },
+      commit: ({ takeover, current }) => {
+        if (!record.backup) {
+          createdBackup = this.store.writePiLikeBackup({
+            agent: provider,
+            file: "models",
+            bytes: current,
+            at: this.now(),
+          });
+        }
+        this.store.writePiModelsTakeover(provider, {
+          takeover,
+          backup: record.backup ?? { path: createdBackup },
+        });
+      },
+      rollback: () => {
+        this.store.writePiModelsTakeover(provider, record);
+        if (createdBackup) this.store.discardBackup(createdBackup);
+        createdBackup = null;
+      },
+    });
+  }
+
+  /**
+   * 只有旧的模型文件（OMP 的 models.json）时，照 CLI 自己的迁移转成新格式再往上写；都没有为 null。
+   * 旧文件读不懂时不写，报出是它。
+   */
+  private migratedModels(files: PiLikeFiles): string | null {
+    const legacyPath = files.legacyModelsPath;
+    const migrate = files.cli.migrateLegacyModels;
+    if (legacyPath === null || migrate === null) return null;
+    const legacy = readOptionalFile(legacyPath)?.toString("utf8") ?? null;
+    if (legacy === null) return null;
+    const migrated = migrate(legacy);
+    if (migrated.kind === "unparsable") {
+      throw unparsable({ filePath: legacyPath, detail: migrated.message, reason: migrated.reason });
+    }
+    return migrated.text;
+  }
+
+  private writePiSettings(input: PiSettingsWrite): void {
+    const { provider } = input;
+    const files = this.piLikeFiles(provider);
+    const filePath = files.settingsPath;
+    const record = this.store.readPiSettingsTakeover(provider);
+    let createdBackup: string | null = null;
+    this.writeConfigFile<TakeoverWrite<PiSettingsTakeover>>({
+      filePath,
+      compute: (text, current) => {
+        const result = files.cli.applySettings({
+          text,
+          takeover: record.takeover,
+          wiring: input.wiring,
+          shouldRewriteModel: input.shouldRewriteModel,
+        });
+        if (result.kind === "unparsable") {
+          throw unparsable({ filePath, detail: result.message, reason: result.reason });
+        }
+        return {
+          change: { kind: "write", text: result.text },
+          value: { takeover: result.takeover, current },
+        };
+      },
+      commit: ({ takeover, current }) => {
+        if (!record.backup) {
+          createdBackup = this.store.writePiLikeBackup({
+            agent: provider,
+            file: "settings",
+            bytes: current,
+            at: this.now(),
+          });
+        }
+        this.store.writePiSettingsTakeover(provider, {
+          takeover,
+          backup: record.backup ?? { path: createdBackup },
+        });
+      },
+      rollback: () => {
+        this.store.writePiSettingsTakeover(provider, record);
+        if (createdBackup) this.store.discardBackup(createdBackup);
+        createdBackup = null;
+      },
+    });
+  }
+
+  /** 设置文件写不成：模型文件放回写之前的字节，接管记录与这次新做的副本一并退回。 */
+  private putPiModelsBack(input: PiModelsPutBack): void {
+    const { files, bytes, record } = input;
+    const { provider, modelsPath: filePath } = files;
+    const createdBackup = record.backup
+      ? null
+      : this.store.readPiModelsTakeover(provider).backup?.path;
+    try {
+      this.writeConfigFile({
+        filePath,
+        compute: () => ({
+          change:
+            bytes === null ? { kind: "delete" } : { kind: "write", text: bytes.toString("utf8") },
+          value: null,
+        }),
+        commit: () => this.store.writePiModelsTakeover(provider, record),
+        rollback: () => undefined,
+      });
+      if (createdBackup) this.store.discardBackup(createdBackup);
+    } catch (error) {
+      this.logger.error({ err: error, filePath }, "Failed to put the Pi-like models file back");
+    }
+  }
+
+  /**
+   * Pi / OMP 切回官方：先设置文件（默认模型放回原值，记下再打开时放回的默认模型），再改回模型文件里 Osuna 的服务商
+   * （OMP 别处还用着 osuna/ 时留着）；模型文件改不成时设置文件退回去。
+   */
+  private restorePiOfficial(input: PiOfficialRestore): void {
+    const { provider, defaultModelId } = input;
+    const files = this.piLikeFiles(provider);
+    const settingsPath = files.settingsPath;
+    const settingsRecord = this.store.readPiSettingsTakeover(provider);
+    const settingsBytes = readOptionalFile(settingsPath);
+    const settingsTakeover = settingsRecord.takeover;
+    if (settingsTakeover) {
+      this.writeConfigFile({
+        filePath: settingsPath,
+        compute: (text) =>
+          piSettingsRestorePlan({
+            filePath: settingsPath,
+            text,
+            takeover: settingsTakeover,
+            defaultModelId,
+            cli: files.cli,
+          }),
+        commit: (value) =>
+          this.store.writePiSettingsTakeover(provider, {
+            takeover: null,
+            backup: settingsRecord.backup,
+            reconnect: value.reconnect,
+          }),
+        rollback: () => this.store.writePiSettingsTakeover(provider, settingsRecord),
+      });
+    }
+    const modelsPath = files.modelsPath;
+    const modelsRecord = this.store.readPiModelsTakeover(provider);
+    const modelsTakeover = modelsRecord.takeover;
+    if (!modelsTakeover) return;
+    const settingsAfter = readOptionalFile(settingsPath)?.toString("utf8") ?? null;
+    try {
+      this.writeConfigFile({
+        filePath: modelsPath,
+        compute: (text) =>
+          piModelsRestorePlan({
+            filePath: modelsPath,
+            text,
+            takeover: modelsTakeover,
+            settingsAfter,
+            cli: files.cli,
+            wiring: this.piKeptWiring(provider),
+          }),
+        commit: (value) =>
+          this.store.writePiModelsTakeover(provider, {
+            // 服务商留着（OMP 别处还用着）时接管记录也留着，以后真删时放回接管前的值。
+            takeover: value.isKept ? modelsTakeover : null,
+            backup: modelsRecord.backup,
+          }),
+        rollback: () => this.store.writePiModelsTakeover(provider, modelsRecord),
+      });
+    } catch (error) {
+      if (settingsTakeover) {
+        this.writeConfigFile({
+          filePath: settingsPath,
+          compute: () => ({
+            change:
+              settingsBytes === null
+                ? { kind: "delete" }
+                : { kind: "write", text: settingsBytes.toString("utf8") },
+            value: null,
+          }),
+          commit: () => this.store.writePiSettingsTakeover(provider, settingsRecord),
+          rollback: () => undefined,
+        });
+      }
+      throw error;
+    }
+    this.logger.info({ provider, dir: files.agentDir }, "Pi-like CLI config restored to Official");
+  }
+
   /** 冲突保护见 writeConfigFileGuarded；三次都没写成就报 config_conflict。 */
   private writeConfigFile<T>(input: {
     filePath: string;
@@ -5013,12 +6051,12 @@ export class ApiEndpointService {
   }
 
   /** CLI 自己的记录显示最近一次改写之后用过，中转站却没收到（cli-bypass.ts）；没有为 null。 */
-  private bypassedIssue(provider: ApiEndpointProvider): AgentIssue | null {
+  private bypassedIssue(provider: ApiEndpointAgentKey): AgentIssue | null {
     // 没记下改写时刻（打开开关后才升级到记它的版本）时，照 magpie 总有 rec.At 的样子从 daemon 起来时算。
     const rewrittenAt = this.store.readCliRewrittenAt(provider) ?? this.startedAt;
     const now = this.now();
     const use = this.readCliUse({
-      provider,
+      provider: providerOfAgent(provider),
       configDir: path.dirname(this.resolveCliConfigPath(provider)),
       since: rewrittenAt,
       now,
@@ -5030,17 +6068,18 @@ export class ApiEndpointService {
       use,
       startedAt: this.startedAt,
       rewrittenAt,
-      lastSeen: this.sightings.lastSeen(provider),
+      lastSeen: this.sightings.lastSeen(providerOfAgent(provider)),
       gatewayUrls,
       now,
     });
     if (bypass === null) return null;
-    return bypassedIssue({ agent: AGENT_NAMES[provider], bypass });
+    return bypassedIssue({ agent: agentNameOf(provider), bypass });
   }
 
   /** 这个 CLI 的配置文件：Claude Code 的 settings.json、Codex 的 config.toml。 */
-  private resolveCliConfigPath(provider: ApiEndpointProvider): string {
+  private resolveCliConfigPath(provider: ApiEndpointAgentKey): string {
     if (provider === "claude") return this.resolveClaudeSettingsPath();
+    if (isPiLike(provider)) return this.piLikeFiles(provider).settingsPath;
     return this.resolveCodexConfigPath();
   }
 
@@ -5070,6 +6109,45 @@ export class ApiEndpointService {
           message: `Subagents on any model is on, but Osuna couldn't read ${file} to check Codex's own multi_agent_v2`,
         };
     }
+  }
+
+  /** Pi / OMP 的两份文件：读不懂的报出是哪一份；负责的键被外部改了按文件分别报。 */
+  private inspectPi(input: PiInspection): ApiEndpointFileStatus {
+    const { provider, enabled } = input;
+    const { modelsPath, settingsPath, cli } = this.piLikeFiles(provider);
+    const models = cli.inspectModels({
+      text: readOptionalFile(modelsPath)?.toString("utf8") ?? null,
+      takeover: enabled ? this.store.readPiModelsTakeover(provider).takeover : null,
+    });
+    if (models.kind === "unparsable") {
+      return unparsableStatus({
+        filePath: modelsPath,
+        detail: models.message,
+        reason: models.reason,
+      });
+    }
+    const settings = cli.inspectSettings({
+      text: readOptionalFile(settingsPath)?.toString("utf8") ?? null,
+      takeover: enabled ? this.store.readPiSettingsTakeover(provider).takeover : null,
+    });
+    if (settings.kind === "unparsable") {
+      return unparsableStatus({
+        filePath: settingsPath,
+        detail: settings.message,
+        reason: settings.reason,
+      });
+    }
+    return {
+      health: [
+        ...modifiedExternallyIssues(modelsPath, models.modifiedKeys),
+        ...modifiedExternallyIssues(settingsPath, settings.modifiedKeys),
+      ],
+      issues: [
+        ...notThroughGatewayIssues(providerOfAgent(provider), modelsPath, models.modifiedKeys),
+        ...notThroughGatewayIssues(providerOfAgent(provider), settingsPath, settings.modifiedKeys),
+      ],
+      baseUrl: null,
+    };
   }
 
   private inspectCodex(enabled: boolean): ApiEndpointFileStatus {
@@ -5111,7 +6189,7 @@ export class ApiEndpointService {
       baseUrl: projectedBaseUrl(endpoint, provider),
       baseUrls: endpoint.baseUrls,
       models: endpoint.models,
-      defaultModelId: projectedDefaultModelId(state.agents[provider], endpoint),
+      defaultModelId: projectedDefaultModelId(agentSettingsOf(state, provider), endpoint),
       ...(endpoint.modelMapping ? { modelMapping: endpoint.modelMapping } : {}),
       enabled: endpoint.enabled,
       hasApiKey: apiKey !== null,
@@ -5250,11 +6328,38 @@ function listedFactsOf(endpoint: StoredApiEndpoint, modelId: string): ModelFacts
   return endpoint.catalog?.models.find((model) => model.id === modelId)?.facts;
 }
 
-function findProvider(provider: string): ApiEndpointProvider | undefined {
-  return API_ENDPOINT_PROVIDERS.find((candidate) => candidate === provider);
+function findProvider(provider: string): CliConfigProvider | undefined {
+  return CLI_CONFIG_PROVIDERS.find((candidate) => candidate === provider);
 }
 
-function requireProvider(provider: string): ApiEndpointProvider {
+interface PiLikeClampInput {
+  provider: PiLikeAgent;
+  level: string;
+  // CLI 给这个模型能选的档位（非空）。
+  offered: string[];
+}
+
+/** 设成 level 时 CLI 让模型跑在哪一档：Pi 照 piClamp；OMP 照它自己的（ompClamp，auto 照旧）。 */
+function piLikeClamp(input: PiLikeClampInput): string {
+  const { provider, level, offered } = input;
+  if (provider === "pi") return piClamp(level, offered);
+  const efforts = offered.filter((option) => option !== "auto");
+  return ompClamp(level, efforts) ?? offered[0] ?? level;
+}
+
+/** 文件夹里的 YAML 文件：有 .yml 用它，只有 .yaml 时用 .yaml，都没有为 .yml（OMP 的 ConfigFile）。 */
+function yamlFileIn(dir: string, name: string): string {
+  const yml = path.join(dir, `${name}.yml`);
+  const yaml = path.join(dir, `${name}.yaml`);
+  return !existsSync(yml) && existsSync(yaml) ? yaml : yml;
+}
+
+/** Osuna 对话里接口模型的 id：Pi 的要写成 Pi 认得的「osuna/模型」，别的就是接口模型的 id。 */
+function chatModelId(provider: CliConfigAgent, modelId: string): string {
+  return isPiLike(provider) ? `${PI_PROVIDER_ID}/${modelId}` : modelId;
+}
+
+function requireProvider(provider: string): CliConfigProvider {
   const supported = findProvider(provider);
   if (!supported) {
     throw new ApiEndpointRequestError({
@@ -5271,8 +6376,12 @@ function requireProvider(provider: string): ApiEndpointProvider {
  */
 function nextGatewayTokens(next: ApiEndpointState, current: GatewayTokens): GatewayTokens {
   const tokens: GatewayTokens = { ...current };
-  for (const provider of API_ENDPOINT_PROVIDERS) {
-    if (next.agents[provider].enabled && !tokens[provider]) tokens[provider] = newGatewayToken();
+  // OMP 的各套命名配置共用 OMP 的口令：哪一套开着都给 OMP 发。
+  for (const agent of [...API_ENDPOINT_PROVIDERS, ...storedOmpProfileKeys(next.agents)]) {
+    const provider = providerOfAgent(agent);
+    if (agentSettingsOf(next, agent).enabled && !tokens[provider]) {
+      tokens[provider] = newGatewayToken();
+    }
   }
   return tokens;
 }
@@ -5286,8 +6395,8 @@ function sameTokens(a: GatewayTokens, b: GatewayTokens): boolean {
 }
 
 /** 快照里该 Agent 的一切：模型列表、默认模型、当前接口；前后不同才通知刷新。 */
-function agentFingerprint(state: ApiEndpointState, provider: ApiEndpointProvider): string {
-  const agent = state.agents[provider];
+function agentFingerprint(state: ApiEndpointState, provider: ApiEndpointAgentKey): string {
+  const agent = agentSettingsOf(state, provider);
   if (!agent.enabled) return "official";
   const target = agentTargetEndpoint(state, provider);
   return JSON.stringify([
@@ -5298,6 +6407,7 @@ function agentFingerprint(state: ApiEndpointState, provider: ApiEndpointProvider
     agent.subagentModelId ?? null,
     agent.subagentThinkingOptionId ?? null,
     agent.memoryModelId ?? null,
+    agent.modelRoles ?? null,
     usableModels(state),
     state.disabledModels ?? null,
     state.endpointNameDisplay ?? null,
@@ -5323,7 +6433,7 @@ function toWireModel(model: ListedModel): ApiEndpointModel {
 /** 打开总开关后的设置；没有可用模型或指定的默认模型不可用时拒绝。没指定时用照 magpie 挑中的（pick）。 */
 function enabledAgentSettings(input: {
   state: ApiEndpointState;
-  provider: ApiEndpointProvider;
+  provider: ApiEndpointAgentKey;
   requested: string | undefined;
   pick: DefaultModelPick | null;
 }): ApiEndpointAgentSettings {
@@ -5340,7 +6450,7 @@ function enabledAgentSettings(input: {
       message: "The default model must be one of the models selected on an endpoint that is on",
     });
   }
-  const agent = state.agents[input.provider];
+  const agent = agentSettingsOf(state, input.provider);
   const defaultModelId = requested || pick?.defaultModelId;
   // 有可用模型时总挑得出来。
   if (!defaultModelId) throw new Error("No default model was picked");
@@ -5366,6 +6476,24 @@ function sideModel(input: { state: ApiEndpointState; requested: string | null })
     });
   }
   return requested;
+}
+
+interface RequestedModelRoles {
+  state: ApiEndpointState;
+  provider: ApiEndpointAgentKey;
+  agent: ApiEndpointAgentSettings;
+  change: ModelRolesChange | undefined;
+}
+
+/** 设模型角色（照 magpie 的 role 与它的 thinking 字段）：只有 OMP 有，别的 Agent 忽略（同别的单家字段）；省略时不变。 */
+function withRequestedModelRoles(input: RequestedModelRoles): ApiEndpointAgentSettings {
+  const { state, provider, agent, change } = input;
+  if (change === undefined || !takesModelRoles(provider)) return agent;
+  const result = withModelRolesChanged({ state, agent, change });
+  if (result.kind === "refused") {
+    throw new ApiEndpointRequestError({ code: "invalid_input", message: result.message });
+  }
+  return result.agent;
 }
 
 function subagentLevel(requested: string | null): string | null {
@@ -5407,13 +6535,14 @@ function followedSubagent(input: {
 function shouldRewriteCliModel(input: {
   previous: ApiEndpointState;
   next: ApiEndpointState;
-  provider: ApiEndpointProvider;
-  options: { rewrite?: ApiEndpointProvider; isFollowingCli?: boolean };
+  provider: ApiEndpointAgentKey;
+  options: { rewrite?: ApiEndpointAgentKey; isFollowingCli?: boolean };
 }): boolean {
   const { previous, next, provider, options } = input;
   if (provider === options.rewrite) return true;
   const isDefaultModelChanged =
-    previous.agents[provider].defaultModelId !== next.agents[provider].defaultModelId;
+    agentSettingsOf(previous, provider).defaultModelId !==
+    agentSettingsOf(next, provider).defaultModelId;
   return isDefaultModelChanged && options.isFollowingCli !== true;
 }
 
@@ -5459,6 +6588,63 @@ function codexRestorePlan(
   }
   if (result.kind === "delete") change = { kind: "delete" };
   return { change, value: reconnectRecord(input.defaultModelId, left) };
+}
+
+/** Pi / OMP 的改回计划另要按哪家的写法改。 */
+interface PiRestorePlanInput<Takeover> extends RestorePlanInput<Takeover> {
+  cli: PiLikeCli;
+}
+
+/** 关掉时 Pi / OMP 的设置文件怎么改回（关开关与关前预览共用）；读不懂时抛 config_unparsable。 */
+function piSettingsRestorePlan(
+  input: PiRestorePlanInput<PiSettingsTakeover>,
+): ConfigFilePlan<ReconnectRecord> {
+  const result = input.cli.restoreSettings({ text: input.text, takeover: input.takeover });
+  if (result.kind === "unparsable") {
+    throw unparsable({ filePath: input.filePath, detail: result.message, reason: result.reason });
+  }
+  let change: ConfigFileChange = { kind: "keep" };
+  let left: string | null = null;
+  if (result.kind === "patched") {
+    change = { kind: "write", text: result.text };
+    left = input.cli.readModel(result.text);
+  }
+  if (result.kind === "delete") change = { kind: "delete" };
+  return { change, value: reconnectRecord(input.defaultModelId, left) };
+}
+
+interface PiModelsRestorePlanInput extends Omit<
+  PiRestorePlanInput<PiModelsTakeover>,
+  "defaultModelId"
+> {
+  // 设置文件改回之后的内容。
+  settingsAfter: string | null;
+  // 服务商留着时按它重写接线；中转站不可用时为 null。
+  wiring: PiLikeProviderWiring | null;
+}
+
+/** 关掉后服务商是不是还留在模型文件里（OMP 别处还用着 osuna/）。 */
+interface PiModelsKept {
+  isKept: boolean;
+}
+
+/** 关掉时 Pi / OMP 的模型文件怎么改回；读不懂时抛 config_unparsable。 */
+function piModelsRestorePlan(input: PiModelsRestorePlanInput): ConfigFilePlan<PiModelsKept> {
+  const result = input.cli.restoreModels({
+    text: input.text,
+    takeover: input.takeover,
+    settingsAfter: input.settingsAfter,
+    wiring: input.wiring,
+  });
+  if (result.kind === "unparsable") {
+    throw unparsable({ filePath: input.filePath, detail: result.message, reason: result.reason });
+  }
+  let change: ConfigFileChange = { kind: "keep" };
+  const isKept = result.kind === "kept";
+  const isRewritten = isKept && result.text !== input.text;
+  if (result.kind === "patched" || isRewritten) change = { kind: "write", text: result.text };
+  if (result.kind === "delete") change = { kind: "delete" };
+  return { change, value: { isKept } };
 }
 
 /** 写进接管记录的 reconnect；没有默认模型时不写。 */
@@ -6223,6 +7409,17 @@ const CODEX_CLI_VERSION_TTL_MS = 10 * 60_000;
  * 本机 Codex CLI 的版本：先读 npm 包，读不到才跑 codex --version，跑失败的同一个文件不再跑（magpie proc.Version）。
  * 没注入、也没有 providerRuntimeSettings（不知道用户配的命令）时不查。
  */
+/** 本机 OMP 的版本：跑 Osuna 起 OMP 用的命令加 --version；没注入、也没有 providerRuntimeSettings 时不查。 */
+function ompCliVersionReader(
+  options: Pick<ApiEndpointServiceOptions, "readOmpCliVersion" | "providerRuntimeSettings">,
+): (() => Promise<string | null>) | null {
+  if (options.readOmpCliVersion) return options.readOmpCliVersion;
+  const settings = options.providerRuntimeSettings;
+  if (!settings) return null;
+  return () =>
+    resolveProviderCliVersion({ runtimeSettings: settings("omp"), defaultBinary: "omp" });
+}
+
 function codexCliVersionReader(
   options: Pick<ApiEndpointServiceOptions, "readCodexCliVersion" | "providerRuntimeSettings">,
 ): (() => Promise<string | null>) | null {
@@ -6385,7 +7582,7 @@ function unparsableParams({ filePath, detail, reason }: UnparsableFile): Record<
 }
 
 function notThroughGatewayIssues(
-  provider: ApiEndpointProvider,
+  provider: CliConfigProvider,
   filePath: string,
   modifiedKeys: string[],
 ): AgentIssue[] {
@@ -6400,7 +7597,7 @@ function notThroughGatewayIssues(
     {
       code: "not_through_gateway",
       params: { file: filePath, keys: changed },
-      message: `${AGENT_NAMES[provider]} no longer goes through the gateway: ${changed} in ${filePath} changed outside Osuna`,
+      message: `${agentNameOf(provider)} no longer goes through the gateway: ${changed} in ${filePath} changed outside Osuna`,
     },
   ];
 }
@@ -6495,9 +7692,15 @@ function modifiedExternallyIssues(filePath: string, keys: string[]): HealthIssue
   ];
 }
 
-/** 有 Agent 用得上模型资料（Claude Code 或 Codex 的总开关开着）：models.dev 才允许下载。 */
+/** 有 Agent 用得上模型资料（有一份设置的总开关开着）：models.dev 才允许下载。 */
 function usesModelFacts(state: ApiEndpointState | null): boolean {
-  return state !== null && (state.agents.claude.enabled || state.agents.codex.enabled);
+  return state !== null && isAnyAgentOn(state);
+}
+
+/** 有一份设置（提供方或 OMP 的命名配置）的总开关开着。 */
+function isAnyAgentOn(state: ApiEndpointState): boolean {
+  const agents = [...CLI_CONFIG_PROVIDERS, ...storedOmpProfileKeys(state.agents)];
+  return agents.some((agent) => agentSettingsOf(state, agent).enabled);
 }
 
 /** 接管记录是 ChatGPT 登录的接法：Osuna 写了 openai_base_url。 */

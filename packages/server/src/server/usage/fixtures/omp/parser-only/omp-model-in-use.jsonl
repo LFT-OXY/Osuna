@@ -1,0 +1,6 @@
+{"type": "title", "v": 1, "title": "", "updatedAt": "2026-09-18T12:30:00.000Z", "pad": "                                                                "}
+{"type": "session", "version": 3, "id": "01a0953b-5555-7000-8000-000000000005", "timestamp": "2026-09-18T12:30:00.000Z", "cwd": "/work/omp-demo"}
+{"type": "model_change", "id": "bf000000", "parentId": null, "timestamp": "2026-09-18T12:30:01.000Z", "model": "Anthropic/claude-opus-5", "role": "default"}
+{"type": "compaction", "id": "bf000001", "parentId": "bf000000", "timestamp": "2026-09-18T12:30:10.000Z", "summary": "<redacted>", "firstKeptEntryId": "bf000000", "tokensBefore": 9000, "usage": {"input": 30, "output": 10, "cacheRead": 5, "cacheWrite": 0, "totalTokens": 45, "reasoningTokens": 4}}
+{"type": "model_change", "id": "bf000002", "parentId": "bf000001", "timestamp": "2026-09-18T12:30:20.000Z", "model": "osuna/deepseek-v3", "role": "default"}
+{"type": "compaction", "id": "bf000003", "parentId": "bf000002", "timestamp": "2026-09-18T12:30:30.000Z", "summary": "<redacted>", "firstKeptEntryId": "bf000002", "tokensBefore": 9000, "usage": {"input": 9, "output": 3, "cacheRead": 0, "cacheWrite": 0, "totalTokens": 12, "reasoningTokens": 0}}

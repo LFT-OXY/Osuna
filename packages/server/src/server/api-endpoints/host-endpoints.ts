@@ -4,10 +4,15 @@
 import type {
   ApiEndpointAgentSettings,
   ApiEndpointModel,
+  ApiEndpointModelRoles,
   ApiEndpointRequestFormat,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import {
   API_ENDPOINT_PROVIDERS,
+  agentSettingsOf,
+  storedOmpProfileKeys,
+  type ApiEndpointAgentKey,
+  type ApiEndpointAgents,
   type ApiEndpointProvider,
   type ApiEndpointState,
   type StoredApiEndpoint,
@@ -24,6 +29,8 @@ import { hostOf } from "./model-facts.js";
 export const AGENT_REQUEST_FORMAT: Record<ApiEndpointProvider, ApiEndpointRequestFormat> = {
   claude: "anthropic_messages",
   codex: "openai_responses",
+  pi: "openai_chat",
+  omp: "openai_chat",
 };
 
 /**
@@ -149,29 +156,64 @@ export function settleAgentSettings(input: {
 }): ApiEndpointState {
   const { state } = input;
   const codexOwnModels = input.codexOwnModels ?? [];
-  const models = usableModels(state);
-  const agents = { ...state.agents };
-  for (const provider of API_ENDPOINT_PROVIDERS) {
-    const agent = withoutUnservedSideModels({
+  const agents: ApiEndpointAgents = { ...state.agents };
+  // 每个提供方与设置过的每套 OMP 命名配置。
+  for (const provider of [...API_ENDPOINT_PROVIDERS, ...storedOmpProfileKeys(state.agents)]) {
+    const sided = withoutUnservedSideModels({
       state,
       provider,
-      agent: agents[provider],
+      agent: agentSettingsOf(state, provider),
       codexOwnModels,
     });
+    agents[provider] = sided;
+    // 关着的 Agent 的默认模型与角色都不动，再打开时照下面的规则换。
+    if (!sided.enabled) continue;
+    const agent = withSettledModelRoles(state, sided);
     agents[provider] = agent;
-    if (!agent.enabled) continue;
     if (isDefaultModelChoice(state, agent.defaultModelId)) continue;
-    const first = models[0];
-    if (!first) {
-      agents[provider] = { ...agent, enabled: false };
-      continue;
-    }
-    const current = agent.defaultModelId ?? "";
-    const bare = current.slice(current.indexOf("/") + 1);
-    const isBareOffered = current.includes("/") && models.some((model) => model.id === bare);
-    agents[provider] = { ...agent, enabled: true, defaultModelId: isBareOffered ? bare : first.id };
+    const settled = settledModelId(state, agent.defaultModelId ?? "");
+    agents[provider] =
+      settled === null
+        ? { ...agent, enabled: false }
+        : { ...agent, enabled: true, defaultModelId: settled };
   }
   return { ...state, agents };
+}
+
+/**
+ * 不再能选的模型换成什么（默认模型失踪规则）：指定的那家不再提供而别家还有同名的就是光秃秃的名字，
+ * 否则是接口顺序里最靠前的开着接口的第一个已选模型；一个都不剩为 null。
+ */
+function settledModelId(state: ApiEndpointState, current: string): string | null {
+  const models = usableModels(state);
+  const bare = current.slice(current.indexOf("/") + 1);
+  const isBareOffered = current.includes("/") && models.some((model) => model.id === bare);
+  if (isBareOffered) return bare;
+  return models[0]?.id ?? null;
+}
+
+/**
+ * 开着的 OMP 的模型角色指向的模型不再能选时照默认模型失踪规则换掉，档位留着（OMP 自己把模型没有的档位贴到最近一档）；
+ * 一个可用模型都不剩时（总开关随之关掉）照默认模型留着。没变时原样返回同一个对象。
+ */
+function withSettledModelRoles(
+  state: ApiEndpointState,
+  agent: ApiEndpointAgentSettings,
+): ApiEndpointAgentSettings {
+  const roles = agent.modelRoles;
+  if (roles === undefined) return agent;
+  let isChanged = false;
+  const settled: ApiEndpointModelRoles = {};
+  for (const [role, value] of Object.entries(roles)) {
+    if (isDefaultModelChoice(state, value.modelId)) {
+      settled[role] = value;
+      continue;
+    }
+    const modelId = settledModelId(state, value.modelId);
+    isChanged = isChanged || modelId !== null;
+    settled[role] = modelId === null ? value : { ...value, modelId };
+  }
+  return isChanged ? { ...agent, modelRoles: settled } : agent;
 }
 
 /**
@@ -180,7 +222,7 @@ export function settleAgentSettings(input: {
  */
 function withoutUnservedSideModels(input: {
   state: ApiEndpointState;
-  provider: ApiEndpointProvider;
+  provider: ApiEndpointAgentKey;
   agent: ApiEndpointAgentSettings;
   codexOwnModels: readonly string[];
 }): ApiEndpointAgentSettings {
@@ -210,9 +252,9 @@ function isUnserved(state: ApiEndpointState, id: string | null | undefined): boo
  */
 export function agentTargetEndpoint(
   state: ApiEndpointState,
-  provider: ApiEndpointProvider,
+  provider: ApiEndpointAgentKey,
 ): StoredApiEndpoint | null {
-  const agent = state.agents[provider];
+  const agent = agentSettingsOf(state, provider);
   if (!agent.enabled) return null;
   const named = namedDefaultModel(state, agent.defaultModelId);
   if (named) return named.endpoint;

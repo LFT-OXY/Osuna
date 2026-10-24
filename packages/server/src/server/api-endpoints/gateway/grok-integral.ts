@@ -123,11 +123,8 @@ export function wholeArgsFilter(emit: EmitEvent): ReplyFilter {
   };
 }
 
-/** 直通的回复里会带调用参数的格式（Agent 只说这两种）。 */
-export type PassedReplyFormat = Extract<
-  ApiEndpointRequestFormat,
-  "anthropic_messages" | "openai_responses"
->;
+/** 直通的回复的格式（即 Agent 说的格式）。 */
+export type PassedReplyFormat = ApiEndpointRequestFormat;
 
 /** 一处参数：在事件 JSON 里的位置，与它怎么改（字符串按文字改，对象按原文改）。 */
 interface ArgsAt {
@@ -137,7 +134,7 @@ interface ArgsAt {
 
 /**
  * 直通的 Grok 回复里，调用参数去掉零小数（magpie intTidy）：Responses 的 function_call 项与参数增量，
- * Anthropic 的 tool_use input 与 input_json_delta。流按行转出，带参数又改了的那行只改参数，其余字节原样；
+ * Anthropic 的 tool_use input 与 input_json_delta，Chat 的 tool_calls（流里的参数增量与整份回复的参数）。流按行转出，带参数又改了的那行只改参数，其余字节原样；
  * 不是流的回复攒齐了在最后改。
  */
 export class WholeArgsTidy extends JsonEventTidy {
@@ -151,6 +148,7 @@ export class WholeArgsTidy extends JsonEventTidy {
   /** 这段文字可能带着调用参数。 */
   protected carries(text: string): boolean {
     if (this.reply.format === "openai_responses") return text.includes("function_call");
+    if (this.reply.format === "openai_chat") return text.includes('"tool_calls"');
     return text.includes('"tool_use"') || text.includes('"input_json_delta"');
   }
 
@@ -164,6 +162,7 @@ export class WholeArgsTidy extends JsonEventTidy {
 
   private argsIn(event: Record<string, unknown>): ArgsAt[] {
     if (this.reply.format === "openai_responses") return this.responsesArgs(event);
+    if (this.reply.format === "openai_chat") return this.chatArgs(event);
     return this.anthropicArgs(event);
   }
 
@@ -191,6 +190,36 @@ export class WholeArgsTidy extends JsonEventTidy {
     const whole = event.object === "response";
     if (isRecord(event.response)) places.push(...outputArgs(event.response, ["response"]));
     else if (whole) places.push(...outputArgs(event, []));
+    return places;
+  }
+
+  /** 流里的 choices[].delta.tool_calls 按选项与调用的 index 接着改；整份回复的 choices[].message.tool_calls 整段改。 */
+  private chatArgs(event: Record<string, unknown>): ArgsAt[] {
+    const places: ArgsAt[] = [];
+    const choices = Array.isArray(event.choices) ? event.choices : [];
+    choices.forEach((choice, at) => {
+      if (!isRecord(choice)) return;
+      const streamed = isRecord(choice.delta) ? choice.delta.tool_calls : undefined;
+      const whole = isRecord(choice.message) ? choice.message.tool_calls : undefined;
+      const choiceIndex = typeof choice.index === "number" ? choice.index : at;
+      if (Array.isArray(streamed)) {
+        streamed.forEach((call, index) => {
+          if (!isRecord(call) || !isRecord(call.function)) return;
+          if (typeof call.function.arguments !== "string") return;
+          const callIndex = typeof call.index === "number" ? call.index : index;
+          const numbers = this.numbersFor(`${choiceIndex}:${callIndex}`);
+          const path = ["choices", at, "delta", "tool_calls", index, "function", "arguments"];
+          places.push({ path, fix: (text) => numbers.feed(text) });
+        });
+      }
+      if (Array.isArray(whole)) {
+        whole.forEach((call, index) => {
+          if (!isRecord(call) || !isRecord(call.function)) return;
+          const path = ["choices", at, "message", "tool_calls", index, "function", "arguments"];
+          places.push({ path, fix: wholeArgs });
+        });
+      }
+    });
     return places;
   }
 

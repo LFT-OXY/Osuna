@@ -140,13 +140,41 @@ describe("counting the user's turns", () => {
     expect(turnOf("openai", body)).toEqual({ turn: 1, within: true });
     expect(turnOf("openai", { input: "hello" })).toEqual({ turn: 1, within: false });
   });
+
+  test("Chat: tool messages carry the turn; the user's words, or an image alone, start one", () => {
+    const body: { messages: object[] } = {
+      messages: [
+        { role: "system", content: "You are Pi." },
+        { role: "user", content: "list files" },
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [{ id: "c1", type: "function", function: { name: "ls", arguments: "{}" } }],
+        },
+        { role: "tool", tool_call_id: "c1", content: "a b" },
+      ],
+    };
+    expect(turnOf("chat", body)).toEqual({ turn: 1, within: true });
+    body.messages.push(
+      { role: "assistant", content: "a, b" },
+      { role: "user", content: [{ type: "image_url", image_url: { url: "data:x" } }] },
+    );
+    expect(turnOf("chat", body)).toEqual({ turn: 2, within: false });
+  });
 });
 
 describe("telling conversations apart", () => {
   test("by the agent's own session header, Codex's older names included", () => {
     expect(conversationId({ "x-claude-code-session-id": "s1" }, {})).toBe("s1");
     expect(conversationId({ "thread-id": "t1", "session-id": "root" }, {})).toBe("t1");
-    for (const name of ["thread_id", "session-id", "session_id", "x-client-request-id"]) {
+    // Pi 的 Chat 与 Anthropic、OMP 发 x-session-affinity。
+    for (const name of [
+      "thread_id",
+      "session-id",
+      "session_id",
+      "x-session-affinity",
+      "x-client-request-id",
+    ]) {
       expect(conversationId({ [name]: "old" }, {})).toBe("old");
     }
   });

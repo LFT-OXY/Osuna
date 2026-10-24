@@ -157,6 +157,8 @@ export interface ProviderSnapshotEntry {
   subagentThinkingOptions?: AgentSelectOption[];
   // Codex 的默认 Subagent 模型与记忆模型的选项（用 ChatGPT 登录时 Codex 自己的模型在前）；总开关开着才有。
   sideModelOptions?: ApiEndpointSideModelOption[];
+  // OMP 每套开着「使用第三方接口」的命名配置（键 omp#<名字>）的分组；只在 OMP 的条目上，给设置页那一块用。
+  ompProfileModelGroups?: Record<string, ApiEndpointModelGroup[]>;
   // 接口名显示方式（always、clash、never）：选择器里模型后面带不带接口名；总开关开着才有。
   apiEndpointNameDisplay?: string;
   // 已装 CLI 的版本号（纯 x.y.z），只有启用的内置提供方才有；取不到时省略。
@@ -813,6 +815,11 @@ export type SideModelOptionsLookup = (
 export type ApiEndpointModelGroupsLookup = (
   provider: AgentProvider,
 ) => ApiEndpointModelGroup[] | null;
+
+/** OMP 每套开着的命名配置的分组，按 omp#<名字>；不是 OMP 或一套都没开时为 null。 */
+export type OmpProfileModelGroupsLookup = (
+  provider: AgentProvider,
+) => Record<string, ApiEndpointModelGroup[]> | null;
 
 export interface ResolveAgentDefaultModeInput {
   config: AgentSessionConfig;

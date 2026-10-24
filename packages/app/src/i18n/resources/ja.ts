@@ -3380,6 +3380,9 @@ export const ja: TranslationResources = {
       agent: {
         title: "サードパーティ API",
         useSwitch: "サードパーティ API を使う",
+        // OMP 有命名配置时默认那块的标题，与命名配置那块里 CLI 的称呼（照 magpie 的 omp · work；以配置名收尾，中日文里不在全角括号后留空格）。
+        defaultProfile: "既定",
+        profileAgent: "{{agent}} · {{profile}}",
         useHint:
           "オンにすると、{{agent}} は「サードパーティ API」ページでオンになっているエンドポイントの選択済みモデルを使えます。オフにすると公式に戻ります。",
         noUsableEndpoint:
@@ -3430,6 +3433,32 @@ export const ja: TranslationResources = {
           "過去の会話をバックグラウンドで {{agent}} のメモリにまとめます。{{agent}} のメモリ機能がオンのときだけ使われます。Osuna はこの機能をオンにしません。",
         memoryModelUnset: "{{agent}} 自身のもの",
         memoryModelPick: "{{agent}} のメモリのモデル",
+        modelRoles: {
+          title: "モデルの役割",
+          hint: "{{agent}} の用途ごとにモデルを選びます。空の役割は {{agent}} に任せます。",
+          modelPick: "{{role}}のモデル",
+          thinkingPick: "{{role}}の思考レベル",
+          unsetModel: "空",
+          unsetThinking: "セッションに従う",
+          roles: {
+            task: "Subagent（task）",
+            smol: "小さなタスク（smol）",
+            slow: "難しい問題（slow）",
+            plan: "計画（plan）",
+            vision: "画像（vision）",
+            advisor: "アドバイザー（advisor）",
+            commit: "コミットメッセージ（commit）",
+            tiny: "ごく小さなタスク（tiny）",
+            memory: "メモリ（memory）",
+          },
+          unset: {
+            default: "空のとき：デフォルトモデルと同じ（{{model}}）",
+            ompPicks: "空のとき：{{agent}} が自分で選ぶ",
+            slow: "空のとき：難しい問題のモデル（{{model}}）",
+            smol: "空のとき：小さなタスクのモデル（{{model}}）",
+            tiny: "空のとき：ごく小さなタスクのモデル（{{model}}）",
+          },
+        },
         forcedSubagentModel: "固定する Subagent のモデル",
         forcedSubagentModelHint:
           "メインの会話がどのモデルを指定しても、すべての Subagent がこのモデルで動きます。Codex の設定は変えません。",

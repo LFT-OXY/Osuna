@@ -21,6 +21,7 @@ import {
   type FetchCatalogOptions,
   type ActiveApiEndpointLookup,
   type ApiEndpointModelGroupsLookup,
+  type OmpProfileModelGroupsLookup,
   type LockedThinkingLookup,
   type SubagentThinkingLookup,
   type SideModelOptionsLookup,
@@ -147,6 +148,7 @@ export interface ProviderSnapshotManagerOptions {
   subagentThinking?: SubagentThinkingLookup;
   sideModelOptions?: SideModelOptionsLookup;
   apiEndpointNameDisplay?: ApiEndpointNameDisplayLookup;
+  ompProfileModelGroups?: OmpProfileModelGroupsLookup;
 }
 
 type ApiEndpointSnapshotFields = Pick<
@@ -157,6 +159,7 @@ type ApiEndpointSnapshotFields = Pick<
   | "subagentThinkingOptions"
   | "sideModelOptions"
   | "apiEndpointNameDisplay"
+  | "ompProfileModelGroups"
 >;
 
 interface ProviderSnapshotRefreshOptions {
@@ -291,6 +294,7 @@ export class ProviderSnapshotManager {
   private readonly subagentThinking?: SubagentThinkingLookup;
   private readonly sideModelOptions?: SideModelOptionsLookup;
   private readonly apiEndpointNameDisplay?: ApiEndpointNameDisplayLookup;
+  private readonly ompProfileModelGroups?: OmpProfileModelGroupsLookup;
   private runtimeSettings: AgentProviderRuntimeSettingsMap | undefined;
   private providerOverrides: Record<string, ProviderOverride> | undefined;
   private baseProviderOverrides: Record<string, ProviderOverride> | undefined;
@@ -322,6 +326,7 @@ export class ProviderSnapshotManager {
     this.subagentThinking = options.subagentThinking;
     this.sideModelOptions = options.sideModelOptions;
     this.apiEndpointNameDisplay = options.apiEndpointNameDisplay;
+    this.ompProfileModelGroups = options.ompProfileModelGroups;
     this.runtimeSettings = options.runtimeSettings;
     this.providerOverrides = options.providerOverrides;
     this.baseProviderOverrides = options.providerOverrides;
@@ -962,6 +967,7 @@ export class ProviderSnapshotManager {
       subagentThinkingOptions: this.subagentThinking?.(provider) ?? undefined,
       sideModelOptions: this.sideModelOptions?.(provider) ?? undefined,
       apiEndpointNameDisplay: this.apiEndpointNameDisplay?.(provider) ?? undefined,
+      ompProfileModelGroups: this.ompProfileModelGroups?.(provider) ?? undefined,
     };
   }
 

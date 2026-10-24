@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type {
   ApiEndpoint,
+  ApiEndpointModelRoles,
   ApiEndpointAgentIssue,
   ApiEndpointReopenHint,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { ApiEndpointModelGroup } from "@getpaseo/protocol/agent-types";
 import type { ApiEndpointNameDisplay } from "@getpaseo/protocol/api-endpoint/endpoint-names";
-import { selectAgentApiEndpointsView } from "./agent-settings";
+import { agentSettingsBlocks, selectAgentApiEndpointsView } from "./agent-settings";
 
 const NOW = new Date("2026-10-14T12:00:00.000Z");
 
@@ -39,6 +40,7 @@ function view(input: {
   memoryModelId?: string | null;
   forcedSubagentModelId?: string | null;
   allowsAnySubagentModel?: boolean;
+  modelRoles?: ApiEndpointModelRoles;
   lockedThinkingOptionId?: string | null;
   subagentThinkingOptions?: { id: string; label: string }[] | null;
   sideModelOptions?: { id: string; model: string; endpointName: string | null }[];
@@ -63,6 +65,7 @@ function view(input: {
           memoryModelId: input.memoryModelId,
           forcedSubagentModelId: input.forcedSubagentModelId,
           allowsAnySubagentModel: input.allowsAnySubagentModel,
+          modelRoles: input.modelRoles,
         },
       },
       gatewayUnavailable: input.gatewayUnavailable ?? null,
@@ -73,6 +76,7 @@ function view(input: {
       endpointNameDisplay: input.endpointNameDisplay ?? "always",
       endpointNamesUnreached: [],
       balanceAutoRefresh: true,
+      ompProfiles: [],
     },
     provider: input.provider ?? "claude",
     endpointModelGroups: input.endpointModelGroups ?? null,
@@ -563,6 +567,7 @@ describe("Keep claude.ai sign-in on an agent page", () => {
         endpointNameDisplay: "always",
         endpointNamesUnreached: [],
         balanceAutoRefresh: true,
+        ompProfiles: [],
       },
       provider: "claude",
       endpointModelGroups: null,
@@ -585,6 +590,7 @@ describe("Keep claude.ai sign-in on an agent page", () => {
         endpointNameDisplay: "always",
         endpointNamesUnreached: [],
         balanceAutoRefresh: true,
+        ompProfiles: [],
       },
       provider: "codex",
       endpointModelGroups: null,
@@ -853,5 +859,259 @@ describe("Codex's default Subagent model and memory model", () => {
       subagentThinkingOptions: levels,
     });
     expect(claude.codexSideModels).toBeNull();
+  });
+});
+
+describe("Pi's Use API endpoints block", () => {
+  it("picks the default model and its thinking from Pi's groups, whose ids Pi names osuna/…", () => {
+    const shown = view({
+      provider: "pi",
+      enabled: true,
+      defaultModelId: "relay/glm-5",
+      defaultThinkingOptionId: "high",
+      endpoints: [endpoint({ id: "relay", name: "Relay", models: [{ id: "glm-5" }] })],
+      endpointModelGroups: [
+        {
+          name: "Relay",
+          models: [
+            {
+              provider: "pi",
+              id: "osuna/relay/glm-5",
+              label: "glm-5",
+              thinkingOptions: [
+                { id: "low", label: "Low" },
+                { id: "high", label: "High" },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    expect(shown.modelOptions.map((option) => option.id)).toEqual(["glm-5", "relay/glm-5"]);
+    expect(shown.defaultModel).toMatchObject({ id: "relay/glm-5", model: "glm-5" });
+    expect(shown.defaultThinking).toEqual({
+      value: "high",
+      options: [
+        { id: "low", label: "Low" },
+        { id: "high", label: "High" },
+      ],
+      usesUltraCode: null,
+      lockedAt: null,
+    });
+  });
+});
+
+describe("OMP's Use API endpoints block", () => {
+  it("picks the default model from OMP's groups, whose ids OMP names osuna/…", () => {
+    const shown = view({
+      provider: "omp",
+      enabled: true,
+      defaultModelId: "relay/glm-5",
+      defaultThinkingOptionId: "auto",
+      endpoints: [endpoint({ id: "relay", name: "Relay", models: [{ id: "glm-5" }] })],
+      endpointModelGroups: [
+        {
+          name: "Relay",
+          models: [
+            {
+              provider: "omp",
+              id: "osuna/relay/glm-5",
+              label: "glm-5",
+              thinkingOptions: [
+                { id: "auto", label: "Auto" },
+                { id: "high", label: "High" },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    expect(shown.defaultModel).toMatchObject({ id: "relay/glm-5", model: "glm-5" });
+    expect(shown.defaultThinking).toEqual({
+      value: "auto",
+      options: [
+        { id: "auto", label: "Auto" },
+        { id: "high", label: "High" },
+      ],
+      usesUltraCode: null,
+      lockedAt: null,
+    });
+  });
+});
+
+describe("the blocks of the Use API endpoints section", () => {
+  it("is one untitled block when OMP has no named profiles, and for every other agent", () => {
+    expect(agentSettingsBlocks({ provider: "omp", ompProfiles: [] })).toEqual([
+      { settingsKey: "omp", profile: null },
+    ]);
+    expect(agentSettingsBlocks({ provider: "claude", ompProfiles: ["work"] })).toEqual([
+      { settingsKey: "claude", profile: null },
+    ]);
+  });
+
+  it("puts OMP's default block first, then one block per named profile", () => {
+    expect(agentSettingsBlocks({ provider: "omp", ompProfiles: ["personal", "work"] })).toEqual([
+      { settingsKey: "omp", profile: null },
+      { settingsKey: "omp#personal", profile: "personal" },
+      { settingsKey: "omp#work", profile: "work" },
+    ]);
+  });
+});
+
+describe("a named OMP profile's block", () => {
+  it("reads that profile's own settings, issues and copies to reopen, by OMP's rules", () => {
+    const shown = selectAgentApiEndpointsView({
+      state: {
+        status: "ready",
+        endpoints: [endpoint({ id: "relay", name: "Relay", models: [{ id: "glm-5" }] })],
+        agents: {
+          omp: { enabled: false, defaultModelId: null },
+          "omp#work": {
+            enabled: true,
+            defaultModelId: "relay/glm-5",
+            modelRoles: { slow: { modelId: "glm-5" } },
+          },
+        },
+        gatewayUnavailable: null,
+        agentIssues: {
+          omp: [],
+          "omp#work": [{ code: "bypassed", message: "work went around Osuna" }],
+        },
+        reopenHints: {
+          omp: [],
+          "omp#work": [{ kind: "osuna_sessions", count: 2, message: "2 work agents" }],
+        },
+        longConversations: {},
+        disabledModels: [],
+        endpointNameDisplay: "always",
+        endpointNamesUnreached: [],
+        balanceAutoRefresh: true,
+        ompProfiles: ["work"],
+      },
+      provider: "omp",
+      settingsKey: "omp#work",
+      endpointModelGroups: [
+        {
+          name: "Relay",
+          models: [{ provider: "omp", id: "osuna/relay/glm-5", label: "glm-5" }],
+        },
+      ],
+      lockedThinkingOptionId: null,
+      subagentThinkingOptions: null,
+      sideModelOptions: [],
+      now: NOW,
+    });
+    expect(shown.enabled).toBe(true);
+    expect(shown.defaultModel).toEqual({
+      id: "relay/glm-5",
+      model: "glm-5",
+      endpointName: "Relay",
+    });
+    expect(shown.modelRoles?.find((role) => role.role === "slow")?.model).toEqual({
+      id: "glm-5",
+      model: "glm-5",
+      endpointName: null,
+    });
+    expect(shown.issues.map((issue) => issue.message)).toEqual(["work went around Osuna"]);
+    expect(shown.reopen).toEqual([{ kind: "osunaSessions", count: 2 }]);
+  });
+});
+
+describe("OMP's model roles", () => {
+  const relay = endpoint({ id: "relay", name: "Relay", models: [{ id: "glm-5" }] });
+
+  it("lists OMP's nine roles in order, with the model and thinking set for each", () => {
+    const shown = view({
+      provider: "omp",
+      enabled: true,
+      defaultModelId: "glm-5",
+      endpoints: [relay],
+      modelRoles: {
+        slow: { modelId: "glm-5", thinkingOptionId: "high" },
+        tiny: { modelId: "gone" },
+      },
+    });
+    expect(shown.modelRoles?.map((role) => role.role)).toEqual([
+      "task",
+      "smol",
+      "slow",
+      "plan",
+      "vision",
+      "advisor",
+      "commit",
+      "tiny",
+      "memory",
+    ]);
+    const glm = { id: "glm-5", model: "glm-5", endpointName: null };
+    const gone = { id: "gone", model: "gone", endpointName: null };
+    expect(shown.modelRoles?.[2]).toEqual({
+      role: "slow",
+      model: glm,
+      thinking: "high",
+      whenEmpty: { kind: "model", via: "default", model: glm },
+    });
+    expect(shown.modelRoles?.[7]).toEqual({
+      role: "tiny",
+      model: gone,
+      thinking: null,
+      whenEmpty: { kind: "model", via: "smol", model: glm },
+    });
+    expect(shown.modelRoles?.[0]).toEqual({
+      role: "task",
+      model: null,
+      thinking: null,
+      whenEmpty: { kind: "model", via: "default", model: glm },
+    });
+  });
+
+  it("say what an empty role falls back to, naming that model", () => {
+    const kimi = { id: "relay/kimi-k2", model: "kimi-k2", endpointName: "Relay" };
+    const fallbacks = (modelRoles: ApiEndpointModelRoles) =>
+      view({
+        provider: "omp",
+        enabled: true,
+        defaultModelId: "glm-5",
+        endpoints: [relay],
+        endpointModelGroups: [
+          {
+            name: "Relay",
+            models: [{ provider: "omp", id: "osuna/relay/kimi-k2", label: "kimi-k2" }],
+          },
+        ],
+        modelRoles,
+      }).modelRoles?.map((role) => [role.role, role.whenEmpty]);
+    const glm = { id: "glm-5", model: "glm-5", endpointName: null };
+    expect(fallbacks({})).toEqual([
+      ["task", { kind: "model", via: "default", model: glm }],
+      ["smol", { kind: "model", via: "default", model: glm }],
+      ["slow", { kind: "model", via: "default", model: glm }],
+      ["plan", { kind: "ompPicks" }],
+      ["vision", { kind: "ompPicks" }],
+      // 顾问不跟默认模型：难题空着就由 OMP 自己挑。
+      ["advisor", { kind: "ompPicks" }],
+      ["commit", { kind: "model", via: "smol", model: glm }],
+      ["tiny", { kind: "model", via: "smol", model: glm }],
+      ["memory", { kind: "model", via: "smol", model: glm }],
+    ]);
+    const set = { modelId: "relay/kimi-k2" };
+    expect(fallbacks({ slow: set, smol: set, tiny: set })).toEqual([
+      ["task", { kind: "model", via: "default", model: glm }],
+      ["smol", { kind: "model", via: "default", model: glm }],
+      ["slow", { kind: "model", via: "default", model: glm }],
+      ["plan", { kind: "ompPicks" }],
+      ["vision", { kind: "ompPicks" }],
+      ["advisor", { kind: "model", via: "slow", model: kimi }],
+      ["commit", { kind: "model", via: "smol", model: kimi }],
+      ["tiny", { kind: "model", via: "smol", model: kimi }],
+      ["memory", { kind: "model", via: "tiny", model: kimi }],
+    ]);
+  });
+
+  it("are only on OMP's page, while its switch is on", () => {
+    expect(view({ provider: "omp", endpoints: [relay] }).modelRoles).toBeNull();
+    expect(
+      view({ provider: "pi", enabled: true, defaultModelId: "glm-5", endpoints: [relay] })
+        .modelRoles,
+    ).toBeNull();
   });
 });

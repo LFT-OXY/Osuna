@@ -10,7 +10,13 @@ import {
   showsEndpointNames,
   type ApiEndpointNameDisplay,
 } from "@getpaseo/protocol/api-endpoint/endpoint-names";
+import {
+  OMP_MODEL_ROLES,
+  type OmpModelRole,
+} from "@getpaseo/protocol/api-endpoint/omp-model-roles";
 import { withoutDisabledEndpointModels } from "./disabled-models-list";
+import { roleFallback, type RoleFallback } from "./model-roles";
+import { hasModelRoles, hasOmpProfiles, isPiLikeProvider, ompProfileSettingsKey } from "./pi-like";
 import {
   endpointRowStatus,
   type CooldownRemaining,
@@ -18,7 +24,7 @@ import {
 } from "./host-list";
 
 /*
- * Claude Code / Codex 提供方页「第三方接口」区的纯计算：总开关能不能打开、默认模型的候选、后台小任务 / Subagent / 记忆模型、
+ * Claude Code / Codex / Pi 提供方页「第三方接口」区的纯计算：总开关能不能打开、默认模型的候选、后台小任务 / Subagent / 记忆模型、
  * 「管理第三方接口」入口行的汇总、提示区的「设置被改过」。规则与 daemon 一致（R-A2、R-B6、ADR 0012）。
  */
 
@@ -264,6 +270,17 @@ export interface CodexSideModelsView {
   allowsAnySubagentModel: boolean;
 }
 
+/**
+ * OMP 的一个模型角色（工单 05）：模型为 null 是空着、交给 OMP；thinking 为 null 是不带档位、跟会话的档位；
+ * whenEmpty 是空着时 OMP 用什么（跟默认模型或另一个角色时带上那个模型）。
+ */
+export interface ModelRoleView {
+  role: OmpModelRole;
+  model: DefaultModelOption | null;
+  thinking: string | null;
+  whenEmpty: RoleFallback<DefaultModelOption>;
+}
+
 export interface SubagentThinkingView {
   // null 为没设，按 Claude Code 给 Subagent 的那一档。
   value: string | null;
@@ -295,11 +312,38 @@ export interface AgentApiEndpointsView {
   sideModels: ClaudeSideModelsView | null;
   // 只有 Codex 有；总开关关着或主机太旧时为 null，不显示这几行。
   codexSideModels: CodexSideModelsView | null;
+  // 只有 OMP 有，按 OMP 的角色先后；总开关关着时为 null，不显示这一区。
+  modelRoles: ModelRoleView[] | null;
+}
+
+/** 「使用第三方接口」的一块：设置所在的键，与它是哪套 OMP 命名配置（默认那块与别的提供方为 null）。 */
+export interface AgentSettingsBlock {
+  settingsKey: string;
+  profile: string | null;
+}
+
+export interface AgentSettingsBlocksInput {
+  provider: string;
+  // 主机列出的 OMP 命名配置，按名字排。
+  ompProfiles: string[];
+}
+
+/** 提供方页上的几块：默认那块在前，OMP 再每套命名配置一块。 */
+export function agentSettingsBlocks(input: AgentSettingsBlocksInput): AgentSettingsBlock[] {
+  const own: AgentSettingsBlock = { settingsKey: input.provider, profile: null };
+  if (!hasOmpProfiles(input.provider)) return [own];
+  const profiles = input.ompProfiles.map((profile) => ({
+    settingsKey: ompProfileSettingsKey(profile),
+    profile,
+  }));
+  return [own, ...profiles];
 }
 
 export function selectAgentApiEndpointsView(input: {
   state: Extract<HostEndpointsLoadState, { status: "ready" }>;
   provider: string;
+  // 这一块的设置、提示区与要重开的副本所在的键：OMP 的命名配置是 omp#<名字>，规则仍按 provider；省略为 provider 本身。
+  settingsKey?: string;
   // 提供方快照里按接口分组的模型（id 是「接口标识/模型名」）；主机认不出指定某一家的默认模型时为 null。
   endpointModelGroups: ApiEndpointModelGroup[] | null;
   // 提供方快照说每个会话都锁在的思考档位（第三方接口的默认思考档位是 max 时）；没有为 null。
@@ -311,7 +355,9 @@ export function selectAgentApiEndpointsView(input: {
   now: Date;
 }): AgentApiEndpointsView {
   const { state, provider, now } = input;
-  const agent = state.agents[provider] ?? { enabled: false, defaultModelId: null };
+  const settingsKey = input.settingsKey ?? provider;
+  const agent = state.agents[settingsKey] ?? { enabled: false, defaultModelId: null };
+  const endpointModelGroups = settingsModelGroups({ provider, groups: input.endpointModelGroups });
   const enabledEndpoints = state.endpoints.filter((endpoint) => endpoint.enabled !== false);
   // 被禁的模型不在服务：默认模型候选不列（分组由主机按在服务的模型给，已经去掉）。
   const modelOptions = withEndpointNamesShown({
@@ -320,7 +366,7 @@ export function selectAgentApiEndpointsView(input: {
         endpoints: enabledEndpoints,
         patterns: state.disabledModels,
       }),
-      groups: input.endpointModelGroups ?? [],
+      groups: endpointModelGroups ?? [],
     }),
     display: state.endpointNameDisplay,
   });
@@ -353,7 +399,7 @@ export function selectAgentApiEndpointsView(input: {
   let defaultThinking: DefaultThinkingView | null = null;
   if (agent.enabled) {
     defaultThinking = defaultThinkingView({
-      groups: input.endpointModelGroups ?? [],
+      groups: endpointModelGroups ?? [],
       defaultModelId: agent.defaultModelId,
       value: agent.defaultThinkingOptionId ?? null,
       usesUltraCode: agent.usesUltraCode === true,
@@ -384,13 +430,60 @@ export function selectAgentApiEndpointsView(input: {
     defaultModel: displayedDefaultModel(modelOptions, agent.defaultModelId),
     modelOptions,
     summary: { enabledCount: enabledEndpoints.length, cooling },
-    issues: (state.agentIssues[provider] ?? []).map(toIssueView),
-    reopen: (state.reopenHints[provider] ?? []).map(toReopenView),
+    issues: (state.agentIssues[settingsKey] ?? []).map(toIssueView),
+    reopen: (state.reopenHints[settingsKey] ?? []).map(toReopenView),
     keepsClaudeAiLogin,
     defaultThinking,
     sideModels,
     codexSideModels,
+    modelRoles: modelRolesView({ provider, agent, modelOptions }),
   };
+}
+
+interface ModelRolesViewInput {
+  provider: string;
+  agent: ApiEndpointAgentSettings;
+  modelOptions: DefaultModelOption[];
+}
+
+function modelRolesView(input: ModelRolesViewInput): ModelRoleView[] | null {
+  const { agent, modelOptions } = input;
+  if (!hasModelRoles(input.provider) || !agent.enabled) return null;
+  const roles = agent.modelRoles ?? {};
+  const modelOf = (role: OmpModelRole) =>
+    displayedDefaultModel(modelOptions, roles[role]?.modelId ?? null);
+  const defaultModel = displayedDefaultModel(modelOptions, agent.defaultModelId);
+  return OMP_MODEL_ROLES.map((role) => ({
+    role,
+    model: modelOf(role),
+    thinking: roles[role]?.thinkingOptionId ?? null,
+    whenEmpty: roleFallback({ role, defaultModel, modelOf }),
+  }));
+}
+
+// Pi、OMP 对话里的接口模型 id 前面带它们里 Osuna 服务商的名字（daemon 的 PI_PROVIDER_ID）。
+const PI_OSUNA_PREFIX = "osuna/";
+
+interface SettingsModelGroupsInput {
+  provider: string;
+  groups: ApiEndpointModelGroup[] | null;
+}
+
+/** 设置页按 Osuna 的模型 id（「接口标识/模型名」）挑默认模型：Pi、OMP 的分组 id 去掉 `osuna/`。 */
+function settingsModelGroups(input: SettingsModelGroupsInput): ApiEndpointModelGroup[] | null {
+  const { provider, groups } = input;
+  if (!isPiLikeProvider(provider) || groups === null) return groups;
+  return groups.map((group) =>
+    Object.assign({}, group, {
+      models: group.models.map((model) =>
+        Object.assign({}, model, { id: withoutOsunaPrefix(model.id) }),
+      ),
+    }),
+  );
+}
+
+function withoutOsunaPrefix(id: string): string {
+  return id.startsWith(PI_OSUNA_PREFIX) ? id.slice(PI_OSUNA_PREFIX.length) : id;
 }
 
 /**

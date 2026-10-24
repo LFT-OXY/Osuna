@@ -39,6 +39,9 @@ const AGENT_USER_AGENTS: Record<ApiEndpointProvider, { names: string[]; prefixes
   claude: { names: ["claude", "cc", "claude-code"], prefixes: ["claude-cli", "claude-code"] },
   // ACP 适配器的缺省客户端名会成为 Codex 的 originator。
   codex: { names: ["codex"], prefixes: ["codex", "acp-extension-codex"] },
+  // magpie 的 piLike 只有 id，OMP 另有别名与 User-Agent 开头（internal/agent/agents.go、omp.go）。
+  pi: { names: ["pi"], prefixes: [] },
+  omp: { names: ["omp", "oh-my-pi"], prefixes: ["oh-my-pi"] },
 };
 
 export type CallerVerdict =

@@ -2,12 +2,8 @@
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import {
-  applyEdits,
-  format,
-  modify,
   parse as parseJsonc,
   printParseErrorCode,
-  type Edit,
   type FormattingOptions,
   type JSONPath,
   type ParseError,
@@ -24,6 +20,15 @@ import {
 import { claudeModelName } from "./claude-model-name.js";
 import { claudeDashed } from "./claude-spelling.js";
 import { CliModelHoldSchema, type CliModelHold, type CliPicks } from "./cli-model-hold.js";
+import {
+  classifyOriginalFile,
+  detectFormatting,
+  edit,
+  OriginalFileSchema,
+  OriginalValueSchema,
+  splitBom,
+  type OriginalValue,
+} from "./jsonc-edit.js";
 
 /*
  * Claude Code 的 ~/.claude/settings.json 补丁：只改 Osuna 负责的键，其余字节不动。
@@ -75,13 +80,6 @@ const WEB_SEARCH_RULE = "WebSearch";
 const AUTO_MODE_SERVER_KEY = "CLAUDE_CODE_AUTO_MODE_SERVER";
 // 按模型提示的归属规则写的 env 键：文件里没有、或还是 Osuna 上次写的值，才归 Osuna。
 const OWNED_WHILE_UNTOUCHED_ENV_KEYS = [...CLAUDE_HINT_ENV_KEYS, AUTO_MODE_SERVER_KEY];
-const BOM = "\uFEFF";
-
-const OriginalValueSchema = z.discriminatedUnion("present", [
-  z.object({ present: z.literal(true), value: z.unknown() }),
-  z.object({ present: z.literal(false) }),
-]);
-export type OriginalValue = z.infer<typeof OriginalValueSchema>;
 
 // 默认思考档位写过的一个键：JSON 路径、接管前的值、写进去的值（null 为拿掉）。
 const ThinkingKeyRecordSchema = z.object({
@@ -97,14 +95,6 @@ const ThinkingRecordSchema = z.object({
   created: z.array(z.array(z.string())),
 });
 type ThinkingRecord = z.infer<typeof ThinkingRecordSchema>;
-
-// 接管前整个文件的样子：不存在、空对象（留原文，恢复成空时逐字节还原）、或有内容。
-const OriginalFileSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("absent") }),
-  z.object({ kind: z.literal("empty"), text: z.string() }),
-  z.object({ kind: z.literal("content") }),
-]);
-type OriginalFile = z.infer<typeof OriginalFileSchema>;
 
 const ModelPickerOptionSchema = z.object({
   model: z.string(),
@@ -902,6 +892,7 @@ export function readClaudeCliPicks(input: {
     subagent,
     subagentLevel: null,
     memory: null,
+    roles: null,
   };
 }
 
@@ -967,16 +958,6 @@ export function keepClaudeCliModel(input: {
   }
   const model = { ...takeover.model, written: fileModel(settings), held: input.held };
   return { ...takeover, model };
-}
-
-function classifyOriginalFile(text: string | null): OriginalFile {
-  if (text === null) return { kind: "absent" };
-  const { body } = splitBom(text);
-  if (body.trim() === "") return { kind: "empty", text };
-  const parsed: unknown = parseJsonc(body, [], JSONC_OPTIONS);
-  return isRecord(parsed) && Object.keys(parsed).length === 0
-    ? { kind: "empty", text }
-    : { kind: "content" };
 }
 
 interface ParsedSettings {
@@ -1054,18 +1035,6 @@ function parsesAsStrictJson(body: string): boolean {
   } catch {
     return false;
   }
-}
-
-/** 开头的 BOM 读时摘下、写回时放回。 */
-interface BomSplit {
-  // 开头的 BOM，没有时为空串。
-  bom: string;
-  body: string;
-}
-
-function splitBom(text: string): BomSplit {
-  if (!text.startsWith(BOM)) return { bom: "", body: text };
-  return { bom: BOM, body: text.slice(BOM.length) };
 }
 
 /** 拿掉 Osuna 写的那条 "WebSearch"，以及因它而建、现在空了的 deny 与 permissions；不是 Osuna 的不动。 */
@@ -1167,90 +1136,6 @@ function removeIfEmptyObject(text: string, path: JSONPath, formatting: Formattin
     return edit(text, path, undefined, formatting);
   }
   return text;
-}
-
-function edit(text: string, path: JSONPath, value: unknown, formatting: FormattingOptions): string {
-  const [change, ...others] = modify(text, path, value, {});
-  if (change !== undefined && others.length === 0) {
-    const commented = besideTrailingComment(text, change);
-    if (commented) return editBesideComment({ text, change, commented, formatting });
-  }
-  return applyEdits(text, modify(text, path, value, { formattingOptions: formatting }));
-}
-
-// 上一个值后面、同一行只剩（逗号加）注释：这条注释属于上一行。
-const TRAILING_COMMENT = /^([ \t]*,)?(?:[ \t]*(?:\/\/[^\r\n]*|\/\*[^\r\n]*?\*\/))+[ \t]*$/;
-
-interface TrailingComment {
-  // 注释那一行的行尾（换行符之前）。
-  lineEnd: number;
-  hasComma: boolean;
-}
-
-/**
- * jsonc-parser 在容器末尾加键时插在上一个值的紧后面，删末尾的键时从上一个值的紧后面删起；
- * 上一行末尾有注释时，前者把注释挤到新键那一行，后者把注释一起删掉。认出这种情况交给 editBesideComment。
- */
-function besideTrailingComment(text: string, change: Edit): TrailingComment | null {
-  const isAppend = change.length === 0 && change.content.startsWith(",");
-  const isRemoveLast = change.content === "" && /^[ \t]*,/.test(text.slice(change.offset));
-  if (!isAppend && !isRemoveLast) return null;
-  const lineBreak = text.slice(change.offset).search(/\r?\n/);
-  if (lineBreak === -1) return null;
-  const lineEnd = change.offset + lineBreak;
-  if (isRemoveLast && lineEnd >= change.offset + change.length) return null;
-  const rest = TRAILING_COMMENT.exec(text.slice(change.offset, lineEnd));
-  if (!rest) return null;
-  return { lineEnd, hasComma: rest[1] !== undefined };
-}
-
-/**
- * 注释留在原来那一行，两个方向互为还原：
- * - 加键：新键另起一行放在注释之后；上一个值原本带尾随逗号，新键也带，没有就在上一个值后补逗号。
- * - 删键：只删被删的那几行；被删的键带尾随逗号就连它一起删，不带就把上一个值后的逗号也拿掉。
- */
-interface BesideCommentEdit {
-  text: string;
-  // jsonc-parser 不带格式算出的那一处改动。
-  change: Edit;
-  commented: TrailingComment;
-  formatting: FormattingOptions;
-}
-
-function editBesideComment(input: BesideCommentEdit): string {
-  const { text, change, formatting } = input;
-  const { lineEnd, hasComma } = input.commented;
-  const valueEnd = change.offset;
-  const separator = text.slice(valueEnd, lineEnd).replace(/^[ \t]*,/, "");
-  if (change.content === "") {
-    const removedEnd = change.offset + change.length;
-    const trailingComma = /^[ \t]*,/.exec(text.slice(removedEnd));
-    if (trailingComma) {
-      return `${text.slice(0, lineEnd)}${text.slice(removedEnd + trailingComma[0].length)}`;
-    }
-    return `${text.slice(0, valueEnd)}${separator}${text.slice(removedEnd)}`;
-  }
-  // 上一个值带尾随逗号就整行留着；不带就在值后补上逗号。
-  let head = text.slice(0, lineEnd);
-  if (!hasComma) head = `${text.slice(0, valueEnd)},${separator}`;
-  // 新键与上一个键同样缩进；值里的对象、数组再按文件格式展开。
-  const lineStart = text.lastIndexOf("\n", valueEnd) + 1;
-  const indent = /^[ \t]*/.exec(text.slice(lineStart))?.[0] ?? "";
-  const begin = head.length + (formatting.eol ?? "\n").length;
-  const property = `${indent}${change.content.slice(1)}${hasComma ? "," : ""}`;
-  const next = `${head}${formatting.eol ?? "\n"}${property}${text.slice(lineEnd)}`;
-  const range = { offset: begin, length: property.length };
-  return applyEdits(next, format(next, range, { ...formatting, keepLines: false }));
-}
-
-/** 按文件自身的缩进和换行写入新键；被插入的那一行会按该缩进重新排版。 */
-function detectFormatting(text: string): FormattingOptions {
-  const eol = text.includes("\r\n") ? "\r\n" : "\n";
-  const indent = /^([ \t]+)\S/m.exec(text)?.[1];
-  if (indent?.startsWith("\t")) {
-    return { insertSpaces: false, tabSize: 1, eol };
-  }
-  return { insertSpaces: true, tabSize: indent ? indent.length : 2, eol };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

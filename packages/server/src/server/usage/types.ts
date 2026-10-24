@@ -212,6 +212,14 @@ const PI_LIKE_PARSER_FIELDS = {
   turnBackend: z.string().nullable(),
   openTurn: USAGE_OPEN_TURN_SCHEMA.nullable(),
   ...ATTACH_AT_FIELD,
+  /**
+   * The provider (as written) and model in use, from the last model change or
+   * reply: a compaction's, a branch summary's or a tool result's usage names
+   * neither and is counted on them, as magpie's `calls_pi.go` does. Null on a
+   * cursor saved before they were kept.
+   */
+  usingProvider: z.string().nullable().default(null),
+  usingModel: z.string().nullable().default(null),
 };
 
 export const PI_PARSER_STATE_SCHEMA = z.object({
@@ -280,6 +288,18 @@ export interface UsageCallDelta {
   /** The turn the reply ran in; null when its tokens are in the bucket rows alone. */
   turnKey: string | null;
   amounts: UsageTokenTotals;
+  /**
+   * The log names Osuna's gateway as the reply's provider (Pi and OMP): its
+   * tokens went to no bucket row, so the ledger alone counts the call and a
+   * reply no ledger row matches is counted nowhere (ADR 0014).
+   */
+  gatewayOnly: boolean;
+  /**
+   * The id a daemon before ticket 07 named this Pi or OMP reply by
+   * (`<sessionId>/<entry id>`), when it is now named by its `responseId`; null
+   * otherwise. A rewritten file read again from the top replaces that record.
+   */
+  formerReplyId: string | null;
 }
 
 export interface UsageParseResult {

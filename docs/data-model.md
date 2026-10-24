@@ -701,7 +701,7 @@ A torn line is dropped on load. Three kinds, discriminated on `kind`
   (from the gateway taking the request; null for a reply that was not streamed, and the last
   for one whose reasoning did not stream first), `flowMs` (how long its content took to come)
   and `reasoningHidden` (the last three absent on rows written before them), `replyId` (Claude `message.id`,
-  Codex `response_id`), `stop`, `status` (`ok`, `failed`, `cancelled`), `error` (the text the
+  Codex `response_id`, the Chat `id` Pi and OMP got back), `stop`, `status` (`ok`, `failed`, `cancelled`), `error` (the text the
   agent was sent when the request failed, or the endpoint and reason when a begun reply broke
   off, cut to 200 characters; absent on rows written before it), and `attempts` (endpoint, null
   for the ChatGPT backend, model, start, duration, result, failure class, the vendor's words
@@ -709,8 +709,12 @@ A torn line is dropped on load. Three kinds, discriminated on `kind`
   field). No conversation content.
 - `cli` — one CLI log reply as deduplicated so far, with the session, cwd, bucket, model and
   turn its tokens went to when first seen. Claude Code and Codex name it by the reply id; Pi and
-  OMP by `<sessionId>/<entry id>`, since their entry ids repeat across sessions. A `cli` record
-  no ledger row meets is a direct call in the Requests tab. Written whole again each time a later line corrects
+  OMP by the entry's `responseId`, else `<sessionId>/<entry id>`, since their entry ids repeat
+  across sessions. `gatewayOnly: true` marks a Pi or OMP reply whose provider is `osuna`: its
+  tokens went to no bucket row (absent is false). `formerReplyId` is the `<sessionId>/<entry id>`
+  a daemon before that named such a reply by: a rewritten file read again replaces that record
+  in the Requests tab. A `cli` record no ledger row meets is a direct
+  call in the Requests tab, unless it is `gatewayOnly`. Written whole again each time a later line corrects
   it; the last line of a `replyId` wins on load.
 - `merged` — `{ agent, replyId, at }`, written in the scan batch that moved the reply's tokens
   from Official and the unknown project to its endpoint, together with that reply's `cli`

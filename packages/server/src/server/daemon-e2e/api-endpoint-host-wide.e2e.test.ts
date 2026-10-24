@@ -171,6 +171,8 @@ describe("old per-agent endpoints are read as host-wide endpoints", () => {
     expect(claude.agents).toEqual({
       claude: { enabled: true, defaultModelId: "a2" },
       codex: { enabled: true, defaultModelId: "d2" },
+      pi: { enabled: false, defaultModelId: null },
+      omp: { enabled: false, defaultModelId: null },
     });
     expect(
       claude.endpoints.map((endpoint) => ({
@@ -225,6 +227,8 @@ describe("old per-agent endpoints are read as host-wide endpoints", () => {
     expect(upgraded.agents).toEqual({
       claude: { enabled: true, defaultModelId: "a2" },
       codex: { enabled: true, defaultModelId: "d2" },
+      pi: { enabled: false, defaultModelId: null },
+      omp: { enabled: false, defaultModelId: null },
     });
     for (const endpoint of upgraded.endpoints) {
       expect(endpoint.provider).toBeUndefined();
@@ -528,8 +532,10 @@ describe("a default model that goes missing", () => {
     return { a, b };
   }
 
+  // 这几条只看打开了的 Claude Code 与 Codex。
   async function agents(client: DaemonClient) {
-    return (await client.apiEndpointList("claude")).agents;
+    const listed = (await client.apiEndpointList("claude")).agents;
+    return { claude: listed?.claude, codex: listed?.codex };
   }
 
   test("deleting an endpoint moves the default to the earliest endpoint that is on", async () => {
@@ -656,6 +662,8 @@ describe("clients without apiEndpointGateway get a single-endpoint projection", 
     expect(listed.agents).toEqual({
       claude: { enabled: true, defaultModelId: "b1" },
       codex: { enabled: true, defaultModelId: "a1" },
+      pi: { enabled: false, defaultModelId: null },
+      omp: { enabled: false, defaultModelId: null },
     });
     expect(JSON.parse(await readFile(settingsPath, "utf8")).model).toBe("b1");
 

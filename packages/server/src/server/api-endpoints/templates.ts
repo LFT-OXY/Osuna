@@ -1119,7 +1119,7 @@ export function servedFormats(input: {
 }
 
 /** OpenAI 自己的模型名（magpie openAIModel）：gpt-、codex 或 o 加数字开头，取最后一个斜杠之后的部分。 */
-function isOpenAIModel(model: string): boolean {
+export function isOpenAIModel(model: string): boolean {
   const bare = model.slice(model.lastIndexOf("/") + 1).toLowerCase();
   return bare.startsWith("gpt-") || bare.startsWith("codex") || /^o\d/.test(bare);
 }

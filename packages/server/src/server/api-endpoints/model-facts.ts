@@ -1,5 +1,5 @@
 // 按模型名查 models.dev 的规则移植自 magpie（https://github.com/yetone/magpie，internal/catalog/catalog.go 的
-// bareID / found / mostGiven / mostListed / window 与 load 里按多数认看图，internal/provider/models.go 的 RejectsTemperature 与 Levelless）。
+// bareID / found / mostGiven / mostListed / window 与 load 里按多数认看图、按多数认会思考（Thinks），internal/provider/models.go 的 RejectsTemperature 与 Levelless）。
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { z } from "zod";
@@ -13,10 +13,13 @@ import { isRecord } from "./upstream-http.js";
  * 不知道的字段不出现；Claude Code 的模型提示与中转站只用知道的。
  */
 
-// 和线上发给模型设置窗口的自动资料是同一个东西（protocol 的 ApiEndpointModelFactsSchema），daemon 另记一项：
-// false 是这家的这个模型不收 temperature 与 top_p，只按这家自己在 models.dev 的条目（samplingFor）。
+// 和线上发给模型设置窗口的自动资料是同一个东西（protocol 的 ApiEndpointModelFactsSchema），daemon 另记两项：
+// takesSampling 为 false 是这家的这个模型不收 temperature 与 top_p，只按这家自己在 models.dev 的条目（samplingFor）；
+// thinks 是 models.dev 多数家说它会思考（reasoning 为真或给了档位，magpie catalog.Thinks），档位知不知道都算。
+// 两项都不发给客户端；models-dev.json 的旧缓存没有 thinks，下次更新补上。
 export const ModelFactsSchema = ApiEndpointModelFactsSchema.extend({
   takesSampling: z.boolean().optional(),
+  thinks: z.boolean().optional(),
 });
 export type ModelFacts = z.infer<typeof ModelFactsSchema>;
 
@@ -70,12 +73,14 @@ interface Votes {
   efforts: Map<string, number>;
   // 说收图的家数减去不收的家数（magpie 的 votes）。
   images: number;
+  // 说会思考的家数减去不说的家数（magpie 的 reasons）。
+  thinks: number;
 }
 
 /**
  * 同一个模型各家给的数可能不同：取给得最多的那个，打平取小的；档位打平取少的。
  * 列着、却没有一家给档位的模型，档位是空列表：知道它没有可挑的档位（magpie Levelless），和查不到不一样。
- * 看图按家数投票，多数说 modalities.input 有 image 才算。
+ * 看图按家数投票，多数说 modalities.input 有 image 才算；会思考同样投票，reasoning 为真或给了档位算说会。
  */
 export function indexModelsDev(raw: unknown): ModelsDevIndex {
   const votes = new Map<string, Votes>();
@@ -91,37 +96,48 @@ export function indexModelsDev(raw: unknown): ModelsDevIndex {
         output: new Map(),
         efforts: new Map(),
         images: 0,
+        thinks: 0,
       };
       votes.set(key, entry);
-      if (typeof model.name === "string" && model.name.trim() !== "") {
-        count(entry.names, model.name.trim());
-      }
-      const limit = isRecord(model.limit) ? model.limit : {};
-      const context = windowOf(limit);
-      if (context !== undefined) count(entry.context, context);
-      const output = positiveInteger(limit.output);
-      if (output !== undefined) count(entry.output, output);
-      const efforts = effortsOf(model.reasoning_options);
-      if (efforts.length > 0) count(entry.efforts, efforts.join(","));
-      entry.images += takesImages(model.modalities) ? 1 : -1;
+      countModel(entry, model);
     }
   }
   const index: ModelsDevIndex = {};
-  for (const [id, entry] of votes) {
-    const facts: ModelFacts = {};
-    const name = mostNamed(entry.names);
-    if (name !== undefined) facts.name = name;
-    const context = mostGiven(entry.context);
-    if (context !== undefined) facts.context = context;
-    const output = mostGiven(entry.output);
-    if (output !== undefined) facts.output = output;
-    const efforts = mostListed(entry.efforts);
-    facts.efforts = efforts === undefined ? [] : efforts.split(",");
-    // 列着的模型都算知道：多数说收图才收，打平算不收。
-    facts.images = entry.images > 0;
-    index[id] = facts;
-  }
+  for (const [id, entry] of votes) index[id] = factsOf(entry);
   return index;
+}
+
+/** 记下一家对这个模型说的。 */
+function countModel(entry: Votes, model: Record<string, unknown>): void {
+  if (typeof model.name === "string" && model.name.trim() !== "") {
+    count(entry.names, model.name.trim());
+  }
+  const limit = isRecord(model.limit) ? model.limit : {};
+  const context = windowOf(limit);
+  if (context !== undefined) count(entry.context, context);
+  const output = positiveInteger(limit.output);
+  if (output !== undefined) count(entry.output, output);
+  const efforts = effortsOf(model.reasoning_options);
+  if (efforts.length > 0) count(entry.efforts, efforts.join(","));
+  entry.images += takesImages(model.modalities) ? 1 : -1;
+  entry.thinks += model.reasoning === true || efforts.length > 0 ? 1 : -1;
+}
+
+/** 各家说的合成一份资料。 */
+function factsOf(entry: Votes): ModelFacts {
+  const facts: ModelFacts = {};
+  const name = mostNamed(entry.names);
+  if (name !== undefined) facts.name = name;
+  const context = mostGiven(entry.context);
+  if (context !== undefined) facts.context = context;
+  const output = mostGiven(entry.output);
+  if (output !== undefined) facts.output = output;
+  const efforts = mostListed(entry.efforts);
+  facts.efforts = efforts === undefined ? [] : efforts.split(",");
+  // 列着的模型都算知道：多数说收图才收，打平算不收；会思考同样。
+  facts.images = entry.images > 0;
+  facts.thinks = entry.thinks > 0;
+  return facts;
 }
 
 /**

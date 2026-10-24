@@ -23,7 +23,13 @@ const API_JSON = {
   },
 };
 
-const GPT_6_SOL = { context: 922_000, output: 128_000, efforts: ["low", "high"], images: true };
+const GPT_6_SOL = {
+  context: 922_000,
+  output: 128_000,
+  efforts: ["low", "high"],
+  images: true,
+  thinks: true,
+};
 
 interface Request {
   url: string;

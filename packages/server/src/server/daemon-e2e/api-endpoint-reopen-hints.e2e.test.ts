@@ -117,8 +117,13 @@ describe.skipIf(process.platform === "win32")("who to reopen after a rewrite", (
       "Background app-server (started 8 minutes ago): restart it with codex app-server daemon restart",
   });
 
+  /** Claude Code 与 Codex 的提示；这里没打开的 Pi、OMP 一律没有要重开的。 */
   async function reopenHints(): Promise<unknown> {
-    return (await client.apiEndpointList("codex")).reopenHints;
+    const hints = (await client.apiEndpointList("codex")).reopenHints;
+    if (!hints) return hints;
+    const { pi, omp, ...rest } = hints;
+    expect({ pi, omp }).toEqual({ pi: [], omp: [] });
+    return rest;
   }
 
   test("terminal Claude Code and Codex started before the rewrite are listed, ones started after aren't", async () => {
@@ -338,6 +343,8 @@ describe.skipIf(process.platform === "win32")("who to reopen after a rewrite", (
           message: "1 Codex agent(s) in Osuna: reload each one (Reload agent in its tab's menu).",
         },
       ],
+      pi: [],
+      omp: [],
     });
     expect(fake.runs).toEqual([]);
   });
@@ -349,6 +356,6 @@ describe.skipIf(process.platform === "win32")("who to reopen after a rewrite", (
     await mkdir(path.join(catalogPath, "held"), { recursive: true });
     const listed = await client.apiEndpointList("codex");
     expect(listed.error).toBeNull();
-    expect(listed.reopenHints).toEqual({ claude: [], codex: [] });
+    expect(listed.reopenHints).toEqual({ claude: [], codex: [], pi: [], omp: [] });
   });
 });

@@ -278,6 +278,8 @@ function pushUsage(
       at: input.at,
       turnKey: attachment?.turnKey ?? null,
       amounts,
+      gatewayOnly: false,
+      formerReplyId: null,
     });
   }
 }

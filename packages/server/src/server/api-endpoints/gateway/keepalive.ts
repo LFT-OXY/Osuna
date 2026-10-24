@@ -9,7 +9,8 @@ import { sseEvent } from "./translation/sse.js";
  * 回复开口前给要流式的 Agent 保活：Claude Code 连自定义地址时 5 分钟没收到字节就断开重发，
  * Codex 5 分钟没收到带数据的事件也断开。请求进来满一个间隔还没开口，就先回 200 与事件流的响应头，
  * 之后每个间隔发一个协议自带的保活事件（Anthropic 的 ping；Responses 的 response.in_progress，
- * Codex 不认注释行）。一家接口这么久毫无动静就不发，真卡死的请求交给 CLI 自己超时。
+ * Codex 不认注释行；Chat 照 OpenAI 兼容服务发注释行，magpie chatEncoder.keepalive）。
+ * 一家接口这么久毫无动静就不发，真卡死的请求交给 CLI 自己超时。
  * 开口后由回复接手，保活停止；响应头发出之后再失败，错误改在流里发（sendAgentError）。
  *
  * 不照搬 magpie 给 Codex 设的「累计最多扣 4 分钟」（agentQuietMost）：那是因为 magpie 用注释行保活，
@@ -25,6 +26,7 @@ const KEEPALIVE_EVENTS: Record<AgentWire, string> = {
     type: "response.in_progress",
     response: { object: "response", status: "in_progress", output: [] },
   }),
+  chat: ": keepalive\n\n",
 };
 
 export class AgentKeepAlive {

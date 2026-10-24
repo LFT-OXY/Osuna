@@ -64,14 +64,15 @@ export function hostEndpointsQueryKey(serverId: string) {
 }
 
 /** 切换或改设置失败：主机给的错误码（本地失败时为 null）与给用户看的说明。 */
-interface ActionFailure {
+/** 一次操作失败的原因；code 是主机拒绝时的错误码（如 config_unparsable），断线等本地失败为 null。 */
+export interface ActionFailure {
   code: string | null;
   message: string;
 }
 
 /**
  * 「使用第三方接口」总开关、默认模型、默认思考档位、Ultra Code、「保留 claude.ai 登录」、后台小任务、Subagent 与记忆模型、
- * 强制 Subagent 模型与「Codex Subagent 可用任意模型」的一次修改。
+ * 强制 Subagent 模型与「Codex Subagent 可用任意模型」、OMP 的模型角色的一次修改。
  */
 export type AgentSettingsChange = Pick<
   ApiEndpointSetAgentSettingsRequest,
@@ -86,6 +87,7 @@ export type AgentSettingsChange = Pick<
   | "memoryModelId"
   | "forcedSubagentModelId"
   | "allowsAnySubagentModel"
+  | "modelRoles"
 >;
 
 /** 打开总开关时主机挑默认模型的办法，给那个 Agent 的设置页说一句（ADR 0012）。 */
@@ -127,8 +129,11 @@ export interface UseHostEndpointsResult {
   setBalanceAutoRefresh: (enabled: boolean) => Promise<string | null>;
   // 正在改总开关或默认模型的 Agent。
   pendingAgent: string | null;
-  // 改失败的原因在 actionError 里。
+  // 改失败的原因在 agentActionErrors 里。provider 是这份设置的键：OMP 的命名配置是 omp#<名字>。
   setAgentSettings: (provider: string, settings: AgentSettingsChange) => void;
+  // 改 Agent 设置失败的原因，按设置的键：OMP 每套配置一块，各自留着，直到那一块重试或关掉。
+  agentActionErrors: Record<string, ActionFailure>;
+  dismissAgentActionError: (provider: string) => void;
   // 上次打开总开关时默认模型是怎么挑的；下一次改设置时清掉。老主机不给。
   lastConnection: AgentConnectionState | null;
   // 提示区的处理：正在做的、失败的原因（留在提示区里，直到重试或关掉）。
@@ -187,6 +192,12 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
   const [pendingEndpointId, setPendingEndpointId] = useState<string | null>(null);
   const [pendingAgent, setPendingAgent] = useState<string | null>(null);
   const [actionFailure, setActionFailure] = useState<ActionFailure | null>(null);
+  const [agentActionErrors, setAgentActionErrors] = useState<Record<string, ActionFailure>>({});
+  const setAgentActionError = useCallback((provider: string, failure: ActionFailure | null) => {
+    setAgentActionErrors(({ [provider]: _previous, ...rest }) =>
+      failure === null ? rest : { ...rest, [provider]: failure },
+    );
+  }, []);
   const [lastConnection, setLastConnection] = useState<AgentConnectionState | null>(null);
   const [pendingIssueAction, setPendingIssueAction] = useState<AgentIssueActionState | null>(null);
   const [issueActionError, setIssueActionError] =
@@ -399,25 +410,27 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
       if (!client) return;
       void (async () => {
         setPendingAgent(provider);
-        setActionFailure(null);
+        setAgentActionError(provider, null);
         setLastConnection(null);
         try {
           const result = await client.apiEndpointSetAgentSettings({ provider, ...settings });
-          if (result.error)
-            setActionFailure({ code: result.error.code, message: describeError(result.error) });
+          if (result.error) {
+            const message = describeError(result.error);
+            setAgentActionError(provider, { code: result.error.code, message });
+          }
           // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove after 2027-04-18. 老主机不回 connection。
           if (!result.error && result.connection) {
             setLastConnection({ provider, connection: result.connection });
           }
         } catch (error) {
-          setActionFailure({ code: null, message: toErrorMessage(error) });
+          setAgentActionError(provider, { code: null, message: toErrorMessage(error) });
         } finally {
           await refresh();
           setPendingAgent(null);
         }
       })();
     },
-    [client, describeError, refresh],
+    [client, describeError, refresh, setAgentActionError],
   );
 
   const runIssueAction = useCallback(
@@ -669,6 +682,10 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
   );
 
   const dismissActionError = useCallback(() => setActionFailure(null), []);
+  const dismissAgentActionError = useCallback(
+    (provider: string) => setAgentActionError(provider, null),
+    [setAgentActionError],
+  );
   const dismissIssueActionError = useCallback(() => setIssueActionError(null), []);
 
   return {
@@ -686,6 +703,8 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     setEndpointNameDisplay,
     pendingAgent,
     setAgentSettings,
+    agentActionErrors,
+    dismissAgentActionError,
     lastConnection,
     pendingIssueAction,
     issueActionError,

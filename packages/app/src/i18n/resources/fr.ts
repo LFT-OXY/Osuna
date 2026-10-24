@@ -3424,6 +3424,9 @@ export const fr: TranslationResources = {
       agent: {
         title: "Points d'accès API",
         useSwitch: "Utiliser les points d'accès API",
+        // OMP 有命名配置时默认那块的标题，与命名配置那块里 CLI 的称呼（照 magpie 的 omp · work；以配置名收尾，中日文里不在全角括号后留空格）。
+        defaultProfile: "Par défaut",
+        profileAgent: "{{agent}} · {{profile}}",
         useHint:
           "Activé, {{agent}} peut utiliser les modèles sélectionnés des points d'accès activés dans Points d'accès API. Désactivez-le pour revenir à l'officiel.",
         noUsableEndpoint:
@@ -3473,6 +3476,32 @@ export const fr: TranslationResources = {
           "Résume en arrière-plan les conversations passées dans les mémoires de {{agent}}. Utilisé seulement quand la fonction mémoires de {{agent}} est activée ; Osuna ne l'active pas.",
         memoryModelUnset: "Celui de {{agent}}",
         memoryModelPick: "Modèle de mémoire pour {{agent}}",
+        modelRoles: {
+          title: "Rôles de modèle",
+          hint: "Choisissez un modèle pour chaque type de travail de {{agent}}. Un rôle vide est laissé à {{agent}}.",
+          modelPick: "Modèle pour {{role}}",
+          thinkingPick: "Réflexion pour {{role}}",
+          unsetModel: "Vide",
+          unsetThinking: "Comme la session",
+          roles: {
+            task: "Subagent (task)",
+            smol: "Petites tâches (smol)",
+            slow: "Problèmes difficiles (slow)",
+            plan: "Planification (plan)",
+            vision: "Images (vision)",
+            advisor: "Conseiller (advisor)",
+            commit: "Messages de commit (commit)",
+            tiny: "Toutes petites tâches (tiny)",
+            memory: "Mémoire (memory)",
+          },
+          unset: {
+            default: "Si vide : comme le modèle par défaut ({{model}})",
+            ompPicks: "Si vide : {{agent}} en choisit un",
+            slow: "Si vide : le modèle des Problèmes difficiles ({{model}})",
+            smol: "Si vide : le modèle des Petites tâches ({{model}})",
+            tiny: "Si vide : le modèle des Toutes petites tâches ({{model}})",
+          },
+        },
         forcedSubagentModel: "Modèle de Subagent imposé",
         forcedSubagentModelHint:
           "Chaque Subagent l'utilise, quel que soit le modèle indiqué par la conversation principale. La configuration de Codex reste telle quelle.",

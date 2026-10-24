@@ -518,6 +518,9 @@ export const ProviderSnapshotEntrySchema = z.object({
   // Codex 的默认 Subagent 模型与记忆模型的选项：用 ChatGPT 登录时 Codex 自己的模型在前（id 是 /model 里的写法），
   // 再是接口的模型；总开关开着才有，老 daemon 不发。
   sideModelOptions: z.array(ApiEndpointSideModelOptionSchema).optional(),
+  // OMP 每套开着「使用第三方接口」的命名配置（键 omp#<名字>）的分组，同 apiEndpointModelGroups；只在 OMP 的条目上，
+  // 给设置页那一块挑默认模型与思考档位用（OMP 自己的对话选单仍看 apiEndpointModelGroups）。老 daemon 不发。
+  ompProfileModelGroups: z.record(z.string(), z.array(ApiEndpointModelGroupSchema)).optional(),
   // 接口名显示方式（api-endpoint/endpoint-names.ts）：选择器里接口名带不带；总开关开着才有，老 daemon 不发（当 always）。
   apiEndpointNameDisplay: z.string().optional(),
   // 已装 CLI 的版本号（纯 x.y.z），只有启用的内置提供方才有；取不到时省略。
@@ -4229,6 +4232,14 @@ export const ServerInfoStatusPayloadSchema = z
         // 与报告的 endpoints（按接口分，含「官方」）；usage.requests.list（请求列表）与 usage.requests.export（导出 CSV）；
         // provider.api_endpoint.recent_problems（接口页「最近异常」）；usage.exchange_rate.get（人民币显示用的汇率）。
         gatewayLedger: z.boolean().optional(),
+        // COMPAT(apiEndpointPi): added in v0.17.0, remove gate after 2027-04-24.
+        // 任务 10-16-pi-omp-endpoints：Pi 的「使用第三方接口」——set_agent_settings、preview_switch_off、keep_current_settings
+        // 收 provider "pi"，列表的 agents、agentIssues 带 pi；daemon 改写 Pi 的 models.json 与 settings.json。
+        apiEndpointPi: z.boolean().optional(),
+        // COMPAT(apiEndpointOmp): added in v0.17.0, remove gate after 2027-04-24.
+        // 任务 10-16-pi-omp-endpoints 工单 04：OMP 默认那套配置的「使用第三方接口」——同上几个 RPC 收 provider "omp"，
+        // 列表的 agents、agentIssues、reopenHints 带 omp；daemon 改写 OMP 的 models.yml 与 config.yml。
+        apiEndpointOmp: z.boolean().optional(),
         // COMPAT(providerVersions): added in v0.14.0, remove gate after 2027-04-01.
         // 快照带内置提供方的已装版本 version；daemon 支持 provider.version.check.* 与 provider.upgrade.*。
         providerVersions: z.boolean().optional(),

@@ -60,6 +60,8 @@ describe("selectHostEndpointsState", () => {
       endpointNamesUnreached: [],
       // 不发「自动刷新余额与套餐用量」：当开着。
       balanceAutoRefresh: true,
+      // 不发 OMP 命名配置：只有默认那块。
+      ompProfiles: [],
     });
   });
 

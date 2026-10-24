@@ -399,6 +399,11 @@ function adaptiveOnly(model: string): boolean {
   return version !== null && (version.major > 4 || (version.major === 4 && version.minor >= 6));
 }
 
+/** 只认自适应思考的 Claude（写给 Pi 的 compat.forceAdaptiveThinking 按它，magpie AdaptiveThinking）。 */
+export function thinksAdaptivelyOnly(model: string): boolean {
+  return adaptiveOnly(model);
+}
+
 function noXhigh(model: string): boolean {
   const version = claudeVersionOf(model);
   return version?.major === 4 && version.minor === 6;

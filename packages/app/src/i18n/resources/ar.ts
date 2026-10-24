@@ -3331,6 +3331,9 @@ export const ar: TranslationResources = {
       agent: {
         title: "واجهات API الخارجية",
         useSwitch: "استخدام واجهات API الخارجية",
+        // OMP 有命名配置时默认那块的标题，与命名配置那块里 CLI 的称呼（照 magpie 的 omp · work；以配置名收尾，中日文里不在全角括号后留空格）。
+        defaultProfile: "الافتراضي",
+        profileAgent: "{{agent}} · {{profile}}",
         useHint:
           "عند التشغيل، يمكن لـ {{agent}} استخدام النماذج المحددة من نقاط الوصول المشغّلة في صفحة واجهات API الخارجية. أوقفه للعودة إلى الرسمي.",
         noUsableEndpoint: "شغّل أولًا نقطة وصول في صفحة واجهات API الخارجية وحدد نماذجها.",
@@ -3377,6 +3380,32 @@ export const ar: TranslationResources = {
           "يلخص المحادثات السابقة في ذاكرة {{agent}} في الخلفية. لا يُستخدم إلا عندما تكون ميزة الذاكرة في {{agent}} مفعّلة؛ ولا يفعّلها Osuna.",
         memoryModelUnset: "الخاص بـ {{agent}}",
         memoryModelPick: "نموذج الذاكرة لـ {{agent}}",
+        modelRoles: {
+          title: "أدوار النماذج",
+          hint: "اختر نموذجًا لكل نوع من أعمال {{agent}}. الدور الفارغ يقرره {{agent}}.",
+          modelPick: "نموذج {{role}}",
+          thinkingPick: "مستوى التفكير لـ {{role}}",
+          unsetModel: "فارغ",
+          unsetThinking: "مثل الجلسة",
+          roles: {
+            task: "Subagent (task)",
+            smol: "المهام الصغيرة (smol)",
+            slow: "المسائل الصعبة (slow)",
+            plan: "التخطيط (plan)",
+            vision: "الصور (vision)",
+            advisor: "المستشار (advisor)",
+            commit: "رسائل الإيداع (commit)",
+            tiny: "المهام الصغيرة جدًا (tiny)",
+            memory: "الذاكرة (memory)",
+          },
+          unset: {
+            default: "عند الفراغ: مثل النموذج الافتراضي ({{model}})",
+            ompPicks: "عند الفراغ: يختار {{agent}} بنفسه",
+            slow: "عند الفراغ: نموذج المسائل الصعبة ({{model}})",
+            smol: "عند الفراغ: نموذج المهام الصغيرة ({{model}})",
+            tiny: "عند الفراغ: نموذج المهام الصغيرة جدًا ({{model}})",
+          },
+        },
         forcedSubagentModel: "نموذج Subagent المفروض",
         forcedSubagentModelHint:
           "يعمل كل Subagent عليه، أيًّا كان النموذج الذي تحدده المحادثة الرئيسية. تبقى إعدادات Codex كما هي.",

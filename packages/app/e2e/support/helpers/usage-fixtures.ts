@@ -127,6 +127,7 @@ export function writeUsageClaudeSession(input: UsageSessionFixture): void {
 
 function copyJsonl(from: string, to: string, day: string): void {
   mkdirSync(to, { recursive: true });
+  // Only top-level files: `parser-only/` holds edge cases for the parser tests, kept out of the page totals.
   for (const name of readdirSync(from)) {
     if (!name.endsWith(".jsonl")) continue;
     const source = readFileSync(path.join(from, name), "utf8");

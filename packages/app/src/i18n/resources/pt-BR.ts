@@ -3394,6 +3394,9 @@ export const ptBR: TranslationResources = {
       agent: {
         title: "Endpoints de API",
         useSwitch: "Usar endpoints de API",
+        // OMP 有命名配置时默认那块的标题，与命名配置那块里 CLI 的称呼（照 magpie 的 omp · work；以配置名收尾，中日文里不在全角括号后留空格）。
+        defaultProfile: "Padrão",
+        profileAgent: "{{agent}} · {{profile}}",
         useHint:
           "Quando ativado, {{agent}} pode usar os modelos selecionados dos endpoints ativos em Endpoints de API. Desative para voltar ao oficial.",
         noUsableEndpoint:
@@ -3442,6 +3445,32 @@ export const ptBR: TranslationResources = {
           "Resume em segundo plano as conversas anteriores nas memórias do {{agent}}. Só é usado enquanto o recurso de memórias do {{agent}} está ligado; o Osuna não o liga.",
         memoryModelUnset: "O do próprio {{agent}}",
         memoryModelPick: "Modelo de memória para o {{agent}}",
+        modelRoles: {
+          title: "Papéis de modelo",
+          hint: "Escolha um modelo para cada tipo de trabalho do {{agent}}. Um papel vazio fica a cargo do {{agent}}.",
+          modelPick: "Modelo para {{role}}",
+          thinkingPick: "Raciocínio para {{role}}",
+          unsetModel: "Vazio",
+          unsetThinking: "Como a sessão",
+          roles: {
+            task: "Subagent (task)",
+            smol: "Tarefas pequenas (smol)",
+            slow: "Problemas difíceis (slow)",
+            plan: "Planejamento (plan)",
+            vision: "Imagens (vision)",
+            advisor: "Conselheiro (advisor)",
+            commit: "Mensagens de commit (commit)",
+            tiny: "Tarefas mínimas (tiny)",
+            memory: "Memória (memory)",
+          },
+          unset: {
+            default: "Se vazio: igual ao modelo padrão ({{model}})",
+            ompPicks: "Se vazio: o {{agent}} escolhe um",
+            slow: "Se vazio: o modelo de Problemas difíceis ({{model}})",
+            smol: "Se vazio: o modelo de Tarefas pequenas ({{model}})",
+            tiny: "Se vazio: o modelo de Tarefas mínimas ({{model}})",
+          },
+        },
         forcedSubagentModel: "Modelo de Subagent forçado",
         forcedSubagentModelHint:
           "Todo Subagent roda nele, seja qual for o modelo que a conversa principal indicar. A configuração do Codex não é alterada.",

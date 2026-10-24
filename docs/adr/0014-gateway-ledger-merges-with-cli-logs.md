@@ -6,7 +6,7 @@ The decisions behind this are in task `10-16-gateway-ledger-usage`, `research/de
 
 ## How a call is counted once
 
-When a ledger row and a CLI log entry are the same call, matched by the reply's id (Claude `message.id`, Codex `response_id`), they become one row. Tokens, endpoint and timing come from the ledger. Project, session and turn come from the CLI log, because the gateway cannot tell which project or Osuna session a request belongs to. A ledger row with no log entry counts under an unknown project. A log entry with no ledger row is a direct call and counts as Official, and so does every gateway call from before the ledger existed. Pi and OMP follow the same rule; an entry whose provider is Osuna's gateway and that matches nothing is skipped, as magpie does.
+When a ledger row and a CLI log entry are the same call, matched by the reply's id (Claude `message.id`, Codex `response_id`), they become one row. Tokens, endpoint and timing come from the ledger. Project, session and turn come from the CLI log, because the gateway cannot tell which project or Osuna session a request belongs to. A ledger row with no log entry counts under an unknown project. A log entry with no ledger row is a direct call and counts as Official, and so does every gateway call from before the ledger existed. Pi and OMP follow the same rule, matched by the `responseId` their logs record; an entry whose provider is `osuna`, the provider Osuna writes into their config for the gateway, and that matches nothing is skipped, as magpie does. That holds for Pi's `usage` and OMP's `model_usage` entries too, which name no reply id and so never match.
 
 ## Storage
 

@@ -545,6 +545,43 @@ describe("models grouped by API endpoint", () => {
     ]);
   });
 
+  it("Pi chats pick from its endpoint groups, ids written the way Pi names Osuna's models", () => {
+    const pi: ProviderSnapshotEntry = {
+      ...entry,
+      provider: "pi",
+      label: "Pi",
+      models: [{ provider: "pi", id: "osuna/glm-5", label: "glm-5" }],
+      apiEndpointModelGroups: [
+        {
+          name: "Relay",
+          models: [{ provider: "pi", id: "osuna/relay/glm-5", label: "glm-5", isDefault: true }],
+        },
+      ],
+    };
+    expect(selectableEntryModels(pi)?.map((model) => model.id)).toEqual(["osuna/relay/glm-5"]);
+    const [provider] = buildSelectableProviderSelectorProviders([pi]);
+    const rows = provider.modelSelection.kind === "models" ? provider.modelSelection.rows : [];
+    expect(rows.map((row) => [row.modelId, row.modelLabel])).toEqual([
+      ["osuna/relay/glm-5", "glm-5"],
+    ]);
+  });
+
+  it("OMP chats pick from its endpoint groups too, ids written the way OMP names Osuna's models", () => {
+    const omp: ProviderSnapshotEntry = {
+      ...entry,
+      provider: "omp",
+      label: "Oh My Pi",
+      models: [{ provider: "omp", id: "e2e/omp-model", label: "omp-model" }],
+      apiEndpointModelGroups: [
+        {
+          name: "Relay",
+          models: [{ provider: "omp", id: "osuna/relay/glm-5", label: "glm-5", isDefault: true }],
+        },
+      ],
+    };
+    expect(selectableEntryModels(omp)?.map((model) => model.id)).toEqual(["osuna/relay/glm-5"]);
+  });
+
   it("rows carry their endpoint group and never show the slashed id", () => {
     const [provider] = buildSelectableProviderSelectorProviders([entry]);
     const rows = provider.modelSelection.kind === "models" ? provider.modelSelection.rows : [];

@@ -35,6 +35,8 @@ const DELTA: UsageCallDelta = {
   at: AT,
   turnKey: "p1",
   amounts: CLI,
+  gatewayOnly: false,
+  formerReplyId: null,
 };
 
 const LEDGER_ROW: GatewayLedgerRow = {
@@ -74,6 +76,9 @@ interface Batch {
 }
 
 function scan(merge: UsageCallMerge, delta: UsageCallDelta): Batch {
+  const merged = merge.addCliDeltas([delta]);
+  // Pi / OMP 经过中转站的回复，解析时 token 不进任何一行。
+  if (delta.gatewayOnly) return { buckets: merged.buckets, records: merged.records };
   const parsed: UsageBucketRow = {
     ...emptyBucketRow({
       cli: delta.cli,
@@ -85,7 +90,6 @@ function scan(merge: UsageCallMerge, delta: UsageCallDelta): Batch {
     }),
     ...delta.amounts,
   };
-  const merged = merge.addCliDeltas([delta]);
   return { buckets: [parsed, ...merged.buckets], records: merged.records };
 }
 
@@ -96,8 +100,8 @@ function flush(merge: UsageCallMerge, disk: Disk, batch: Batch): void {
   disk.records.push(...batch.records, ...settled.records);
 }
 
-function ledger(merge: UsageCallMerge, disk: Disk): void {
-  const merged = merge.addLedgerRow(LEDGER_ROW);
+function ledger(merge: UsageCallMerge, disk: Disk, row: GatewayLedgerRow = LEDGER_ROW): void {
+  const merged = merge.addLedgerRow(row);
   disk.buckets.push(...merged.buckets);
   disk.records.push(...merged.records);
 }
@@ -224,5 +228,140 @@ describe("pruning a day of records", () => {
     expect(merge.listCalls()).toEqual([]);
     scan(merge, earlyDelta);
     expect(merge.hasUnsettled()).toBe(false);
+  });
+});
+
+describe("a Pi or OMP reply that went through the gateway", () => {
+  // 会话记录里服务商是 osuna 的回复：token 只看账本，回复编号是记录里的 responseId。
+  const PI_DELTA: UsageCallDelta = {
+    ...DELTA,
+    replyId: "chatcmpl-77",
+    cli: "pi",
+    model: "deepseek-v3",
+    gatewayOnly: true,
+  };
+  const PI_LEDGER_ROW: GatewayLedgerRow = {
+    ...LEDGER_ROW,
+    agent: "pi",
+    model: "deepseek-v3",
+    replyId: "chatcmpl-77",
+  };
+
+  test("ledger row first, log scanned after: once, at the endpoint, in the log's turn", () => {
+    const disk: Disk = { buckets: [], records: [] };
+    const merge = new UsageCallMerge();
+    ledger(merge, disk, PI_LEDGER_ROW);
+    const batch = scan(merge, PI_DELTA);
+    const settled = merge.settle();
+    disk.buckets.push(...batch.buckets, ...settled.buckets);
+    disk.records.push(...batch.records, ...settled.records);
+
+    expect(counted(disk)).toEqual({ ep_a: LEDGER });
+    expect(settled.turns).toEqual([
+      expect.objectContaining({
+        cli: "pi",
+        sessionId: "sess-1",
+        turnKey: "p1",
+        endpointId: "ep_a",
+        ...LEDGER,
+      }),
+    ]);
+  });
+
+  test("log scanned and flushed first, ledger row after: once, at the endpoint", () => {
+    const disk: Disk = { buckets: [], records: [] };
+    const merge = new UsageCallMerge();
+    flush(merge, disk, scan(merge, PI_DELTA));
+    expect(counted(disk)).toEqual({});
+    ledger(merge, disk, PI_LEDGER_ROW);
+    flush(merge, disk, { buckets: [], records: [] });
+    expect(counted(disk)).toEqual({ ep_a: LEDGER });
+  });
+
+  test("across restarts on either side of the ledger row: still once, and not moved twice", () => {
+    const disk: Disk = { buckets: [], records: [] };
+    flush(new UsageCallMerge(), disk, scan(new UsageCallMerge(), PI_DELTA));
+    const afterLog = restart(disk);
+    ledger(afterLog, disk, PI_LEDGER_ROW);
+    flush(afterLog, disk, { buckets: [], records: [] });
+    flush(restart(disk), disk, { buckets: [], records: [] });
+    expect(counted(disk)).toEqual({ ep_a: LEDGER });
+
+    const killed: Disk = { buckets: [], records: [] };
+    const merge = new UsageCallMerge();
+    scan(merge, PI_DELTA);
+    ledger(merge, killed, PI_LEDGER_ROW);
+    const restarted = restart(killed);
+    flush(restarted, killed, scan(restarted, PI_DELTA));
+    flush(restart(killed), killed, { buckets: [], records: [] });
+    expect(counted(killed)).toEqual({ ep_a: LEDGER });
+  });
+
+  test("a reply no ledger row matches is counted nowhere and not listed, as magpie skips it", () => {
+    const disk: Disk = { buckets: [], records: [] };
+    const merge = new UsageCallMerge();
+    flush(merge, disk, scan(merge, PI_DELTA));
+
+    expect(counted(disk)).toEqual({});
+    expect(merge.listCalls()).toEqual([]);
+    expect(restart(disk).listCalls()).toEqual([]);
+  });
+
+  test("a merged reply is listed once, as the gateway's, with the log's session", () => {
+    const disk: Disk = { buckets: [], records: [] };
+    const merge = new UsageCallMerge();
+    ledger(merge, disk, PI_LEDGER_ROW);
+    flush(merge, disk, scan(merge, PI_DELTA));
+
+    for (const listed of [merge.listCalls(), restart(disk).listCalls()]) {
+      expect(listed).toEqual([
+        {
+          kind: "gateway",
+          ledger: PI_LEDGER_ROW,
+          cli: expect.objectContaining({
+            replyId: "chatcmpl-77",
+            sessionId: "sess-1",
+            cwd: "/work/demo",
+          }),
+        },
+      ]);
+    }
+  });
+
+  test("a Pi reply on its own provider is still a direct call at Official", () => {
+    const disk: Disk = { buckets: [], records: [] };
+    const merge = new UsageCallMerge();
+    flush(merge, disk, scan(merge, { ...PI_DELTA, gatewayOnly: false }));
+
+    expect(counted(disk)).toEqual({ official: CLI });
+    expect(merge.listCalls()).toEqual([
+      { kind: "direct", cli: expect.objectContaining({ replyId: "chatcmpl-77", cli: "pi" }) },
+    ]);
+  });
+});
+
+describe("a Pi reply recorded before replies were named by responseId", () => {
+  // 工单 07 之前的 daemon 按 <会话>/<条目> 记下这次回复；会话文件被改写后整份重扫，同一回复按 responseId 再来一次。
+  const BEFORE: UsageCallDelta = { ...DELTA, cli: "pi", replyId: "sess-1/e1" };
+  const RESCANNED: UsageCallDelta = {
+    ...DELTA,
+    cli: "pi",
+    replyId: "resp_1",
+    formerReplyId: "sess-1/e1",
+  };
+
+  test("a rescan of the rewritten file lists the reply once, under its responseId, also after a restart", () => {
+    const disk: Disk = { buckets: [], records: [] };
+    const before = new UsageCallMerge();
+    flush(before, disk, scan(before, BEFORE));
+
+    const merge = restart(disk);
+    flush(merge, disk, scan(merge, RESCANNED));
+
+    for (const listed of [merge.listCalls(), restart(disk).listCalls()]) {
+      expect(listed).toEqual([
+        { kind: "direct", cli: expect.objectContaining({ cli: "pi", replyId: "resp_1" }) },
+      ]);
+    }
   });
 });

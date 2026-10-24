@@ -759,12 +759,92 @@ proxied, forwardHeaders, rebound, fromBrowser, ownHost and callerKeys in
 magpie's internal/gateway/lan.go, corsGuard, foreignPage and
 localhostSubdomain in internal/gateway/cors.go, agentOf in
 internal/gateway/gateway.go, AgentOf in internal/usage/usage.go and the UA
-fields in internal/agent/claude.go and codex.go. Its tests take cases from
-lan_rebind_test.go, cors_test.go and lan_test.go in internal/gateway and
-useragent_test.go in internal/agent:
+fields in internal/agent/claude.go, codex.go, omp.go and agents.go (piLike).
+Its tests take cases from lan_rebind_test.go, cors_test.go and lan_test.go in
+internal/gateway and useragent_test.go in internal/agent:
 
   packages/server/src/server/api-endpoints/gateway/callers.ts
   packages/server/src/server/api-endpoints/gateway/callers.test.ts
+
+The gateway's OpenAI Chat entrance for Pi and Oh My Pi follows handle and
+agentOf in magpie's internal/gateway/gateway.go: tools a message carries
+joined to the request's (liftMessageTools and chatToolKey in
+internal/gateway/message_tools.go, emptyContent in anthropic_shapes.go),
+developer messages sent as system to a Chat endpoint (developerAsSystem in
+gateway.go), reasoning on a passed-through Chat request's tool turns
+(withReasoningOnToolTurns in chattidy.go), the conversation named by
+x-session-affinity (sessionHeaders in gateway.go), a Chat stream's error and
+keepalive (streamFailure in gateway.go, chatEncoder's keepalive in chat.go),
+a Grok reply's whole numbers in Chat (intTidy), an earlier turn's reasoning
+sent to Mistral as its thinking part (mistralThinking and messageReasoning in
+chattidy.go), a passed-through Chat reply's tidying (chatTidy, tidyLine,
+withoutEmptyNames, partsText, flattenContent and chatWhole in chattidy.go;
+chatToolNames, textCallTidy, mayWriteCalls and wholeTextCalls in
+textcalls.go), and Gemini's thought signatures carried in call ids
+(signedID, unsignedID, googleSignature, chatCallSignatures, sigTidy and
+signReply in gemini_signature.go, sigStore in gemini_sigstore.go,
+geminiCompat in chat.go). Its tests take cases from message_tools_test.go,
+opencode_client_test.go, workbuddy_session_test.go, chattidy_test.go,
+mistral_parts_test.go, mistral_reasoning_test.go, textcalls_test.go,
+textcalls_whole_test.go and gemini_signature_test.go in internal/gateway:
+
+  packages/server/src/server/api-endpoints/gateway/message-tools.ts
+  packages/server/src/server/api-endpoints/gateway/chat-reply-tidy.ts
+  packages/server/src/server/api-endpoints/gateway/chat-reply-tidy.test.ts
+  packages/server/src/server/api-endpoints/gateway/gemini-signatures.ts
+  packages/server/src/server/api-endpoints/gateway/gemini-signatures.test.ts
+  packages/server/src/server/api-endpoints/gateway/passthrough.test.ts
+  packages/server/src/server/api-endpoints/gateway/gateway.ts
+  packages/server/src/server/api-endpoints/gateway/passthrough.ts
+  packages/server/src/server/api-endpoints/gateway/affinity.ts
+  packages/server/src/server/api-endpoints/gateway/agent-errors.ts
+  packages/server/src/server/api-endpoints/gateway/keepalive.ts
+  packages/server/src/server/api-endpoints/gateway/grok-integral.ts
+  packages/server/src/server/api-endpoints/gateway/translation/chat.test.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-gateway-chat.e2e.test.ts
+
+Pi's models.json entry for each model (its API by model, thinking level map,
+context and output, prompt cache lifetimes and adaptive-thinking flag) follows
+piModelJSON, piThinkingLevels and piPromptCache in magpie's
+internal/agent/agents.go and magpieModels, allResponses and maxTokens in
+internal/agent/route.go; the user's own keys and compat values kept inside
+Osuna's provider follow piBlockKept in agents.go and theirsKept and mergeTheirs
+in internal/agent/sync.go. Its tests take cases from pi_thinking_test.go and
+pi_api_test.go in internal/agent:
+
+  packages/server/src/server/api-endpoints/pi-model-entries.ts
+  packages/server/src/server/api-endpoints/pi-model-entries.test.ts
+  packages/server/src/server/api-endpoints/pi-config-patch.ts
+
+OMP's models.yml entry for each model (its API, thinking mode and efforts, max
+offered as xhigh to an OMP before 16.4.0) follows ompProviderAt, ompTakesMax and
+ompModel in magpie's internal/agent/omp.go; the user's own keys kept inside
+Osuna's provider follow ompKept there and yamlKept in internal/agent/sync.go;
+keeping the provider while another role or fallback chain names it follows
+dropMagpie and ompRefKeys in omp.go; reading enabledModels entries follows
+ompTakes in internal/agent/omp_scope.go; carrying an older models.json over to
+YAML follows JSONToYAML in internal/edit/yaml.go:
+
+  packages/server/src/server/api-endpoints/omp-model-entries.ts
+  packages/server/src/server/api-endpoints/omp-config-patch.ts
+
+OMP's model roles (the nine roles and their order, the thinking levels a role
+takes, setting and clearing a role and following one saved in OMP) follow role
+and its thinking field in magpie's internal/agent/omp.go; what each role falls
+back to when empty follows FOLLOWS_MODEL and OMP_UNSET in magpie's
+internal/gui/assets/app.js:
+
+  packages/protocol/src/api-endpoint/omp-model-roles.ts
+  packages/server/src/server/api-endpoints/omp-model-roles.ts
+  packages/app/src/api-endpoints/internal/model-roles.ts
+
+OMP's named profiles (finding them under the OMP folder's profiles, the profile
+name rules, leaving out the one the environment already selects, and a link to
+a folder counting as a folder) follow ompProfileName, ompReserved, ompProfileOK,
+ompRoot and ompProfiles in magpie's internal/agent/omp.go and IsFolder in
+internal/dirent/dirent.go:
+
+  packages/server/src/server/api-endpoints/omp-profiles.ts
 
 The gateway's ChatGPT backend path (relaying a Codex signed in with ChatGPT to
 the ChatGPT backend as it came, an API key's requests to the OpenAI API, and
@@ -1299,6 +1379,15 @@ codexResponseMatches and codexIdentityRow in magpie's
 internal/usage/codex_identity.go:
 
   packages/server/src/server/usage/call-merge.ts
+
+A Pi or OMP log entry whose provider is the gateway's own being left to the
+ledger, Pi's usage and OMP's model_usage entries counted as calls on their own
+provider and model, a compaction's, a branch summary's and a tool result's usage
+counted on the model in use, and an entry with a negative count dropped, follow
+piGateway, readPiCalls and piCall in magpie's
+internal/sessions/calls_pi.go:
+
+  packages/server/src/server/usage/pi-like-parser.ts
 
 The per-request usage records' retention (finished days gzipped, a later
 append joining as a gzip member of its own, a .gz cut short written anew from

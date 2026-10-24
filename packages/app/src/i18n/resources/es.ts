@@ -3411,6 +3411,9 @@ export const es: TranslationResources = {
       agent: {
         title: "Endpoints de API",
         useSwitch: "Usar endpoints de API",
+        // OMP 有命名配置时默认那块的标题，与命名配置那块里 CLI 的称呼（照 magpie 的 omp · work；以配置名收尾，中日文里不在全角括号后留空格）。
+        defaultProfile: "Predeterminado",
+        profileAgent: "{{agent}} · {{profile}}",
         useHint:
           "Si lo activas, {{agent}} puede usar los modelos seleccionados de los endpoints activos en Endpoints de API. Desactívalo para volver al oficial.",
         noUsableEndpoint:
@@ -3459,6 +3462,32 @@ export const es: TranslationResources = {
           "Resume en segundo plano las conversaciones pasadas en las memorias de {{agent}}. Solo se usa mientras la función de memorias de {{agent}} está activada; Osuna no la activa.",
         memoryModelUnset: "El de {{agent}}",
         memoryModelPick: "Modelo de memoria para {{agent}}",
+        modelRoles: {
+          title: "Roles de modelo",
+          hint: "Elige un modelo para cada tipo de trabajo de {{agent}}. Un rol vacío lo decide {{agent}}.",
+          modelPick: "Modelo para {{role}}",
+          thinkingPick: "Razonamiento para {{role}}",
+          unsetModel: "Vacío",
+          unsetThinking: "Como la sesión",
+          roles: {
+            task: "Subagent (task)",
+            smol: "Tareas pequeñas (smol)",
+            slow: "Problemas difíciles (slow)",
+            plan: "Planificación (plan)",
+            vision: "Imágenes (vision)",
+            advisor: "Asesor (advisor)",
+            commit: "Mensajes de commit (commit)",
+            tiny: "Tareas mínimas (tiny)",
+            memory: "Memoria (memory)",
+          },
+          unset: {
+            default: "Si está vacío: igual que el modelo predeterminado ({{model}})",
+            ompPicks: "Si está vacío: {{agent}} elige uno",
+            slow: "Si está vacío: el modelo de Problemas difíciles ({{model}})",
+            smol: "Si está vacío: el modelo de Tareas pequeñas ({{model}})",
+            tiny: "Si está vacío: el modelo de Tareas mínimas ({{model}})",
+          },
+        },
         forcedSubagentModel: "Modelo de Subagent forzado",
         forcedSubagentModelHint:
           "Todos los Subagents usan este modelo, sea cual sea el que indique la conversación principal. La configuración de Codex no se toca.",

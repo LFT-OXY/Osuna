@@ -33,8 +33,8 @@ const CODEX_LOG_WINDOW_MS = 24 * 60 * 60 * 1000;
 const CODEX_LOG_ROWS = 20;
 const CODEX_WEBSOCKET_TARGET = "codex_api::endpoint::responses_websocket";
 
-/** 每个 CLI 的 history.jsonl 里时间与那句话的键（magpie claude.go、codex.go 的 LastUsed）。 */
-const HISTORY_KEYS: Record<ApiEndpointProvider, { timeKey: string; textKey: string }> = {
+/** 每个 CLI 的 history.jsonl 里时间与那句话的键（magpie claude.go、codex.go 的 LastUsed）；Pi、OMP 没有这个文件。 */
+const HISTORY_KEYS: Partial<Record<ApiEndpointProvider, { timeKey: string; textKey: string }>> = {
   claude: { timeKey: "timestamp", textKey: "display" },
   codex: { timeKey: "ts", textKey: "text" },
 };
@@ -43,6 +43,8 @@ const HISTORY_KEYS: Record<ApiEndpointProvider, { timeKey: string; textKey: stri
 const GatewaySeenFileSchema = z.object({
   claude: z.string().datetime().optional(),
   codex: z.string().datetime().optional(),
+  pi: z.string().datetime().optional(),
+  omp: z.string().datetime().optional(),
 });
 type GatewaySeenFile = z.infer<typeof GatewaySeenFileSchema>;
 
@@ -158,6 +160,7 @@ export type ReadCliUse = (input: ReadCliUseInput) => CliUse;
 /** 缺省的入口：读 configDir 下 CLI 自己的文件。 */
 export function readCliUse(input: ReadCliUseInput): CliUse {
   const keys = HISTORY_KEYS[input.provider];
+  if (keys === undefined) return { lastPromptAt: null, lastRequest: null };
   const lastPromptAt = readLastPromptAt({
     filePath: path.join(input.configDir, "history.jsonl"),
     ...keys,

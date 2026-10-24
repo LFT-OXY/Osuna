@@ -2064,6 +2064,64 @@ describe("API endpoint balance (apiEndpointBalance)", () => {
     expect(older.features?.apiEndpointBalance).toBeUndefined();
   });
 
+  it("parses a host that advertises apiEndpointOmp, and an older one without it", () => {
+    const base = { status: "server_info" as const, serverId: "srv_1" };
+    const current = ServerInfoStatusPayloadSchema.parse({
+      ...base,
+      features: { apiEndpointPi: true, apiEndpointOmp: true },
+    });
+    expect(current.features?.apiEndpointOmp).toBe(true);
+    const older = ServerInfoStatusPayloadSchema.parse({
+      ...base,
+      features: { apiEndpointPi: true },
+    });
+    expect(older.features?.apiEndpointOmp).toBeUndefined();
+  });
+
+  it("parses OMP's model roles in a settings change and in the settings, and settings from a daemon without them", () => {
+    const request = {
+      type: "provider.api_endpoint.set_agent_settings.request" as const,
+      requestId: "req-roles",
+      provider: "omp",
+      enabled: true,
+      modelRoles: { slow: { modelId: "relay/glm-5", thinkingOptionId: "high" }, smol: null },
+    };
+    expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+    const response = {
+      type: "provider.api_endpoint.set_agent_settings.response" as const,
+      payload: {
+        requestId: "req-roles",
+        provider: "omp",
+        agent: {
+          enabled: true,
+          defaultModelId: "glm-5",
+          modelRoles: { slow: { modelId: "relay/glm-5", thinkingOptionId: "high" } },
+        },
+        error: null,
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+    const older = {
+      ...response,
+      payload: { ...response.payload, agent: { enabled: true, defaultModelId: "glm-5" } },
+    };
+    expect(SessionOutboundMessageSchema.parse(older)).toEqual(older);
+  });
+
+  it("parses a host that advertises apiEndpointPi, and an older one without it", () => {
+    const base = { status: "server_info" as const, serverId: "srv_1" };
+    const current = ServerInfoStatusPayloadSchema.parse({
+      ...base,
+      features: { gatewayLedger: true, apiEndpointPi: true },
+    });
+    expect(current.features?.apiEndpointPi).toBe(true);
+    const older = ServerInfoStatusPayloadSchema.parse({
+      ...base,
+      features: { gatewayLedger: true },
+    });
+    expect(older.features?.apiEndpointPi).toBeUndefined();
+  });
+
   it("parses a balance's parts and a failure's hint and console, and a reading from a daemon without them", () => {
     const withParts = {
       endpointId: "ep_1",

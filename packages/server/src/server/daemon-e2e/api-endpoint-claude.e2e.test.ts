@@ -831,6 +831,8 @@ describe("Claude API endpoint over the daemon RPC", () => {
           },
         ],
         codex: [],
+        pi: [],
+        omp: [],
       });
       // 老客户端照旧看到 modified_externally。
       expect(listed.health).toEqual([
