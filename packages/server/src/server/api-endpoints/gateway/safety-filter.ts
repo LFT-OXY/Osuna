@@ -27,6 +27,11 @@ const FILTER_REASONS: Record<string, string> = {
   IMAGE_SAFETY: "safety",
 };
 
+/** 厂商说的这个原因是安全过滤（Gemini 的 finishReason、blockReason 也用它认）。 */
+export function filteredBy(reason: string): boolean {
+  return Object.hasOwn(FILTER_REASONS, reason);
+}
+
 // 点名用量政策的错误码：OpenAI 的 bio_policy、cyber_policy 之类。
 const POLICY_CODE = /^[a-z]+_policy$/;
 // OpenAI 的 invalid_prompt 说的是违反用量政策，不是请求写错了。

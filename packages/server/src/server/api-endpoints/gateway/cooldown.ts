@@ -164,6 +164,30 @@ export function retryAfter(headers: IncomingHttpHeaders, now: number): number {
   return wait <= 0 ? 0 : Math.min(wait, COOLDOWN.longestWait);
 }
 
+/**
+ * 厂商在错误体里说的何时再试：Gemini 的 error.details 里 RetryInfo 的 retryDelay（「37s」「0.5s」，比 magpie 多），
+ * 与 Retry-After 同一规则：最多信一小时；没说或读不懂返回 0。
+ */
+function retryDelay(body: string): number {
+  const parsed = parseJson(body);
+  const value = Array.isArray(parsed) ? parsed[0] : parsed;
+  const error = isRecord(value) && isRecord(value.error) ? value.error : null;
+  const details = error && Array.isArray(error.details) ? error.details : [];
+  for (const detail of details) {
+    if (!isRecord(detail) || !String(detail["@type"] ?? "").endsWith("google.rpc.RetryInfo")) {
+      continue;
+    }
+    const match = /^(\d+(?:\.\d+)?)s$/.exec(String(detail.retryDelay ?? ""));
+    if (match) return Math.min(Number(match[1]) * 1000, COOLDOWN.longestWait);
+  }
+  return 0;
+}
+
+/** 厂商说的何时再试：先看响应头（retryAfter），没说再看错误体里的 retryDelay。 */
+function vendorWait(input: { headers: IncomingHttpHeaders; body: string }, now: number): number {
+  return retryAfter(input.headers, now) || retryDelay(input.body);
+}
+
 /** ChatGPT 的 {"error":{"resets_at":<unix>,"resets_in_seconds":<n>}}。 */
 function resetsIn(body: string, now: number): number {
   const parsed = parseJson(body);
@@ -306,7 +330,7 @@ export function doubledPause(input: { retryPauseMs: number; again: number }): nu
 
 /**
  * 最后一家失败后要不要等一会儿再问它一次：服务器忙最多两次，短时限流最多三次，
- * 每次等待翻倍（厂商给了 Retry-After 就等它），超过 8 秒就不等，把错误交给 Agent。
+ * 每次等待翻倍（厂商给了 Retry-After 或 retryDelay 就等它），超过 8 秒就不等，把错误交给 Agent。
  */
 export function passing(input: {
   status: number;
@@ -316,7 +340,7 @@ export function passing(input: {
   retryPauseMs: number;
   now: number;
 }): { again: boolean; waitMs: number } {
-  const said = retryAfter(input.headers, input.now);
+  const said = vendorWait(input, input.now);
   const waitMs = said > 0 ? said : doubledPause(input);
   if (waitMs > COOLDOWN.longestPause) return { again: false, waitMs: 0 };
   if ([408, 500, 502, 503, 504, 529].includes(input.status)) {
@@ -397,7 +421,7 @@ function ownQuotaRest(attempt: FailureReport, now: number): number {
 function quotaRest(attempt: FailureReport, now: number): { duration: number; by: RestBy } {
   const own = ownQuotaRest(attempt, now);
   const resets = resetsAt(attempt.body, now) || clineBackIn(attempt);
-  const said = retryAfter(attempt.headers, now);
+  const said = vendorWait(attempt, now);
   if (resets > 0) return { duration: Math.min(resets, COOLDOWN.longestQuota), by: "resets" };
   const saidStands = said > 0 && (said < COOLDOWN.longestWait || own <= said);
   if (saidStands) return { duration: said, by: "retry-after" };
@@ -596,7 +620,7 @@ export class EndpointCooldowns {
       restCapOr({ attempt: input.attempt, fallback: COOLDOWN.longestRateRest }),
     );
     let by: RestBy = failures > 1 ? "backoff" : "cooldown";
-    let said = retryAfter(input.attempt.headers, now);
+    let said = vendorWait(input.attempt, now);
     let saidBy: RestBy = "retry-after";
     const resets = resetsAt(input.attempt.body, now);
     if (resets > said) {

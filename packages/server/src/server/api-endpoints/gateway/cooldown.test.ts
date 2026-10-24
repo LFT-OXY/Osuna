@@ -599,6 +599,78 @@ describe("what the vendor says about when to try again", () => {
   });
 });
 
+/** Gemini 的错误体：RetryInfo 里写着多久后再试；额度用完的还带 QuotaFailure（它的名字就含 quota）。 */
+function geminiRetryIn(input: {
+  code: number;
+  message: string;
+  delay: string;
+  quotaFailure?: boolean;
+}): string {
+  const retryInfo = {
+    "@type": "type.googleapis.com/google.rpc.RetryInfo",
+    retryDelay: input.delay,
+  };
+  const quotaFailure = { "@type": "type.googleapis.com/google.rpc.QuotaFailure", violations: [] };
+  return JSON.stringify({
+    error: {
+      code: input.code,
+      message: input.message,
+      status: "RESOURCE_EXHAUSTED",
+      details: input.quotaFailure ? [quotaFailure, retryInfo] : [retryInfo],
+    },
+  });
+}
+
+describe("Gemini's retryDelay (G5)", () => {
+  test("out of quota: rests as long as its retryDelay, read as Retry-After", () => {
+    const { store } = cooldowns();
+    const body = geminiRetryIn({
+      code: 429,
+      message: "You exceeded your current quota, please check your plan and billing details.",
+      delay: "37s",
+      quotaFailure: true,
+    });
+    expect(fail(store, { status: 429, body })).toMatchObject({
+      why: "quota",
+      by: "retry-after",
+      until: START + 37_000,
+    });
+  });
+
+  test("rate limited: a longer retryDelay stands over the minute; Retry-After goes first", () => {
+    const { store } = cooldowns();
+    const body = geminiRetryIn({ code: 429, message: "Rate limit exceeded", delay: "300.5s" });
+    expect(fail(store, { status: 429, body })).toMatchObject({
+      why: "rate",
+      by: "retry-after",
+      until: START + 300_500,
+    });
+    expect(
+      fail(store, { status: 429, body, headers: { "retry-after": "600" }, endpoint: B }),
+    ).toMatchObject({ until: START + 10 * MINUTE });
+  });
+
+  test("the last endpoint waits for it before asking again, and not when it is long", () => {
+    const ask = (delay: string) =>
+      passing({
+        status: 429,
+        headers: {},
+        body: geminiRetryIn({ code: 429, message: "Rate limit exceeded", delay }),
+        again: 0,
+        retryPauseMs: 1_000,
+        now: START,
+      });
+    expect(ask("3s")).toEqual({ again: true, waitMs: 3_000 });
+    expect(ask("30s").again).toBe(false);
+  });
+
+  test("a delay it can't read, or none, is no word at all", () => {
+    const { store } = cooldowns();
+    const body = geminiRetryIn({ code: 429, message: "Rate limit exceeded", delay: "soon" });
+    expect(fail(store, { status: 429, body })).toMatchObject({ by: "cooldown" });
+  });
+});
+
 describe("telling when it is back", () => {
   test("the time with its offset, and the date when it is not today", () => {
     const zone = process.env.TZ;

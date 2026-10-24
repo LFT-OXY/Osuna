@@ -21,7 +21,8 @@ import {
 import { geminiPath } from "../gemini-base-url.js";
 import { skipsCertificateCheck } from "../insecure-tls.js";
 import type { AgentError } from "./agent-errors.js";
-import { streamStatus } from "./failure.js";
+import { ENDED_SHORT, endedShort } from "./broken-reply.js";
+import { EMPTY_REPLY, streamStatus } from "./failure.js";
 import { notApiDetail, notApiReply, saysNothingYet, type NotApiReply } from "./not-api-reply.js";
 import { zhipuRefusal } from "./zhipu-envelope.js";
 import type { ReplyTimes } from "./reply-clock.js";
@@ -48,9 +49,6 @@ const MAX_HELD_BYTES = 1024 * 1024;
 const DROPPED_CONNECTION_CODES = new Set(["ECONNRESET", "EPIPE"]);
 // 一次最多这么多回重发：连接池里每台主机最多留这么多条空闲连接（magpie 的 MaxIdleConnsPerHost）。
 const MAX_REPLAYS = 8;
-
-// 空回复交给 Agent 的说法（magpie 的 emptyReply）。
-export const EMPTY_REPLY = "an empty reply (the model answered nothing; try again)";
 
 // Anthropic 地址按 Claude Code 的规则拼 /v1/messages；OpenAI 两种地址按 SDK 的规则以 /v1 结尾。
 // Gemini 的模型在路径里（geminiPath），上游一律流式。
@@ -163,6 +161,8 @@ type Opening =
   | { kind: "error"; raw: string; refusesRequest: boolean }
   | { kind: "empty" }
   | { kind: "broken" }
+  // 流读完了，什么都没说、也没说完（magpie 的 errEndedShort，开口前还能换家）。
+  | { kind: "short" }
   // 2xx 却不是接口的回复（网页、空的、不是 JSON）：认出它的开头，其余的由调用方接着读。
   | { kind: "not_api"; reply: NotApiReply; head: Buffer }
   // 2xx 里包着的拒绝（智谱的信封）：读成它代表的状态码与错误体。
@@ -236,6 +236,8 @@ export async function openUpstream(input: {
         status: 502,
         detail: `${url.origin}: the connection closed before the reply began`,
       });
+    case "short":
+      return failedBySelf({ status: 502, detail: `${url.origin}: ${ENDED_SHORT}` });
     case "enveloped":
       return failedByUpstream({ status: opening.status, response, text: opening.text, secrets });
     case "not_api": {
@@ -417,6 +419,7 @@ function awaitOpening(input: {
       const failed = reply ? failedBeforeContent(reply) : null;
       if (failed) settle(failed);
       else if (reply && isEmptyReply(reply, reads)) settle({ kind: "empty" });
+      else if (reply && endedEmpty(reply, reads)) settle({ kind: "short" });
       else settle(open());
     };
     const onClose = () => settle({ kind: "broken" });
@@ -441,17 +444,28 @@ function failedBeforeContent(reply: TappedReply): Opening | null {
 }
 
 /**
- * 空回复（magpie 的 repliesCounted、uncounted、answersNothing）：Anthropic 与 Responses 的回复一定计 token，
+ * 空回复（magpie 的 repliesCounted、uncounted、answersNothing、emptyFails）：Anthropic 与 Responses 的回复一定计 token，
  * 什么都没说、一个 token 也没计的才是空回复；Claude 自己以空回复结束一轮时计了提示词，仍是回答。
- * Chat 的回复不一定计 token，从不算空。被截断（length）与拒答（filter）的不算。
+ * Chat 的回复不一定计 token，从不算空。Gemini 的回复什么都没说就算空，没有 candidate 的结尾也算说完了。
+ * 被截断（length）与拒答（filter）的不算。
  * 没说结束原因的（`{}`）读不出是不是本协议的回复，也不算；网页与空的回复开口前就认出（not-api-reply.ts）。
  */
 function isEmptyReply(reply: TappedReply, format: ApiEndpointRequestFormat): boolean {
   const { usage } = reply;
+  const endsBy = reply.stop !== null || (format === "gemini" && reply.ended);
+  const answersNothing = endsBy && reply.stop !== "length" && reply.stop !== "filter";
+  if (reply.content.length > 0 || !answersNothing) return false;
+  // Gemini 什么都没说就是空回复，计不计 token 都一样（magpie emptyFails）。
+  if (format === "gemini") return true;
   const repliesCounted = format === "anthropic_messages" || format === "openai_responses";
   const uncounted = usage.input + usage.output + usage.cacheRead + usage.cacheWrite === 0;
-  const answersNothing = reply.stop !== null && reply.stop !== "length" && reply.stop !== "filter";
-  return repliesCounted && uncounted && reply.content.length === 0 && answersNothing;
+  return repliesCounted && uncounted;
+}
+
+/** 读完了却什么都没说、也没说完的回复（broken-reply.ts 的 endedShort）。 */
+function endedEmpty(reply: TappedReply, format: ApiEndpointRequestFormat): boolean {
+  const ending = { stopped: reply.stop !== null, ended: reply.ended, failed: reply.error !== null };
+  return reply.content.length === 0 && endedShort({ format, ending });
 }
 
 interface UpstreamSend {

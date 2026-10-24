@@ -5,6 +5,7 @@
 
 import { isRecord, parseJson } from "../../upstream-http.js";
 import { SKIP_SIGNATURE, signedId, type GeminiSignatureStore } from "../gemini-signatures.js";
+import { filteredBy } from "../safety-filter.js";
 import { compacting } from "./compacting.js";
 import {
   CONTINUE_TEXT,
@@ -448,6 +449,7 @@ function toolOfCall(name: string): string {
 export class GeminiDecoder {
   private started = false;
   private stopped = false;
+  private ended = false;
   private searched = false;
   private calledTools = false;
   private usage: Usage | null = null;
@@ -486,10 +488,24 @@ export class GeminiDecoder {
     if (!this.started) this.start(chunk, emit);
     const candidates = Array.isArray(chunk.candidates) ? chunk.candidates.filter(isRecord) : [];
     for (const candidate of candidates) this.readCandidate(candidate, emit);
+    if (isRecord(chunk.promptFeedback)) this.readBlocked(chunk.promptFeedback, emit);
     if (this.stopped && this.usage !== null) {
       emit({ kind: "usage", usage: this.usage });
       this.usage = null;
     }
+    // 不带 candidates 的 chunk（只有用量、提示词被挡）也说完了，没说什么的交给空回复；带着空数组的不算（magpie geminiEnds）。
+    if (chunk.candidates === undefined && !this.ended) {
+      this.ended = true;
+      emit({ kind: "done" });
+    }
+  }
+
+  /** 提示词被安全过滤挡下（promptFeedback.blockReason）：以拒答结束；别的原因不算拒答。 */
+  private readBlocked(feedback: Record<string, unknown>, emit: EmitEvent): void {
+    if (this.stopped || !filteredBy(stringOf(feedback.blockReason))) return;
+    this.flush(emit);
+    this.stopped = true;
+    emit({ kind: "stop", stop: "filter" });
   }
 
   private start(chunk: Record<string, unknown>, emit: EmitEvent): void {

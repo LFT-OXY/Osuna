@@ -177,13 +177,42 @@ describe("decoding a Gemini stream", () => {
     }
   });
 
-  test("a chunk with only usage does not end the reply", () => {
+  test("usage on a chunk with candidates does not end the reply; a chunk with no candidate ends it with no stop", () => {
+    const going = decoded([
+      {
+        candidates: [{ content: { parts: [{ text: "x" }] } }],
+        usageMetadata: { promptTokenCount: 3 },
+      },
+    ]);
+    expect(going.map((event) => event.kind)).toEqual(["start", "text"]);
+    const emptyList = decoded([
+      { candidates: [{ content: { parts: [{ text: "x" }] } }] },
+      { candidates: [], usageMetadata: { promptTokenCount: 3 } },
+    ]);
+    expect(emptyList.map((event) => event.kind)).toEqual(["start", "text"]);
+
     const events = decoded([
       { candidates: [{ content: { parts: [{ text: "x" }] } }] },
       { usageMetadata: { promptTokenCount: 3, candidatesTokenCount: 1 } },
+      { usageMetadata: { promptTokenCount: 3, candidatesTokenCount: 1 } },
     ]);
+    expect(events.map((event) => event.kind)).toEqual(["start", "text", "done"]);
+  });
 
-    expect(events.map((event) => event.kind)).toEqual(["start", "text"]);
+  test("a prompt blocked by the safety filter ends as a filter stop; one blocked for another reason as nothing", () => {
+    for (const blockReason of ["SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST", "IMAGE_SAFETY"]) {
+      const events = decoded([
+        { promptFeedback: { blockReason }, usageMetadata: { promptTokenCount: 7 } },
+      ]);
+      expect(
+        events.map((event) => event.kind),
+        blockReason,
+      ).toEqual(["start", "stop", "usage", "done"]);
+      expect(events[1]).toEqual({ kind: "stop", stop: "filter" });
+    }
+
+    const other = decoded([{ promptFeedback: { blockReason: "OTHER" } }]);
+    expect(other.map((event) => event.kind)).toEqual(["start", "done"]);
   });
 
   test("an error in the stream ends the reply as an error", () => {

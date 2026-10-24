@@ -6,7 +6,7 @@ import { parseJson } from "../upstream-http.js";
 /*
  * 上游失败的判定：为什么失败（决定冷却多久）、值不值得换下一家、是不是只该冷却这个模型。
  * 词表与归类顺序照 magpie 原样；magpie 为订阅账号与个别厂商加的分类（verify、restricted 等）这里没有。
- * 「auth」是 Osuna 加的：key 无效或无权限，接口标「需要检查」，直到用户编辑它。
+ * 「auth」是 Osuna 加的：key 无效或无权限，接口标「需要检查」，直到用户编辑它；Gemini 用 400 说 key 无效，也算（比 magpie 多）。
  */
 
 export const FAILURE_WORDS = {
@@ -58,6 +58,8 @@ export const FAILURE_WORDS = {
     /"ModelDeprecated"|model_deprecated|model.{0,80}(has been|was|is now|is) (deprecated|retired|discontinued|decommissioned|sunset)/i,
   // OpenCode Zen 用 401 说模型下线了。
   zenModelGone: /(^|[\s:"])Model [^"\s]+ is not supported("|\s*$)/,
+  // Gemini 用 400 INVALID_ARGUMENT 说 key 无效。
+  keyInvalid: /API key not valid|API_KEY_INVALID/,
   // 厂商拒收这个客户端。
   refused: /unapproved channel|illegal api invocation/i,
   // 厂商读不懂请求的形状。
@@ -86,6 +88,9 @@ export const FAILURE_WORDS = {
 } as const;
 
 const W = FAILURE_WORDS;
+
+// 空回复交给 Agent 的说法（magpie 的 emptyReply）。
+export const EMPTY_REPLY = "an empty reply (the model answered nothing; try again)";
 
 /** 决定冷却多久的失败分类。 */
 export type FailureClass = "credit" | "quota" | "rate" | "other" | "auth" | "proxy";
@@ -172,10 +177,16 @@ export function failure(status: number, rawBody: string): FailureClass {
  */
 export function endpointFailure(status: number, body: string): FailureClass {
   const why = failure(status, body);
+  if (why === "other" && keyInvalid(status, body)) return "auth";
   if (why !== "other" || (status !== 401 && status !== 403)) return why;
   const words = wordsOf(body);
   const notTheKey = modelRefused(status, body) || W.region.test(words) || W.blocked.test(words);
   return notTheKey ? "other" : "auth";
+}
+
+/** Gemini 的 key 无效：400 且错误说 key 不对（API key not valid / API_KEY_INVALID）。 */
+function keyInvalid(status: number, rawBody: string): boolean {
+  return status === 400 && W.keyInvalid.test(wordsOf(rawBody));
 }
 
 /** 值不值得换下一家：上下文超长哪家都装不下，交给 Agent 压缩；其余 4xx 只在词表说明原因时换。 */
@@ -183,7 +194,7 @@ export function retryable(status: number, rawBody: string): boolean {
   const body = wordsOf(rawBody);
   if (overflowed(status, body)) return false;
   if ([401, 402, 403, 404, 408, 429].includes(status) || status >= 500) return true;
-  if (modelRetired(status, body)) return true;
+  if (modelRetired(status, body) || keyInvalid(status, body)) return true;
   // 防火墙挡了这个地址：别家走的是别的路。
   if (status >= 400 && W.blocked.test(body)) return true;
   if (status === 400 || status === 422) {
@@ -236,7 +247,12 @@ export function streamStatus(rawMessage: string): number {
   return 502;
 }
 
-/** 回复开始后断掉时这家要不要冷却：对话超长、厂商拒收或保护机制导致的不怪这家。 */
+/** 回复开始后断掉时这家要不要冷却：对话超长、厂商拒收、保护机制或模型只给了空回复导致的不怪这家（magpie #1221）。 */
 export function lateRests(message: string): boolean {
-  return !tooLong(400, message) && !W.refused.test(message) && !W.protection.test(message);
+  const notTheEndpoint =
+    tooLong(400, message) ||
+    W.refused.test(message) ||
+    W.protection.test(message) ||
+    message.includes(EMPTY_REPLY);
+  return !notTheEndpoint;
 }

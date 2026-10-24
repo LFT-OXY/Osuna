@@ -9,6 +9,7 @@ import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
+import { DaemonClient } from "../test-utils/daemon-client.js";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 
 /*
@@ -36,6 +37,7 @@ interface FakeUpstream {
 }
 
 interface Harness {
+  daemon: TestPaseoDaemon;
   gateway: string;
   usageDir: string;
   signaturesDir: string;
@@ -44,8 +46,10 @@ interface Harness {
 const servers: Server[] = [];
 const tempRoots: string[] = [];
 const daemons: TestPaseoDaemon[] = [];
+const clients: DaemonClient[] = [];
 
 afterEach(async () => {
+  for (const client of clients.splice(0)) await client.close();
   for (const daemon of daemons.splice(0)) await daemon.close();
   for (const server of servers.splice(0)) {
     server.closeAllConnections();
@@ -185,6 +189,7 @@ async function start(endpoints: EndpointSpec[]): Promise<Harness> {
   });
   daemons.push(daemon);
   return {
+    daemon,
     gateway: `http://127.0.0.1:${daemon.port}/api-endpoint-gateway`,
     usageDir: path.join(root, ".paseo", "usage"),
     signaturesDir: path.join(endpointsDir, "gemini-signatures"),
@@ -919,5 +924,298 @@ describe("thinking, tools, images and search through a Gemini base URL", () => {
       .filter((event) => event.type === "content_block_start")
       .map((event) => (event.content_block as Record<string, unknown>).type);
     expect(blocks).toEqual(["text", "server_tool_use", "web_search_tool_result"]);
+  });
+});
+
+describe("failures at a Gemini base URL: rests and failover", () => {
+  const ASK = { model: "gemini-2.5-pro", max_tokens: 64, stream: true, messages: HI };
+
+  /** 两家都只有 Gemini 地址、都有 gemini-2.5-pro：A 按 `respond` 答，B 照常答「a.txt」。 */
+  async function twoGeminiRelays(respond: FakeUpstream["respond"]) {
+    const upstreamA = await startUpstream(respond);
+    const upstreamB = await scriptedGemini([DONE]);
+    const harness = await start([
+      geminiOnly(upstreamA, { id: "ep_a" }),
+      geminiOnly(upstreamB, { id: "ep_b" }),
+    ]);
+    return { upstreamA, upstreamB, harness };
+  }
+
+  async function connectTo(daemon: TestPaseoDaemon): Promise<DaemonClient> {
+    const client = new DaemonClient({
+      url: `ws://127.0.0.1:${daemon.port}/ws`,
+      appVersion: "0.15.1",
+    });
+    clients.push(client);
+    await client.connect();
+    await client.fetchAgents({ subscribe: {} });
+    return client;
+  }
+
+  async function cooldownOf(harness: Harness, endpointId: string) {
+    const client = await connectTo(harness.daemon);
+    const list = await client.apiEndpointList("claude");
+    return list.endpoints.find((endpoint) => endpoint.id === endpointId)?.cooldown ?? null;
+  }
+
+  function geminiError(status: number, error: Record<string, unknown>): FakeUpstream["respond"] {
+    return (_request, res) => {
+      res.writeHead(status, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: { code: status, ...error } }));
+    };
+  }
+
+  function replying(chunks: unknown[]): FakeUpstream["respond"] {
+    return (_request, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      for (const chunk of chunks) res.write(`data: ${JSON.stringify(chunk)}\r\n\r\n`);
+      res.end();
+    };
+  }
+
+  /** Claude Code 收到的文字。 */
+  function saidIn(events: Record<string, unknown>[]): string {
+    return events
+      .map((event) => (event.delta as Record<string, unknown> | undefined)?.text ?? "")
+      .join("");
+  }
+
+  test("a 400 saying the API key is not valid marks the endpoint needs-check and the next one answers", async () => {
+    const { upstreamA, upstreamB, harness } = await twoGeminiRelays(
+      geminiError(400, {
+        message: "API key not valid. Please pass a valid API key.",
+        status: "INVALID_ARGUMENT",
+        details: [
+          { "@type": "type.googleapis.com/google.rpc.ErrorInfo", reason: "API_KEY_INVALID" },
+        ],
+      }),
+    );
+
+    const response = await askClaude(harness, ASK);
+
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    expect(saidIn(sseData(await response.text()))).toBe("a.txt");
+    expect(await cooldownOf(harness, "ep_a")).toEqual({
+      state: "needs_check",
+      reason: "auth",
+      until: null,
+    });
+    await (await askClaude(harness, ASK)).text();
+    expect(upstreamA.requests).toHaveLength(1);
+    expect(upstreamB.requests).toHaveLength(2);
+  });
+
+  test("a 429 with a RetryInfo retryDelay rests the endpoint that long and the next one answers", async () => {
+    const { upstreamA, harness } = await twoGeminiRelays(
+      geminiError(429, {
+        message: "You exceeded your current quota, please check your plan and billing details.",
+        status: "RESOURCE_EXHAUSTED",
+        details: [
+          { "@type": "type.googleapis.com/google.rpc.QuotaFailure", violations: [] },
+          { "@type": "type.googleapis.com/google.rpc.RetryInfo", retryDelay: "37s" },
+        ],
+      }),
+    );
+
+    const before = Date.now();
+    const response = await askClaude(harness, ASK);
+
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    await response.text();
+    const cooldown = await cooldownOf(harness, "ep_a");
+    expect(cooldown).toMatchObject({ state: "cooling_down", reason: "quota" });
+    const rested = Date.parse(cooldown?.until ?? "") - before;
+    expect(rested).toBeGreaterThanOrEqual(36_000);
+    expect(rested).toBeLessThan(45_000);
+    expect(upstreamA.requests).toHaveLength(1);
+  });
+
+  test.each([
+    { failure: "a rate limit", reason: "rate", status: 429, message: "Rate limit exceeded." },
+    {
+      failure: "billing not enabled",
+      reason: "credit",
+      status: 403,
+      message: "This API method requires billing to be enabled.",
+    },
+    {
+      failure: "quota exhausted on a 5xx",
+      reason: "quota",
+      status: 503,
+      message: "Resource has been exhausted",
+      grpc: "RESOURCE_EXHAUSTED",
+    },
+  ])(
+    "$failure rests the endpoint as $reason and the next one answers",
+    async ({ reason, status, message, grpc }) => {
+      const { harness } = await twoGeminiRelays(
+        geminiError(status, { message, status: grpc ?? "UNAVAILABLE" }),
+      );
+
+      const response = await askClaude(harness, ASK);
+
+      expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+      await response.text();
+      expect(await cooldownOf(harness, "ep_a")).toMatchObject({ state: "cooling_down", reason });
+    },
+  );
+
+  test("a model the base URL does not have rests only that model and the next endpoint answers", async () => {
+    const { harness } = await twoGeminiRelays(
+      geminiError(404, {
+        message:
+          "models/gemini-2.5-pro is not found for API version v1beta, or is not supported for generateContent.",
+        status: "NOT_FOUND",
+      }),
+    );
+
+    const response = await askClaude(harness, ASK);
+
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    await response.text();
+    expect(await cooldownOf(harness, "ep_a")).toBeNull();
+    const saved = JSON.parse(
+      await readFile(path.join(path.dirname(harness.signaturesDir), "cooldowns.json"), "utf8"),
+    ) as { rests: Record<string, unknown>[] };
+    expect(saved.rests).toEqual([
+      expect.objectContaining({ endpointId: "ep_a", model: "gemini-2.5-pro", why: "other" }),
+    ]);
+  });
+
+  test.each([
+    { failure: "a prompt blocked", chunks: [{ promptFeedback: { blockReason: "SAFETY" } }] },
+    {
+      failure: "a reply stopped for SAFETY with nothing said",
+      chunks: [{ candidates: [{ content: { role: "model", parts: [] }, finishReason: "SAFETY" }] }],
+    },
+  ])("$failure is a refusal: nobody rests, the next endpoint answers", async ({ chunks }) => {
+    const { upstreamA, harness } = await twoGeminiRelays(replying(chunks));
+
+    const response = await askClaude(harness, ASK);
+
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    expect(saidIn(sseData(await response.text()))).toBe("a.txt");
+    expect(await cooldownOf(harness, "ep_a")).toBeNull();
+    expect(upstreamA.requests).toHaveLength(1);
+  });
+
+  test.each([
+    {
+      failure: "a STOP with nothing said",
+      chunks: [{ candidates: [{ content: { role: "model", parts: [] }, finishReason: "STOP" }] }],
+    },
+    { failure: "a chunk with no candidate", chunks: [{ usageMetadata: { promptTokenCount: 5 } }] },
+  ])(
+    "$failure is an empty reply: asked once more, then the next endpoint, and nobody rests",
+    async ({ chunks }) => {
+      const { upstreamA, harness } = await twoGeminiRelays(replying(chunks));
+
+      const response = await askClaude(harness, ASK);
+
+      expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+      expect(saidIn(sseData(await response.text()))).toBe("a.txt");
+      expect(upstreamA.requests).toHaveLength(2);
+      expect(await cooldownOf(harness, "ep_a")).toBeNull();
+    },
+  );
+
+  test("a stream that ends with no finishReason before a word goes to the next endpoint", async () => {
+    const { harness } = await twoGeminiRelays(
+      replying([{ candidates: [{ content: { role: "model", parts: [{ text: "" }] } }] }]),
+    );
+
+    const response = await askClaude(harness, ASK);
+
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    expect(saidIn(sseData(await response.text()))).toBe("a.txt");
+  });
+
+  test("a stream that ends with no finishReason after it began is told as incomplete, and the endpoint rests", async () => {
+    const { upstreamB, harness } = await twoGeminiRelays(
+      replying([{ candidates: [{ content: { role: "model", parts: [{ text: "half" }] } }] }]),
+    );
+
+    const response = await askClaude(harness, ASK);
+    const events = sseData(await response.text());
+
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
+    expect(saidIn(events)).toBe("half");
+    expect(events.at(-1)).toMatchObject({
+      type: "error",
+      error: {
+        type: "api_error",
+        message:
+          "Relay ep_a: the reply ended before it was complete (502: you can retry your request)",
+      },
+    });
+    expect(events.some((event) => event.type === "message_stop")).toBe(false);
+    expect(upstreamB.requests).toHaveLength(0);
+    await expect
+      .poll(() => cooldownOf(harness, "ep_a"))
+      .toMatchObject({ state: "cooling_down", reason: "other" });
+  });
+
+  const THOUGHT_ONLY = [
+    {
+      candidates: [{ content: { role: "model", parts: [{ text: "Hmm.", thought: true }] } }],
+      usageMetadata: { promptTokenCount: 10 },
+    },
+    {
+      candidates: [{ content: { role: "model", parts: [] }, finishReason: "STOP" }],
+      usageMetadata: { promptTokenCount: 10, thoughtsTokenCount: 4 },
+    },
+  ];
+
+  test("a streamed reply that only thought is asked again in place; the thinking stays and the answer follows it", async () => {
+    const upstream = await scriptedGemini([THOUGHT_ONLY, DONE]);
+    const harness = await start([geminiOnly(upstream)]);
+
+    const response = await askClaude(harness, {
+      ...ASK,
+      max_tokens: 32_000,
+      thinking: { type: "enabled", budget_tokens: 24_000 },
+    });
+    const events = sseData(await response.text());
+
+    expect(upstream.requests).toHaveLength(2);
+    expect(sentBody(upstream.requests[1])).toEqual(sentBody(upstream.requests[0]));
+    const thinking = events
+      .map((event) => (event.delta as Record<string, unknown> | undefined)?.thinking ?? "")
+      .join("");
+    expect(thinking).toBe("Hmm.");
+    expect(saidIn(events)).toBe("a.txt");
+    expect(events.filter((event) => event.type === "message_start")).toHaveLength(1);
+    expect(events.find((event) => event.type === "message_delta")).toMatchObject({
+      delta: { stop_reason: "end_turn" },
+    });
+  });
+
+  test("a streamed reply that keeps only thinking is asked three times more, then ends with the empty reply's error, resting nobody", async () => {
+    const upstream = await scriptedGemini([THOUGHT_ONLY]);
+    const harness = await start([geminiOnly(upstream)]);
+
+    const response = await askClaude(harness, ASK);
+    const events = sseData(await response.text());
+
+    expect(upstream.requests).toHaveLength(4);
+    expect(events.at(-1)).toMatchObject({
+      type: "error",
+      error: {
+        type: "api_error",
+        message: "Relay ep_gemini: an empty reply (the model answered nothing; try again)",
+      },
+    });
+    expect(await cooldownOf(harness, "ep_gemini")).toBeNull();
+  });
+
+  test("a whole (non-streamed) reply that only thought is asked once more, then the next endpoint answers", async () => {
+    const { upstreamA, harness } = await twoGeminiRelays(replying(THOUGHT_ONLY));
+
+    const response = await askClaude(harness, { ...ASK, stream: false });
+
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    expect(await response.json()).toMatchObject({ content: [{ type: "text", text: "a.txt" }] });
+    expect(upstreamA.requests).toHaveLength(2);
+    expect(await cooldownOf(harness, "ep_a")).toBeNull();
   });
 });
