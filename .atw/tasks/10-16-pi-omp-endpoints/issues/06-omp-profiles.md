@@ -4,7 +4,7 @@
 
 **Blocked by:** 04
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] daemon 扫 OMP 根目录（`~/.omp` 或 `PI_CONFIG_DIR` 给的名字）下的 `profiles/<名字>/agent`，名字规则照 OMP；扫到的列表随设置一起返回（可选新字段）。
 - [ ] daemon 环境里 `OMP_PROFILE` / `PI_PROFILE` 已经指向的那套由「默认」块管，不另列。
