@@ -309,3 +309,4 @@ Pi 和 OMP 像 Claude Code、Codex 一样用第三方接口：
 - **参考源码**：magpie `7597c132` 在 `/tmp/magpie-7597`，Pi 源码在 `/tmp/pi-mono-src`，OMP 源码在 `/tmp/omp-src`，都是只读的临时克隆。
 - **待另开工单**（工单 02 审查，用户 2026-10-24 决定）：设置页「已更新 just now」的相对时间来自全应用共用的英文时间工具，中文界面露出英文；不在本任务改，另开工单做时间文字本地化。
 - **验收时记下的后续事项**（2026-10-24，不在本任务改）：关开关预览弹窗中文标题「关闭 Oh My Pi 的第三方接口?」用了半角问号；以下只有代码、没有专门测试：`PI_CONFIG_DIR` 指定的 OMP 根目录、`PI_PROFILE` 指向的那套并入「默认」、命名配置按套随接口同步、advisor / commit 两个角色的写入。思考档位名（High、Off 等）用户决定保留英文。
+- **待另开工单**（PR #29 的 CI，用户 2026-10-24 决定）：Windows CI 上价格表（models.dev）更新后 Pi 的 `models.json` 没被改写，Mac、Linux 正常；原因未查清，`api-endpoint-pi.e2e.test.ts` 的这一条先在 Windows 上跳过。Codex / Claude 的同类测试本来就不在 Windows 上跑，这条后台改写在 Windows 上从没被测过。
