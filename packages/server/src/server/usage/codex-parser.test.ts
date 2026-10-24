@@ -163,6 +163,7 @@ describe("parseCodexChunk", () => {
         at: "2026-09-18T09:30:20.000Z",
         turnKey: "turn-1",
         amounts: { input: 200, cachedInput: 1000, cacheWrite: 300, output: 250, reasoning: 60 },
+        gatewayOnly: false,
       },
       {
         replyId: "resp_2",
@@ -174,6 +175,7 @@ describe("parseCodexChunk", () => {
         at: "2026-09-18T09:30:40.000Z",
         turnKey: "turn-1",
         amounts: { input: 100, cachedInput: 1400, cacheWrite: 0, output: 100, reasoning: 20 },
+        gatewayOnly: false,
       },
       {
         replyId: "resp_3",
@@ -185,6 +187,7 @@ describe("parseCodexChunk", () => {
         at: "2026-09-18T09:46:10.000Z",
         turnKey: "turn-2",
         amounts: { input: 500, cachedInput: 0, cacheWrite: 0, output: 40, reasoning: 0 },
+        gatewayOnly: false,
       },
     ]);
     expect(parse("codex-token-count.jsonl", "019fd6e0-2c31-7a04-9c65-12b7d8e4a5f3").calls).toEqual(

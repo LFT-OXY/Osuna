@@ -1380,6 +1380,13 @@ internal/usage/codex_identity.go:
 
   packages/server/src/server/usage/call-merge.ts
 
+A Pi or OMP log entry whose provider is the gateway's own being left to the
+ledger, and Pi's usage and OMP's model_usage entries counted as calls on their
+own provider and model, follow piGateway and piCall in magpie's
+internal/sessions/calls_pi.go:
+
+  packages/server/src/server/usage/pi-like-parser.ts
+
 The per-request usage records' retention (finished days gzipped, a later
 append joining as a gzip member of its own, a .gz cut short written anew from
 its whole lines, 30 days and 200 MB in all counted compressed, checked on a

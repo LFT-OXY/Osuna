@@ -46,7 +46,9 @@ interface MergedCall {
  * Folds the gateway ledger into the rows the CLI logs produce (ADR 0014). A
  * call both sides know is counted once, at the log's project, session and turn,
  * with the ledger's tokens and endpoint; a ledger row with no log entry counts
- * under no project; a log entry with no ledger row stays Official.
+ * under no project; a log entry with no ledger row stays Official, unless the
+ * log says it went through the gateway (`gatewayOnly`, Pi and OMP), which then
+ * counts nowhere and is not listed, as magpie skips it.
  *
  * Rows are increments, so the merge never rewrites. A ledger row lands at
  * once, under no project. The move to the log's project and the endpoint —
@@ -101,7 +103,7 @@ export class UsageCallMerge {
       if (call.cli) addTotals(call.cli, delta.amounts);
       else call.cli = cliCallOf(delta);
       touched.set(key, call.cli);
-      if (call.settled) {
+      if (call.settled && !delta.gatewayOnly) {
         pushAt({
           output,
           key: deltaKey(delta),
@@ -169,14 +171,17 @@ export class UsageCallMerge {
       const call = this.calls.get(key);
       const { cli, ledger } = call ?? { cli: null, ledger: null };
       if (!call || !cli || !ledger) continue;
-      const official = { ...mergedKey(cli, ledger), endpointId: undefined };
-      pushAt({
-        output,
-        key: official,
-        turnKey: cli.turnKey,
-        at: cli.at,
-        amounts: negated(totalsOf(cli)),
-      });
+      // 经过中转站的 Pi / OMP 回复从没算进「官方」，没有要退回的。
+      if (!cli.gatewayOnly) {
+        const official = { ...mergedKey(cli, ledger), endpointId: undefined };
+        pushAt({
+          output,
+          key: official,
+          turnKey: cli.turnKey,
+          at: cli.at,
+          amounts: negated(totalsOf(cli)),
+        });
+      }
       const speed = speedOf(ledger);
       const unknown = unknownProjectKey(ledger);
       pushAt({
@@ -210,13 +215,14 @@ export class UsageCallMerge {
 
   /**
    * Every request the stored records still hold: each call once, at the first
-   * ledger row of its reply, and each ledger row that names no reply.
+   * ledger row of its reply, and each ledger row that names no reply. A log
+   * reply that went through the gateway is listed only with its ledger row.
    */
   listCalls(): UsageListedCall[] {
     const listed: UsageListedCall[] = [];
     for (const { cli, ledger } of this.calls.values()) {
       if (ledger) listed.push({ kind: "gateway", ledger, cli });
-      else if (cli) listed.push({ kind: "direct", cli });
+      else if (cli && !cli.gatewayOnly) listed.push({ kind: "direct", cli });
     }
     for (const ledger of this.unreplied) listed.push({ kind: "gateway", ledger, cli: null });
     return listed;
@@ -292,6 +298,7 @@ function cliCallOf(delta: UsageCallDelta): UsageCliCall {
     bucket: delta.bucket,
     turnKey: delta.turnKey,
     ...delta.amounts,
+    ...(delta.gatewayOnly ? { gatewayOnly: true } : {}),
   };
 }
 

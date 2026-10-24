@@ -55,8 +55,8 @@ and what a rewritten file costs.
 
 ## The gateway ledger
 
-The gateway writes one row per Claude Code or Codex request it carried, when the
-request ends ([ADR 0014](adr/0014-gateway-ledger-merges-with-cli-logs.md)): the
+The gateway writes one row per Claude Code, Codex, Pi or OMP request it carried,
+when the request ends ([ADR 0014](adr/0014-gateway-ledger-merges-with-cli-logs.md)): the
 endpoint and model that answered, the six token columns, the duration, the time
 to first content, the stop reason, every try with its outcome, and the id of the
 reply the CLI got back. No prompt, reply text, tool arguments or body is
@@ -87,8 +87,9 @@ tried, as magpie counts failed calls in its groups, so the unknown project is
 listed even when every request in the period failed.
 
 The ledger and the CLI log meet on that id (Claude `message.id`, the
-`response_id` of Codex's `token_usage_record`; a rollout old enough to have only
-`token_count` names none, so its calls stay Official):
+`response_id` of Codex's `token_usage_record`, the `responseId` Pi and OMP record
+on a reply; a rollout old enough to have only `token_count` names none, so its
+calls stay Official):
 
 - **Both have the call**: one row. Tokens and endpoint come from the ledger;
   project, session and turn from the log, since the gateway cannot tell which
@@ -114,18 +115,25 @@ counted on the log's row, which is why an Official group can be left holding
 turns and no tokens; the report leaves such a group and model out. A reply of
 any age merges, as magpie merges over the whole period it reads.
 
-Pi and OMP follow the same rule once they go through the gateway: a log entry
-matched by its reply id merges as above; one that matches no ledger row and
-whose provider is the gateway Osuna writes into their config is skipped, and
-only the ledger counts it, as magpie's `calls_pi.go` does.
+Pi and OMP follow the same rule, with one difference that comes from magpie's
+`calls_pi.go`: an entry whose provider is `osuna`, the provider Osuna writes into
+their config for the gateway, is never counted from the log. Its tokens go to no
+row, so with no ledger row to meet it is skipped and not listed; matched, it
+merges as above and the ledger's tokens move to its project, session and turn.
+Its turn is still counted from the log. Pi's `usage` and OMP's `model_usage`
+entries (a cache warm-up, a title, a role's side call) count like replies on
+their own provider and model; they name no reply id, so the `osuna` ones are
+left to the ledger. A Pi or OMP run straight from a terminal is counted the same
+way: the gateway knows it by the token in its config, and its log is in the same
+directory.
 
 ### Two layers: summaries and per-request records
 
 Usage is kept twice. The 15-minute bucket and turn rows are the summaries: every
 total, split, cost and speed on the page reads them, and they are kept forever. The
 per-request records under `usage/requests/` are the ledger rows, the CLI log
-replies (Claude Code, Codex, Pi and OMP; Pi and OMP name a reply by session and
-entry id) and the `merged` markers. They back the Requests tab and an endpoint's
+replies (Claude Code, Codex, Pi and OMP; a Pi or OMP entry with no `responseId` is
+named by session and entry id) and the `merged` markers. They back the Requests tab and an endpoint's
 Recent problems, and they are what
 a restart reloads to carry on merging.
 

@@ -239,6 +239,7 @@ function recordUsage(input: {
         at,
         turnKey: attachment?.turnKey ?? null,
         amounts,
+        gatewayOnly: false,
       });
     }
   }

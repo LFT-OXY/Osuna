@@ -280,6 +280,12 @@ export interface UsageCallDelta {
   /** The turn the reply ran in; null when its tokens are in the bucket rows alone. */
   turnKey: string | null;
   amounts: UsageTokenTotals;
+  /**
+   * The log names Osuna's gateway as the reply's provider (Pi and OMP): its
+   * tokens went to no bucket row, so the ledger alone counts the call and a
+   * reply no ledger row matches is counted nowhere (ADR 0014).
+   */
+  gatewayOnly: boolean;
 }
 
 export interface UsageParseResult {
