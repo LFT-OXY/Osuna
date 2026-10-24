@@ -4,7 +4,7 @@
 
 **Blocked by:** 03
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] Agent 设置的 provider 取值接受 `omp`；目录照 Osuna 现有的 OMP 目录规则；能力位沿用 02 的或另加，旧 daemon 下新 App 不显示。
 - [ ] `models.yml`（只有 `models.yaml` 时用它）的 `providers.osuna`：`baseUrl`、`api: openai-completions`、`apiKey` 为 OMP 的中转站口令、`auth: apiKey`、`compat.promptCacheSessionHeader: x-session-affinity`；不写 User-Agent。
