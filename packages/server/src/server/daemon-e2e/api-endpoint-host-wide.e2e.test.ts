@@ -316,6 +316,74 @@ async function saveEndpoint(
   return saved.endpoint.id;
 }
 
+describe("a Gemini base URL (task 10-16-gemini-upstream)", () => {
+  test("is saved alone, spelled as its base, and listed with the endpoint", async () => {
+    const { client, endpointsPath } = await start();
+    expect(client.getLastServerInfoMessage()?.features?.apiEndpointGemini).toBe(true);
+
+    const bare = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Gemini relay",
+      baseUrls: [{ format: "gemini", url: "gemini-relay.example" }],
+      apiKey: "g-key",
+      models: [{ id: "gemini-3-pro" }],
+    });
+    expect(bare.error).toBeNull();
+    expect(bare.endpoint?.baseUrls).toEqual([
+      { format: "gemini", url: "https://gemini-relay.example/v1beta" },
+    ]);
+
+    const pasted = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Both",
+      baseUrls: [
+        {
+          format: "gemini",
+          url: "https://both.example/proxy/v1beta/models/gemini-2.5-pro:streamGenerateContent?alt=sse",
+        },
+        { format: "anthropic_messages", url: "https://both.example" },
+      ],
+      apiKey: "b-key",
+      models: [{ id: "b1" }],
+    });
+    expect(pasted.error).toBeNull();
+    // 按格式的顺序存，Gemini 排最后。
+    expect(pasted.endpoint?.baseUrls).toEqual([
+      { format: "anthropic_messages", url: "https://both.example" },
+      { format: "gemini", url: "https://both.example/proxy/v1beta" },
+    ]);
+
+    const listed = await client.apiEndpointList("claude");
+    expect(listed.endpoints.map((endpoint) => endpoint.baseUrls)).toEqual([
+      [{ format: "gemini", url: "https://gemini-relay.example/v1beta" }],
+      [
+        { format: "anthropic_messages", url: "https://both.example" },
+        { format: "gemini", url: "https://both.example/proxy/v1beta" },
+      ],
+    ]);
+    const stored = JSON.parse(await readFile(endpointsPath, "utf8"));
+    expect(stored.endpoints[0].baseUrls).toEqual([
+      { format: "gemini", url: "https://gemini-relay.example/v1beta" },
+    ]);
+  });
+
+  test("two Gemini base URLs are refused, and nothing is saved", async () => {
+    const { client } = await start();
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Twice",
+      baseUrls: [
+        { format: "gemini", url: "https://a.example/v1beta" },
+        { format: "gemini", url: "https://b.example/v1beta" },
+      ],
+      apiKey: "k",
+      models: [],
+    });
+    expect(saved.error).toMatchObject({ code: "invalid_input" });
+    expect((await client.apiEndpointList("claude")).endpoints).toEqual([]);
+  });
+});
+
 describe("the Use API endpoints switch", () => {
   test("stays off while every endpoint is off", async () => {
     const { client, settingsPath } = await start();
@@ -1397,7 +1465,7 @@ describe("reading a saved key back", () => {
 });
 
 describe("Templates", () => {
-  // magpie 的 57 个去掉 5 个决策模型、Remote magpie、Google Vertex AI、Google Gemini（子任务 7）。
+  // magpie 的 57 个去掉 5 个决策模型、Remote magpie、Google Vertex AI。
   const LEFT_OUT = new Set([
     "typesafe",
     "vercel-jev",
@@ -1406,7 +1474,6 @@ describe("Templates", () => {
     "qwen-decision",
     "remote-magpie",
     "vertex",
-    "google",
   ]);
 
   test("the list has magpie's vendors, relay services and local servers, and none of what is left out", async () => {
@@ -1415,12 +1482,12 @@ describe("Templates", () => {
     const { templates, error } = await client.apiEndpointListTemplates();
 
     expect(error).toBeNull();
-    expect(templates.length).toBe(49);
+    expect(templates.length).toBe(50);
     const groups = new Map<string, number>();
     for (const template of templates) {
       groups.set(template.group, (groups.get(template.group) ?? 0) + 1);
     }
-    expect(Object.fromEntries(groups)).toEqual({ vendor: 29, relay: 16, local: 4 });
+    expect(Object.fromEntries(groups)).toEqual({ vendor: 30, relay: 16, local: 4 });
     const ids = templates.map((template) => template.id);
     expect(ids.filter((id) => LEFT_OUT.has(id))).toEqual([]);
     expect(new Set(ids).size).toBe(ids.length);
@@ -1440,6 +1507,14 @@ describe("Templates", () => {
       expect(hasAddress, template.id).toBe(true);
       if (template.group !== "local") expect(template.keysUrl, template.id).toMatch(/^https:\/\//);
     }
+    // Google Gemini 照 magpie 只有 Chat 兼容地址。
+    expect(templates.find((template) => template.id === "google")).toMatchObject({
+      name: "Google Gemini",
+      group: "vendor",
+      baseUrls: [
+        { format: "openai_chat", url: "https://generativelanguage.googleapis.com/v1beta/openai" },
+      ],
+    });
     const zhipu = templates.find((template) => template.id === "zhipu");
     expect(zhipu).toMatchObject({
       group: "vendor",

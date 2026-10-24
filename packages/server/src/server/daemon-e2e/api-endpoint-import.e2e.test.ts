@@ -470,6 +470,102 @@ describe("import from other apps", () => {
     ).toEqual(["added", "added", "added"]);
   });
 
+  test("Gemini base URLs come in from CC Switch and Alma, and a Gemini URL's host makes an entry the same endpoint", async () => {
+    const known = {
+      ...storedEndpoint({ id: "ep_known", name: "Known", url: "https://unused.example" }),
+      baseUrls: [{ format: "gemini", url: "https://known-gemini.example/v1beta" }],
+    };
+    const { client, sources } = await start({ endpoints: [known], keys: { ep_known: "sk-known" } });
+    const cc = new DatabaseSync(sources.ccSwitchDb);
+    const ccInsert = cc.prepare("INSERT INTO providers VALUES (?, ?, ?, ?, NULL, NULL, ?, ?)");
+    ccInsert.run(
+      "g1",
+      "gemini",
+      "Gemini Relay",
+      JSON.stringify({
+        env: {
+          GOOGLE_GEMINI_BASE_URL: "https://gem-relay.example/gemini",
+          GEMINI_API_KEY: "sk-gem-6666",
+          GEMINI_MODEL: "gemini-3-pro",
+        },
+      }),
+      0,
+      4,
+    );
+    // 和已有那家同一把 key、Anthropic 地址在它 Gemini 地址的主机上：是同一家。
+    ccInsert.run(
+      "g2",
+      "claude",
+      "Known again",
+      JSON.stringify({
+        env: {
+          ANTHROPIC_BASE_URL: "https://known-gemini.example/anthropic",
+          ANTHROPIC_AUTH_TOKEN: "sk-known",
+        },
+      }),
+      0,
+      5,
+    );
+    cc.close();
+    const alma = new DatabaseSync(sources.almaDb);
+    alma
+      .prepare("INSERT INTO providers VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(
+        "a2",
+        "Alma Gemini",
+        "openai-compatible",
+        "sk-alma-gem-7777",
+        "[]",
+        "https://alma-gem.example/v1beta",
+        1,
+        "gemini",
+        0,
+        "{}",
+        2,
+      );
+    alma.close();
+
+    const scan = await client.apiEndpointImportScan();
+    const gemini = itemsOf(scan, "cc-switch").find((item) => item.name === "Gemini Relay");
+    expect(gemini).toMatchObject({
+      baseUrls: [{ format: "gemini", url: "https://gem-relay.example/gemini/v1beta" }],
+      models: ["gemini-3-pro"],
+      status: "new",
+      skip: null,
+    });
+    expect(itemsOf(scan, "cc-switch").find((item) => item.name === "Known again")).toMatchObject({
+      status: "added",
+      existingEndpointId: "ep_known",
+    });
+    const almaGemini = itemsOf(scan, "alma").find((item) => item.name === "Alma Gemini");
+    expect(almaGemini).toMatchObject({
+      baseUrls: [{ format: "gemini", url: "https://alma-gem.example/v1beta" }],
+      status: "new",
+      skip: null,
+    });
+    if (!gemini || !almaGemini) throw new Error("Expected the two Gemini entries");
+
+    const result = await client.apiEndpointImport([
+      { fingerprint: gemini.fingerprint, action: "add" },
+      { fingerprint: almaGemini.fingerprint, action: "add" },
+    ]);
+    expect(result.error).toBeNull();
+    const listed = await client.apiEndpointList("claude");
+    expect(listed.endpoints.slice(1).map((endpoint) => [endpoint.name, endpoint.baseUrls])).toEqual(
+      [
+        ["Gemini Relay", [{ format: "gemini", url: "https://gem-relay.example/gemini/v1beta" }]],
+        ["Alma Gemini", [{ format: "gemini", url: "https://alma-gem.example/v1beta" }]],
+      ],
+    );
+    expect((await client.apiEndpointRevealKey(result.imported[0]?.endpointId ?? "")).apiKey).toBe(
+      "sk-gem-6666",
+    );
+    const again = await client.apiEndpointImportScan();
+    expect(itemsOf(again, "cc-switch").find((item) => item.name === "Gemini Relay")?.status).toBe(
+      "added",
+    );
+  });
+
   test("one at a time: what came in before an entry fails stays, and the reply names the failed one; an empty rename is no rename", async () => {
     const { client } = await start({
       endpoints: [
@@ -792,7 +888,13 @@ describe("import links (ticket 28)", () => {
       hosts: ["fresh.example"],
       models: ["m1", "m2"],
       replaces: null,
-      ignoredGemini: true,
+      // 老客户端要这个字段；Gemini 地址收进了地址里。
+      ignoredGemini: false,
+      baseUrls: [
+        { format: "anthropic_messages", url: "https://fresh.example" },
+        { format: "openai_chat", url: "https://fresh.example/v1" },
+        { format: "gemini", url: "https://fresh.example/v1beta" },
+      ],
     });
     expect((await client.apiEndpointList("claude")).endpoints).toHaveLength(2);
 
@@ -828,6 +930,10 @@ describe("import links (ticket 28)", () => {
       { format: "openai_chat", url: "https://new-relay.example/v1" },
     ]);
     expect(listed.endpoints[2]?.models).toEqual([{ id: "m1" }, { id: "m2" }]);
+    expect(listed.endpoints[2]?.baseUrls).toContainEqual({
+      format: "gemini",
+      url: "https://fresh.example/v1beta",
+    });
     // 换成链接里没有 key 的那家：原来那把 key 不再是它的。
     expect((await client.apiEndpointRevealKey("my-relay")).apiKey).toBeNull();
     // 确认框里改的 key 也照链接的规矩拒收。
@@ -840,6 +946,28 @@ describe("import links (ticket 28)", () => {
       code: "import_link_refused",
       params: { reason: "bad_key" },
     });
+  });
+
+  test("a link with a Gemini base URL alone is taken, and the URL is kept as its base", async () => {
+    const { client } = await start({ endpoints: [], keys: {} });
+    const only = "paseo://import?name=Only%20Gemini&gemini=https://only-gemini.example&key=g-link";
+    const preview = await client.apiEndpointImportLinkPreview(only);
+    expect(preview.error).toBeNull();
+    expect(preview.preview).toMatchObject({
+      baseUrls: [{ format: "gemini", url: "https://only-gemini.example" }],
+      hosts: ["only-gemini.example"],
+      ignoredGemini: false,
+    });
+    const added = await client.apiEndpointImportLink({
+      link: only,
+      name: "Only Gemini",
+      key: "g-link",
+    });
+    expect(added.error).toBeNull();
+    const listed = await client.apiEndpointList("claude");
+    expect(listed.endpoints[0]?.baseUrls).toEqual([
+      { format: "gemini", url: "https://only-gemini.example/v1beta" },
+    ]);
   });
 
   test("replaces what magpie's Find(id) finds: the same id, then a name equal to the id, never the link's name alone", async () => {

@@ -14,6 +14,7 @@ import {
   CODEX_ONLY,
   CODEX_SAMPLE,
   connectApiEndpointClient,
+  hideHostFeature,
   hideManagementCapability,
   openApiEndpointsPage,
   RELAY_ACCOUNT_TOKEN,
@@ -126,8 +127,15 @@ function postedPaths(target: FakeRelay): string[] {
     .sort();
 }
 
+/** 收到的认证头：Gemini 的请求只带 x-goog-api-key，记成「x-goog-api-key <key>」。 */
 function authorizationsSeen(target: FakeRelay): Set<string | undefined> {
-  return new Set(target.requests.map((request) => request.authorization));
+  return new Set(
+    target.requests.map((request) =>
+      request.googApiKey === undefined
+        ? request.authorization
+        : `x-goog-api-key ${request.googApiKey}`,
+    ),
+  );
 }
 
 function methodsSeen(target: FakeRelay): Set<string> {
@@ -148,6 +156,11 @@ function deploymentListings(target: FakeRelay): FakeRelay["requests"] {
 
 function namesAndSwitches(endpoints: { name: string; enabled?: boolean }[]) {
   return endpoints.map((endpoint) => [endpoint.name, endpoint.enabled]);
+}
+
+/** 第一个问 Gemini generateContent 的请求。 */
+function geminiAskOf(target: FakeRelay): FakeRelay["requests"][number] | undefined {
+  return target.requests.find((request) => request.url.includes(":generateContent"));
 }
 
 function statusesOf(results: { status: string }[]): string[] {
@@ -182,7 +195,7 @@ async function templateTileOriginsInOneFrame(
 
 // 自动检测每种格式一行，这里取那一行的结论。
 function detectionTags(page: Page): Locator[] {
-  return ["anthropic_messages", "openai_chat", "openai_responses"].map((format) =>
+  return ["anthropic_messages", "openai_chat", "openai_responses", "gemini"].map((format) =>
     page.getByTestId(`api-endpoint-connection-detection-${format}-verdict`),
   );
 }
@@ -247,6 +260,7 @@ test.describe("Settings API endpoints", () => {
         "",
       );
       expect(postedPaths(relay)).toEqual([
+        "/good/models/claude-sonnet-4-5:generateContent",
         "/good/v1/chat/completions",
         "/good/v1/messages",
         "/good/v1/responses",
@@ -285,8 +299,10 @@ test.describe("Settings API endpoints", () => {
         endpointId,
         baseUrl: `${relay.origin}/good`,
       });
-      expect(statusesOf(detected.results)).toEqual(["ok", "ok", "not_detected"]);
-      expect(authorizationsSeen(relay)).toEqual(new Set([`Bearer ${RELAY_KEY}`]));
+      expect(statusesOf(detected.results)).toEqual(["ok", "ok", "not_detected", "not_detected"]);
+      expect(authorizationsSeen(relay)).toEqual(
+        new Set([`Bearer ${RELAY_KEY}`, `x-goog-api-key ${RELAY_KEY}`]),
+      );
     });
   });
 
@@ -305,7 +321,7 @@ test.describe("Settings API endpoints", () => {
 
     for (const tag of detectionTags(page)) await expect(tag).toHaveText("Key rejected");
     await expect(page.getByTestId("api-endpoint-connection-api-key-field-error")).toHaveText(
-      "The upstream rejected this key (401 / 403)",
+      "The upstream rejected this key",
     );
     await expect(page.getByTestId("api-endpoint-connection-save")).toBeDisabled();
     expect(postedPaths(relay)).toEqual([]);
@@ -322,7 +338,7 @@ test.describe("Settings API endpoints", () => {
       "API key (optional)",
     );
     await expect(page.getByTestId("api-endpoint-connection-address-field-hint")).toHaveText(
-      "Press Auto-detect: Osuna tries each of the three request formats once and lists how each answered; Use these fills in the addresses that work. The key goes with each try only if you fill it in.",
+      "Press Auto-detect: Osuna tries each request format once and lists how each answered; Use these fills in the addresses that work. The key goes with each try only if you fill it in.",
     );
     await page.getByTestId("api-endpoint-connection-name").fill("Local server");
     const detect = page.getByTestId("api-endpoint-connection-detect");
@@ -1418,8 +1434,8 @@ test.describe("Settings API endpoints", () => {
         "Not detected · The model chat-only-glm is not served here · /v1/messages",
       );
       await expect(verdict("chat-only-glm", "openai_chat")).toHaveText(/^\d+ ms$/);
-      // 两个模型、三种格式，各问一次。
-      expect(postedPaths(relay)).toHaveLength(6);
+      // 两个模型、四种格式，各问一次。
+      expect(postedPaths(relay)).toHaveLength(8);
       await expect(page.getByTestId("api-endpoint-connection-each-given")).toHaveText(
         "“Use these” also sets “Use only this format”: chat-only-glm: OpenAI Chat only",
       );
@@ -1460,6 +1476,37 @@ test.describe("Settings API endpoints", () => {
       await expect(page.getByTestId("api-endpoint-connection-each-results")).toHaveCount(0);
       await expect(each).toBeEnabled();
     });
+  });
+
+  test("Each picked model has a Gemini column; Use these makes a model that answered on Gemini only use Gemini", async ({
+    page,
+  }) => {
+    const endpointId = await seedApiEndpoint(client, {
+      name: "Gemini relay",
+      baseUrls: [{ format: "gemini", url: `${relay.origin}/good/v1beta` }],
+      models: ["gemini-2.5-pro", "claude-sonnet-4-5"],
+    });
+    await openEndpointDetail(page, endpointId);
+    await page.getByTestId("api-endpoint-edit-connection").filter({ visible: true }).click();
+    const verdict = (model: string, format: string) =>
+      page.getByTestId(`api-endpoint-connection-each-${model}-${format}-verdict`);
+    await page.getByTestId("api-endpoint-connection-detect-each").click();
+    await expect(verdict("gemini-2.5-pro", "gemini")).toHaveText(/^\d+ ms$/);
+    await expect(verdict("claude-sonnet-4-5", "gemini")).toHaveText("400");
+    await expect(
+      page.getByTestId("api-endpoint-connection-each-claude-sonnet-4-5-gemini-reason"),
+    ).toHaveText(
+      "Not detected · models/claude-sonnet-4-5 is not found · /models/claude-sonnet-4-5:generateContent",
+    );
+    await expect(page.getByTestId("api-endpoint-connection-each-given")).toHaveText(
+      "“Use these” also sets “Use only this format”: gemini-2.5-pro: Gemini only",
+    );
+    await page.getByTestId("api-endpoint-connection-use-detected").click();
+    await page.getByTestId("api-endpoint-connection-save").click();
+    await expect(connectionForm(page)).toHaveCount(0);
+    await expect
+      .poll(modelSettingsReader(endpointId))
+      .toEqual({ models: { "gemini-2.5-pro": { format: "gemini" } } });
   });
 
   test("Long conversations: Full window and Compact at reach the host, and a refusal keeps what was there", async ({
@@ -1611,13 +1658,18 @@ test.describe("Settings API endpoints", () => {
     ).toEqual(["claude-sonnet-4-5"]);
   });
 
-  test("Searches the web by itself saves from its switch, a failed save stays in place, and a Chat-only endpoint has no such row", async ({
+  test("Searches the web by itself saves from its switch, a failed save stays in place, a Gemini-only endpoint has the row, and a Chat-only endpoint has none", async ({
     page,
   }) => {
     const endpointId = await seedApiEndpoint(client, {
       name: "Searching relay",
       baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
       models: ["claude-sonnet-4-5"],
+    });
+    const geminiOnlyId = await seedApiEndpoint(client, {
+      name: "Gemini relay",
+      baseUrls: [{ format: "gemini", url: `${relay.origin}/good/v1beta` }],
+      models: ["gemini-2.5-pro"],
     });
     const chatOnlyId = await seedApiEndpoint(client, {
       name: "Chat relay",
@@ -1651,6 +1703,14 @@ test.describe("Settings API endpoints", () => {
       await expect(section.getByTestId("api-endpoint-web-search-error")).toHaveCount(0);
       await expect.poll(searchesWeb).toBe(true);
     });
+
+    await openEndpointDetail(page, geminiOnlyId);
+    await expect(
+      page
+        .getByTestId("api-endpoint-web-search-section")
+        .filter({ visible: true })
+        .getByRole("switch", { name: "Searches the web by itself" }),
+    ).toBeVisible();
 
     await openEndpointDetail(page, chatOnlyId);
     await expect(page.getByTestId("api-endpoint-detail").filter({ visible: true })).toBeVisible();
@@ -1808,8 +1868,10 @@ test.describe("Settings API endpoints", () => {
         endpointId: copyId,
         baseUrl: `${relay.origin}/good`,
       });
-      expect(statusesOf(detected.results)).toEqual(["ok", "ok", "not_detected"]);
-      expect(authorizationsSeen(relay)).toEqual(new Set([`Bearer ${RELAY_KEY}`]));
+      expect(statusesOf(detected.results)).toEqual(["ok", "ok", "not_detected", "not_detected"]);
+      expect(authorizationsSeen(relay)).toEqual(
+        new Set([`Bearer ${RELAY_KEY}`, `x-goog-api-key ${RELAY_KEY}`]),
+      );
     });
   });
 
@@ -2365,7 +2427,7 @@ test.describe("Templates", () => {
       const [left, right, next] = await templateTileOriginsInOneFrame(page, [
         "anthropic",
         "openai",
-        "deepseek",
+        "google",
       ]);
       expect(right?.y ?? Infinity).toBe(left?.y ?? 0);
       expect(next?.x ?? Infinity).toBe(left?.x ?? 0);
@@ -2946,6 +3008,90 @@ test.describe("Templates", () => {
   });
 });
 
+test.describe("A Gemini base URL", () => {
+  function geminiUrl(page: Page): Locator {
+    return page.getByTestId("api-endpoint-connection-url-gemini");
+  }
+
+  test("the add dialog has a Gemini base URL field; an endpoint with it alone saves after a failed try, and its page shows it", async ({
+    page,
+  }) => {
+    const host = await failConnectionSave(page);
+    await openApiEndpointsPage(page);
+    await page.getByTestId("api-endpoints-empty-add").click();
+    await page.getByTestId("api-endpoint-template-custom").click();
+    const field = page.getByTestId("api-endpoint-connection-url-field-gemini");
+    await expect(field).toContainText("Gemini base URL");
+    await expect(page.getByTestId("api-endpoint-connection-url-field-gemini-hint")).toHaveText(
+      "Fill in the …/v1beta level. The key is sent in the x-goog-api-key header.",
+    );
+    await expect(geminiUrl(page)).toHaveAttribute("placeholder", /\/v1beta$/);
+
+    await page.getByTestId("api-endpoint-connection-name").fill("Gemini Relay");
+    await page.getByTestId("api-endpoint-connection-api-key").fill(RELAY_KEY);
+    await geminiUrl(page).fill(`${relay.origin}/gem/v1beta`);
+    const save = page.getByTestId("api-endpoint-connection-save");
+
+    await test.step("a failed save keeps the form and says why", async () => {
+      await save.click();
+      await expect(page.getByTestId("api-endpoint-connection-error")).toHaveText(
+        "EACCES: permission denied",
+      );
+      await expect(geminiUrl(page)).toHaveValue(`${relay.origin}/gem/v1beta`);
+      expect((await client.apiEndpointList("claude")).endpoints).toEqual([]);
+    });
+
+    await test.step("trying again saves it, and the endpoint's page shows the Gemini base URL", async () => {
+      host.failing = false;
+      await save.click();
+      await expect(connectionForm(page)).toHaveCount(0);
+      await expect(headerTitle(page)).toHaveText("Gemini Relay");
+      const listed = await client.apiEndpointList("claude");
+      expect(listed.endpoints[0]?.baseUrls).toEqual([
+        { format: "gemini", url: `${relay.origin}/gem/v1beta` },
+      ]);
+      await expect(
+        page.getByTestId("api-endpoint-connection-row-gemini").filter({ visible: true }),
+      ).toContainText(`${relay.origin}/gem/v1beta`);
+    });
+  });
+
+  test("a host without apiEndpointGemini shows no Gemini base URL, in the dialog or on the page", async ({
+    page,
+  }) => {
+    await hideHostFeature(page, "apiEndpointGemini");
+    const endpointId = await seedApiEndpoint(client, {
+      name: "Relay",
+      baseUrls: [{ format: "openai_chat", url: `${relay.origin}/good/v1` }],
+      models: ["gpt-5"],
+      apiKey: RELAY_KEY,
+    });
+    await openApiEndpointsPage(page);
+    await row(page, endpointId).click();
+    await expect(
+      page.getByTestId("api-endpoint-connection-row-openai_chat").filter({ visible: true }),
+    ).toBeVisible();
+    await expect(page.getByTestId("api-endpoint-connection-row-gemini")).toHaveCount(0);
+    await page.getByTestId("api-endpoint-edit-connection").filter({ visible: true }).click();
+    await expect(page.getByTestId("api-endpoint-connection-url-openai_chat")).toBeVisible();
+    await expect(geminiUrl(page)).toHaveCount(0);
+  });
+
+  test("the template list has Google Gemini, which fills its Chat-compatible address", async ({
+    page,
+  }) => {
+    await openApiEndpointsPage(page);
+    await page.getByTestId("api-endpoints-empty-add").click();
+    await page.getByTestId("api-endpoint-template-search").fill("Gemini");
+    const google = page.getByTestId("api-endpoint-template-google");
+    await expect(google).toContainText("Google Gemini");
+    await google.click();
+    await expect(page.getByTestId("api-endpoint-connection-url-openai_chat")).toHaveValue(
+      "https://generativelanguage.googleapis.com/v1beta/openai",
+    );
+  });
+});
+
 test.describe("Checking an API endpoint before saving it", () => {
   async function openCustomForm(page: Page, input: { apiKey: string }): Promise<void> {
     await openApiEndpointsPage(page);
@@ -3046,6 +3192,101 @@ test.describe("Checking an API endpoint before saving it", () => {
     await expect(page.getByTestId("api-endpoint-connection-models-field-error")).toHaveCount(0);
   });
 
+  // 任务 10-16-gemini-upstream 工单 05：Gemini 地址的识别、逐个模型、拉清单。
+  test("a Gemini base URL is detected on its own row, a key Google turns away reads Key rejected, and its models list in the add window", async ({
+    page,
+  }) => {
+    await openCustomForm(page, { apiKey: RELAY_KEY });
+    const address = page.getByTestId("api-endpoint-connection-address");
+    const detect = page.getByTestId("api-endpoint-connection-detect");
+    const [, , , gemini] = detectionTags(page);
+
+    await test.step("Auto-detect finds Gemini's generateContent at …/v1beta, asked with x-goog-api-key", async () => {
+      await address.fill(`${relay.origin}/good/v1beta`);
+      relay.requests.length = 0;
+      await detect.click();
+      await expect(gemini).toHaveText(DETECTED_IN);
+      for (const tag of detectionTags(page).slice(0, 3))
+        await expect(tag).toHaveText("Not detected");
+      expect(geminiAskOf(relay)).toMatchObject({
+        url: "/good/v1beta/models/gemini-2.5-pro:generateContent",
+        googApiKey: RELAY_KEY,
+        authorization: undefined,
+      });
+      await page.getByTestId("api-endpoint-connection-use-detected").click();
+      await expect(page.getByTestId("api-endpoint-connection-url-gemini")).toHaveValue(
+        `${relay.origin}/good/v1beta`,
+      );
+    });
+
+    await test.step("a key Google turns away with a 400 reads Key rejected on the Gemini row", async () => {
+      await page.getByTestId("api-endpoint-connection-api-key").fill("sk-wrong");
+      await page.getByTestId("api-endpoint-connection-detect-model").fill("gemini-2.5-pro");
+      await detect.click();
+      await expect(gemini).toHaveText("Key rejected");
+      await expect(
+        page.getByTestId("api-endpoint-connection-detection-gemini-reason"),
+      ).toContainText("API key not valid");
+      await expect(page.getByTestId("api-endpoint-connection-api-key-field-error")).toBeVisible();
+    });
+
+    await test.step("Fetch models on a Gemini base URL lists the models that chat, and says why it failed or listed none", async () => {
+      await page.getByTestId("api-endpoint-connection-api-key").fill(RELAY_KEY);
+      const fetchButton = page.getByTestId("api-endpoint-connection-fetch-models");
+      const fieldError = page.getByTestId("api-endpoint-connection-models-field-error");
+      await fetchButton.click();
+      await expect(page.getByTestId("api-endpoint-connection-catalog-count")).toHaveText(
+        "0 of 2 picked",
+      );
+      await expect(
+        page.getByTestId("api-endpoint-connection-catalog-model-gemini-2.5-pro"),
+      ).toBeVisible();
+      await expect(
+        page.getByTestId("api-endpoint-connection-catalog-model-text-embedding-004"),
+      ).toHaveCount(0);
+
+      await page.getByTestId("api-endpoint-connection-api-key").fill("sk-wrong");
+      await fetchButton.click();
+      await expect(fieldError).toContainText("HTTP 400: API key not valid");
+      await expect(page.getByTestId("api-endpoint-connection-catalog")).toHaveCount(0);
+
+      await page.getByTestId("api-endpoint-connection-api-key").fill(RELAY_KEY);
+      await page
+        .getByTestId("api-endpoint-connection-url-gemini")
+        .fill(`${relay.origin}/empty/v1beta`);
+      await fetchButton.click();
+      await expect(fieldError).toHaveText(
+        "The vendor's list is empty. Type the model ids instead.",
+      );
+
+      await page
+        .getByTestId("api-endpoint-connection-url-gemini")
+        .fill(`${relay.origin}/slow/v1beta`);
+      await fetchButton.click();
+      await page.getByTestId("api-endpoint-connection-fetch-cancel").click();
+      await expect(page.getByTestId("api-endpoint-connection-fetch-cancel")).toHaveCount(0);
+      await expect(fetchButton).toBeEnabled();
+    });
+  });
+
+  test("Test connection asks a Gemini base URL with x-goog-api-key and tells a key Google turns away apart", async ({
+    page,
+  }) => {
+    await openCustomForm(page, { apiKey: RELAY_KEY });
+    await page
+      .getByTestId("api-endpoint-connection-url-gemini")
+      .fill(`${relay.origin}/good/v1beta`);
+    const testButton = page.getByTestId("api-endpoint-connection-test-button");
+    relay.requests.length = 0;
+    await testButton.click();
+    await expect(testVerdict(page, "gemini")).toHaveText(/^Connected · \d+ ms$/);
+    expect(authorizationsSeen(relay)).toEqual(new Set([`x-goog-api-key ${RELAY_KEY}`]));
+
+    await page.getByTestId("api-endpoint-connection-api-key").fill("sk-wrong");
+    await testButton.click();
+    await expect(testVerdict(page, "gemini")).toHaveText("Key rejected");
+  });
+
   test("Test connection gives each format its time or its error, and can be cancelled", async ({
     page,
   }) => {
@@ -3070,7 +3311,7 @@ test.describe("Checking an API endpoint before saving it", () => {
       await testButton.click();
       await expect(testVerdict(page, "openai_chat")).toHaveText("Key rejected");
       await expect(page.getByTestId("api-endpoint-connection-api-key-field-error")).toHaveText(
-        "The upstream rejected this key (401 / 403)",
+        "The upstream rejected this key",
       );
     });
 
@@ -3111,6 +3352,7 @@ test.describe("Checking an API endpoint before saving it", () => {
       await expect(chat).toHaveText(DETECTED_IN);
       await expect(responses).toHaveText("Not detected");
       expect(modelsAsked(relay)).toEqual([
+        "claude-sonnet-4-5",
         "claude-sonnet-4-5",
         "claude-sonnet-4-5",
         "claude-sonnet-4-5",
@@ -6149,6 +6391,39 @@ test.describe("Import from other apps", () => {
     await expect(list).toContainText("Team Relay");
     await expect(list).toContainText("My Codex Relay");
     await expect(list).toContainText("My Relay");
+  });
+
+  test("a Gemini CLI entry at a relay comes in on its Gemini base URL", async ({ page }) => {
+    await mkdir(path.join(importHome, ".cc-switch"), { recursive: true });
+    await writeFile(
+      path.join(importHome, ".cc-switch", "config.json"),
+      JSON.stringify({
+        gemini: {
+          providers: {
+            relay: {
+              name: "Gemini Relay",
+              settingsConfig: {
+                env: { GOOGLE_GEMINI_BASE_URL: `${relay.origin}/gem`, GEMINI_API_KEY: RELAY_KEY },
+              },
+            },
+          },
+        },
+      }),
+    );
+    await openApiEndpointsPage(page);
+    await page.getByTestId("api-endpoints-import-button").click();
+    const entry = importItem(page, "gemini/relay");
+    await expect(entry).toContainText("Gemini Relay");
+    await expect(entry).toContainText("New");
+    await expect(entry).toContainText(new URL(relay.origin).host);
+    await expect(importSheet(page)).not.toContainText("Gemini format");
+    await page.getByTestId("api-endpoint-import-submit").click();
+    await expect(importSheet(page)).toHaveCount(0);
+    await expect(page.getByText("Imported 1: Gemini Relay")).toBeVisible();
+    const listed = await client.apiEndpointList("claude");
+    expect(listed.endpoints[0]?.baseUrls).toEqual([
+      { format: "gemini", url: `${relay.origin}/gem/v1beta` },
+    ]);
   });
 
   for (const language of ["en", "zh-CN"] as const) {

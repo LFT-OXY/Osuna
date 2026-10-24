@@ -118,14 +118,16 @@ export class ReplyClock {
     };
   }
 
-  /** Responses 的推理只给摘要，量不全（magpie 的 hidesReasoning）。 */
+  /** Responses 与 Gemini 的推理只给摘要，量不全（magpie 的 hidesReasoning）。 */
   private hidesReasoning(): boolean {
-    return this.hidden || (this.upstream === "openai_responses" && this.reasoning !== null);
+    const summarizes = this.upstream === "openai_responses" || this.upstream === "gemini";
+    return this.hidden || (summarizes && this.reasoning !== null);
   }
 
   /** 推理是第一个内容、没封存、按自己的节奏流了至少 100ms，且上游是 Chat 或 Anthropic（magpie 的 reasoningMs）。 */
   private visibleReasoning(): boolean {
-    if (this.upstream === "openai_responses" || this.hidden || this.off) return false;
+    const paced = this.upstream === "openai_chat" || this.upstream === "anthropic_messages";
+    if (!paced || this.hidden || this.off) return false;
     if (this.reasoning === null || this.lastReasoning === null) return false;
     if (this.reasoning !== this.first) return false;
     return this.lastReasoning - this.reasoning >= MIN_REASONING_SPAN_MS;

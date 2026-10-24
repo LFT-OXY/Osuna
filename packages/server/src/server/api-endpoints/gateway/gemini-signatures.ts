@@ -1,6 +1,6 @@
 // Gemini 的思考签名移植自 magpie（https://github.com/yetone/magpie，internal/gateway/gemini_signature.go 的 signedID、unsignedID、
 // googleSignature、chatCallSignatures、sigTidy 与 signReply，gemini_sigstore.go 的 sigStore，chat.go 的 geminiCompat 与 aiStudioHost，
-// codeassist.go 的 skipSignature）
+// codeassist.go 的 skipSignature，gemini_signature.go 的 unsignCalls）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { createHash } from "node:crypto";
@@ -22,7 +22,7 @@ import { applyEdits, modify } from "jsonc-parser";
 import { hostOf } from "../model-facts.js";
 import { isRecord, parseJson } from "../upstream-http.js";
 import type { ReplyTidy } from "./reply-tidy.js";
-import { newId } from "./translation/ir.js";
+import { newId, type GatewayRequest, type Message } from "./translation/ir.js";
 
 /*
  * Gemini 3 给每个思考过的步骤的第一个工具调用签名，下一个请求那个调用不带回签名就整个拒收
@@ -40,7 +40,7 @@ const SIG_RAW = "r";
 const SIG_KEPT = "k";
 const SIG_END = "__";
 // Google 给没签过的历史用的值（magpie skipSignature）。
-const SKIP_SIGNATURE = "skip_thought_signature_validator";
+export const SKIP_SIGNATURE = "skip_thought_signature_validator";
 // Google AI Studio 的 Gemini 接口。
 const AI_STUDIO_HOST = "generativelanguage.googleapis.com";
 
@@ -212,7 +212,7 @@ function decodeBase64Url(text: string): Buffer | null {
 }
 
 /** 调用的 extra_content 里的思考签名；没有为 ""。 */
-function googleSignature(extra: unknown): string {
+export function googleSignature(extra: unknown): string {
   if (!isRecord(extra) || !isRecord(extra.google)) return "";
   const signature = extra.google.thought_signature;
   return typeof signature === "string" ? signature : "";
@@ -389,4 +389,39 @@ export class GeminiSignatureTidy implements ReplyTidy {
     }
     return changed ? JSON.stringify(reply) : null;
   }
+}
+
+/**
+ * 翻译读的请求取下调用 id 里的签名（magpie unsignCalls）：调用留着自己的 id，签名记在它身上（客户端在别处带回来的优先），
+ * 回答它的结果改答这个 id。发给 Gemini 的带回签名，发给别家的只用调用原来的 id。不改传进来的请求。
+ */
+export function unsignCalls(input: {
+  request: GatewayRequest;
+  store: GeminiSignatureStore;
+}): GatewayRequest {
+  const { request, store } = input;
+  let changed = false;
+  const messages = request.messages.map((message): Message => {
+    let touched = false;
+    const parts = message.parts.map((part) => {
+      if (part.kind === "tool_call") {
+        const unsigned = unsignedId({ id: part.id, store });
+        if (unsigned.signature === "") return part;
+        touched = true;
+        const signature = part.signature || unsigned.signature;
+        return { ...part, id: unsigned.id, signature };
+      }
+      if (part.kind === "tool_result") {
+        const unsigned = unsignedId({ id: part.callId, store });
+        if (unsigned.signature === "") return part;
+        touched = true;
+        return { ...part, callId: unsigned.id };
+      }
+      return part;
+    });
+    if (!touched) return message;
+    changed = true;
+    return { ...message, parts };
+  });
+  return changed ? { ...request, messages } : request;
 }

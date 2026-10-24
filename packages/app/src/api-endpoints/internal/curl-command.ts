@@ -38,11 +38,16 @@ const KEY_PLACEHOLDER =
   /^\$|^%\w+%$|^<.*>$|^\{\{.*\}\}$|^\[.*\]$|your[_-]?|api[_-]?key|x{6,}|\.\.\.|…/i;
 
 /**
- * 把一个地址改成这种格式要的写法：Anthropic 用根地址（它自己加 /v1），OpenAI 的两种用 …/v1（只有主机时补上）。
+ * 把一个地址改成这种格式要的写法：Anthropic 用根地址（它自己加 /v1），OpenAI 的两种用 …/v1（只有主机时补上），
+ * Gemini 用 …/v1beta（主机后正好是 /v1 的改成 /v1beta，只有主机时补上，同 Google 的 SDK）。
  */
 export function respellUrl(input: { url: string; format: ApiEndpointRequestFormat }): string {
   const url = input.url.trim().replace(/\/+$/, "");
   if (input.format === "anthropic_messages") return url.replace(/\/v1$/, "");
+  if (input.format === "gemini") {
+    if (/^https?:\/\/[^/]+\/v1$/.test(url)) return `${url}beta`;
+    return /^https?:\/\/[^/]+$/.test(url) ? `${url}/v1beta` : url;
+  }
   const hasVersion = /\/v\d+[a-z]*$/.test(url);
   const isBareHost = /^https?:\/\/[^/]+$/.test(url);
   const needsVersion = isBareHost && !hasVersion;

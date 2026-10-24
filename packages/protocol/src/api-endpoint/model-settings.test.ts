@@ -243,9 +243,9 @@ describe("upstream name and format as stored", () => {
 
   it("refuses a format that is not a request format", () => {
     const base = { knownEfforts: undefined, listedImages: undefined };
-    expect(settleModelSetting({ ...base, setting: { format: "gemini" } })).toEqual({
+    expect(settleModelSetting({ ...base, setting: { format: "vertex" } })).toEqual({
       kind: "invalid",
-      problem: { kind: "format", format: "gemini" },
+      problem: { kind: "format", format: "vertex" },
     });
   });
 });

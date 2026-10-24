@@ -2490,6 +2490,7 @@ export const ar: TranslationResources = {
         anthropic_messages: "Anthropic",
         openai_chat: "OpenAI Chat",
         openai_responses: "OpenAI Responses",
+        gemini: "Gemini",
       },
       status: {
         available: "متاح",
@@ -2567,7 +2568,6 @@ export const ar: TranslationResources = {
           invalid_base_url: "العنوان الأساسي غير صالح",
           points_at_osuna: "يشير إلى Osuna نفسه",
           no_api_key: "لا يوجد مفتاح API",
-          gemini_unsupported: "لا يدعم Osuna تنسيق Gemini بعد",
           no_azure_endpoint: "لا توجد نقطة نهاية Azure OpenAI",
           unknown: "لا يمكن استيراده",
         },
@@ -2593,7 +2593,6 @@ export const ar: TranslationResources = {
         baseUrls: "العناوين الأساسية",
         models_one: "النماذج: {{count}}",
         models_other: "النماذج: {{count}}",
-        geminiIgnored: "لا يُستخدم عنوان Gemini الأساسي في الرابط: لا يدعم Osuna تنسيق Gemini بعد.",
         replaces: "يستبدل {{name}} لديك، مع مفتاحه.",
         add: "إضافة",
         replace: "استبدال",
@@ -2617,7 +2616,6 @@ export const ar: TranslationResources = {
           needs_https:
             "يجب أن يستخدم عنوان {{field}} الأساسي فيه https. لا يصل http إلا إلى هذا الحاسوب أو الشبكة المحلية.",
           no_base_url: "لا يعطي أي عنوان أساسي.",
-          gemini_only: "يعطي عنوان Gemini أساسيًا فقط، ولا يستطيع Osuna استخدامه بعد.",
           bad_key: "مفتاحه ليس مفتاحًا: يتجاوز 4096 بايت أو يحتوي محارف تحكم.",
           bad_icon: "يجب أن تكون أيقونته صورة https على مضيف عام.",
           unknown: "تعذّر على Osuna قراءته.",
@@ -2728,7 +2726,7 @@ export const ar: TranslationResources = {
         hideKey: "إخفاء",
         apiKeyOptionalLabel: "مفتاح API (اختياري)",
         apiKeyLocalPlaceholder: "اختياري للخوادم المحلية",
-        keyRejected: "رفض الخادم هذا المفتاح (401 / 403)",
+        keyRejected: "رفض الخادم هذا المفتاح",
         balance: {
           url: "عنوان الرصيد",
           urlInfo:
@@ -2876,9 +2874,9 @@ export const ar: TranslationResources = {
         footerLocal: "بعد الحفظ تُفتح صفحة نقطة النهاية ونماذجها مجلوبة لتختار منها.",
         footerResource: "بعد الحفظ تُفتح صفحة نقطة الاتصال وتعرض عمليات نشر المورد كنماذج لها.",
         addressHint:
-          "أدخل المفتاح ثم اضغط اكتشاف تلقائي: يجرّب Osuna كل صيغة من صيغ الطلب الثلاث مرة واحدة ويعرض نتيجة كل منها؛ «استخدم هذه» يملأ العناوين التي تعمل.",
+          "أدخل المفتاح ثم اضغط اكتشاف تلقائي: يجرّب Osuna كل صيغة من صيغ الطلب مرة واحدة ويعرض نتيجة كل منها؛ «استخدم هذه» يملأ العناوين التي تعمل.",
         addressHintKeyOptional:
-          "اضغط اكتشاف تلقائي: يجرّب Osuna كل صيغة من صيغ الطلب الثلاث مرة واحدة ويعرض نتيجة كل منها؛ «استخدم هذه» يملأ العناوين التي تعمل. لا يُرسل المفتاح إلا إذا أدخلته.",
+          "اضغط اكتشاف تلقائي: يجرّب Osuna كل صيغة من صيغ الطلب مرة واحدة ويعرض نتيجة كل منها؛ «استخدم هذه» يملأ العناوين التي تعمل. لا يُرسل المفتاح إلا إذا أدخلته.",
         detect: "اكتشاف تلقائي",
         detectModelPlaceholder: "نموذج للتجربة (اختياري)",
         detected: {
@@ -2920,6 +2918,10 @@ export const ar: TranslationResources = {
           anthropic_messages: "عنوان Anthropic الأساسي",
           openai_chat: "عنوان OpenAI Chat الأساسي",
           openai_responses: "عنوان OpenAI Responses الأساسي",
+          gemini: "عنوان Gemini الأساسي",
+        },
+        formatUrlHint: {
+          gemini: "أدخله حتى مستوى ‎…/v1beta. يُرسل المفتاح في الترويسة x-goog-api-key.",
         },
         detection: {
           ok: "تم الاكتشاف",
@@ -2927,11 +2929,11 @@ export const ar: TranslationResources = {
           auth_failed: "المفتاح مرفوض",
         },
         footer:
-          "يُدخل المفتاح مرة واحدة وتشترك فيه الصيغ الثلاث (Anthropic وOpenAI Chat وOpenAI Responses). بعد الحفظ تُفتح صفحة نقطة النهاية ونماذجها مجلوبة لتختار منها.",
+          "يُدخل المفتاح مرة واحدة وتشترك فيه كل الصيغ. بعد الحفظ تُفتح صفحة نقطة النهاية ونماذجها مجلوبة لتختار منها.",
         footerKeyOptional:
-          "المفتاح اختياري: إذا أدخلته تشترك فيه الصيغ الثلاث (Anthropic وOpenAI Chat وOpenAI Responses)، ومن دونه لا يُرسل أي مفتاح. بعد الحفظ تُفتح صفحة نقطة النهاية ونماذجها مجلوبة لتختار منها.",
+          "المفتاح اختياري: إذا أدخلته تشترك فيه كل الصيغ، ومن دونه لا يُرسل أي مفتاح. بعد الحفظ تُفتح صفحة نقطة النهاية ونماذجها مجلوبة لتختار منها.",
         footerFetched:
-          "عند الحفظ تُحفظ أيضًا القائمة المجلوبة والنماذج المحددة في «النماذج»؛ ويشترك في المفتاح Anthropic وOpenAI Chat وOpenAI Responses.",
+          "عند الحفظ تُحفظ أيضًا القائمة المجلوبة والنماذج المحددة في «النماذج»؛ ويشترك في المفتاح كل الصيغ.",
         models: "النماذج",
         modelsHint: "معرّفات النماذج مفصولة بفواصل. تُحدَّد عند الحفظ.",
         modelsPlaceholder: "مثلًا gpt-5.5, claude-sonnet-5",
@@ -2962,7 +2964,7 @@ export const ar: TranslationResources = {
       detail: {
         connection: "الاتصال",
         connectionInfo:
-          "مفتاح واحد للصيغ الثلاث. في كل طلب: إذا كانت لنقطة النهاية صيغة الوكيل نفسه يمر الطلب دون تغيير؛ وتستخدم نماذج Claude عنوان Anthropic متى وُجد للحفاظ على ذاكرة التخزين المؤقت للمطالبات؛ وإلا يترجم Osuna الطلب.",
+          "مفتاح واحد لكل الصيغ. في كل طلب: إذا كانت لنقطة النهاية صيغة الوكيل نفسه يمر الطلب دون تغيير؛ وتستخدم نماذج Claude عنوان Anthropic متى وُجد للحفاظ على ذاكرة التخزين المؤقت للمطالبات؛ وإلا يترجم Osuna الطلب.",
         edit: "تعديل",
         formatNotSet: "غير مضبوط، لا تُستخدم هذه الصيغة",
         noKey: "غير محفوظ",
@@ -3208,7 +3210,7 @@ export const ar: TranslationResources = {
       webSearch: {
         title: "البحث على الويب",
         switch: "يبحث على الويب بنفسه",
-        hint: "لخدمة تقع أمام واجهة Anthropic أو OpenAI الرسمية: يُمرَّر بحث Claude Code وCodex على الويب إليها كما هو. عند التشغيل أو الإيقاف تتغير جلسات Claude Code الجارية من طلبها التالي، ويفقد ذلك الطلب ذاكرة التخزين المؤقت للموجّه.",
+        hint: "لخدمة تقع أمام واجهة Anthropic أو OpenAI أو Google الرسمية: يُمرَّر بحث Claude Code وCodex على الويب إليها كما هو. عند التشغيل أو الإيقاف تتغير جلسات Claude Code الجارية من طلبها التالي، ويفقد ذلك الطلب ذاكرة التخزين المؤقت للموجّه.",
         saving: "جارٍ الحفظ…",
         saveFailed: "تعذّر الحفظ: {{message}}",
       },

@@ -1,5 +1,5 @@
 // 导入链接的解析与拒收照 magpie（https://github.com/yetone/magpie，internal/provider/importurl.go 的 ParseImport、endpoint、
-// local、page、iconURL，provider.go 的 Slug，presets.go 的 IconForCatalog，7597c132）。
+// local、page、iconURL，provider.go 的 Slug，presets.go 的 IconForCatalog，7597c132；gemini= 照 c3bef99e）。
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import {
   API_ENDPOINT_REQUEST_FORMATS,
@@ -20,8 +20,7 @@ import { API_ENDPOINT_TEMPLATES, findTemplate } from "./templates.js";
  *   name       名称；没有 preset 时必填
  *   id         标识（照 magpie Find(id) 找会被替换的那家）；没有时由名称生成
  *   key        API key；没有时用户在确认框里填
- *   chat / responses / anthropic   各格式的地址
- *   gemini     Gemini 地址：Osuna 还没有 Gemini 格式（子任务 7），照样校验、不用
+ *   chat / responses / anthropic / gemini   各格式的地址
  *   models     给 Agent 用的模型，逗号隔开，最多 200 个
  *   catalog    models.dev 的厂商 id：只用来取图标（magpie IconForCatalog）。magpie 还拿它补模型资料，
  *              Osuna 的接口上没有记它的字段，模型资料照常按地址与模板取
@@ -43,6 +42,7 @@ const FORMAT_FIELDS: Record<ApiEndpointRequestFormat, ImportLinkUrlField> = {
   anthropic_messages: "anthropic",
   openai_chat: "chat",
   openai_responses: "responses",
+  gemini: "gemini",
 };
 
 export interface ImportLinkBaseUrl {
@@ -65,7 +65,6 @@ export interface ParsedImportLink {
   keysUrl: string | null;
   icon: string | null;
   iconUrl: string | null;
-  ignoredGemini: boolean;
 }
 
 /** 拒收：reason 见 protocol 的 API_ENDPOINT_IMPORT_LINK_REFUSALS；params 只有参数名、模板与区域，从不带 key。 */
@@ -151,7 +150,7 @@ function cutToBytes(input: { text: string; maxBytes: number }): string {
 /** 链接里除标识、key、模型、图片之外的那家：地址、模板与区域、名称、去拿 key 的页面、内置图标。 */
 type LinkedEndpoint = Pick<
   ParsedImportLink,
-  "name" | "baseUrls" | "templateId" | "region" | "keysUrl" | "icon" | "ignoredGemini"
+  "name" | "baseUrls" | "templateId" | "region" | "keysUrl" | "icon"
 >;
 
 /** preset= 的那家：模板（或它的一个区域、套餐）的地址。 */
@@ -190,7 +189,6 @@ function templateEndpointOf(input: {
     region: region?.id ?? null,
     keysUrl: region?.keysUrl ?? template.keysUrl ?? null,
     icon: null,
-    ignoredGemini: false,
   };
 }
 
@@ -226,14 +224,10 @@ function customEndpointOf(get: (name: string) => string): LinkedEndpoint {
     const url = linkBaseUrl({ field, raw: get(field) });
     if (url !== null) baseUrls.push({ format, url });
   }
-  const gemini = linkBaseUrl({ field: "gemini", raw: get("gemini") });
   if (baseUrls.length === 0) {
-    const onlyGemini = gemini !== null;
     throw new ImportLinkRefusedError({
-      reason: onlyGemini ? "gemini_only" : "no_base_url",
-      message: onlyGemini
-        ? "The link only gives a Gemini base URL, which Osuna can't use yet"
-        : "The link gives no base URL: it needs chat=, responses= or anthropic=",
+      reason: "no_base_url",
+      message: "The link gives no base URL: it needs chat=, responses=, anthropic= or gemini=",
     });
   }
   const keysUrl = httpsPage(get("keys"));
@@ -245,7 +239,6 @@ function customEndpointOf(get: (name: string) => string): LinkedEndpoint {
     region: null,
     keysUrl,
     icon,
-    ignoredGemini: gemini !== null,
   };
 }
 

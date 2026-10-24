@@ -2078,6 +2078,20 @@ describe("API endpoint balance (apiEndpointBalance)", () => {
     expect(older.features?.apiEndpointOmp).toBeUndefined();
   });
 
+  it("parses a host that advertises apiEndpointGemini, and an older one without it", () => {
+    const base = { status: "server_info" as const, serverId: "srv_1" };
+    const current = ServerInfoStatusPayloadSchema.parse({
+      ...base,
+      features: { apiEndpointOmp: true, apiEndpointGemini: true },
+    });
+    expect(current.features?.apiEndpointGemini).toBe(true);
+    const older = ServerInfoStatusPayloadSchema.parse({
+      ...base,
+      features: { apiEndpointOmp: true },
+    });
+    expect(older.features?.apiEndpointGemini).toBeUndefined();
+  });
+
   it("parses OMP's model roles in a settings change and in the settings, and settings from a daemon without them", () => {
     const request = {
       type: "provider.api_endpoint.set_agent_settings.request" as const,

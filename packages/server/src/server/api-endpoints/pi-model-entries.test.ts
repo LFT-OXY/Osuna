@@ -31,6 +31,11 @@ describe("the format each Pi model asks the gateway in", () => {
     );
   });
 
+  it("asks a model pinned to Gemini on Chat: Pi doesn't speak Gemini", () => {
+    const served = ["openai_responses", "gemini"] as const;
+    expect(piEndpointFormat({ modelId: "gpt-6", served, pinned: "gemini" })).toBe("openai_chat");
+  });
+
   it("puts a bare name on Responses only when every endpoint serving it is", () => {
     expect(piBareFormat(["openai_responses", "openai_responses"])).toBe("openai_responses");
     expect(piBareFormat(["openai_responses", "openai_chat"])).toBe("openai_chat");

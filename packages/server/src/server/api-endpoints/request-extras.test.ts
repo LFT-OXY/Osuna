@@ -1,5 +1,6 @@
 // 用例取自 magpie（MIT，THIRD_PARTY_NOTICES）：https://github.com/yetone/magpie 的 internal/provider/account_test.go、extrabody_test.go。
 import { describe, expect, test } from "vitest";
+import { keyHeaderValues } from "./gateway/refusals.js";
 import {
   extraBodySession,
   keyHeadersAt,
@@ -48,7 +49,7 @@ describe("user headers", () => {
 
 describe("which header the key goes in (magpie AuthHeaders)", () => {
   function keysAt(input: {
-    format?: "anthropic_messages" | "openai_chat";
+    format?: "anthropic_messages" | "openai_chat" | "gemini";
     baseUrl: string;
     keyHeader?: "both" | "x-api-key" | "bearer";
     templateId?: string;
@@ -78,6 +79,15 @@ describe("which header the key goes in (magpie AuthHeaders)", () => {
     expect(
       keysAt({ format: "openai_chat", baseUrl: "https://x.example", templateId: "azure" }),
     ).toBe("apiKey");
+  });
+
+  test("a Gemini address takes x-goog-api-key alone, whatever was picked", () => {
+    const relay = "https://relay.example/v1beta";
+    expect(keysAt({ format: "gemini", baseUrl: relay })).toBe("googApiKey");
+    expect(keysAt({ format: "gemini", baseUrl: relay, keyHeader: "x-api-key" })).toBe("googApiKey");
+    expect(keyHeaderValues({ apiKey: "g-key", keys: "googApiKey" })).toEqual({
+      "x-goog-api-key": "g-key",
+    });
   });
 });
 

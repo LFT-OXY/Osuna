@@ -349,6 +349,8 @@ export interface ConnectionFormOptions {
   canSetBalance: boolean;
   // 主机声明了 gatewayLedger：「高级」里有价格倍率。
   canSetPriceMultiplier: boolean;
+  // 主机声明了 apiEndpointGemini：有 Gemini 地址框。
+  canUseGemini: boolean;
   // 主机给的模板清单；老主机没有，为空。
   templates: readonly ApiEndpointTemplate[];
 }
@@ -452,7 +454,7 @@ export interface ConnectionFormState {
   // 能点「逐个模型」；点了但表单里还没有模型时 eachNeedsModels 为真，提示先选模型。
   canDetectEach: boolean;
   eachNeedsModels: boolean;
-  // 上游拒绝了这把 key（401 / 403）；改 key 之前一直标红。
+  // 上游拒绝了这把 key（401 / 403，或 Gemini 的 400 key 无效）；改 key 之前一直标红。
   keyRejected: boolean;
   canDetect: boolean;
   catalogFetch: ConnectionCatalogFetch;
@@ -787,7 +789,12 @@ interface CurlBaseUrl {
 // 什么也没设的「高级」保存时的样子。
 const EMPTY_EXTRAS = { headers: {}, extraBody: {}, keyHeader: "both" };
 
-const EMPTY_URLS: Urls = { anthropic_messages: "", openai_chat: "", openai_responses: "" };
+const EMPTY_URLS: Urls = {
+  anthropic_messages: "",
+  openai_chat: "",
+  openai_responses: "",
+  gemini: "",
+};
 
 export function createConnectionFormModel(
   seed: ConnectionFormSeed,
@@ -804,8 +811,13 @@ export function createConnectionFormModel(
     canSetRequestExtras,
     canSetBalance,
     canSetPriceMultiplier,
+    canUseGemini,
     templates,
   } = options;
+  // 有地址框的格式：老主机没有 Gemini。
+  const urlFormats = API_ENDPOINT_REQUEST_FORMATS.filter(
+    (format) => canUseGemini || format !== "gemini",
+  );
   // 添加窗口（新建或复制）：能在保存前拉模型，「模型」框一直显示。
   const isAdding = seed.mode !== "edit";
   const listeners = new Set<() => void>();
@@ -919,7 +931,7 @@ export function createConnectionFormModel(
     const hasKey = isKeyOptional || next.apiKey.trim() !== "" || hasSavedKey;
     const address = next.address.trim();
     const addressInvalid = address !== "" && !isHttpUrl(address);
-    const formats = API_ENDPOINT_REQUEST_FORMATS.map((format) => {
+    const formats = urlFormats.map((format) => {
       const url = next.urls[format];
       return { format, url, invalid: url.trim() !== "" && !isHttpUrl(url.trim()) };
     });
@@ -1448,7 +1460,7 @@ export function createConnectionFormModel(
     return isMoved ? atOrigin(from.urls, origin) : from.urls;
   }
 
-  /** 拉模型、测试连接要问的地址：保存时会存的、像 http(s) 地址的那些，按 Anthropic → Chat → Responses。 */
+  /** 拉模型、测试连接要问的地址：保存时会存的、像 http(s) 地址的那些，按 Anthropic → Chat → Responses → Gemini。 */
   function checkedUrlsOf(from: Values): CheckedUrl[] {
     const urls = urlsToSave(from);
     return API_ENDPOINT_REQUEST_FORMATS.flatMap((format) => {

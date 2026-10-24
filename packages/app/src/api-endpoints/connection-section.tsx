@@ -15,18 +15,21 @@ import { settingsStyles } from "@/styles/settings";
 import type { FormatTestOutcome, FormatTestResults } from "./use-endpoint-detail";
 
 /**
- * 接口详情页的「连接」区：三种格式的地址与打码的 key，标题右侧「编辑」打开编辑连接弹窗。
+ * 接口详情页的「连接」区：各格式的地址与打码的 key，标题右侧「编辑」打开编辑连接弹窗。
  * 头部「测试连接」的结果按格式接在对应地址的行尾。
  */
 export function ApiEndpointConnectionSection({
   endpoint,
   isKeyOptional,
+  showsGemini,
   testResults = {},
   onEdit,
 }: {
   endpoint: ApiEndpoint;
   // 主机声明了 apiEndpointManagement：没 key 是用户没填，不是缺失。
   isKeyOptional: boolean;
+  // 主机声明了 apiEndpointGemini：有 Gemini 地址一行。
+  showsGemini: boolean;
   testResults?: FormatTestResults;
   onEdit: () => void;
 }) {
@@ -47,50 +50,52 @@ export function ApiEndpointConnectionSection({
       testID="api-endpoint-connection-section"
     >
       <View style={settingsStyles.card}>
-        {API_ENDPOINT_REQUEST_FORMATS.map((format, index) => {
-          const url = endpoint.baseUrls?.find((entry) => entry.format === format)?.url;
-          const outcome = url ? testResults[format] : undefined;
-          const failureReason =
-            outcome && (outcome.kind === "failed" || outcome.kind === "authFailed")
-              ? outcome.message
-              : "";
-          return (
-            <View
-              key={format}
-              style={index > 0 ? settingsStyles.rowBorder : null}
-              testID={`api-endpoint-connection-row-${format}`}
-            >
-              <View style={settingsStyles.row}>
-                <Text style={[settingsStyles.rowTitle, styles.title]}>
-                  {t(`settings.apiEndpoints.form.formatUrl.${format}`)}
-                </Text>
-                <View style={styles.valueGroup}>
-                  <Text
-                    style={[settingsStyles.rowValue, url ? styles.url : null]}
-                    numberOfLines={1}
-                    selectable={Boolean(url)}
-                  >
-                    {url ?? t("settings.apiEndpoints.detail.formatNotSet")}
+        {API_ENDPOINT_REQUEST_FORMATS.filter((format) => showsGemini || format !== "gemini").map(
+          (format, index) => {
+            const url = endpoint.baseUrls?.find((entry) => entry.format === format)?.url;
+            const outcome = url ? testResults[format] : undefined;
+            const failureReason =
+              outcome && (outcome.kind === "failed" || outcome.kind === "authFailed")
+                ? outcome.message
+                : "";
+            return (
+              <View
+                key={format}
+                style={index > 0 ? settingsStyles.rowBorder : null}
+                testID={`api-endpoint-connection-row-${format}`}
+              >
+                <View style={settingsStyles.row}>
+                  <Text style={[settingsStyles.rowTitle, styles.title]}>
+                    {t(`settings.apiEndpoints.form.formatUrl.${format}`)}
                   </Text>
-                  {outcome ? <TestOutcome format={format} outcome={outcome} /> : null}
+                  <View style={styles.valueGroup}>
+                    <Text
+                      style={[settingsStyles.rowValue, url ? styles.url : null]}
+                      numberOfLines={1}
+                      selectable={Boolean(url)}
+                    >
+                      {url ?? t("settings.apiEndpoints.detail.formatNotSet")}
+                    </Text>
+                    {outcome ? <TestOutcome format={format} outcome={outcome} /> : null}
+                  </View>
                 </View>
+                {/* 失败原因可能很长，单独占一行，不挤掉标题和地址。 */}
+                {failureReason ? (
+                  <UiText
+                    variant="caption"
+                    color="foregroundMuted"
+                    style={styles.reason}
+                    numberOfLines={2}
+                    selectable
+                    testID={`api-endpoint-test-reason-${format}`}
+                  >
+                    {failureReason}
+                  </UiText>
+                ) : null}
               </View>
-              {/* 失败原因可能很长，单独占一行，不挤掉标题和地址。 */}
-              {failureReason ? (
-                <UiText
-                  variant="caption"
-                  color="foregroundMuted"
-                  style={styles.reason}
-                  numberOfLines={2}
-                  selectable
-                  testID={`api-endpoint-test-reason-${format}`}
-                >
-                  {failureReason}
-                </UiText>
-              ) : null}
-            </View>
-          );
-        })}
+            );
+          },
+        )}
         <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
           <Text style={settingsStyles.rowTitle}>{t("settings.apiEndpoints.form.apiKey")}</Text>
           <Text style={settingsStyles.rowValue}>

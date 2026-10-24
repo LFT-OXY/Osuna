@@ -81,7 +81,7 @@ const CHOSEN_KEY_HEADERS: Record<ApiEndpointKeyHeader, KeyHeaders | null> = {
 };
 
 /**
- * 发给这家这种格式时 key 放哪（照 magpie AuthHeaders）：Bedrock、Azure 模板由模板定；OpenAI 格式只放 Bearer；
+ * 发给这家这种格式时 key 放哪（照 magpie AuthHeaders）：Gemini 地址只放 x-goog-api-key；Bedrock、Azure 模板由模板定；OpenAI 格式只放 Bearer；
  * Anthropic 自己与 Bedrock 的地址只放 x-api-key；第三方 Anthropic 地址照用户选的，没选是 anthropicDefault
  * （中转站与测试两个都放，老客户端的测试连接照 Claude Code 只放 Bearer）。
  */
@@ -92,6 +92,7 @@ export function keyHeadersAt(input: {
   keyHeader: ApiEndpointKeyHeader;
   anthropicDefault: KeyHeaders;
 }): KeyHeaders {
+  if (input.format === "gemini") return "googApiKey";
   const fixed = templateKeyHeaders({ templateId: input.templateId, format: input.format });
   if (fixed !== null) return fixed;
   if (input.format !== "anthropic_messages") return "bearer";

@@ -2503,6 +2503,7 @@ export const ko: TranslationResources = {
         anthropic_messages: "Anthropic",
         openai_chat: "OpenAI Chat",
         openai_responses: "OpenAI Responses",
+        gemini: "Gemini",
       },
       status: {
         available: "사용 가능",
@@ -2582,7 +2583,6 @@ export const ko: TranslationResources = {
           invalid_base_url: "기본 URL이 올바르지 않습니다",
           points_at_osuna: "Osuna 자신을 가리킵니다",
           no_api_key: "API 키가 없습니다",
-          gemini_unsupported: "Osuna는 아직 Gemini 형식을 지원하지 않습니다",
           no_azure_endpoint: "Azure OpenAI 엔드포인트가 없습니다",
           unknown: "가져올 수 없습니다",
         },
@@ -2609,8 +2609,6 @@ export const ko: TranslationResources = {
         baseUrls: "주소",
         models_one: "모델 {{count}}개",
         models_other: "모델 {{count}}개",
-        geminiIgnored:
-          "링크의 Gemini 형식 주소는 사용되지 않습니다. Osuna는 아직 Gemini 형식을 지원하지 않습니다.",
         replaces: "{{name}}을(를) 키까지 모두 교체합니다.",
         add: "추가",
         replace: "교체",
@@ -2636,7 +2634,6 @@ export const ko: TranslationResources = {
           needs_https:
             "{{field}} 형식 주소는 https여야 합니다. http는 이 컴퓨터나 로컬 네트워크만 가능합니다.",
           no_base_url: "주소가 하나도 없습니다.",
-          gemini_only: "Gemini 형식 주소만 있어 Osuna가 아직 쓸 수 없습니다.",
           bad_key: "키가 올바른 키가 아닙니다. 4096바이트를 넘거나 제어 문자가 들어 있습니다.",
           bad_icon: "아이콘은 공개 호스트의 https 이미지여야 합니다.",
           unknown: "Osuna가 이 링크를 읽을 수 없습니다.",
@@ -2747,7 +2744,7 @@ export const ko: TranslationResources = {
         hideKey: "숨기기",
         apiKeyOptionalLabel: "API 키 (선택 사항)",
         apiKeyLocalPlaceholder: "로컬 서버는 선택 사항",
-        keyRejected: "업스트림이 이 키를 거부했습니다 (401 / 403)",
+        keyRejected: "업스트림이 이 키를 거부했습니다",
         balance: {
           url: "잔액 조회 URL",
           urlInfo:
@@ -2898,9 +2895,9 @@ export const ko: TranslationResources = {
         footerLocal: "저장하면 이 엔드포인트 페이지가 열리고, 가져온 모델 중에서 고를 수 있습니다.",
         footerResource: "저장하면 이 엔드포인트 페이지가 열리고 리소스의 배포가 모델로 나열됩니다.",
         addressHint:
-          "키를 입력한 뒤 자동 감지를 누르면 Osuna가 세 가지 요청 형식을 한 번씩 시도하고 결과를 한 줄씩 보여 줍니다. '이것 사용'을 누르면 작동하는 주소를 아래에 채웁니다.",
+          "키를 입력한 뒤 자동 감지를 누르면 Osuna가 각 요청 형식을 한 번씩 시도하고 결과를 한 줄씩 보여 줍니다. '이것 사용'을 누르면 작동하는 주소를 아래에 채웁니다.",
         addressHintKeyOptional:
-          "자동 감지를 누르면 Osuna가 세 가지 요청 형식을 한 번씩 시도하고 결과를 한 줄씩 보여 줍니다. '이것 사용'을 누르면 작동하는 주소를 아래에 채웁니다. 키는 입력한 경우에만 함께 보냅니다.",
+          "자동 감지를 누르면 Osuna가 각 요청 형식을 한 번씩 시도하고 결과를 한 줄씩 보여 줍니다. '이것 사용'을 누르면 작동하는 주소를 아래에 채웁니다. 키는 입력한 경우에만 함께 보냅니다.",
         detect: "자동 감지",
         detectModelPlaceholder: "시도할 모델(선택)",
         detected: {
@@ -2946,6 +2943,10 @@ export const ko: TranslationResources = {
           anthropic_messages: "Anthropic 형식 주소",
           openai_chat: "OpenAI Chat 형식 주소",
           openai_responses: "OpenAI Responses 형식 주소",
+          gemini: "Gemini 형식 주소",
+        },
+        formatUrlHint: {
+          gemini: "…/v1beta 단계까지 입력합니다. 키는 x-goog-api-key 헤더로 보냅니다.",
         },
         detection: {
           ok: "감지됨",
@@ -2953,11 +2954,11 @@ export const ko: TranslationResources = {
           auth_failed: "키가 거부됨",
         },
         footer:
-          "키는 한 번만 입력하고 세 형식(Anthropic, OpenAI Chat, OpenAI Responses)이 함께 씁니다. 저장하면 이 엔드포인트 페이지가 열리고, 가져온 모델 중에서 고를 수 있습니다.",
+          "키는 한 번만 입력하고 모든 형식이 함께 씁니다. 저장하면 이 엔드포인트 페이지가 열리고, 가져온 모델 중에서 고를 수 있습니다.",
         footerKeyOptional:
-          "키는 선택 사항입니다. 입력하면 세 형식(Anthropic, OpenAI Chat, OpenAI Responses)이 함께 쓰고, 없으면 키를 보내지 않습니다. 저장하면 이 엔드포인트 페이지가 열리고, 가져온 모델 중에서 고를 수 있습니다.",
+          "키는 선택 사항입니다. 입력하면 모든 형식이 함께 쓰고, 없으면 키를 보내지 않습니다. 저장하면 이 엔드포인트 페이지가 열리고, 가져온 모델 중에서 고를 수 있습니다.",
         footerFetched:
-          "저장하면 가져온 목록과 '모델'에서 고른 모델도 함께 저장됩니다. 키는 Anthropic, OpenAI Chat, OpenAI Responses가 함께 씁니다.",
+          "저장하면 가져온 목록과 '모델'에서 고른 모델도 함께 저장됩니다. 키는 모든 형식이 함께 씁니다.",
         models: "모델",
         modelsHint: "쉼표로 구분한 모델 ID. 저장하면 선택됩니다.",
         modelsPlaceholder: "예: gpt-5.5, claude-sonnet-5",
@@ -2988,7 +2989,7 @@ export const ko: TranslationResources = {
       detail: {
         connection: "연결",
         connectionInfo:
-          "키는 세 형식이 함께 씁니다. 요청마다 이 엔드포인트에 에이전트 자신의 형식이 있으면 그대로 전달하고, Claude 모델은 Anthropic 주소가 있으면 항상 그쪽을 씁니다(프롬프트 캐시 유지). 둘 다 아니면 Osuna가 변환합니다.",
+          "키는 모든 형식이 함께 씁니다. 요청마다 이 엔드포인트에 에이전트 자신의 형식이 있으면 그대로 전달하고, Claude 모델은 Anthropic 주소가 있으면 항상 그쪽을 씁니다(프롬프트 캐시 유지). 둘 다 아니면 Osuna가 변환합니다.",
         edit: "편집",
         formatNotSet: "설정 안 됨, 이 형식은 쓰지 않음",
         noKey: "저장 안 됨",
@@ -3236,7 +3237,7 @@ export const ko: TranslationResources = {
       webSearch: {
         title: "웹 검색",
         switch: "자체적으로 웹 검색 가능",
-        hint: "Anthropic 또는 OpenAI 공식 API 앞단의 서비스용: Claude Code와 Codex의 웹 검색을 그대로 넘깁니다. 켜거나 끄면 실행 중인 Claude Code 세션은 다음 요청부터 바뀌며, 그 요청은 프롬프트 캐시를 쓰지 못합니다.",
+        hint: "Anthropic, OpenAI 또는 Google 공식 API 앞단의 서비스용: Claude Code와 Codex의 웹 검색을 그대로 넘깁니다. 켜거나 끄면 실행 중인 Claude Code 세션은 다음 요청부터 바뀌며, 그 요청은 프롬프트 캐시를 쓰지 못합니다.",
         saving: "저장 중…",
         saveFailed: "저장하지 못했습니다: {{message}}",
       },

@@ -66,4 +66,13 @@ describe("importLinkRefusalOf", () => {
     ).toBe("unknown");
     expect(importLinkRefusalOf({ code: "endpoints_unparsable", message: "" })).toBeNull();
   });
+
+  it("calls an older daemon's Gemini-only refusal unknown", () => {
+    const refusal = importLinkRefusalOf({
+      code: "import_link_refused",
+      params: { reason: "gemini_only" },
+      message: "",
+    });
+    expect(refusal).toBe("unknown");
+  });
 });

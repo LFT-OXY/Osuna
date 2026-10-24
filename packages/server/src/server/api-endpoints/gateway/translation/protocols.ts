@@ -1,3 +1,6 @@
+// 上游与 Agent 两个方向分开、Gemini 只做上游照 magpie（https://github.com/yetone/magpie，internal/gateway/gemini.go 的 buildGemini 与 gateway.go 里 Gemini 解码共用 codeAssistDecoder 处）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import {
   AnthropicDecoder,
@@ -13,6 +16,8 @@ import {
   parseChatRequest,
   renderChat,
 } from "./chat.js";
+import type { GeminiSignatureStore } from "../gemini-signatures.js";
+import { GeminiDecoder, buildGeminiRequest } from "./gemini.js";
 import type { EmitEvent, GatewayRequest, Reply, StreamEvent, Usage } from "./ir.js";
 import {
   ResponsesDecoder,
@@ -23,8 +28,9 @@ import {
 } from "./responses.js";
 
 /*
- * 每种协议的五件套：解析 Agent 的请求、构建给上游的请求、解码上游的流、把事件编码成 Agent 的流、
- * 渲染整份回复。中转站按格式取用。编码与渲染拿着 Agent 的请求：Codex 的命名空间工具要按它写回。
+ * 每种协议的上游两件：构建给上游的请求、解码上游的流；Agent 说的协议另有三件：解析 Agent 的请求、
+ * 把事件编码成 Agent 的流、渲染整份回复。中转站按格式取用。编码与渲染拿着 Agent 的请求：Codex 的命名空间工具要按它写回。
+ * Gemini 只做上游：没有 Agent 说它（入口按路径认格式），它没有 Agent 那三件。
  */
 
 export interface StreamDecoder {
@@ -43,10 +49,14 @@ export interface StreamEncoder {
   replyId(): string;
 }
 
-interface Protocol {
-  parse(body: unknown): GatewayRequest;
+interface UpstreamProtocol {
   build(request: GatewayRequest, model: string): Record<string, unknown>;
-  decoder(): StreamDecoder;
+  // signatures：Gemini 的调用签名存放（藏进调用 id）；只为认出回复里有什么时不给。
+  decoder(options?: { signatures?: GeminiSignatureStore }): StreamDecoder;
+}
+
+interface Protocol extends UpstreamProtocol {
+  parse(body: unknown): GatewayRequest;
   encoder(output: {
     model: string;
     write: (text: string) => void;
@@ -55,7 +65,9 @@ interface Protocol {
   render(reply: Reply, output: { model: string; request: GatewayRequest }): Record<string, unknown>;
 }
 
-const PROTOCOLS: Record<ApiEndpointRequestFormat, Protocol> = {
+type AgentFormat = Exclude<ApiEndpointRequestFormat, "gemini">;
+
+const PROTOCOLS: Record<AgentFormat, Protocol> = {
   anthropic_messages: {
     parse: parseAnthropicRequest,
     build: buildAnthropicRequest,
@@ -79,6 +91,18 @@ const PROTOCOLS: Record<ApiEndpointRequestFormat, Protocol> = {
   },
 };
 
+const GEMINI: UpstreamProtocol = {
+  build: buildGeminiRequest,
+  decoder: (options) => new GeminiDecoder(options),
+};
+
+/** Agent 说的协议：Agent 不说 Gemini，按 Gemini 要是中转站自己的错。 */
 export function protocolOf(format: ApiEndpointRequestFormat): Protocol {
+  if (format === "gemini") throw new Error("No agent speaks Gemini: it is an upstream format only");
   return PROTOCOLS[format];
+}
+
+/** 发给上游的协议：四种格式都有。 */
+export function upstreamProtocolOf(format: ApiEndpointRequestFormat): UpstreamProtocol {
+  return format === "gemini" ? GEMINI : PROTOCOLS[format];
 }

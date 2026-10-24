@@ -24,7 +24,7 @@ import {
   type ConnectionBalanceDetectResult,
   type ConnectionRevealSecretResult,
 } from "./connection-form-model";
-import { curlOf, type CurlCommand } from "./curl-command";
+import { curlOf, respellUrl, type CurlCommand } from "./curl-command";
 import type { ConnectionCurlInputs } from "./connection-form-model";
 
 interface Deferred<T> {
@@ -214,6 +214,7 @@ const KEY_REQUIRED = {
   canSetRequestExtras: false,
   canSetBalance: false,
   canSetPriceMultiplier: false,
+  canUseGemini: false,
   templates: [],
 };
 const KEY_OPTIONAL = {
@@ -226,10 +227,13 @@ const KEY_OPTIONAL = {
   canSetRequestExtras: true,
   canSetBalance: false,
   canSetPriceMultiplier: false,
+  canUseGemini: false,
   templates: [],
 };
 // 主机还声明了 apiEndpointBalance：「高级」里有余额设置与「查询余额」。
 const WITH_BALANCE = { ...KEY_OPTIONAL, canSetBalance: true };
+// 主机还声明了 apiEndpointGemini：有 Gemini 地址框。
+const WITH_GEMINI = { ...KEY_OPTIONAL, canUseGemini: true };
 
 describe("connection form: create", () => {
   it("cannot save or detect until a name, a key and an address are there", () => {
@@ -454,6 +458,115 @@ describe("connection form: create", () => {
 
     expect(await model.submit()).toEqual({ status: "failed", message: "Name is required" });
     expect(model.getState()).toMatchObject({ submitting: false, submitError: "Name is required" });
+  });
+});
+
+describe("connection form: a Gemini base URL", () => {
+  it("has no Gemini field on a host that doesn't say it takes one", () => {
+    const { deps } = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: null },
+      deps,
+      KEY_OPTIONAL,
+    );
+    expect(model.getState().formats.map((field) => field.format)).toEqual([
+      "anthropic_messages",
+      "openai_chat",
+      "openai_responses",
+    ]);
+  });
+
+  it("saves an endpoint with a Gemini base URL alone", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: null },
+      fake.deps,
+      WITH_GEMINI,
+    );
+    expect(model.getState().formats.map((field) => field.format)).toEqual([
+      "anthropic_messages",
+      "openai_chat",
+      "openai_responses",
+      "gemini",
+    ]);
+    model.setName("Gemini relay");
+    model.setApiKey("g-key");
+    model.setUrl("gemini", "https://relay.example/v1beta");
+    expect(model.getState().canSubmit).toBe(true);
+
+    await model.submit();
+    expect(fake.saves).toEqual([
+      {
+        name: "Gemini relay",
+        apiKey: "g-key",
+        baseUrls: [{ format: "gemini", url: "https://relay.example/v1beta" }],
+        models: [],
+        modelScope: "vendor",
+      },
+    ]);
+  });
+
+  it("flags a Gemini base URL that isn't an http address and won't save it", () => {
+    const { deps } = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: null },
+      deps,
+      WITH_GEMINI,
+    );
+    model.setName("Gemini relay");
+    model.setApiKey("g-key");
+    model.setUrl("gemini", "ftp://relay.example/v1beta");
+    const state = model.getState();
+    expect(state.formats.find((field) => field.format === "gemini")?.invalid).toBe(true);
+    expect(state.canSubmit).toBe(false);
+  });
+
+  it("Test connection asks a Gemini base URL too, even when it is the only one", () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: null },
+      fake.deps,
+      WITH_GEMINI,
+    );
+    model.setName("Gemini relay");
+    model.setApiKey("g-key");
+    model.setUrl("gemini", "https://relay.example/v1beta");
+    expect(model.getState().canTest).toBe(true);
+
+    model.setUrl("openai_chat", "https://relay.example/v1");
+    model.testConnection();
+    expect(fake.tests.map((test) => [test.request.format, test.request.baseUrl])).toEqual([
+      ["openai_chat", "https://relay.example/v1"],
+      ["gemini", "https://relay.example/v1beta"],
+    ]);
+  });
+
+  it("opens a saved endpoint with its Gemini base URL in the Gemini field", () => {
+    const { deps } = fakeDeps();
+    const endpoint: ApiEndpoint = {
+      ...SAVED_ENDPOINT,
+      baseUrls: [{ format: "gemini", url: "https://relay.example/v1beta" }],
+    };
+    const model = createConnectionFormModel({ mode: "edit", endpoint }, deps, WITH_GEMINI);
+    expect(model.getState().formats.map((field) => field.url)).toEqual([
+      "",
+      "",
+      "",
+      "https://relay.example/v1beta",
+    ]);
+  });
+});
+
+describe("respellUrl: an address spelled as a format wants it", () => {
+  it.each([
+    ["https://relay.example/v1", "https://relay.example/v1beta"],
+    ["https://relay.example", "https://relay.example/v1beta"],
+    ["https://relay.example/", "https://relay.example/v1beta"],
+    ["https://relay.example/v1beta", "https://relay.example/v1beta"],
+    ["https://relay.example/proxy/v1", "https://relay.example/proxy/v1"],
+    ["https://relay.example/v1/openai", "https://relay.example/v1/openai"],
+  ])("Gemini: %s is %s", (url, want) => {
+    expect(respellUrl({ url, format: "gemini" })).toBe(want);
   });
 });
 

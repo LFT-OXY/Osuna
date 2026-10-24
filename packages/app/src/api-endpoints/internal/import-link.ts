@@ -49,8 +49,10 @@ function settingsHostServerId(pathname: string): string | null {
 /** daemon 拒收导入链接的原因：认得的那几种之一，认不出的为 unknown；不是拒收为 null。 */
 export function importLinkRefusalOf(
   error: ApiEndpointError,
-): ApiEndpointImportLinkRefusal | "unknown" | null {
+): Exclude<ApiEndpointImportLinkRefusal, "gemini_only"> | "unknown" | null {
   if (error.code !== "import_link_refused") return null;
   const reason = API_ENDPOINT_IMPORT_LINK_REFUSALS.find((known) => known === error.params?.reason);
-  return reason ?? "unknown";
+  // COMPAT(apiEndpointGemini): added in v0.17.0, remove after 2027-04-24. 只有老 daemon 发它，不另给说法。
+  if (reason === undefined || reason === "gemini_only") return "unknown";
+  return reason;
 }

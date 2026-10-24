@@ -3,6 +3,7 @@
 
 import { describe, expect, test } from "vitest";
 import {
+  EMPTY_REPLY,
   FAILURE_WORDS,
   endpointFailure,
   failure,
@@ -33,6 +34,23 @@ const CLINE_FREE_LIMIT =
 // magpie zcode_blocked_test.go：阿里云 ESA 防火墙挡在 zcode.z.ai 前面的 405 页面。
 const BLOCK_PAGE =
   '<html><body><h1>Sorry, your request has been blocked due to unusual activity.</h1><a href="https://errors.aliyun.com/">details</a></body></html>';
+
+// Gemini 的 key 无效：400 INVALID_ARGUMENT，不是 401（任务 10-16-gemini-upstream G4）。
+const GEMINI_KEY_INVALID = JSON.stringify({
+  error: {
+    code: 400,
+    message: "API key not valid. Please pass a valid API key.",
+    status: "INVALID_ARGUMENT",
+    details: [
+      {
+        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+        reason: "API_KEY_INVALID",
+        domain: "googleapis.com",
+        metadata: { service: "generativelanguage.googleapis.com" },
+      },
+    ],
+  },
+});
 
 const WORD_CASES: Record<keyof typeof FAILURE_WORDS, { hits: string[]; misses: string[] }> = {
   credit: {
@@ -115,6 +133,10 @@ const WORD_CASES: Record<keyof typeof FAILURE_WORDS, { hits: string[]; misses: s
   zenModelGone: {
     hits: ['{"message":"Model glm-5-free is not supported"}'],
     misses: ["The model is not supported"],
+  },
+  keyInvalid: {
+    hits: [GEMINI_KEY_INVALID, "API key not valid. Please pass a valid API key."],
+    misses: ["invalid api key"],
   },
   refused: {
     hits: ["Illegal API invocation from an unapproved channel"],
@@ -234,11 +256,25 @@ describe("why a reply failed", () => {
     // 防火墙挡的是这台机器的地址，不是 key。
     expect(endpointFailure(403, BLOCK_PAGE)).toBe("other");
   });
+
+  test("Gemini's 400 saying the key is not valid needs checking too (G4)", () => {
+    expect(endpointFailure(400, GEMINI_KEY_INVALID)).toBe("auth");
+    expect(endpointFailure(400, '{"error":{"details":[{"reason":"API_KEY_INVALID"}]}}')).toBe(
+      "auth",
+    );
+    expect(endpointFailure(400, "Invalid JSON payload received.")).toBe("other");
+    expect(endpointFailure(422, "API key not valid")).toBe("other");
+  });
 });
 
 describe("whether another endpoint is worth asking", () => {
   test.each([401, 402, 403, 404, 408, 429, 500, 502, 503, 529])("%i is", (status) => {
     expect(retryable(status, "x")).toBe(true);
+  });
+
+  test("Gemini's 400 saying the key is not valid is, and rests the endpoint (G4)", () => {
+    expect(retryable(400, GEMINI_KEY_INVALID)).toBe(true);
+    expect(requestRefused(400, GEMINI_KEY_INVALID)).toBe(false);
   });
 
   test("a conversation too long for the model is not: every endpoint would refuse it", () => {
@@ -332,6 +368,10 @@ describe("whether another endpoint is worth asking", () => {
     // 这个地址不提供、别的格式的地址也许提供：所有格式都这样说时也只冷却这个模型。
     expect(modelRefused(400, "no model endpoints available given user constraints")).toBe(true);
     expect(retryable(400, "no model endpoints available given user constraints")).toBe(true);
+  });
+
+  test("a reply that ended empty after it began rests nobody (magpie #1221)", () => {
+    expect(lateRests(EMPTY_REPLY)).toBe(false);
   });
 
   test("a reply that broke off rests its endpoint unless the conversation or a filter was the cause", () => {

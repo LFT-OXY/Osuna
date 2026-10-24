@@ -2542,6 +2542,7 @@ export const fr: TranslationResources = {
         anthropic_messages: "Anthropic",
         openai_chat: "OpenAI Chat",
         openai_responses: "OpenAI Responses",
+        gemini: "Gemini",
       },
       status: {
         available: "Disponible",
@@ -2622,7 +2623,6 @@ export const fr: TranslationResources = {
           invalid_base_url: "Son URL de base n'est pas valide",
           points_at_osuna: "Il pointe vers Osuna lui-même",
           no_api_key: "Pas de clé d'API",
-          gemini_unsupported: "Osuna ne parle pas encore le format Gemini",
           no_azure_endpoint: "Pas d'endpoint Azure OpenAI",
           unknown: "Import impossible",
         },
@@ -2649,8 +2649,6 @@ export const fr: TranslationResources = {
         baseUrls: "URL de base",
         models_one: "{{count}} modèle",
         models_other: "{{count}} modèles",
-        geminiIgnored:
-          "L'URL de base Gemini du lien n'est pas utilisée : Osuna ne prend pas encore en charge le format Gemini.",
         replaces: "Remplace votre {{name}}, clé comprise.",
         add: "Ajouter",
         replace: "Remplacer",
@@ -2677,8 +2675,6 @@ export const fr: TranslationResources = {
           needs_https:
             "Son URL de base {{field}} doit utiliser https. En http, seuls cet ordinateur et le réseau local sont joignables.",
           no_base_url: "Il ne donne aucune URL de base.",
-          gemini_only:
-            "Il ne donne qu'une URL de base Gemini, qu'Osuna ne peut pas encore utiliser.",
           bad_key:
             "Sa clé n'est pas une clé : elle dépasse 4096 octets ou contient des caractères de contrôle.",
           bad_icon: "Son icône doit être une image https sur un hôte public.",
@@ -2790,7 +2786,7 @@ export const fr: TranslationResources = {
         hideKey: "Masquer",
         apiKeyOptionalLabel: "Clé d'API (facultative)",
         apiKeyLocalPlaceholder: "Facultative pour les serveurs locaux",
-        keyRejected: "Le serveur a refusé cette clé (401 / 403)",
+        keyRejected: "Le serveur a refusé cette clé",
         balance: {
           url: "URL du solde",
           urlInfo:
@@ -2945,9 +2941,9 @@ export const fr: TranslationResources = {
         footerResource:
           "Après l'enregistrement, la page du point de terminaison s'ouvre et liste les déploiements de la ressource comme ses modèles.",
         addressHint:
-          "Saisissez la clé puis appuyez sur Détecter : Osuna essaie une fois chacun des trois formats de requête et affiche la réponse de chacun ; Utiliser celles-ci remplit les adresses qui fonctionnent.",
+          "Saisissez la clé puis appuyez sur Détecter : Osuna essaie une fois chaque format de requête et affiche la réponse de chacun ; Utiliser celles-ci remplit les adresses qui fonctionnent.",
         addressHintKeyOptional:
-          "Appuyez sur Détecter : Osuna essaie une fois chacun des trois formats de requête et affiche la réponse de chacun ; Utiliser celles-ci remplit les adresses qui fonctionnent. La clé n'est envoyée que si vous la saisissez.",
+          "Appuyez sur Détecter : Osuna essaie une fois chaque format de requête et affiche la réponse de chacun ; Utiliser celles-ci remplit les adresses qui fonctionnent. La clé n'est envoyée que si vous la saisissez.",
         detect: "Détecter",
         detectModelPlaceholder: "Modèle à essayer (facultatif)",
         detected: {
@@ -2997,6 +2993,11 @@ export const fr: TranslationResources = {
           anthropic_messages: "URL de base Anthropic",
           openai_chat: "URL de base OpenAI Chat",
           openai_responses: "URL de base OpenAI Responses",
+          gemini: "URL de base Gemini",
+        },
+        formatUrlHint: {
+          gemini:
+            "Saisissez-la jusqu'au niveau …/v1beta. La clé est envoyée dans l'en-tête x-goog-api-key.",
         },
         detection: {
           ok: "Détecté",
@@ -3004,11 +3005,11 @@ export const fr: TranslationResources = {
           auth_failed: "Clé refusée",
         },
         footer:
-          "La clé se saisit une seule fois et sert aux trois formats (Anthropic, OpenAI Chat, OpenAI Responses). Après l'enregistrement, la page de l'endpoint s'ouvre avec ses modèles déjà récupérés, à choisir.",
+          "La clé se saisit une seule fois et sert à tous les formats. Après l'enregistrement, la page de l'endpoint s'ouvre avec ses modèles déjà récupérés, à choisir.",
         footerKeyOptional:
-          "La clé est facultative : saisie, elle sert aux trois formats (Anthropic, OpenAI Chat, OpenAI Responses) ; sans elle, aucune clé n'est envoyée. Après l'enregistrement, la page de l'endpoint s'ouvre avec ses modèles déjà récupérés, à choisir.",
+          "La clé est facultative : saisie, elle sert à tous les formats ; sans elle, aucune clé n'est envoyée. Après l'enregistrement, la page de l'endpoint s'ouvre avec ses modèles déjà récupérés, à choisir.",
         footerFetched:
-          "L'enregistrement garde aussi la liste récupérée et les modèles choisis dans Modèles ; la clé sert à Anthropic, OpenAI Chat et OpenAI Responses.",
+          "L'enregistrement garde aussi la liste récupérée et les modèles choisis dans Modèles ; la clé sert à tous les formats.",
         models: "Modèles",
         modelsHint:
           "Identifiants de modèle séparés par des virgules. Ils sont sélectionnés à l'enregistrement.",
@@ -3041,7 +3042,7 @@ export const fr: TranslationResources = {
       detail: {
         connection: "Connexion",
         connectionInfo:
-          "Une clé pour les trois formats. À chaque requête : si cet endpoint a le format propre de l'agent, la requête passe telle quelle ; les modèles Claude passent par l'adresse Anthropic dès qu'il y en a une, pour garder le cache des prompts ; sinon Osuna traduit.",
+          "Une clé pour tous les formats. À chaque requête : si cet endpoint a le format propre de l'agent, la requête passe telle quelle ; les modèles Claude passent par l'adresse Anthropic dès qu'il y en a une, pour garder le cache des prompts ; sinon Osuna traduit.",
         edit: "Modifier",
         formatNotSet: "Non renseignée, ce format n'est pas utilisé",
         noKey: "Non enregistrée",
@@ -3292,7 +3293,7 @@ export const fr: TranslationResources = {
       webSearch: {
         title: "Recherche web",
         switch: "Fait ses propres recherches web",
-        hint: "Pour un service placé devant l'API d'Anthropic ou d'OpenAI : les recherches web de Claude Code et de Codex lui sont transmises telles quelles. L'activer ou le désactiver s'applique aux sessions Claude Code en cours dès leur prochaine requête, qui perd alors son cache de prompt.",
+        hint: "Pour un service placé devant l'API d'Anthropic, d'OpenAI ou de Google : les recherches web de Claude Code et de Codex lui sont transmises telles quelles. L'activer ou le désactiver s'applique aux sessions Claude Code en cours dès leur prochaine requête, qui perd alors son cache de prompt.",
         saving: "Enregistrement…",
         saveFailed: "Impossible d'enregistrer : {{message}}",
       },

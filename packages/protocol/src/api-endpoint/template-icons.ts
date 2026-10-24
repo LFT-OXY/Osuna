@@ -8,6 +8,7 @@
 export const API_ENDPOINT_TEMPLATE_ICONS: Readonly<Record<string, string>> = {
   anthropic: "claude-color",
   openai: "openai",
+  google: "gemini-color",
   deepseek: "deepseek-color",
   xai: "xai",
   moonshot: "kimi",

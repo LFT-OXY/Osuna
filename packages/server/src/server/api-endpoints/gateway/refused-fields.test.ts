@@ -1,6 +1,7 @@
 // 用例取自 magpie（https://github.com/yetone/magpie，internal/gateway 的 safeguards_refused_test.go、thinking_display_test.go、anthropic_shapes_test.go、thinking_off_test.go、deferred_tools_test.go、tool_reference_result_test.go、strict_refused_test.go、image_tool_test.go、prompt_cache_test.go、object_root_test.go，internal/provider/grok_test.go）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
+import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { describe, expect, test } from "vitest";
 import {
   foldsRootsUpFront,
@@ -49,7 +50,7 @@ const REFS_ONLY_RESULT = {
 };
 
 function readOff(input: {
-  format: "anthropic_messages" | "openai_chat" | "openai_responses";
+  format: ApiEndpointRequestFormat;
   body: unknown;
   text: string;
   status?: number;
@@ -58,7 +59,7 @@ function readOff(input: {
 }
 
 function dropped(input: {
-  format: "anthropic_messages" | "openai_chat" | "openai_responses";
+  format: ApiEndpointRequestFormat;
   body: Record<string, unknown>;
   fields: DroppedField[];
 }): Record<string, unknown> {
@@ -444,6 +445,35 @@ describe("a tool whose parameters are a union at the root refused (magpie object
             name: "pick",
             parameters: { type: "object", properties: { a: { type: "string" } } },
           },
+        },
+      ],
+    });
+  });
+
+  test("a Gemini request's function declarations are read off and folded too (magpie objectRootsReq)", () => {
+    const gemini = {
+      tools: [
+        {
+          functionDeclarations: [
+            { name: "pick", parametersJsonSchema: PICK },
+            { name: "plain", parametersJsonSchema: PLAIN },
+          ],
+        },
+      ],
+    };
+    expect(readOff({ format: "gemini", body: gemini, text: ROOT_UNION_REFUSALS[0] ?? "" })).toEqual(
+      ["rootUnion"],
+    );
+    expect(dropped({ format: "gemini", body: gemini, fields: ["rootUnion"] })).toEqual({
+      tools: [
+        {
+          functionDeclarations: [
+            {
+              name: "pick",
+              parametersJsonSchema: { type: "object", properties: { a: { type: "string" } } },
+            },
+            { name: "plain", parametersJsonSchema: PLAIN },
+          ],
         },
       ],
     });

@@ -13,13 +13,14 @@ import { choosesWebSearch, type GatewayRequest } from "./translation/ir.js";
 type Body = Record<string, unknown>;
 
 /*
- * 联网搜索按接口放行（ADR 0009）。开关只在这家填了 Anthropic 或 OpenAI Responses 地址时算数：
- * 只有 Chat 地址的接口收不到原生的搜索工具。Osuna 不按主机或厂商自己认定谁会搜（magpie 另有官方主机表，这里不要）。
+ * 联网搜索按接口放行（ADR 0009）。开关只在这家填了 Anthropic、OpenAI Responses 或 Gemini 地址时算数：
+ * 只有 Chat 地址的接口收不到原生的搜索工具；Gemini 地址发 Google 自己的搜索（googleSearch，magpie search.go）。Osuna 不按主机或厂商自己认定谁会搜（magpie 另有官方主机表，这里不要）。
  */
 
 const SEARCHABLE_FORMATS: readonly ApiEndpointRequestFormat[] = [
   "anthropic_messages",
   "openai_responses",
+  "gemini",
 ];
 
 /** 这家在这个格式上自己会搜：打开了开关，且有这个格式的地址；不给格式时看任一能搜的格式。 */

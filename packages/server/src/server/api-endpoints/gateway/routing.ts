@@ -1,6 +1,6 @@
 // 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/provider/provider.go 的 MessagesFirst、internal/gateway/gateway.go 的 usable、
 // internal/provider/group.go 的 sameModel、internal/provider/closest.go 的 Closest、internal/gateway/unknown_model.go，
-// internal/gateway/gateway.go 的 claudeFamily 与 claudeTierStandIn、internal/agent/claude.go 的 claudeStandInAt）
+// internal/gateway/gateway.go 的 claudeFamily 与 claudeTierStandIn、internal/agent/claude.go 的 claudeStandInAt，Gemini 排最后照 provider.go 的 Speaks）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import {
@@ -271,11 +271,12 @@ function closeness(input: {
   return score;
 }
 
-// 没有 Agent 自己格式的地址时，按这个顺序取第一个能用的格式翻译过去。
+// 没有 Agent 自己格式的地址时，按这个顺序取第一个能用的格式翻译过去；Gemini 排最后（magpie Speaks）。
 const TRANSLATION_ORDER: ApiEndpointRequestFormat[] = [
   "openai_chat",
   "openai_responses",
   "anthropic_messages",
+  "gemini",
 ];
 
 /** 斜杠后的名字以 claude 开头，或是 Bedrock 的 Claude id（magpie 的 claudeModel）。 */
@@ -287,7 +288,7 @@ export function isClaudeModel(model: string): boolean {
 /**
  * 这次向这家接口用哪种格式请求（照 magpie 的 usable + MessagesFirst）：
  * Claude 模型且有 Anthropic 地址一律走 Anthropic，保住缓存标记与思考；
- * 否则有 Agent 自己格式的地址就直通；再否则按 Chat → Responses → Anthropic 取第一个翻译过去。
+ * 否则有 Agent 自己格式的地址就直通；再否则按 Chat → Responses → Anthropic → Gemini 取第一个翻译过去。
  * `formatOrder` 是这家这个模型翻译时先试的格式（translationOrderAt，如 Bedrock 与 Azure 上的 GPT 先 Responses，照 magpie ResponsesFirst），
  * 翻译时按它取；null 即按上面的顺序。
  */

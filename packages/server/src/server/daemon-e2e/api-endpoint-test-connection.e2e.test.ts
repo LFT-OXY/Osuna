@@ -31,6 +31,7 @@ function sendJson(response: ServerResponse, status: number, body: unknown) {
 
 /**
  * /claude 下是 Anthropic Messages（也能列模型），/codex/v1 下是 OpenAI Responses，/chat-only/v1 只有 Chat Completions。
+ * /gem/v1beta 下是 Gemini（key 只认 x-goog-api-key，不对回 Google 的 400「API key not valid」，清单里混着向量模型）。
  * 只认两把 key；模型 `missing` 当作不存在。
  */
 async function startUpstream(): Promise<FakeUpstream> {
@@ -54,6 +55,10 @@ async function startUpstream(): Promise<FakeUpstream> {
       const authorized =
         request.headers.authorization === `Bearer ${TYPED_KEY}` ||
         request.headers.authorization === `Bearer ${SAVED_KEY}`;
+      if ((request.url ?? "").startsWith("/gem/v1beta/models")) {
+        answerGemini({ url: request.url ?? "", headers: request.headers, response });
+        return;
+      }
       if (request.url === "/claude/v1/messages") {
         if (!authorized) {
           sendJson(response, 401, {
@@ -87,6 +92,38 @@ async function startUpstream(): Promise<FakeUpstream> {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   upstream.origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   return upstream;
+}
+
+/** /gem/v1beta 的 Gemini：key 只认 x-goog-api-key，列出模型或答 generateContent。 */
+function answerGemini(input: {
+  url: string;
+  headers: IncomingHttpHeaders;
+  response: ServerResponse;
+}) {
+  const { response } = input;
+  const googKey = input.headers["x-goog-api-key"];
+  if (googKey !== TYPED_KEY && googKey !== SAVED_KEY) {
+    sendJson(response, 400, {
+      error: {
+        code: 400,
+        message: "API key not valid. Please pass a valid API key.",
+        status: "INVALID_ARGUMENT",
+      },
+    });
+  } else if (input.url === "/gem/v1beta/models?pageSize=1000") {
+    sendJson(response, 200, {
+      models: [
+        { name: "models/text-embedding-004", supportedGenerationMethods: ["embedContent"] },
+        { name: "models/gemini-2.5-pro", supportedGenerationMethods: ["generateContent"] },
+      ],
+    });
+  } else if (/^\/gem\/v1beta\/models\/[^/]+:generateContent$/.test(input.url)) {
+    sendJson(response, 200, {
+      candidates: [{ content: { role: "model", parts: [{ text: "p" }] }, finishReason: "STOP" }],
+    });
+  } else {
+    response.writeHead(404, { "content-type": "text/plain" }).end("Not Found");
+  }
 }
 
 function closeServer(server: Server): Promise<void> {
@@ -441,6 +478,76 @@ describe("API endpoint connection test by base URL and request format", () => {
     expect(upstream.requests[1]?.body.model).toBe("claude-opus-4");
   });
 
+  test("a Gemini-only endpoint is tested at its Gemini base URL, the key in x-goog-api-key alone", async () => {
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Gemini relay",
+      baseUrls: [{ format: "gemini", url: `${upstream.origin}/gem/v1beta` }],
+      apiKey: SAVED_KEY,
+      models: [{ id: "claude-sonnet-4-5" }, { id: "gemini-2.5-flash" }],
+    });
+    if (!saved.endpoint) throw new Error(`Expected a saved endpoint: ${saved.error?.message}`);
+    upstream.requests.length = 0;
+
+    const tested = await client.apiEndpointTestConnection({
+      provider: "claude",
+      endpointId: saved.endpoint.id,
+      baseUrl: `${upstream.origin}/gem/v1beta`,
+      format: "gemini",
+    });
+
+    expect(tested).toMatchObject({ error: null, result: { ok: true, status: 200 } });
+    expect(upstream.requests.map((request) => request.url)).toEqual([
+      "/gem/v1beta/models/gemini-2.5-flash:generateContent",
+    ]);
+    const [asked] = upstream.requests;
+    expect(asked?.headers["x-goog-api-key"]).toBe(SAVED_KEY);
+    expect(asked?.headers.authorization).toBeUndefined();
+    expect(asked?.headers["x-api-key"]).toBeUndefined();
+  });
+
+  test("with no model selected a Gemini base URL lists Gemini's models first and asks one that chats", async () => {
+    const tested = await client.apiEndpointTestConnection({
+      provider: "claude",
+      baseUrl: `${upstream.origin}/gem/v1beta`,
+      apiKey: TYPED_KEY,
+      format: "gemini",
+    });
+
+    expect(tested.result?.ok).toBe(true);
+    expect(upstream.requests.map((request) => request.url)).toEqual([
+      "/gem/v1beta/models?pageSize=1000",
+      "/gem/v1beta/models/gemini-2.5-pro:generateContent",
+    ]);
+  });
+
+  test("a key Google turns away with a 400 is told apart as auth_failed, when testing and when listing", async () => {
+    const tested = await client.apiEndpointTestConnection({
+      provider: "claude",
+      baseUrl: `${upstream.origin}/gem/v1beta`,
+      apiKey: "sk-wrong",
+      modelId: "gemini-2.5-pro",
+      format: "gemini",
+    });
+    expect(tested).toMatchObject({
+      error: null,
+      result: { ok: false, status: 400, error: { code: "auth_failed" } },
+    });
+
+    const listedFirst = await client.apiEndpointTestConnection({
+      provider: "claude",
+      baseUrl: `${upstream.origin}/gem/v1beta`,
+      apiKey: "sk-wrong",
+      format: "gemini",
+    });
+    expect(listedFirst).toMatchObject({
+      error: null,
+      result: { ok: false, status: 400, error: { code: "auth_failed" } },
+    });
+    expect(listedFirst.result?.error?.message).toContain("API key not valid");
+    expect(JSON.stringify([tested, listedFirst])).not.toContain("sk-wrong");
+  });
+
   test("an address that answers nothing in that format is a failure with the reason", async () => {
     const tested = await client.apiEndpointTestConnection({
       provider: "claude",
@@ -666,6 +773,7 @@ describe("API endpoint connection test by base URL and request format", () => {
     });
     expect(listed.error).toMatchObject({ code: "invalid_header", params: { name: "X Team" } });
     expect(detected.results.map((result) => result.code)).toEqual([
+      "invalid_header",
       "invalid_header",
       "invalid_header",
       "invalid_header",

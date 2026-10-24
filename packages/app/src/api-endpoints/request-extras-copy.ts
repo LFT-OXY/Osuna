@@ -33,6 +33,12 @@ export function extraBodyProblemText(t: TFunction, problem: ExtraBodyTextProblem
   }
 }
 
+/** 拉模型失败的原因按界面语言说：请求头、附加请求体的问题与清单一个都没列（models_empty）；别的错误为 null。 */
+export function modelsFetchErrorText(t: TFunction, error: ApiEndpointError): string | null {
+  if (error.code === "models_empty") return t("settings.apiEndpoints.form.fetch.empty");
+  return requestExtrasErrorText(t, error);
+}
+
 /** daemon 拒收保存的 invalid_header、invalid_extra_body、insecure_tls_template 按界面语言说；别的错误为 null。 */
 export function requestExtrasErrorText(t: TFunction, error: ApiEndpointError): string | null {
   if (error.code === "insecure_tls_template") {

@@ -2512,6 +2512,7 @@ export const ja: TranslationResources = {
         anthropic_messages: "Anthropic",
         openai_chat: "OpenAI Chat",
         openai_responses: "OpenAI Responses",
+        gemini: "Gemini",
       },
       status: {
         available: "利用可能",
@@ -2591,7 +2592,6 @@ export const ja: TranslationResources = {
           invalid_base_url: "ベース URL が無効です",
           points_at_osuna: "Osuna 自身を指しています",
           no_api_key: "API キーがありません",
-          gemini_unsupported: "Osuna はまだ Gemini 形式に対応していません",
           no_azure_endpoint: "Azure OpenAI のエンドポイントがありません",
           unknown: "インポートできません",
         },
@@ -2618,8 +2618,6 @@ export const ja: TranslationResources = {
         baseUrls: "アドレス",
         models_one: "{{count}} 個のモデル",
         models_other: "{{count}} 個のモデル",
-        geminiIgnored:
-          "リンクの Gemini 形式のアドレスは使われません。Osuna はまだ Gemini 形式に対応していません。",
         replaces: "{{name}} をキーごと置き換えます。",
         add: "追加",
         replace: "置き換え",
@@ -2646,7 +2644,6 @@ export const ja: TranslationResources = {
           needs_https:
             "{{field}} 形式のアドレスは https でなければなりません。http はこのコンピューターかローカルネットワークだけです。",
           no_base_url: "アドレスがひとつもありません。",
-          gemini_only: "Gemini 形式のアドレスしかなく、Osuna はまだ使えません。",
           bad_key:
             "キーがキーとして正しくありません。4096 バイトを超えているか、制御文字を含んでいます。",
           bad_icon: "アイコンは公開ホスト上の https の画像でなければなりません。",
@@ -2760,7 +2757,7 @@ export const ja: TranslationResources = {
         hideKey: "隠す",
         apiKeyOptionalLabel: "API キー（任意）",
         apiKeyLocalPlaceholder: "ローカルサーバーでは任意",
-        keyRejected: "上流がこのキーを拒否しました（401 / 403）",
+        keyRejected: "上流がこのキーを拒否しました",
         balance: {
           url: "残高照会 URL",
           urlInfo:
@@ -2915,9 +2912,9 @@ export const ja: TranslationResources = {
         footerResource:
           "保存すると、このエンドポイントのページが開き、リソースのデプロイがモデルとして一覧されます。",
         addressHint:
-          "キーを入力して「自動検出」を押すと、Osuna が 3 つのリクエスト形式をそれぞれ 1 回試し、結果を 1 行ずつ表示します。「これを使う」で使えるアドレスを下に入力します。",
+          "キーを入力して「自動検出」を押すと、Osuna が 各リクエスト形式を 1 回ずつ試し、結果を 1 行ずつ表示します。「これを使う」で使えるアドレスを下に入力します。",
         addressHintKeyOptional:
-          "「自動検出」を押すと、Osuna が 3 つのリクエスト形式をそれぞれ 1 回試し、結果を 1 行ずつ表示します。「これを使う」で使えるアドレスを下に入力します。キーは入力した場合だけ送ります。",
+          "「自動検出」を押すと、Osuna が 各リクエスト形式を 1 回ずつ試し、結果を 1 行ずつ表示します。「これを使う」で使えるアドレスを下に入力します。キーは入力した場合だけ送ります。",
         detect: "自動検出",
         detectModelPlaceholder: "試すモデル（任意）",
         detected: {
@@ -2962,6 +2959,10 @@ export const ja: TranslationResources = {
           anthropic_messages: "Anthropic 形式のアドレス",
           openai_chat: "OpenAI Chat 形式のアドレス",
           openai_responses: "OpenAI Responses 形式のアドレス",
+          gemini: "Gemini 形式のアドレス",
+        },
+        formatUrlHint: {
+          gemini: "…/v1beta の階層まで入力します。キーは x-goog-api-key ヘッダーで送られます。",
         },
         detection: {
           ok: "検出済み",
@@ -2969,11 +2970,11 @@ export const ja: TranslationResources = {
           auth_failed: "キーが無効",
         },
         footer:
-          "キーは一度入力すれば 3 つの形式（Anthropic、OpenAI Chat、OpenAI Responses）で共有されます。保存するとこのエンドポイントのページが開き、取得済みのモデルから選べます。",
+          "キーは一度入力すればすべての形式で共有されます。保存するとこのエンドポイントのページが開き、取得済みのモデルから選べます。",
         footerKeyOptional:
-          "キーは任意です。入力すると 3 つの形式（Anthropic、OpenAI Chat、OpenAI Responses）で共有され、なければキーを送りません。保存するとこのエンドポイントのページが開き、取得済みのモデルから選べます。",
+          "キーは任意です。入力するとすべての形式で共有され、なければキーを送りません。保存するとこのエンドポイントのページが開き、取得済みのモデルから選べます。",
         footerFetched:
-          "保存すると、取得した一覧と「モデル」で選んだモデルも一緒に保存されます。キーは Anthropic、OpenAI Chat、OpenAI Responses で共有されます。",
+          "保存すると、取得した一覧と「モデル」で選んだモデルも一緒に保存されます。キーはすべての形式で共有されます。",
         models: "モデル",
         modelsHint: "モデル ID をカンマ区切りで。保存すると選択されます。",
         modelsPlaceholder: "例：gpt-5.5, claude-sonnet-5",
@@ -3005,7 +3006,7 @@ export const ja: TranslationResources = {
       detail: {
         connection: "接続",
         connectionInfo:
-          "キーは 3 つの形式で共有です。リクエストごとに、エージェント自身の形式がこのエンドポイントにあればそのまま転送し、Claude モデルは Anthropic のアドレスがあれば常にそちらを使います（プロンプトキャッシュを保つため）。どちらもなければ Osuna が変換します。",
+          "キーはすべての形式で共有です。リクエストごとに、エージェント自身の形式がこのエンドポイントにあればそのまま転送し、Claude モデルは Anthropic のアドレスがあれば常にそちらを使います（プロンプトキャッシュを保つため）。どちらもなければ Osuna が変換します。",
         edit: "編集",
         formatNotSet: "未設定。この形式は使いません",
         noKey: "未保存",
@@ -3252,7 +3253,7 @@ export const ja: TranslationResources = {
       webSearch: {
         title: "ウェブ検索",
         switch: "自前でウェブ検索できる",
-        hint: "Anthropic または OpenAI 公式 API の前段にあるサービス向け：Claude Code と Codex のウェブ検索をそのまま渡します。オン・オフすると、実行中の Claude Code セッションは次のリクエストから切り替わり、そのリクエストではプロンプトキャッシュが無効になります。",
+        hint: "Anthropic、OpenAI または Google 公式 API の前段にあるサービス向け：Claude Code と Codex のウェブ検索をそのまま渡します。オン・オフすると、実行中の Claude Code セッションは次のリクエストから切り替わり、そのリクエストではプロンプトキャッシュが無効になります。",
         saving: "保存中…",
         saveFailed: "保存できませんでした：{{message}}",
       },

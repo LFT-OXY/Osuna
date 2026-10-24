@@ -477,9 +477,23 @@ internal/gui/assets/app.js and i18n.js:
   packages/app/src/i18n/resources/*.ts (settings.apiEndpoints.agent.issues.codexProxied*)
 
 Request-format auto-detection (each format's base URL, the model asked, the
-smallest request) follows magpie's internal/provider/detect.go and test.go:
+smallest request) follows magpie's internal/provider/detect.go and test.go;
+Gemini asked last, at …/v1beta (DetectBase), with a non-streamed
+generateContent and the key in x-goog-api-key (tinyBody, AuthHeaders), a
+model named gemini picked for it (detectModel), and a Gemini base URL tested
+and its models tested there (Test, testOne):
 
   packages/server/src/server/api-endpoints/upstream-detect.ts
+
+A Gemini base URL's model list (GET models a page at a time by nextPageToken,
+at most 20 pages of 8 seconds each, the key in x-goog-api-key, names without
+models/, only the models that serve generateContent, their input and output
+limits, none listed is a failure) and that list merged with the other
+formats' follow FetchGemini in magpie's internal/catalog/gemini_list.go and
+fetchOne in internal/provider/models.go:
+
+  packages/server/src/server/api-endpoints/gemini-models.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-models.e2e.test.ts
 
 Detecting each picked model (the first 30 picked models asked once on every
 format, eight requests at a time, each waiting 12 seconds and the whole
@@ -1351,6 +1365,74 @@ and renderImport in internal/gui/assets/app.js:
   packages/server/src/server/api-endpoints/import-link.ts
   packages/server/src/server/api-endpoints/import-link.test.ts
   packages/app/src/api-endpoints/import-link-sheet.tsx
+
+A Gemini base URL kept as its base (trimmed, https:// added to a bare host, a
+method or model-list URL pasted whole cut back, /v1beta added to a bare host)
+follows GeminiBase in magpie's internal/provider/gemini_api.go, with its tests
+taken from gemini_api_test.go; a Gemini CLI relay imported from CC Switch with
+/v1beta added follows geminiCLIBase in internal/provider/importapps.go:
+
+  packages/server/src/server/api-endpoints/gemini-base-url.ts
+  packages/server/src/server/api-endpoints/gemini-base-url.test.ts
+
+A request translated to a Gemini base URL (turns as user and model, neighbours
+of one role joined, a systemInstruction with no role, the generation settings
+and a JSON answer, no model or stream in the body, the model in the path of
+streamGenerateContent?alt=sse) and Gemini's stream read back (the prompt count
+at the start, the whole count with the finish reason, the finish reasons, a
+chunk with only usage not ending the reply, an error told in its words)
+follow buildCodeAssistSent,
+codeAssistDecoder and stopFromGemini in magpie's internal/gateway/codeassist.go
+(the branch that is neither Antigravity nor Code Assist), buildGemini and
+geminiRequest in internal/gateway/gemini.go, streamErrorText in
+internal/gateway/upstream.go, GeminiPath in
+internal/provider/gemini_api.go, and Speaks in internal/provider/provider.go
+for Gemini coming last:
+
+  packages/server/src/server/api-endpoints/gateway/translation/gemini.ts
+  packages/server/src/server/api-endpoints/gateway/translation/gemini.test.ts
+  packages/server/src/server/api-endpoints/gateway/translation/protocols.ts
+  packages/server/src/server/api-endpoints/gateway/upstream-call.ts
+  packages/server/src/server/api-endpoints/gateway/routing.ts
+
+A request translated to a Gemini base URL thinking at a level or a budget by
+the model's generation, its tools as function declarations with the calling
+mode, its calls and their results under one id with the thought signature
+carried back (or the skip value), the tools' images after their responses,
+the user's words split from a turn of responses, a call left unanswered
+answered with the interrupted note, a second answer left out, a history
+opening or ending with the model given a user turn, images inline or as
+fileData, Google's own search, and an image model asked for images; and
+Gemini's reply read back (thoughts and their signatures, a call's signature in
+the id the agent gets, a call with no id given one, the default_api namespace
+taken off, a call written out in the text made a call, a drawn image, what
+Google's search found, a stop after calls read as a tool stop) follow
+buildCodeAssistSent, dropSecondAnswers, pairFunctionTurns, thinkingConfig,
+geminiGeneration and codeAssistDecoder (with toolOfCall, textCall, closeBrace,
+textArgs and nextKey) in magpie's internal/gateway/codeassist.go, a compaction
+ending with the model asked for its summary per compacting in
+internal/gateway/compacting.go and modelLastAsk in internal/gateway/prefill.go,
+DrawsID in
+internal/catalog/catalog.go, budgetOf in internal/gateway/ir.go, signedID and
+unsignCalls in internal/gateway/gemini_signature.go and googleSignature's use
+in parseChat in internal/gateway/chat.go. Gemini counted among the formats
+that search follows searchesFor in internal/gateway/search.go; Gemini's
+reasoning timed as a summary follows hidesReasoning and reasoningMs in
+internal/gateway/ttft.go; a refused JSON answer read off generationConfig
+follows the structured-output refusal in internal/gateway/format.go; and a
+function declaration's union root folded follows objectRootsReq in
+internal/gateway/object_root.go:
+
+  packages/server/src/server/api-endpoints/gateway/translation/gemini.ts
+  packages/server/src/server/api-endpoints/gateway/translation/gemini.test.ts
+  packages/server/src/server/api-endpoints/gateway/translation/compacting.ts
+  packages/server/src/server/api-endpoints/gateway/translation/chat.ts
+  packages/server/src/server/api-endpoints/gateway/gemini-signatures.ts
+  packages/server/src/server/api-endpoints/gateway/gemini-signatures.test.ts
+  packages/server/src/server/api-endpoints/gateway/web-search.ts
+  packages/server/src/server/api-endpoints/gateway/reply-clock.ts
+  packages/server/src/server/api-endpoints/gateway/refused-downgrades.ts
+  packages/server/src/server/api-endpoints/gateway/refused-fields.ts
 
 An endpoint's price multiplier (from 0 to 1000 in steps of 0.001; a save that
 leaves it out keeps it and null clears it; empty in the editor is the list

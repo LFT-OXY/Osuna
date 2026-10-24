@@ -53,7 +53,7 @@ function sourceOf(sources: ReturnType<typeof readImportSources>, id: string) {
 }
 
 describe("readImportSources", () => {
-  test("CC Switch without a database reads config.json; Gemini and sign-ins can't be imported", async () => {
+  test("CC Switch without a database reads config.json; Gemini comes in, sign-ins can't be imported", async () => {
     const { root, context } = await contextIn();
     await put(
       path.join(root, "cc-switch", "config.json"),
@@ -73,7 +73,31 @@ describe("readImportSources", () => {
           },
         },
         gemini: {
-          providers: { g: { name: "Gemini", settingsConfig: { env: { GEMINI_API_KEY: "k" } } } },
+          providers: {
+            g: {
+              name: "Gemini",
+              settingsConfig: { env: { GEMINI_API_KEY: "k", GEMINI_MODEL: "gemini-3-pro" } },
+            },
+            relay: {
+              name: "Gemini relay",
+              settingsConfig: {
+                env: {
+                  GOOGLE_GEMINI_BASE_URL: "https://g.example.com/gemini/",
+                  GEMINI_API_KEY: "g",
+                },
+              },
+            },
+            versioned: {
+              name: "Versioned relay",
+              settingsConfig: {
+                env: {
+                  GOOGLE_GEMINI_BASE_URL: "https://v.example.com/v1beta",
+                  GOOGLE_API_KEY: "v",
+                },
+              },
+            },
+            own: { name: "Gemini CLI", settingsConfig: { env: {} } },
+          },
         },
       }),
     );
@@ -89,7 +113,38 @@ describe("readImportSources", () => {
         skip: null,
       },
       { ref: "claude/own", skip: "sign_in" },
-      { ref: "gemini/g", skip: "gemini_unsupported" },
+      // 没给地址的是 Google 自己：Google Gemini 模板的 Chat 兼容地址。
+      {
+        ref: "gemini/g",
+        found: {
+          templateId: "google",
+          key: "k",
+          models: ["gemini-3-pro"],
+          baseUrls: [
+            {
+              format: "openai_chat",
+              url: "https://generativelanguage.googleapis.com/v1beta/openai",
+            },
+          ],
+        },
+        skip: null,
+      },
+      { ref: "gemini/own", skip: "sign_in" },
+      // 说 Gemini 格式的中转服务：地址进 Gemini 地址，补上 Gemini CLI 自己会加的 /v1beta。
+      {
+        ref: "gemini/relay",
+        found: {
+          templateId: null,
+          key: "g",
+          baseUrls: [{ format: "gemini", url: "https://g.example.com/gemini/v1beta" }],
+        },
+        skip: null,
+      },
+      {
+        ref: "gemini/versioned",
+        found: { baseUrls: [{ format: "gemini", url: "https://v.example.com/v1beta" }] },
+        skip: null,
+      },
     ]);
   });
 

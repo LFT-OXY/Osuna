@@ -2553,6 +2553,7 @@ export const en = {
         anthropic_messages: "Anthropic",
         openai_chat: "OpenAI Chat",
         openai_responses: "OpenAI Responses",
+        gemini: "Gemini",
       },
       status: {
         available: "Available",
@@ -2632,7 +2633,6 @@ export const en = {
           invalid_base_url: "Its base URL isn't valid",
           points_at_osuna: "It points at Osuna itself",
           no_api_key: "It has no API key",
-          gemini_unsupported: "Osuna doesn't speak the Gemini format yet",
           no_azure_endpoint: "It has no Azure OpenAI endpoint",
           unknown: "It can't be imported",
         },
@@ -2659,8 +2659,6 @@ export const en = {
         baseUrls: "Base URLs",
         models_one: "{{count}} model",
         models_other: "{{count}} models",
-        geminiIgnored:
-          "The link's Gemini base URL isn't used: Osuna doesn't speak the Gemini format yet.",
         replaces: "Replaces your {{name}}, key and all.",
         add: "Add",
         replace: "Replace",
@@ -2685,7 +2683,6 @@ export const en = {
           needs_https:
             "Its {{field}} base URL must use https. Plain http only reaches this computer or the local network.",
           no_base_url: "It gives no base URL.",
-          gemini_only: "It only gives a Gemini base URL, which Osuna can't use yet.",
           bad_key: "Its key isn't a key: it's over 4096 bytes or has control characters.",
           bad_icon: "Its icon must be an https picture on a public host.",
           unknown: "Osuna couldn't read it.",
@@ -2796,7 +2793,7 @@ export const en = {
         hideKey: "Hide",
         apiKeyOptionalLabel: "API key (optional)",
         apiKeyLocalPlaceholder: "Optional for local servers",
-        keyRejected: "The upstream rejected this key (401 / 403)",
+        keyRejected: "The upstream rejected this key",
         balance: {
           url: "Balance URL",
           urlInfo:
@@ -2948,9 +2945,9 @@ export const en = {
         footerResource:
           "After saving, the endpoint's page opens and lists the resource's deployments as its models.",
         addressHint:
-          "Fill in the key, then press Auto-detect: Osuna tries each of the three request formats once and lists how each answered; Use these fills in the addresses that work.",
+          "Fill in the key, then press Auto-detect: Osuna tries each request format once and lists how each answered; Use these fills in the addresses that work.",
         addressHintKeyOptional:
-          "Press Auto-detect: Osuna tries each of the three request formats once and lists how each answered; Use these fills in the addresses that work. The key goes with each try only if you fill it in.",
+          "Press Auto-detect: Osuna tries each request format once and lists how each answered; Use these fills in the addresses that work. The key goes with each try only if you fill it in.",
         detect: "Auto-detect",
         detectModelPlaceholder: "Model to try (optional)",
         detected: {
@@ -2994,6 +2991,10 @@ export const en = {
           anthropic_messages: "Anthropic base URL",
           openai_chat: "OpenAI Chat base URL",
           openai_responses: "OpenAI Responses base URL",
+          gemini: "Gemini base URL",
+        },
+        formatUrlHint: {
+          gemini: "Fill in the …/v1beta level. The key is sent in the x-goog-api-key header.",
         },
         detection: {
           ok: "Detected",
@@ -3001,11 +3002,11 @@ export const en = {
           auth_failed: "Key rejected",
         },
         footer:
-          "The key is entered once and shared by all three formats (Anthropic, OpenAI Chat, OpenAI Responses). After saving, the endpoint's page opens with its models fetched, to pick from.",
+          "The key is entered once and shared by every format. After saving, the endpoint's page opens with its models fetched, to pick from.",
         footerKeyOptional:
-          "The key is optional: one key is shared by all three formats (Anthropic, OpenAI Chat, OpenAI Responses), and without one no key is sent. After saving, the endpoint's page opens with its models fetched, to pick from.",
+          "The key is optional: one key is shared by every format, and without one no key is sent. After saving, the endpoint's page opens with its models fetched, to pick from.",
         footerFetched:
-          "Saving keeps the list fetched and the models picked in Models; one key is shared by Anthropic, OpenAI Chat and OpenAI Responses.",
+          "Saving keeps the list fetched and the models picked in Models; one key is shared by every format.",
         models: "Models",
         modelsHint: "Model ids, separated by commas. They are picked when you save.",
         modelsPlaceholder: "e.g. gpt-5.5, claude-sonnet-5",
@@ -3036,7 +3037,7 @@ export const en = {
       detail: {
         connection: "Connection",
         connectionInfo:
-          "One key for all three formats. On each request: if this endpoint has the agent's own format, the request passes through unchanged; Claude models use the Anthropic address whenever there is one, to keep prompt caching; otherwise Osuna translates.",
+          "One key for every format. On each request: if this endpoint has the agent's own format, the request passes through unchanged; Claude models use the Anthropic address whenever there is one, to keep prompt caching; otherwise Osuna translates.",
         edit: "Edit",
         formatNotSet: "Not set, this format is not used",
         noKey: "Not saved",
@@ -3284,7 +3285,7 @@ export const en = {
       webSearch: {
         title: "Web search",
         switch: "Searches the web by itself",
-        hint: "For a service in front of Anthropic's or OpenAI's own API: Claude Code's and Codex's web search go to it as sent. Turning this on or off reaches running Claude Code sessions on their next request, and that request loses its prompt cache.",
+        hint: "For a service in front of Anthropic's, OpenAI's or Google's own API: Claude Code's and Codex's web search go to it as sent. Turning this on or off reaches running Claude Code sessions on their next request, and that request loses its prompt cache.",
         saving: "Saving…",
         saveFailed: "Couldn't save: {{message}}",
       },

@@ -38,6 +38,7 @@ import {
   type PrefillMode,
 } from "./continuation.js";
 import { doubledPause } from "./cooldown.js";
+import { EMPTY_REPLY } from "./failure.js";
 import type { AgentKeepAlive } from "./keepalive.js";
 import {
   askRefitted,
@@ -74,7 +75,8 @@ import {
 } from "./translation/ir.js";
 import { isGrokReply, wholeArgsFilter } from "./grok-integral.js";
 import { fenceFilter, unfencedReply } from "./translation/fence.js";
-import { protocolOf, type StreamDecoder } from "./translation/protocols.js";
+import { protocolOf, upstreamProtocolOf, type StreamDecoder } from "./translation/protocols.js";
+import type { GeminiSignatureStore } from "./gemini-signatures.js";
 import { SseReader } from "./translation/sse.js";
 import { textCallFilter } from "./translation/text-calls.js";
 import { withSearchSourcesFor, withThinkingInline, withVendorRewrites } from "./vendor-rewrites.js";
@@ -142,9 +144,15 @@ export async function attemptTranslated(input: {
   retryPauseMs: number;
   // 附加请求体里 ${sessionId} 换成的对话标识（request-extras.ts 的 extraBodySession）。
   sessionId: string;
+  // Gemini 的调用签名存放：解码 Gemini 回复时签名藏进交给 Agent 的调用 id。
+  signatures: GeminiSignatureStore;
 }): Promise<AttemptOutcome> {
   const { res, apiKey, to, refusals } = input;
-  const url = upstreamUrl({ baseUrl: input.baseUrl, format: to });
+  const sentModel = upstreamModelName({
+    settings: input.endpoint.modelSettings,
+    modelId: input.upstreamModel,
+  });
+  const url = upstreamUrl({ baseUrl: input.baseUrl, format: to, model: sentModel });
   const extras = storedRequestExtras(input.endpoint);
   const secrets = secretsOf({ apiKey, extras });
   // 这家的请求头发不出去：这一个请求当作连不上，照常换家。
@@ -193,10 +201,7 @@ export async function attemptTranslated(input: {
       from: input.from,
       to,
       model: input.upstreamModel,
-      sentModel: upstreamModelName({
-        settings: input.endpoint.modelSettings,
-        modelId: input.upstreamModel,
-      }),
+      sentModel,
       facts: input.facts,
       extraBody: extras.extraBody,
       session: input.sessionId,
@@ -252,22 +257,43 @@ export async function attemptTranslated(input: {
     ask: (without) => open(build(without)),
   });
   if (opened.kind !== "opened") return opened;
+  const askAgain = () => open(build());
   return answerUnlessRefused({
     opened,
     format: to,
-    answer: (ready) => answerOpened({ ...input, url, secrets, opened: ready, goOn }),
+    answer: (ready) => answerOpened({ ...input, url, secrets, opened: ready, goOn, askAgain }),
   });
 }
 
-/** 开了口的回复解码后按 Agent 的协议交给它：要流式就边收边发，不要就渲染成整份回复。 */
+/**
+ * 开了口的回复解码后按 Agent 的协议交给它：要流式就边收边发，不要就攒齐渲染成整份回复。
+ * 整份的 Gemini 回复什么都没说（只想了一下）时还没交给 Agent，当作空回复交回中转站重问或换家。
+ */
 async function answerOpened(input: TranslatedAnswer): Promise<AttemptOutcome> {
   const reply = await upstreamReplyOf(input);
   if (reply.kind === "failed") return reply;
   input.keepAlive.stop();
-  const finished = input.request.stream
-    ? streamReply({ ...input, reply })
-    : wholeReply({ ...input, reply });
-  return { kind: "answered", finished };
+  if (input.request.stream) return { kind: "answered", finished: streamReply({ ...input, reply }) };
+  const read = await readWhole({ ...input, reply });
+  if (read.kind === "gone") return { kind: "answered", finished: Promise.resolve(read) };
+  if (read.failure === null && answeredNothing({ to: input.to, read: read.collector })) {
+    return failedBySelf({ status: 502, detail: EMPTY_REPLY, cause: "empty" });
+  }
+  return { kind: "answered", finished: Promise.resolve(sendWhole({ ...input, read })) };
+}
+
+// 开口后什么都没说（只想了一下）的 Gemini 回复在同一家原地再问几次（magpie 的 emptyRetries：思考已随来随发，比续写多一次）。
+const EMPTY_RETRIES = STREAM_RETRIES + 1;
+
+/**
+ * Gemini 的回复读完了却什么都没说（只想了一下，或没有 candidate 就结束）、也不是被截断或拒答：空回复（magpie 的 emptyFails、
+ * saysSomething、answersNothing）。别的格式开口后不这样认。
+ */
+function answeredNothing(input: { to: ApiEndpointRequestFormat; read: ReplyCollector }): boolean {
+  const { read } = input;
+  if (input.to !== "gemini" || read.error !== null || read.saidAnything()) return false;
+  const { stop } = read.finish();
+  return stop !== "length" && stop !== "filter";
 }
 
 /** 交出一份翻译后的回复要的：Agent 的协议与请求、这家、上游的格式与开了口的回复。 */
@@ -285,6 +311,10 @@ interface TranslatedAnswer {
   url: URL;
   opened: OpenedUpstream;
   goOn: GoOn;
+  // 把原来的请求在这家再问一次（空回复重问）。
+  askAgain: () => Promise<UpstreamOpening>;
+  retryPauseMs: number;
+  signatures: GeminiSignatureStore;
 }
 
 /**
@@ -477,8 +507,9 @@ export function translatedBody(input: TranslatedBodyInput): string {
   if (to === "openai_chat") request = withThinkingInline({ baseUrl, request });
   // 要回放推理的模型按原名或上游模型名认出一个就算（magpie）；请求体里的模型名总是上游模型名。
   const replayModel = replaysThinking(input.model) ? input.model : input.sentModel;
-  const built = protocolOf(to).build({ ...request, stream: true }, replayModel);
-  built.model = input.sentModel;
+  const built = upstreamProtocolOf(to).build({ ...request, stream: true }, replayModel);
+  // Gemini 的模型在地址里（upstreamUrl），请求体不带。
+  if (to !== "gemini") built.model = input.sentModel;
   let body = withoutRefusedFields({
     format: to,
     body: built,
@@ -581,6 +612,12 @@ async function streamReply(input: {
   upstreamModel: string;
   reply: UpstreamReply;
   goOn: GoOn;
+  askAgain: () => Promise<UpstreamOpening>;
+  url: URL;
+  secrets: Secrets;
+  keepAlive: AgentKeepAlive;
+  retryPauseMs: number;
+  signatures: GeminiSignatureStore;
 }): Promise<AnswerEnd> {
   const { res } = input;
   // 保活已经回了 200 与响应头：接着在同一个流里写。
@@ -617,6 +654,7 @@ async function streamReply(input: {
     fence.end();
   };
   let reply = input.reply;
+  const empties = { asked: 0 };
   while (true) {
     const tried = await readTry({
       ...input,
@@ -625,6 +663,24 @@ async function streamReply(input: {
       onData: (data) => delivery.sawRaw(data),
     });
     if (tried.kind === "gone") return tried;
+    if (tried.kind === "ended" && answeredNothing({ to: input.to, read: tried.read })) {
+      // 思考留在 Agent 那里，再问一次的回复接在它后面（magpie #667）。
+      const again = await askAfterEmpty({ ...input, empties });
+      if (again.kind === "gone") return again;
+      if (again.kind === "reply") {
+        reply = again.reply;
+        continue;
+      }
+      flush();
+      res.write("\n");
+      const told =
+        again.kind === "failed"
+          ? toldBroken({ endpointName: input.endpoint.name, reason: "", resumed: again })
+          : { message: `${input.endpoint.name}: ${EMPTY_REPLY}`, reason: EMPTY_REPLY };
+      encoder.event({ kind: "error", message: told.message, code: null, vendorError: null });
+      res.end();
+      return { kind: "broken", message: told.reason };
+    }
     if (tried.kind === "ended") {
       flush();
       encoder.finish();
@@ -656,6 +712,44 @@ async function streamReply(input: {
     encoder.event({ kind: "error", message: told.message, code: null, vendorError: null });
     res.end();
     return { kind: "broken", message: told.reason };
+  }
+}
+
+/**
+ * 空回复之后把原来的请求在同一家再问（每份回复共 EMPTY_RETRIES 次，等待每次加倍），等着时给 Agent 保活。
+ * 再问又是开口前的空回复就接着问；问完了还是空为 stopped，别的失败交出它。
+ */
+async function askAfterEmpty(input: {
+  res: Response;
+  to: ApiEndpointRequestFormat;
+  url: URL;
+  secrets: Secrets;
+  keepAlive: AgentKeepAlive;
+  retryPauseMs: number;
+  askAgain: () => Promise<UpstreamOpening>;
+  empties: { asked: number };
+}): Promise<Resumed> {
+  const { res, keepAlive, empties } = input;
+  keepAlive.restart();
+  try {
+    while (empties.asked < EMPTY_RETRIES) {
+      const waitMs = doubledPause({ retryPauseMs: input.retryPauseMs, again: empties.asked });
+      empties.asked++;
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+      if (res.destroyed) return { kind: "gone" };
+      const opening = await input.askAgain();
+      if (opening.kind === "gone") return opening;
+      if (opening.kind === "failed") {
+        if (opening.cause === "empty") continue;
+        return { kind: "failed", failure: opening };
+      }
+      const reply = await upstreamReplyOf({ ...input, opened: opening });
+      if (reply.kind === "failed") return { kind: "failed", failure: reply };
+      return { kind: "reply", reply };
+    }
+    return { kind: "stopped" };
+  } finally {
+    keepAlive.stop();
   }
 }
 
@@ -691,9 +785,10 @@ async function readTry(input: {
   soFar: ReplySoFar;
   // 上游每个事件的原文（计时看推理是否被封存）。
   onData: (data: string) => void;
+  signatures: GeminiSignatureStore;
 }): Promise<TryEnd> {
   const { soFar } = input;
-  const decoder = protocolOf(input.to).decoder();
+  const decoder = upstreamProtocolOf(input.to).decoder({ signatures: input.signatures });
   const calls = textCallFilter({
     tools: input.request.tools,
     emit: (event) => soFar.event(event),
@@ -720,21 +815,29 @@ async function readTry(input: {
   return { kind: "ended", read };
 }
 
-/** Agent 不要流式：攒齐整份回复再一次给它；只想了一下就出错的回复按出错交给它。 */
-async function wholeReply(input: {
+/** 读完的整份回复：攒好的回复，与交不出的原因（断流或只想了一下就出错）；没有为 null。 */
+interface WholeRead {
+  kind: "read";
+  collector: ReplyCollector;
+  failure: WholeFailure | null;
+  // 流读完了（不是断了）：只想了一下就以报错形式拒答要看它。
+  ended: boolean;
+}
+
+/** Agent 不要流式：先攒齐整份回复。 */
+async function readWhole(input: {
   res: Response;
-  wire: AgentWire;
-  endpoint: StoredApiEndpoint;
-  from: ApiEndpointRequestFormat;
   to: ApiEndpointRequestFormat;
   request: GatewayRequest;
   requestedModel: string;
   upstreamModel: string;
+  endpoint: StoredApiEndpoint;
   reply: UpstreamReply;
-}): Promise<AnswerEnd> {
-  const { res, endpoint } = input;
+  signatures: GeminiSignatureStore;
+}): Promise<WholeRead | { kind: "gone" }> {
+  const { res } = input;
   const collector = new ReplyCollector();
-  const decoder = protocolOf(input.to).decoder();
+  const decoder = upstreamProtocolOf(input.to).decoder({ signatures: input.signatures });
   const numbers = wholeNumbersFilter({
     requestedModel: input.requestedModel,
     upstreamModel: input.upstreamModel,
@@ -758,11 +861,26 @@ async function wholeReply(input: {
   let failure: WholeFailure | null = null;
   if (broken !== null) failure = { message: broken, vendorError: null };
   else if (collector.error && !collector.saidAnything()) failure = collector.error;
+  return { kind: "read", collector, failure, ended: end.kind === "ended" };
+}
+
+/** 攒齐的整份回复一次给 Agent；只想了一下就出错的回复按出错交给它。 */
+function sendWhole(input: {
+  res: Response;
+  wire: AgentWire;
+  endpoint: StoredApiEndpoint;
+  from: ApiEndpointRequestFormat;
+  request: GatewayRequest;
+  requestedModel: string;
+  read: WholeRead;
+}): AnswerEnd {
+  const { res, endpoint } = input;
+  const { collector, failure } = input.read;
   const headers = { [ANSWERED_BY_HEADER]: endpoint.slug };
   if (failure !== null) {
     // 只想了一下就以报错形式拒答：照拒答交给 Agent（400，不是它会重问的 5xx），不怪这家（magpie 的 refusedAfter）。
     const refusedAfterThinking =
-      end.kind === "ended" && refusedAfterOpening({ stop: null, error: collector.error });
+      input.read.ended && refusedAfterOpening({ stop: null, error: collector.error });
     if (refusedAfterThinking) {
       const message = `${endpoint.name}: ${failure.message}`;
       sendRefusal({ res, wire: input.wire, message, headers });

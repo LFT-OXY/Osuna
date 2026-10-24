@@ -84,6 +84,9 @@ export function withFixedEffort(input: {
     }
     case "anthropic_messages":
       return anthropicAt({ text, body, effort });
+    // 没有 Agent 说 Gemini，Agent 的请求不会是这种格式。
+    case "gemini":
+      return text;
   }
 }
 

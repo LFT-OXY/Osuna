@@ -1,5 +1,5 @@
 // 拒收字段的认法与改法移植自 magpie（https://github.com/yetone/magpie，internal/gateway/anthropic_shapes.go 的 refuseShapes、withoutRefusedShapes、withDisplay、withoutDeferredTools、withRefsSaid，anthropic.go 的 samplingDeprecated、withoutSampling，strict_refused.go 的 toolStrictRefusal、withoutToolStrict，image_tool.go 的 withoutImageTool、withoutImageToolReq、mayDropImageTool，
-// gateway.go 的 cacheKeyField 与 refusesField，object_root.go 的 rootUnionRefusal、objectRootsBody、foldTools）
+// gateway.go 的 cacheKeyField 与 refusesField，object_root.go 的 rootUnionRefusal、objectRootsBody、foldTools 与 objectRootsReq）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
@@ -327,7 +327,7 @@ function toolsWithoutStrict(input: { tools: unknown[]; chat: boolean }): unknown
 }
 
 /**
- * Chat 的 tools[].function、Responses 的 tools[]（含命名空间里的）的参数根包成 object；
+ * Chat 的 tools[].function、Responses 的 tools[]（含命名空间里的）、Gemini 的 functionDeclarations 的参数根包成 object；
  * 工具里没有联合（`Of"`）或都不用改时原样交回同一个对象。
  */
 function foldsTools(body: Body): Body {
@@ -360,20 +360,38 @@ function toolFolded(tool: unknown): unknown {
   }
   const fn = tool.function;
   if (isRecord(fn)) {
-    const folded = withParametersFolded(fn);
+    const folded = withParametersFolded({ definition: fn, key: "parameters" });
     if (folded === fn) return tool;
     return { ...tool, function: folded };
   }
-  return withParametersFolded(tool);
+  const declarations = tool.functionDeclarations;
+  if (Array.isArray(declarations)) {
+    let changed = false;
+    const folded = declarations.map((declaration: unknown) => {
+      if (!isRecord(declaration)) return declaration;
+      const next = withParametersFolded({ definition: declaration, key: "parametersJsonSchema" });
+      changed ||= next !== declaration;
+      return next;
+    });
+    return changed ? { ...tool, functionDeclarations: folded } : tool;
+  }
+  return withParametersFolded({ definition: tool, key: "parameters" });
 }
 
-/** 工具定义（Responses 的工具，或 Chat 的 function）的 parameters 根包成 object；不用改时交回同一个对象。 */
-function withParametersFolded(definition: Body): Body {
-  const { parameters } = definition;
+/**
+ * 工具定义（Responses 的工具、Chat 的 function，或 Gemini 的 functionDeclaration）的参数根包成 object；
+ * 不用改时交回同一个对象。
+ */
+function withParametersFolded(input: {
+  definition: Body;
+  key: "parameters" | "parametersJsonSchema";
+}): Body {
+  const { definition, key } = input;
+  const parameters = definition[key];
   if (!isRecord(parameters)) return definition;
   const folded = objectRoot(parameters);
   if (folded === parameters) return definition;
-  return { ...definition, parameters: folded };
+  return { ...definition, [key]: folded };
 }
 
 function isImageTool(tool: unknown): boolean {

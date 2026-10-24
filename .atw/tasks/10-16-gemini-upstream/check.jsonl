@@ -1,0 +1,13 @@
+{"file": ".atw/tasks/10-16-gemini-upstream/research/decisions.md", "reason": "两轮访谈的全部决定（G1–G15、A1–A7）与 magpie 翻译细节的出处，判断实现是否照 magpie、是否越界"}
+{"file": ".atw/tasks/10-16-magpie-osuna-gaps/prd.md", "reason": "总任务的跨子任务规矩：身份如实、协议、测试约束、不连真实上游"}
+{"file": "docs/adr/0007-api-endpoints-route-through-daemon-gateway.md", "reason": "中转站只服务本机、同格式直通与翻译顺序、旧客户端投影不变"}
+{"file": "docs/adr/0008-gateway-reshapes-rejected-requests-and-fails-over-refusals.md", "reason": "被拒改写、厂商专属改写清单、请求头与附加请求体、只用这种格式"}
+{"file": "docs/adr/0009-web-search-allowed-per-endpoint.md", "reason": "这家自己会联网搜索按格式生效的规则"}
+{"file": "docs/adr/0013-osuna-reads-other-apps-and-tests-as-the-cli.md", "reason": "导入别的软件配置与导入链接的规则"}
+{"file": "docs/protocol-compatibility.md", "reason": "新字段可选、features 能力位、COMPAT 标记"}
+{"file": "docs/glossary.md", "reason": "Request format、API endpoint 等界面名词"}
+{"file": ".atw/spec/server/backend/index.md", "reason": "daemon 侧规范入口：中转站、翻译、判错都在 server"}
+{"file": ".atw/spec/server/backend/rpc-and-protocol.md", "reason": "可选新字段与 server_info.features 能力位的写法"}
+{"file": ".atw/spec/server/backend/testing.md", "reason": "daemon 端到端测试、本机假上游"}
+{"file": ".atw/spec/app/frontend/index.md", "reason": "接口页、添加窗口、识别结果、导入确认框的界面规范"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "浏览器测试与失败状态的测法"}

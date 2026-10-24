@@ -14,11 +14,11 @@ import {
   type VendorError,
 } from "./translation/ir.js";
 import { ReplyClock, UNTIMED, type ReplyTimes } from "./reply-clock.js";
-import { protocolOf, type StreamDecoder } from "./translation/protocols.js";
+import { upstreamProtocolOf, type StreamDecoder } from "./translation/protocols.js";
 import { SseReader } from "./translation/sse.js";
 
 /** 回复里出现过的内容。 */
-export type ReplyContent = "text" | "thinking" | "tool_call";
+export type ReplyContent = "text" | "thinking" | "tool_call" | "image";
 
 /** 回复里读出来的东西。 */
 export interface TappedReply {
@@ -78,7 +78,7 @@ export class ReplyTap {
   private raw = "";
 
   constructor(input: { format: ApiEndpointRequestFormat; stream: boolean }) {
-    this.decoder = protocolOf(input.format).decoder();
+    this.decoder = upstreamProtocolOf(input.format).decoder();
     if (input.stream) {
       const clock = new ReplyClock({ upstream: input.format });
       this.clock = clock;
@@ -172,6 +172,10 @@ export class ReplyTap {
       case "tool_start":
       case "other_tool":
         this.addContent("tool_call");
+        return;
+      // 画图模型画的图：Agent 收不到，但模型回答了（magpie saysSomething）。
+      case "image":
+        this.addContent("image");
         return;
       default:
       // think_start、tool_args 不是新的内容；签名也不算（magpie 的 anthropicDeltaSays）。

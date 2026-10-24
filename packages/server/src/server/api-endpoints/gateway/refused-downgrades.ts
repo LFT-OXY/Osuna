@@ -1,4 +1,4 @@
-// 结构化输出与预填的拒收移植自 magpie（https://github.com/yetone/magpie，internal/gateway/format.go 的 formatRefusal、refusesFormat、asObject、inSystem、formatInBody、withSystemLine、withLine，prefill.go 的 prefillRefusal、refusesPrefill、endsWithAssistant、userLast、userLastBody、continueText）
+// 结构化输出与预填的拒收移植自 magpie（https://github.com/yetone/magpie，internal/gateway/format.go 的 formatRefusal（含 Gemini 的 response_mime_type、response_json_schema）、refusesFormat、asObject、inSystem、formatInBody、withSystemLine、withLine，prefill.go 的 prefillRefusal、refusesPrefill、endsWithAssistant、userLast、userLastBody、continueText）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
@@ -6,6 +6,8 @@ import { isRecord } from "../upstream-http.js";
 import { refusesContent } from "./refused-fields.js";
 import { anthropicFormat } from "./translation/anthropic.js";
 import {
+  CONTINUE_TEXT,
+  FORMAT_NAME,
   formatInstruction,
   openAIFormat,
   stringOf,
@@ -38,9 +40,6 @@ const DOWNGRADE_WORDS = {
 } as const;
 
 const W = DOWNGRADE_WORDS;
-
-// 补在 assistant 消息后面的 user 轮。
-const CONTINUE_TEXT = "Continue.";
 
 const OBJECT_FORMAT = { type: "json_object" };
 
@@ -79,12 +78,23 @@ function objectStepFits(input: { format: ApiEndpointRequestFormat; asked: Format
   return input.asked.type === "json_schema" && input.format !== "anthropic_messages";
 }
 
-/** 请求体要的结构化输出：Responses 的 text.format、Chat 的 response_format、Anthropic 的 output_config.format。 */
+/**
+ * 请求体要的结构化输出：Responses 的 text.format、Chat 的 response_format、Anthropic 的 output_config.format、
+ * Gemini 的 generationConfig.responseMimeType 与 responseJsonSchema。
+ */
 function sentFormat(input: SentBody): Format | null {
   const { body } = input;
   if (input.format === "anthropic_messages") return anthropicFormat(body.output_config);
+  if (input.format === "gemini") return geminiFormat(body.generationConfig);
   if (input.format === "openai_chat") return openAIFormat(body.response_format);
   return openAIFormat(isRecord(body.text) ? body.text.format : null);
+}
+
+function geminiFormat(config: unknown): Format | null {
+  if (!isRecord(config) || config.responseMimeType !== "application/json") return null;
+  const schema = config.responseJsonSchema;
+  if (schema === undefined || schema === null) return { type: "json_object" };
+  return { type: "json_schema", name: FORMAT_NAME, description: "", schema, strict: null };
 }
 
 function itemsOf(value: unknown): unknown[] {

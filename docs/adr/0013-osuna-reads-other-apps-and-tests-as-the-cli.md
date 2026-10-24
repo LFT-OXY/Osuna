@@ -19,7 +19,7 @@ The reason for all three is that magpie (MIT, at `7597c132`) does them and the u
 
 - Only the desktop app takes them, through the `paseo` scheme it already registers ([ADR 0002](0002-rename-stops-at-app-identity.md)). With the official Paseo desktop app also installed, the system may hand the link to Paseo instead.
 - A link never saves anything by itself. The confirmation dialog names the hosts that would get the user's prompts and the key, lets the user change the name and the key, and warns separately when the link would replace an endpoint the user has. It adds to the host the window is showing; a host without `apiEndpointManagement` gets "update the host" instead.
-- Refused, with the reason shown: a base URL that is not https, except plain http to this machine or the local network; a URL with an account, a query or a fragment; a key over 4096 bytes or with control characters; an unknown template; Vertex; a link with no base URL. A name is cut to 80 bytes, and a link adds at most 200 models. `gemini` URLs are ignored until Osuna has a Gemini format.
+- Refused, with the reason shown: a base URL that is not https, except plain http to this machine or the local network; a URL with an account, a query or a fragment; a key over 4096 bytes or with control characters; an unknown template; Vertex; a link with no base URL. A name is cut to 80 bytes, and a link adds at most 200 models.
 
 ## Testing as the CLI
 
@@ -41,3 +41,7 @@ The reason for all three is that magpie (MIT, at `7597c132`) does them and the u
 - "Test as Claude Code" fails with "run Claude Code through the gateway once" on a fresh install, until the first Claude Code request.
 - The parent task's rule 15 links here. Any further exception gets its own ADR.
 - Files borrowed from magpie keep its MIT notice at the top and are listed in the root [`THIRD_PARTY_NOTICES`](../../THIRD_PARTY_NOTICES).
+
+## Revision 2026-10-24: Gemini base URLs come in
+
+Osuna now has the Gemini **Request format** (task `10-16-gemini-upstream`). Imports take Gemini base URLs as magpie does since `7ea0e047`: a CC Switch Gemini CLI entry with `GOOGLE_GEMINI_BASE_URL` comes in on that URL with `/v1beta` added (Gemini CLI adds the version itself), one without it on the Google Gemini template; an Alma provider of the Gemini format comes in on its `base_url` as written; OpenCode's `google` key comes in on the Google Gemini template; an import link's `gemini=` is taken, alone too. A Gemini URL's host counts when an entry is matched to an endpoint the user already has. The daemon no longer sends `gemini_unsupported`, `gemini_only` or a true `ignoredGemini`; the values stay in the protocol for older clients.
