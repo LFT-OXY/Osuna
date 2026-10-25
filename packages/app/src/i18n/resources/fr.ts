@@ -2630,6 +2630,8 @@ export const fr: TranslationResources = {
         errors: {
           gone: "L'analyse n'était plus à jour, Osuna a analysé à nouveau. Vérifiez la sélection puis importez à nouveau.",
           failed: "Osuna n'a pas pu l'enregistrer ({{reason}})",
+          cliSignInsOff:
+            "« Lire les connexions des CLI » est désactivé : les entrées d'OpenCode n'ont pas été importées",
           cannotReplace:
             "{{name}} ne porte le nom d'aucun de vos endpoints ; gardez les deux à la place.",
         },

@@ -407,17 +407,19 @@ describe("import from other apps", () => {
       ["claude-code", true, null],
       ["codex", true, null],
     ]);
-    // 导入时重读来源也不碰 OpenCode：开着时扫到的那条对不上了。
-    const fromOpenCode = await client.apiEndpointImport([
-      { fingerprint: openCode.fingerprint, action: "add" },
-    ]);
-    expect(fromOpenCode).toMatchObject({ imported: [], error: { code: "import_gone" } });
+    // 开着时扫到、关了之后才导入：OpenCode 那条跳过并说明原因，排在它后面的照常导入。
     const ccRelay = itemsOf(off, "cc-switch")[0];
-    const fromCcSwitch = await client.apiEndpointImport([
-      { fingerprint: ccRelay!.fingerprint, action: "add" },
+    if (!ccRelay) throw new Error("Expected CC Relay");
+    const mixed = await client.apiEndpointImport([
+      { fingerprint: openCode.fingerprint, action: "add" },
+      { fingerprint: ccRelay.fingerprint, action: "add" },
     ]);
-    expect(fromCcSwitch.error).toBeNull();
-    expect(fromCcSwitch.imported.map((entry) => entry.name)).toEqual(["CC Relay"]);
+    expect(mixed.imported.map((entry) => entry.name)).toEqual(["CC Relay"]);
+    expect(mixed.failed).toBeNull();
+    expect(mixed.error).toEqual({
+      code: "import_cli_sign_ins_off",
+      message: "Read CLI sign-ins is off, so the entries from OpenCode weren't imported",
+    });
 
     await client.patchDaemonConfig({ readCliSignIns: true });
     const on = await client.apiEndpointImportScan({ includeOpenCode: true });

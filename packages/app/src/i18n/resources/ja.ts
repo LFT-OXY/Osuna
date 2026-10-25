@@ -2600,6 +2600,8 @@ export const ja: TranslationResources = {
         errors: {
           gone: "スキャン結果が古くなっていたため、Osuna がもう一度スキャンしました。選択を確認してから再度インポートしてください。",
           failed: "Osuna が保存できませんでした（{{reason}}）",
+          cliSignInsOff:
+            "「CLI のサインイン情報を読む」がオフのため、OpenCode の項目はインポートしていません",
           cannotReplace:
             "{{name}} は既存のエンドポイントと名前が重なっていません。両方残すを選んでください。",
         },

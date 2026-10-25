@@ -2614,6 +2614,8 @@ export const ptBR: TranslationResources = {
         errors: {
           gone: "A verificação estava desatualizada, então o Osuna verificou de novo. Confira a seleção e importe novamente.",
           failed: "O Osuna não conseguiu salvá-lo ({{reason}})",
+          cliSignInsOff:
+            "“Ler logins das CLIs” está desativado, então as entradas do OpenCode não foram importadas",
           cannotReplace: "{{name}} não tem o nome de nenhum endpoint seu; mantenha os dois.",
         },
       },

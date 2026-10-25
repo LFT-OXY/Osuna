@@ -2601,6 +2601,7 @@ export const zhCN: TranslationResources = {
         errors: {
           gone: "扫描结果已经过时，Osuna 重新扫描了一遍。请检查选择后再导入。",
           failed: "Osuna 没能保存它（{{reason}}）",
+          cliSignInsOff: "已关闭读取 CLI 登录凭证，OpenCode 的条目没导入",
           cannotReplace: "「{{name}}」没有和你已有的接口重名，请改为两家都留。",
         },
       },

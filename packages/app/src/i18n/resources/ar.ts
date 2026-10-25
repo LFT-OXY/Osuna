@@ -2575,6 +2575,7 @@ export const ar: TranslationResources = {
         errors: {
           gone: "كانت نتائج الفحص قديمة، فأعاد Osuna الفحص. راجع اختياراتك ثم استورد من جديد.",
           failed: "تعذّر على Osuna حفظه ({{reason}})",
+          cliSignInsOff: "«قراءة تسجيلات دخول CLI» متوقفة، لذلك لم تُستورد إدخالات OpenCode",
           cannotReplace: "لا يطابق اسم {{name}} أي نقطة نهاية لديك؛ أبقِ الاثنين بدلًا من ذلك.",
         },
       },

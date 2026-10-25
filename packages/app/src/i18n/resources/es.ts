@@ -2630,6 +2630,8 @@ export const es: TranslationResources = {
         errors: {
           gone: "El escaneo estaba desactualizado y Osuna volvió a escanear. Revisa la selección e importa de nuevo.",
           failed: "Osuna no pudo guardarlo ({{reason}})",
+          cliSignInsOff:
+            "«Leer inicios de sesión de las CLI» está desactivado, así que las entradas de OpenCode no se importaron",
           cannotReplace:
             "{{name}} no comparte nombre con ningún endpoint tuyo; conserva ambos en su lugar.",
         },

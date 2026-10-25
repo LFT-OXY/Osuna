@@ -628,6 +628,8 @@ export type ApiEndpointErrorCode =
   // 导入时那一条已经不在它的软件里了（重新扫描）；替换给的不是名称撞上的那条（params.name）。
   | "import_gone"
   | "import_cannot_replace"
+  // 「读取 CLI 登录凭证」关着，选中的 OpenCode 条目跳过了，别的照常导入。
+  | "import_cli_sign_ins_off"
   // 加某一条时写文件等出了错（params.reason 是 errno 或错误名）。
   | "import_failed"
   // 「忽略」没记上（params.reason：errno、endpoints_unparsable 或错误名）。
@@ -1217,6 +1219,8 @@ export class ApiEndpointService {
   private importSecret: Buffer | null = null;
   // 发现提示上次真读别的软件的结果（不含 OpenCode）与时刻：一分钟内照用，导入之后丢掉。
   private discoveryRead: DiscoveryRead | null = null;
+  // 上次真读到的 OpenCode 条目的指纹：「读取 CLI 登录凭证」关着时导入据此认出要跳过的那几条。
+  private openCodeFingerprints = new Set<string>();
   private readonly isAutoUpdate: () => boolean;
   // 每家最近一次读到的余额与读的时刻：一分钟内照用；保存或删掉这家时丢掉。只在内存里，开机为空。
   private readonly keptBalances = new Map<
@@ -4409,10 +4413,7 @@ export class ApiEndpointService {
     sources: ApiEndpointImportSource[];
     cliSignInsOff: boolean;
   } {
-    const cliSignInsOff = input.includeOpenCode && !this.cliSignIns.allowed();
-    const settled = this.settledImports({
-      includeOpenCode: input.includeOpenCode && !cliSignInsOff,
-    });
+    const { settled, openCodeSkipped } = this.settledImports(input);
     // 刚读过的比发现提示存着的新：提示照它算（不含 OpenCode），一分钟从这一刻重新算。
     const withoutOpenCode = settled.filter(({ source }) => source.id !== "opencode");
     this.discoveryRead = {
@@ -4427,7 +4428,7 @@ export class ApiEndpointService {
       error: source.error,
       items: entries.map(wireImportItem),
     }));
-    return { sources, cliSignInsOff };
+    return { sources, cliSignInsOff: openCodeSkipped };
   }
 
   /**
@@ -4448,12 +4449,21 @@ export class ApiEndpointService {
   }
 
   private async importPicked(picks: readonly ApiEndpointImportPick[]): Promise<ImportOutcome> {
-    const entries = this.settledImports({ includeOpenCode: this.cliSignIns.allowed() }).flatMap(
-      (source) => source.entries,
-    );
+    const { settled, openCodeSkipped } = this.settledImports({ includeOpenCode: true });
+    const entries = settled.flatMap((source) => source.entries);
     const imported: ApiEndpointNameRef[] = [];
+    let hasSkippedOpenCode = false;
     for (const pick of picks) {
       const entry = entries.find((candidate) => candidate.fingerprint === pick.fingerprint);
+      // 开着时扫到的 OpenCode 条目、现在开关关着：跳过，别的照常导入，最后说明原因。
+      if (
+        entry === undefined &&
+        openCodeSkipped &&
+        this.openCodeFingerprints.has(pick.fingerprint)
+      ) {
+        hasSkippedOpenCode = true;
+        continue;
+      }
       // 指纹对不上（来源变了、daemon 重启过）：扫描结果过时了，没有可说的那一条。
       if (entry === undefined) return { imported, failed: null, error: importGone() };
       try {
@@ -4465,7 +4475,7 @@ export class ApiEndpointService {
         return { imported, failed, error: this.importItemError({ error, entry }) };
       }
     }
-    return { imported, failed: null, error: null };
+    return { imported, failed: null, error: hasSkippedOpenCode ? openCodeNotImported() : null };
   }
 
   /** 一条没成的原因：请求的错照原样；写文件等别的错记日志，换成 import_failed（params.reason 是 errno 或错误名）。 */
@@ -4796,16 +4806,26 @@ export class ApiEndpointService {
     }));
   }
 
+  /**
+   * 读来源并对照已有的接口。要了 OpenCode、但「读取 CLI 登录凭证」关着时不读它，openCodeSkipped 为 true；
+   * 读了就记下它那几条的指纹。
+   */
   private settledImports(input: { includeOpenCode: boolean }) {
-    const sources = readImportSources({
-      context: this.importContext(),
-      includeOpenCode: input.includeOpenCode,
-    });
-    return settleImports({
-      sources,
+    const openCodeSkipped = input.includeOpenCode && !this.cliSignIns.allowed();
+    const readsOpenCode = input.includeOpenCode && !openCodeSkipped;
+    const settled = settleImports({
+      sources: readImportSources({ context: this.importContext(), includeOpenCode: readsOpenCode }),
       held: this.heldForImport(this.readState()),
       fingerprintSecret: this.importFingerprintSecret(),
     });
+    if (readsOpenCode) {
+      this.openCodeFingerprints = new Set(
+        settled
+          .filter(({ source }) => source.id === "opencode")
+          .flatMap(({ entries }) => entries.map((entry) => entry.fingerprint)),
+      );
+    }
+    return { settled, openCodeSkipped };
   }
 
   private importContext(): ImportReadContext {
@@ -7807,6 +7827,13 @@ function importLinkTarget(input: {
   if (byId !== undefined) return byId;
   const byName = endpoints.find((endpoint) => endpoint.name.toLowerCase() === parsed.identity);
   return byName ?? null;
+}
+
+function openCodeNotImported(): ApiEndpointRequestError {
+  return new ApiEndpointRequestError({
+    code: "import_cli_sign_ins_off",
+    message: "Read CLI sign-ins is off, so the entries from OpenCode weren't imported",
+  });
 }
 
 function importGone(): ApiEndpointRequestError {

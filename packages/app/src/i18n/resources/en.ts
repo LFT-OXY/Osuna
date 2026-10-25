@@ -2640,6 +2640,8 @@ export const en = {
         errors: {
           gone: "The scan was out of date, so Osuna scanned again. Check the picks and import again.",
           failed: "Osuna couldn't save it ({{reason}})",
+          cliSignInsOff:
+            "“Read CLI sign-ins” is off, so the entries from OpenCode weren't imported",
           cannotReplace:
             "{{name}} doesn't share a name with an endpoint you have; keep both instead.",
         },

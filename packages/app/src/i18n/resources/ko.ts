@@ -2590,6 +2590,7 @@ export const ko: TranslationResources = {
         errors: {
           gone: "검색 결과가 오래되어 Osuna가 다시 검색했습니다. 선택을 확인하고 다시 가져오세요.",
           failed: "Osuna가 저장하지 못했습니다({{reason}})",
+          cliSignInsOff: "'CLI 로그인 정보 읽기'가 꺼져 있어 OpenCode 항목은 가져오지 않았습니다",
           cannotReplace:
             "{{name}}은(는) 기존 엔드포인트와 이름이 겹치지 않습니다. 둘 다 유지를 선택하세요.",
         },
