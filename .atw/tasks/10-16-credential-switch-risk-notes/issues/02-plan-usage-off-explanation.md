@@ -4,7 +4,7 @@
 
 **Blocked by:** 01
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 客户端据 `usage.list_reports` 响应里的「已关闭」字段判断，不另发请求；没有这个字段时照现在的空状态。
 - [ ] 弹窗与用量页显示说明行和「打开设置」（次要按钮样式，不是蓝色链接）；跳转落在「隐私」一节。
