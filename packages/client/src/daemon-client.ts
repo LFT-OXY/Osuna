@@ -6918,9 +6918,12 @@ export class DaemonClient {
     });
   }
 
-  /** 用粘贴的回调地址完成加号；daemon 换完 token 才回，最多等一分钟。 */
+  /**
+   * 用粘贴的内容完成加号：Codex 是浏览器最后跳到的地址（callbackUrl），Claude Code 是登录页显示的代码或回不到主机的
+   * 那个地址（code）。daemon 等登录结束才回，最多等一分钟。
+   */
   async providerAccountSignInSubmit(
-    options: { signInId: string; callbackUrl: string },
+    options: { signInId: string; callbackUrl?: string; code?: string },
     requestId?: string,
   ): Promise<ProviderAccountSignInPayload> {
     return this.sendNamespacedCorrelatedSessionRequest({

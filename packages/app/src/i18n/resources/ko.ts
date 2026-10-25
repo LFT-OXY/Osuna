@@ -4555,11 +4555,20 @@ export const ko: TranslationResources = {
           retry: "다시 시도",
           canceled: "로그인이 취소되었습니다.",
           failed: "로그인을 완료하지 못했습니다: {{reason}}",
+          claude: {
+            waitingHint: "추가할 Claude 계정으로 로그인하세요. 완료되면 자동으로 닫힙니다.",
+            pasteLabel: "로그인 페이지에 표시된 코드",
+            pasteHint:
+              "다른 기기에서 로그인하나요? 그 기기에서 링크를 열고, 로그인 후 페이지에 표시되는 코드를 복사해 여기에 붙여넣으세요.",
+            pasteHintBlocked:
+              "Claude Code가 Osuna로 돌아오는 페이지를 열지 않았습니다. 로그인 후 페이지에 표시되는 코드를 복사해 여기에 붙여넣으세요.",
+          },
           pasteErrors: {
             paste_invalid: "http://로 시작하는 전체 주소를 붙여 넣으세요",
             paste_mismatch:
               "이 로그인에서 나온 주소가 아닙니다. 이 로그인의 브라우저 탭 주소를 붙여 넣으세요.",
             not_waiting: "이 로그인은 끝났습니다. 다시 시도하세요.",
+            code_invalid: "로그인 페이지에 표시된 코드를 붙여넣으세요.",
           },
           failures: {
             timed_out: "10분 안에 로그인이 완료되지 않았습니다.",
@@ -4568,6 +4577,8 @@ export const ko: TranslationResources = {
             no_account: "ChatGPT가 어떤 계정으로 로그인했는지 알려 주지 않았습니다.",
             different_account: "다른 계정입니다. 이 계정으로 로그인하세요.",
             cli_sign_ins_off: "'CLI 로그인 정보 읽기'가 꺼져 있어 계정을 추가할 수 없습니다.",
+            no_email: "Claude Code가 계정 이메일을 기록하지 않아 추가하지 않았습니다.",
+            login_failed: "Claude Code 로그인이 완료되지 않았습니다: {{reason}}",
           },
         },
         riskNotice: {

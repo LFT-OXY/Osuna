@@ -205,7 +205,8 @@ export class ProviderAccountSession {
         case "provider.account.sign_in.submit.request":
           signIn = await service.submitSignIn({
             signInId: request.signInId,
-            callbackUrl: request.callbackUrl,
+            ...(request.callbackUrl !== undefined ? { callbackUrl: request.callbackUrl } : {}),
+            ...(request.code !== undefined ? { code: request.code } : {}),
           });
           break;
       }

@@ -4492,10 +4492,19 @@ export const zhCN: TranslationResources = {
           retry: "重试",
           canceled: "登录已取消。",
           failed: "登录没有完成：{{reason}}",
+          claude: {
+            waitingHint: "用要添加的 Claude 账号登录。登录完成后这里会自动关闭。",
+            pasteLabel: "登录页显示的代码",
+            pasteHint:
+              "在别的设备上登录？在那台设备上打开链接，登录后页面会显示一段代码，复制下来粘贴到这里。",
+            pasteHintBlocked:
+              "Claude Code 没有打开能回到 Osuna 的页面。登录后页面会显示一段代码，复制下来粘贴到这里。",
+          },
           pasteErrors: {
             paste_invalid: "请粘贴以 http:// 开头的整段地址",
             paste_mismatch: "这个地址不是这次登录的，请粘贴这次登录的浏览器页面的地址。",
             not_waiting: "这次登录已经结束，请重试。",
+            code_invalid: "请粘贴登录页显示的代码。",
           },
           failures: {
             timed_out: "10 分钟内没有完成登录，已超时。",
@@ -4504,6 +4513,8 @@ export const zhCN: TranslationResources = {
             no_account: "ChatGPT 没有说明登录的是哪个号。",
             different_account: "登录的是另一个号，请用这个号登录。",
             cli_sign_ins_off: "已关闭读取 CLI 登录凭证，不能添加账号。",
+            no_email: "Claude Code 没有记下这个号的邮箱，没有添加。",
+            login_failed: "Claude Code 的登录没有完成：{{reason}}",
           },
         },
         riskNotice: {

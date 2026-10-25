@@ -174,6 +174,8 @@ export async function resetProviderAccounts(): Promise<void> {
   const file = path.join(home, "accounts", "accounts.json");
   await rm(file, { force: true });
   await rm(`${file}.bak`, { force: true });
+  // 存着的 Claude 号的私有配置目录。
+  await rm(path.join(home, "accounts", "claude"), { recursive: true, force: true });
 }
 
 export async function rotationOnDaemon(provider: "codex" | "claude"): Promise<boolean> {

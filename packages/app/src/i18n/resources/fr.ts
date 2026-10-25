@@ -4650,11 +4650,21 @@ export const fr: TranslationResources = {
           retry: "Réessayer",
           canceled: "La connexion a été annulée.",
           failed: "La connexion n’a pas abouti : {{reason}}",
+          claude: {
+            waitingHint:
+              "Connectez-vous avec le compte Claude à ajouter. Cette fenêtre se ferme d'elle-même une fois terminé.",
+            pasteLabel: "Code de la page de connexion",
+            pasteHint:
+              "Vous vous connectez sur un autre appareil ? Ouvrez-y le lien. Après la connexion, la page affiche un code : copiez-le et collez-le ici.",
+            pasteHintBlocked:
+              "Claude Code n'a pas ouvert de page qui revient à Osuna. Après la connexion, la page affiche un code : copiez-le et collez-le ici.",
+          },
           pasteErrors: {
             paste_invalid: "Collez l’adresse complète, commençant par http://",
             paste_mismatch:
               "Cette adresse ne vient pas de cette connexion. Collez celle de l’onglet de cette connexion.",
             not_waiting: "Cette connexion est terminée. Réessayez.",
+            code_invalid: "Collez le code affiché par la page de connexion.",
           },
           failures: {
             timed_out: "La connexion n’a pas été terminée en 10 minutes.",
@@ -4665,6 +4675,9 @@ export const fr: TranslationResources = {
               "C’est un autre compte. Connectez-vous avec ce compte pour le réparer.",
             cli_sign_ins_off:
               "« Lire les connexions des CLI » est désactivé : impossible d’ajouter des comptes.",
+            no_email:
+              "Claude Code n'a pas enregistré l'e-mail du compte, il n'a donc pas été ajouté.",
+            login_failed: "La connexion de Claude Code n'a pas abouti : {{reason}}",
           },
         },
         riskNotice: {

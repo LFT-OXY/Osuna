@@ -4659,11 +4659,21 @@ export const en = {
           retry: "Try again",
           canceled: "The sign-in was canceled.",
           failed: "The sign-in didn't finish: {{reason}}",
+          claude: {
+            waitingHint:
+              "Sign in with the Claude account you want to add. This closes on its own when you're done.",
+            pasteLabel: "Code from the sign-in page",
+            pasteHint:
+              "Signing in on another device? Open the link there. After you sign in, the page shows a code: copy it and paste it here.",
+            pasteHintBlocked:
+              "Claude Code didn't open a page that comes back to Osuna. After you sign in, the page shows a code: copy it and paste it here.",
+          },
           pasteErrors: {
             paste_invalid: "Paste the whole address, starting with http://",
             paste_mismatch:
               "That address isn't from this sign-in. Paste the one from this sign-in's browser tab.",
             not_waiting: "This sign-in is over. Try again.",
+            code_invalid: "Paste the code the sign-in page shows.",
           },
           failures: {
             timed_out: "The sign-in wasn't finished within 10 minutes.",
@@ -4672,6 +4682,8 @@ export const en = {
             no_account: "ChatGPT didn't say which account signed in.",
             different_account: "That's a different account. Sign in with this account to fix it.",
             cli_sign_ins_off: "“Read CLI sign-ins” is off, so accounts can't be added.",
+            no_email: "Claude Code didn't record the account's email, so it wasn't added.",
+            login_failed: "Claude Code's sign-in didn't finish: {{reason}}",
           },
         },
         riskNotice: {

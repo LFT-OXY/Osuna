@@ -473,9 +473,4 @@ describe.skipIf(process.platform === "win32")("Codex sign-in and saved accounts"
     // 存着的号保留。
     expect(await storeText()).toContain("refresh-acct-1-1");
   });
-
-  test("Claude Code accounts can't be added through this sign-in", async () => {
-    const refused = await client.providerAccountSignInStart({ provider: "claude" });
-    expect(refused.error?.code).toBe("unsupported_provider");
-  });
 });

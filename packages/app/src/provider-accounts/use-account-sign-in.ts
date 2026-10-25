@@ -33,8 +33,20 @@ export interface UseAccountSignInResult {
   start: (target?: { accountId: string; email?: string }) => void;
   retry: () => void;
   close: () => void;
-  submitPaste: (callbackUrl: string) => void;
+  submitPaste: (pasted: string) => void;
   openSignInPage: () => void;
+}
+
+/**
+ * 这台设备要打开的登录页。Claude Code 的号不在主机前（或 Claude Code 没打开页面）时打开它打印的那个：
+ * 登录完显示一段代码，粘回来完成；别的都打开 authUrl。
+ */
+export function signInLink(input: { signIn: ProviderAccountSignIn; isLocalHost: boolean }): string {
+  const { signIn, isLocalHost } = input;
+  if (signIn.provider === "claude" && (!isLocalHost || signIn.callbackBlocked)) {
+    return signIn.codeUrl ?? signIn.authUrl;
+  }
+  return signIn.authUrl;
 }
 
 const CHANGED_EVENT = "provider.account.changed";
@@ -140,7 +152,7 @@ export function useAccountSignIn(input: {
   }, [client]);
 
   const submitPaste = useCallback(
-    (callbackUrl: string) => {
+    (pasted: string) => {
       const current = viewRef.current;
       if (current.kind !== "active" || !client) return;
       const signInId = current.signIn.id;
@@ -153,7 +165,12 @@ export function useAccountSignIn(input: {
       setView({ ...current, paste: { submitting: true, error: null } });
       void (async () => {
         try {
-          const payload = await client.providerAccountSignInSubmit({ signInId, callbackUrl });
+          // Claude Code 粘的是登录页显示的代码，Codex 是浏览器最后跳到的地址。
+          const payload = await client.providerAccountSignInSubmit(
+            current.signIn.provider === "claude"
+              ? { signInId, code: pasted }
+              : { signInId, callbackUrl: pasted },
+          );
           show(payload.signIn, current.email);
           settlePaste(payload.error);
         } catch (cause) {
@@ -166,8 +183,10 @@ export function useAccountSignIn(input: {
 
   const openSignInPage = useCallback(() => {
     const current = viewRef.current;
-    if (current.kind === "active") void openExternalUrl(current.signIn.authUrl);
-  }, []);
+    if (current.kind === "active") {
+      void openExternalUrl(signInLink({ signIn: current.signIn, isLocalHost }));
+    }
+  }, [isLocalHost]);
 
   const refresh = useCallback(
     async (signInId: string) => {

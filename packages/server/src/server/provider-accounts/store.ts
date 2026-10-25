@@ -23,7 +23,8 @@ import {
  * Codex、Claude Code 的号与每家的多号自动轮换设置。写坏时用上一份好的 .bak（last-good.ts）。
  * 不进 config.json：get_daemon_config 会把配置原样发给客户端。
  * 一个登录只有一个持有者：CLI 现在登录的号在这里只有资料，它的 token 只在 CLI 自己那里；
- * 存着的 Codex 号（加号得来的）的整份登录只在这里的 login。
+ * 存着的 Codex 号（加号得来的）的整份登录只在这里的 login；存着的 Claude 号的登录在它的私有配置目录 configDir
+ * （$PASEO_HOME/accounts/claude/<随机名>/）里。
  * 写是同步的、整份替换；续期这种「读、发请求、写回」的一段在跨进程锁里做（file-lock.ts），写前重读。
  */
 
@@ -46,6 +47,11 @@ const StoredAccountSchema = z.object({
   usage: StoredUsageSchema.optional(),
   // 存着的 Codex 号的整份登录（与 auth.json 同形，含 refresh token）；CLI 现在登录的号没有。
   login: z.record(z.string(), z.unknown()).optional(),
+  // 存着的 Claude 号的私有配置目录（绝对路径）：它的登录由 Claude Code 存在这里（macOS 在按目录取后缀的钥匙串项里），
+  // 也由 Claude Code 在这里续期。CLI 现在登录的号没有。
+  configDir: z.string().optional(),
+  // Claude 号的 .claude.json oauthAccount 资料：换上这个号时写进 CLI 的 .claude.json。
+  oauthAccount: z.record(z.string(), z.unknown()).optional(),
   // 续期被拒或被吊销：「需要重新登录」，退出轮换。
   needsSignIn: ProviderAccountNeedsSignInSchema.optional(),
   // Osuna 最近一次续这个号（加号、续期、保活）的时间。

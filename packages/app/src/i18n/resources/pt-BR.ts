@@ -4601,11 +4601,21 @@ export const ptBR: TranslationResources = {
           retry: "Tentar de novo",
           canceled: "O login foi cancelado.",
           failed: "O login não terminou: {{reason}}",
+          claude: {
+            waitingHint:
+              "Entre com a conta do Claude que você quer adicionar. Isto fecha sozinho quando você terminar.",
+            pasteLabel: "Código da página de login",
+            pasteHint:
+              "Entrando em outro dispositivo? Abra o link nele. Depois de entrar, a página mostra um código: copie e cole aqui.",
+            pasteHintBlocked:
+              "O Claude Code não abriu uma página que volte ao Osuna. Depois de entrar, a página mostra um código: copie e cole aqui.",
+          },
           pasteErrors: {
             paste_invalid: "Cole o endereço inteiro, começando com http://",
             paste_mismatch:
               "Esse endereço não é deste login. Cole o da aba do navegador deste login.",
             not_waiting: "Este login terminou. Tente de novo.",
+            code_invalid: "Cole o código que a página de login mostra.",
           },
           failures: {
             timed_out: "O login não terminou em 10 minutos.",
@@ -4615,6 +4625,9 @@ export const ptBR: TranslationResources = {
             different_account: "É outra conta. Entre com esta conta para corrigi-la.",
             cli_sign_ins_off:
               "“Ler logins das CLIs” está desativado, então não dá para adicionar contas.",
+            no_email:
+              "O Claude Code não registrou o e-mail da conta, então ela não foi adicionada.",
+            login_failed: "O login do Claude Code não terminou: {{reason}}",
           },
         },
         riskNotice: {

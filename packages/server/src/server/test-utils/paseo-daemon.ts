@@ -328,6 +328,8 @@ async function prepareTestDaemonConfig(
         },
         callbackPort: 0,
       },
+      // 绝不运行真的 Claude Code：关心加号与读额度的用例给自己的假 claude。
+      claude: { command: path.join(paseoHomeRoot, "no-claude-in-tests") },
       usage: {
         read: async () => ({
           status: "failed",

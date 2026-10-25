@@ -1069,6 +1069,7 @@ export async function createPaseoDaemon(
     logger,
     cliSignIns,
     planUsage: pluginRuntime,
+    claudeRuntime: () => config.agentProviderSettings?.claude,
     onChanged: () => {
       broadcastProviderAccountsChanged();
       // 号或设置变了：第二层要不要经过中转站可能跟着变（apiEndpointService 在下面创建）。

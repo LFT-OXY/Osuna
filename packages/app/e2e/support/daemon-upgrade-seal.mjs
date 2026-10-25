@@ -36,6 +36,10 @@
  * 10. Codex 加号不占本机的 1455、不连 OpenAI：回调端口换成随便一个空端口（provider-accounts/service.ts 的
  *     SEALED_CODEX_CALLBACK_PORT），换 token 与续期（https://auth.openai.com/oauth/token）由上面第 8 条的假外网回答。
  *
+ * 11. 不运行真的 Claude Code：Claude Code 加号（`claude auth login`）与读存着的号的额度（`claude -p /usage`）
+ *     只运行 PASEO_E2E_CLAUDE_COMMAND 指的假程序（provider-accounts/service.ts 的 SEALED_CLAUDE_COMMAND），
+ *     没设就是一个不存在的路径，运行不了。
+ *
  * 2026-10-18 一条浏览器用例点中了升级按钮，测试 daemon 真的跑了 `brew upgrade --cask claude-code@latest`
  * 又被中途杀掉，弄坏了开发者本机的 Claude Code。
  */
@@ -228,7 +232,17 @@ globalThis[Symbol.for("paseo.e2e.cliKeychain")] = {
     const file = process.env.PASEO_E2E_KEYCHAIN_PATH;
     if (file) writeFileSync(file, JSON.stringify(items));
   },
+  delete: async (service, account) => {
+    const items = readFakeKeychain();
+    delete items[`${service}\u0000${account}`];
+    const file = process.env.PASEO_E2E_KEYCHAIN_PATH;
+    if (file) writeFileSync(file, JSON.stringify(items));
+  },
 };
+
+// 第 11 条：Claude Code 加号、读存着的号的额度只运行用例给的假 claude；没给就是一个不存在的路径（运行不了）。
+globalThis[Symbol.for("paseo.e2e.claudeCommand")] =
+  process.env.PASEO_E2E_CLAUDE_COMMAND || "/nonexistent/paseo-e2e-sealed-claude";
 
 function readFakeSites() {
   const file = process.env.PASEO_E2E_FAKE_SITES_PATH;

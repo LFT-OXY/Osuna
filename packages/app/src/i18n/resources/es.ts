@@ -4630,11 +4630,21 @@ export const es: TranslationResources = {
           retry: "Reintentar",
           canceled: "Se canceló el inicio de sesión.",
           failed: "El inicio de sesión no terminó: {{reason}}",
+          claude: {
+            waitingHint:
+              "Inicia sesión con la cuenta de Claude que quieres añadir. Esto se cierra solo cuando termines.",
+            pasteLabel: "Código de la página de inicio de sesión",
+            pasteHint:
+              "¿Inicias sesión en otro dispositivo? Abre el enlace allí. Después de iniciar sesión, la página muestra un código: cópialo y pégalo aquí.",
+            pasteHintBlocked:
+              "Claude Code no abrió una página que vuelva a Osuna. Después de iniciar sesión, la página muestra un código: cópialo y pégalo aquí.",
+          },
           pasteErrors: {
             paste_invalid: "Pega la dirección completa, empezando por http://",
             paste_mismatch:
               "Esa dirección no es de este inicio de sesión. Pega la de la pestaña de este inicio de sesión.",
             not_waiting: "Este inicio de sesión terminó. Vuelve a intentarlo.",
+            code_invalid: "Pega el código que muestra la página de inicio de sesión.",
           },
           failures: {
             timed_out: "El inicio de sesión no terminó en 10 minutos.",
@@ -4644,6 +4654,8 @@ export const es: TranslationResources = {
             different_account: "Es otra cuenta. Inicia sesión con esta cuenta para arreglarla.",
             cli_sign_ins_off:
               "«Leer inicios de sesión de las CLI» está desactivado, así que no se pueden añadir cuentas.",
+            no_email: "Claude Code no registró el correo de la cuenta, así que no se añadió.",
+            login_failed: "El inicio de sesión de Claude Code no terminó: {{reason}}",
           },
         },
         riskNotice: {

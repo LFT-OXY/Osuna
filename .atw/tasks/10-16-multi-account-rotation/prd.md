@@ -211,11 +211,13 @@ Codex、Claude Code 的提供方设置页各多一节「账号」（**Account**�
 
 - **读写 Claude Code 的登录**：macOS 用钥匙串服务名 `Claude Code-credentials`（提供方环境设了 `CLAUDE_CONFIG_DIR` 时加 `-<该目录 sha256 前 8 位>`），账号 `$USER`；其他系统写该配置目录下的 `.credentials.json`。换号同时把 `.claude.json` 的 `oauthAccount` 换成目标号的资料，只动这一键，写前重读。读写同样走可替换的适配器。
 - **私有目录**：每个存着的号一个，放在账号存储下。号被换上时，它的凭证移进 CLI 的默认存储，私有目录里的凭证清掉；号被换下时，从默认存储收回到私有目录。
+  - （工单 07 实现时定）目录是 `$PASEO_HOME/accounts/claude/<随机名>/`，`claude auth login` 运行前就建在最终位置：macOS 上 Claude Code 按目录路径取钥匙串项的后缀，目录不能挪也不能改名。账号存储记下目录（`configDir`）与 `oauthAccount` 资料。重新登录或加到已有的号时改用这次的新目录，旧目录（连同钥匙串项）清掉；加的正是 CLI 现在登录的号时，这次的目录清掉、只记资料；「移除」连同目录与钥匙串项一起清。
 - **续期**：Osuna 从不续 Claude 的 token，也从不连 Anthropic 的登录服务。存着的号在查额度时由 Claude Code 在私有目录里自己续；续出的新 token 留在私有目录。
 - **读额度**：
   - 当前登录的号：沿用现有 Claude 套餐用量来源的读法（两家都按报告 ID `codex:<账号 ID>`、`claude:<账号 UUID>.<组织 UUID>` 从套餐用量注册表取；注册表还没发现这个号时，照用量页那样整体发现一次）。
   - 存着的号：照 magpie 在该号的私有目录、临时工作目录里运行真的 `claude -p /usage --output-format json --tools "" --strict-mcp-config --setting-sources "" --no-session-persistence`，解析其中的「Current session / Current week」用量与重置时间。跟随每 5 分钟的检查自动读（Q19，magpie 只在用户刷新时读）。
   - 从没读到过额度的号不当目标。
+  - （工单 07 实现时定）窗口 ID 与 Claude 套餐用量来源一致：`five_hour`、`weekly`、`weekly_model_<名字>`。这些 ID 不带「:」，按现有的 `isWholeAccountWindow` 某个模型的每周窗口也会算整个号的窗口，换号时算不算由工单 08 定。`/usage` 报未登录、401/403、token 过期或被吊销、要求 `/login` 时标「需要重新登录」（code `signed_out`）；报用量上限或没给额度只算这次读不到。
 - **判定、选目标、换回、节奏**：与 Codex 第一层相同。
 - **生效范围**：新会话用新号。开着的 Claude Code 进程可能在登录过期、重读存储时跟着换到新号（Claude Code 的行为，见 `cli-login-mechanics.md`），这一点写进说明，不另做处理。
 - **与「使用第三方接口」**：Claude Code 开着「使用第三方接口」时订阅号用不上（中转站不转发 claude.ai 登录，ADR 0012），轮换照常转，界面加说明（Q20）。
@@ -232,6 +234,7 @@ Codex、Claude Code 的提供方设置页各多一节「账号」（**Account**�
 - **Claude**（照 magpie）：在新的私有 `CLAUDE_CONFIG_DIR` 里后台运行真的 `claude auth login`，Osuna 截下它要打开的登录地址交给客户端。
   - 主机上的桌面端直接打开浏览器；远程设备显示链接，并提供粘贴代码的输入框，转给这个登录进程。
   - 登录完成后从该目录读出邮箱与套餐，存进账号存储；没读到邮箱的拒收。
+  - （工单 07 实现时定，照 magpie）`.claude.json` 没记下邮箱或套餐时再问 `claude auth status --json`。远程设备打开 Claude Code 打印的那个链接（登录完显示代码）；粘贴框也收下回不到主机的浏览器最后跳到的地址，转给主机上等着的 `claude auth login`（magpie `claudePaste`）。Claude Code 没打开页面时只能粘贴代码。Windows 上不截它要打开的页面，只用打印的链接与粘贴代码。`claude` 用 Claude 提供方配置的命令（与新会话同一套解析），找不到时拒绝开始（`cli_not_found`）；30 秒没给出链接算启动失败。
 - **第一个号**：打开轮换时，把 CLI 当前登录的号登记为第 1 个号（只记资料，登录仍只在 CLI 那里）。打开时 CLI 还没登录的，列表为空；之后 CLI 登录了，下一次读列表时把它补登为第 1 个号。
 - **重新登录**：走同一流程，把结果写回同一个号。
 - **不做导入**（02·B15）。
@@ -255,7 +258,8 @@ Codex、Claude Code 的提供方设置页各多一节「账号」（**Account**�
   
   读要 `daemon.read`，改要 `daemon.manage`（`docs/permissions.md`）。
 - 状态变化（换号、额度更新、号失效、加号完成）用推送通知客户端刷新。
-- 新字段全部可选；不改旧 RPC 的形状。旧客户端（含官方 Paseo 手机 App）看不到新功能，套餐用量照旧。
+- 新字段全部可选；不改旧 RPC 的形状。
+  - （工单 07 实现时定）`ProviderAccountSignIn` 加可选 `codeUrl`；`callbackBlocked` 也表示 Claude Code 没打开页面。加号的 submit 请求 `callbackUrl` 改为可选、加可选 `code`（Claude 粘的代码或地址）。新的失败代码 `no_email`、`login_failed`，粘贴错误 `code_invalid`、`forward_failed`，开始失败 `cli_not_found`。旧客户端（含官方 Paseo 手机 App）看不到新功能，套餐用量照旧。
 - 账本给答话的号新增的字段可选，旧的用量 RPC 不变。
 
 ### 风险提示

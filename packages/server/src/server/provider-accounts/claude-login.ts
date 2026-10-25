@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { rm } from "node:fs/promises";
 import path from "node:path";
 import { readOptionalFile } from "../api-endpoints/config-file.js";
 import { isRecord, nonEmptyString, planLabel, type CliLoginReading } from "./cli-login.js";
@@ -105,7 +106,7 @@ function oauthOf(text: string): ClaudeOauth | "unparsable" | null {
 }
 
 /** .claude.json 的 oauthAccount；没有这个文件或这一键为 null，读不懂为 "unparsable"。 */
-function readOauthAccount(
+export function readOauthAccount(
   location: ClaudeLoginLocation,
 ): Record<string, unknown> | "unparsable" | null {
   const filePath = path.join(location.configDir ?? location.homeDir, ".claude.json");
@@ -119,4 +120,20 @@ function readOauthAccount(
   }
   if (!isRecord(parsed)) return "unparsable";
   return isRecord(parsed.oauthAccount) ? parsed.oauthAccount : null;
+}
+
+/**
+ * 清掉存着的 Claude 号的私有配置目录：macOS 上 Claude Code 把这个目录的登录存在按目录取后缀的钥匙串项里，
+ * 先删那一项，再删整个目录（照 magpie 的 clearClaudeDir、forgetClaudeDir）。
+ */
+export async function removeClaudeConfigDir(
+  location: Omit<ClaudeLoginLocation, "configDir" | "homeDir"> & { configDir: string },
+): Promise<void> {
+  if (location.platform === "darwin" && location.keychain.available) {
+    await location.keychain.delete(
+      claudeKeychainService(location.configDir),
+      claudeKeychainAccount(location.user),
+    );
+  }
+  await rm(location.configDir, { recursive: true, force: true });
 }

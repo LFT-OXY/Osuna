@@ -15,7 +15,8 @@ import type { AccountSignInView, PasteState } from "./use-account-sign-in";
 
 /*
  * 加号与重新登录的对话框：进行中「在浏览器里完成登录」、打开登录页、复制链接；
- * 浏览器回不到主机（远程设备、主机的回调端口被占）时多一个粘贴地址的输入框；
+ * 浏览器回不到主机（远程设备、主机的回调端口被占、Claude Code 没打开页面）时多一个输入框：
+ * Codex 粘贴浏览器最后跳到的地址，Claude Code 粘贴登录页显示的代码；
  * 失败、超时留在框里显示原因与「重试」。成功时由 view.tsx 关掉并高亮新号。
  */
 
@@ -35,10 +36,13 @@ const FAILURE_CODES = new Set([
   "no_account",
   "different_account",
   "cli_sign_ins_off",
+  "no_email",
+  "login_failed",
 ]);
-const PASTE_CODES = new Set(["paste_invalid", "paste_mismatch", "not_waiting"]);
+const PASTE_CODES = new Set(["paste_invalid", "paste_mismatch", "code_invalid", "not_waiting"]);
 
 export interface ProviderAccountSignInSheetProps {
+  provider: string;
   providerLabel: string;
   view: Exclude<AccountSignInView, { kind: "closed" }>;
   // 浏览器回得到主机：主机就是这台电脑，且回调端口开着。
@@ -160,8 +164,18 @@ function SignInBody(props: ProviderAccountSignInSheetProps) {
 function WaitingBody(
   props: ProviderAccountSignInSheetProps & { paste: PasteState; blocked: boolean },
 ) {
-  const { paste, callbackReachable, blocked, onOpenSignInPage, onCopyLink, onSubmitPaste } = props;
+  const {
+    provider,
+    paste,
+    callbackReachable,
+    blocked,
+    onOpenSignInPage,
+    onCopyLink,
+    onSubmitPaste,
+  } = props;
   const { t } = useTranslation();
+  // Claude Code 粘贴的是代码，文字另有一套。
+  const copy = provider === "claude" ? `${KEY}.claude` : KEY;
   const [draft, setDraft] = useState("");
   const submit = useCallback(() => {
     if (draft.trim()) onSubmitPaste(draft.trim());
@@ -171,7 +185,7 @@ function WaitingBody(
     <View style={styles.body} testID="account-sign-in-waiting">
       <View style={styles.lead}>
         <Text style={styles.title}>{t(`${KEY}.waitingTitle`)}</Text>
-        <Text style={styles.hint}>{t(`${KEY}.waitingHint`)}</Text>
+        <Text style={styles.hint}>{t(`${copy}.waitingHint`)}</Text>
       </View>
       <View style={styles.buttons}>
         <Button
@@ -196,8 +210,8 @@ function WaitingBody(
       {showsPaste ? (
         <View style={styles.paste}>
           <Field
-            label={t(`${KEY}.pasteLabel`)}
-            hint={blocked ? t(`${KEY}.pasteHintBlocked`) : t(`${KEY}.pasteHint`)}
+            label={t(`${copy}.pasteLabel`)}
+            hint={blocked ? t(`${copy}.pasteHintBlocked`) : t(`${copy}.pasteHint`)}
             error={paste.error ? pasteErrorText(t, paste.error) : null}
             reservesTwoLines
             testID="account-sign-in-paste"
@@ -206,11 +220,13 @@ function WaitingBody(
               initialValue=""
               onChangeText={setDraft}
               onSubmitEditing={submit}
-              placeholder="http://localhost:1455/auth/callback?code=…"
+              placeholder={
+                provider === "claude" ? undefined : "http://localhost:1455/auth/callback?code=…"
+              }
               autoCapitalize="none"
               autoCorrect={false}
               editable={!paste.submitting}
-              accessibilityLabel={t(`${KEY}.pasteLabel`)}
+              accessibilityLabel={t(`${copy}.pasteLabel`)}
               testID="account-sign-in-paste-input"
             />
           </Field>

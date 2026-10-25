@@ -11,6 +11,8 @@ export interface CliKeychain {
   read(service: string, account: string): Promise<string | null>;
   /** 新建或替换一项（换号时把目标号的登录写进 CLI 的钥匙串）。 */
   write(service: string, account: string, value: string): Promise<void>;
+  /** 删掉一项（存着的 Claude 号被移除或登录被收走时清它私有目录的那一项）；没有这一项不算错。 */
+  delete(service: string, account: string): Promise<void>;
 }
 
 /** 钥匙串没收下这一项；不带输出与参数，两者都含登录。 */
@@ -34,8 +36,14 @@ function sealedKeychain(): CliKeychain | null {
   if (typeof sealed !== "object" || sealed === null) return null;
   const read: unknown = Reflect.get(sealed, "read");
   const write: unknown = Reflect.get(sealed, "write");
+  const remove: unknown = Reflect.get(sealed, "delete");
   const available: unknown = Reflect.get(sealed, "available");
-  if (typeof read !== "function" || typeof write !== "function" || typeof available !== "boolean") {
+  if (
+    typeof read !== "function" ||
+    typeof write !== "function" ||
+    typeof remove !== "function" ||
+    typeof available !== "boolean"
+  ) {
     return null;
   }
   return {
@@ -46,6 +54,9 @@ function sealedKeychain(): CliKeychain | null {
     },
     write: async (service, account, value) => {
       await write.call(sealed, service, account, value);
+    },
+    delete: async (service, account) => {
+      await remove.call(sealed, service, account);
     },
   };
 }
@@ -61,6 +72,7 @@ export function createSystemKeychain(platform: NodeJS.Platform = process.platfor
       write: async () => {
         throw new KeychainWriteError("Osuna can't write the system keyring on this platform");
       },
+      delete: async () => {},
     };
   }
   return {
@@ -89,6 +101,17 @@ export function createSystemKeychain(platform: NodeJS.Platform = process.platfor
         );
       } catch {
         throw new KeychainWriteError("The keychain didn't take the sign-in");
+      }
+    },
+    async delete(service, account) {
+      try {
+        await execCommand("security", ["delete-generic-password", "-s", service, "-a", account], {
+          timeout: SECURITY_TIMEOUT_MS,
+          envMode: "internal",
+        });
+      } catch (error) {
+        if (exitCodeOf(error) === ITEM_NOT_FOUND_EXIT_CODE) return;
+        throw error;
       }
     },
   };

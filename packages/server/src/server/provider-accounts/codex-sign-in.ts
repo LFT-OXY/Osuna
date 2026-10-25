@@ -41,7 +41,9 @@ export type SignInFailureCode =
   | "no_account"
   | "different_account"
   | "cli_sign_ins_off"
-  | "not_found";
+  | "not_found"
+  | "no_email"
+  | "login_failed";
 
 /** 存号被拒；keep 抛这个就是登录失败，code 进 ProviderAccountSignIn 的 failed。 */
 export class SignInFailure extends Error {
@@ -67,7 +69,12 @@ const SIGN_IN_OVER_PAGE: Page = {
 /** 粘贴的地址不能用，这次登录照旧等着；code 见 protocol 的加号回复。 */
 export class SignInPasteError extends Error {
   constructor(
-    readonly code: "paste_invalid" | "paste_mismatch" | "not_waiting",
+    readonly code:
+      | "paste_invalid"
+      | "paste_mismatch"
+      | "code_invalid"
+      | "forward_failed"
+      | "not_waiting",
     message: string,
   ) {
     super(message);

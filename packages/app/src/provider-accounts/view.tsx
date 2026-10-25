@@ -13,7 +13,7 @@ import { ProviderAccountLimitsSheet } from "./limits-sheet";
 import { ProviderAccountsRiskNoticeSheet } from "./risk-notice-sheet";
 import { ProviderAccountsSection } from "./section";
 import { ProviderAccountSignInSheet } from "./sign-in-sheet";
-import { useAccountSignIn, type SignedInAccount } from "./use-account-sign-in";
+import { signInLink, useAccountSignIn, type SignedInAccount } from "./use-account-sign-in";
 import { useProviderAccounts } from "./use-provider-accounts";
 
 // 加号成功后新号的行高亮这么久。
@@ -88,10 +88,11 @@ export function ProviderAccountsView(props: {
   const signInView = signIn.view;
   const copyLink = useCallback(() => {
     if (signInView.kind !== "active") return;
-    void Clipboard.setStringAsync(signInView.signIn.authUrl).then(() =>
+    const link = signInLink({ signIn: signInView.signIn, isLocalHost });
+    void Clipboard.setStringAsync(link).then(() =>
       toast.copied(t("settings.providers.accounts.signIn.linkLabel")),
     );
-  }, [signInView, t, toast]);
+  }, [isLocalHost, signInView, t, toast]);
   useEffect(() => {
     if (!highlighted) return;
     const timer = setTimeout(() => setHighlighted(null), HIGHLIGHT_MS);
@@ -109,8 +110,7 @@ export function ProviderAccountsView(props: {
         rotationError={accounts.rotationError}
         onToggleRotation={accounts.setRotation}
         onOpenPrivacySettings={openPrivacy}
-        // 加 Claude Code 的号在后面的工单里做。
-        onAddAccount={provider === "codex" ? addAccount : undefined}
+        onAddAccount={addAccount}
         onSignInAgain={signInAgain}
         highlighted={highlighted}
         pendingAction={accounts.pendingAction}
@@ -141,6 +141,7 @@ export function ProviderAccountsView(props: {
       ) : null}
       {signInView.kind !== "closed" ? (
         <ProviderAccountSignInSheet
+          provider={provider}
           providerLabel={providerLabel}
           view={signInView}
           callbackReachable={isLocalHost}

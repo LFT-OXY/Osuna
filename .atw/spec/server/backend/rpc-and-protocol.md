@@ -2514,3 +2514,64 @@ return { change: kept.change, … }; // "keep" here throws away the endpoints re
 ```ts
 const change = kept.change.kind === "keep" ? plan.change : kept.change;
 ```
+
+## Scenario: Claude Code add account and saved-account usage (multi-account-rotation ticket 07, `accountRotation`)
+
+### 1. Scope / Trigger
+- Claude Code accounts are added by running the real `claude auth login --claudeai` in a private `CLAUDE_CONFIG_DIR`; saved accounts' usage comes from the real `claude -p /usage` in that directory. Osuna never refreshes a Claude token and never calls Anthropic (magpie `claude_signin.go`, `claude_usage_cli.go`, `claude_dirs.go`).
+
+### 2. Signatures
+- Same `provider.account.sign_in.*` RPCs as ticket 03, now accepting `provider: "claude"`.
+- `ProviderAccountSignIn` gains optional `codeUrl` (the link Claude Code printed; its page shows a code). `callbackBlocked: true` also means Claude Code opened no page that returns to the host (then `authUrl === codeUrl`).
+- `submit {signInId, callbackUrl?, code?}`: both optional now. Codex reads `callbackUrl`; Claude reads `code` — either `code#state` (written to the login's stdin) or the localhost address a browser ended on (forwarded to the port in the opened link's `redirect_uri`).
+- Server modules: `provider-accounts/claude-sign-in.ts` (`ClaudeSignIn`, same surface as `CodexSignIn`: `id`, `waiting`, `view()`, `cancel()`, `submit(raw)`, `dispose()`), `claude-usage-cli.ts` (`readClaudeUsageCli`, `parseClaudeUsage`, `claudeResetTime`), `claude-cli.ts` (`claudeEnvFor`, `runClaudeCli`, `readClaudeAuthStatus`, `ClaudeCliNotFound`), `claude-login.ts` `removeClaudeConfigDir`. `CliKeychain` gains `delete(service, account)` (missing item is not an error).
+- Overrides: `ProviderAccountOverrides.claude {command?, signInTimeoutMs?, linkWaitMs?}`; the browser seal sets `Symbol.for("paseo.e2e.claudeCommand")`.
+
+### 3. Contracts
+- Private dir: `$PASEO_HOME/accounts/claude/<random>/`, created 0700 **at its final path before** `auth login` runs. On macOS Claude Code keys the keychain item by `sha256(dir)`, so the dir can never be moved or renamed.
+- `StoredAccount` gains optional `configDir` (absolute) and `oauthAccount` (the dir's `.claude.json` profile, for ticket 08's switch). A saved account is `login !== undefined || configDir !== undefined` (`isSaved`).
+- Keep after a successful login, inside the renew lock: read the CLI's login → same identity as the CLI: remove the new dir, keep only the profile (one holder); existing account (duplicate or Sign in again): point it at the new dir, remove the old dir, clear `needsSignIn`, `alreadyAdded: true`; else add.
+- Email/plan come from the dir (`readClaudeLogin`); when either is missing ask `claude auth status --json` (magpie `claudeSignedIn`). No email → refused.
+- Remove deletes the account's dir and keychain item.
+- Usage of a saved account: `/usage` args exactly `-p /usage --output-format json --tools "" --strict-mcp-config --setting-sources "" --no-session-persistence`, cwd a fresh temp dir, stdin ignored, env cleaned of `ANTHROPIC_*`, `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CONFIG_DIR`, `BROWSER`, outer-session vars, plus `DISABLE_TELEMETRY/ERROR_REPORTING/AUTOUPDATER=1`. Window IDs match `claude-usage-source`: `five_hour`, `weekly`, `weekly_model_<normalized name>`. These IDs carry no `:`, so `isWholeAccountWindow` counts the per-model weekly window as whole-account — ticket 08 decides.
+- Command: Claude provider settings (`agentProviderSettings.claude`, same resolution as new sessions) unless overridden. The "browser" given to `auth login` is a script in the dir that writes the URL to `PASEO_CLAUDE_OPENED_URL`; on Windows it opens nothing, so only the printed link + code works there.
+
+### 4. Validation & Error Matrix
+| Condition | Result |
+|---|---|
+| Read CLI sign-ins off | start `cli_sign_ins_off`; no `claude` run (list, check, usage) |
+| `claude` not found | start `error.code = cli_not_found` |
+| no link within 30 s (`linkWaitMs`) / exits before a link | start error, message = its last line; dir removed |
+| exits non-zero after the link | `failed login_failed`, message = its last line |
+| pasted text neither `x#y` nor `http(s)://` | `code_invalid` (sign-in keeps waiting) |
+| pasted address for another port / no `code` | `paste_mismatch`; forwarding failed → `forward_failed` |
+| no email even after `auth status` | `failed no_email`, dir removed |
+| Sign in again lands on another account | `failed different_account`, nothing written |
+| `/usage` says not logged in / 401 / token expired or revoked / run /login | `needsSignIn {code: "signed_out"}`, usage `failed needs_sign_in` |
+| `/usage` hit-your-limit notice, or empty | usage `failed` (account not marked) |
+| cancel / 10-minute timeout | `canceled` / `failed timed_out`; process killed, dir removed after it exits |
+
+### 5. Good/Base/Bad Cases
+- Good: desktop on the host opens `authUrl`; the browser returns to Claude Code's own localhost port; done.
+- Base: remote device opens `codeUrl`, pastes `code#state`.
+- Bad: reusing the sign-in dir under a different name after login — the macOS keychain item is no longer found and the account looks signed out.
+
+### 6. Tests Required
+- `daemon-e2e/provider-account-claude.e2e.test.ts` with `test-utils/fake-claude-cli.ts` (answers `auth login`, `auth status --json`, `-p /usage`; logs every run): opened link + callback, pasted code, pasted address, no browser, cancel, timeout + retry, no link, failure, duplicate, CLI's own account, `auth status` email, no email, `/usage` windows and exact args, signed-out marking + Sign in again, different account, remove clears the dir, gate off runs nothing.
+- `provider-accounts/claude-usage-cli.test.ts`: reset-time year/zone/time-only inference with literal instants; full-shape readings.
+- Browser: `settings-provider-account-claude-sign-in.spec.ts` (remote paste, failure + retry, no email, Sign in again). The browser page is never the host, so the host's open-and-return path is covered only by the daemon E2E.
+
+### 7. Wrong vs Correct
+#### Wrong
+```ts
+const cli = await this.readLogin("claude");
+const heldByCli = cli.identity === reading.identity;
+await withFileLock(lock, async () => { /* keep or drop the dir */ });
+```
+#### Correct
+```ts
+await withFileLock(lock, async () => {
+  const cli = await this.readLogin("claude"); // re-read inside the lock: a switch may land in between
+  heldByCli = cli.kind === "signed_in" && cli.identity === reading.identity;
+});
+```

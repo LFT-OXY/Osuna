@@ -4591,11 +4591,21 @@ export const ja: TranslationResources = {
           retry: "再試行",
           canceled: "サインインはキャンセルされました。",
           failed: "サインインが完了しませんでした：{{reason}}",
+          claude: {
+            waitingHint:
+              "追加したい Claude アカウントでサインインしてください。完了すると自動で閉じます。",
+            pasteLabel: "サインインページに表示されたコード",
+            pasteHint:
+              "別のデバイスでサインインしますか？そのデバイスでリンクを開き、サインイン後にページに表示されるコードをコピーしてここに貼り付けてください。",
+            pasteHintBlocked:
+              "Claude Code が Osuna に戻るページを開きませんでした。サインイン後にページに表示されるコードをコピーしてここに貼り付けてください。",
+          },
           pasteErrors: {
             paste_invalid: "http:// で始まるアドレス全体を貼り付けてください",
             paste_mismatch:
               "このアドレスは今回のサインインのものではありません。今回のサインインのブラウザタブのアドレスを貼り付けてください。",
             not_waiting: "このサインインは終了しています。もう一度お試しください。",
+            code_invalid: "サインインページに表示されたコードを貼り付けてください。",
           },
           failures: {
             timed_out: "10 分以内にサインインが完了しませんでした。",
@@ -4605,6 +4615,9 @@ export const ja: TranslationResources = {
             different_account: "別のアカウントです。このアカウントでサインインしてください。",
             cli_sign_ins_off:
               "「CLI のサインイン情報を読む」がオフのため、アカウントを追加できません。",
+            no_email:
+              "Claude Code がアカウントのメールアドレスを記録しなかったため、追加されませんでした。",
+            login_failed: "Claude Code のサインインが完了しませんでした：{{reason}}",
           },
         },
         riskNotice: {

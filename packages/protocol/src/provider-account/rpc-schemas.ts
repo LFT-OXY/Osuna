@@ -340,8 +340,12 @@ export const ProviderAccountChangedMessageSchema = z.object({
 export type ProviderAccountChangedMessage = z.infer<typeof ProviderAccountChangedMessageSchema>;
 
 /*
- * 加号与重新登录（照 magpie 的 signin.go）：Codex 由 daemon 跑 PKCE OAuth，回调监听 127.0.0.1:1455；
- * 端口被占（callbackBlocked）或用户不在主机前时，把浏览器最后跳到的地址粘回来（submit）完成。
+ * 加号与重新登录（照 magpie 的 signin.go、claude_signin.go）：
+ * - Codex 由 daemon 跑 PKCE OAuth，回调监听 127.0.0.1:1455；端口被占（callbackBlocked）或用户不在主机前时，
+ *   把浏览器最后跳到的地址粘回来（submit 的 callbackUrl）完成。
+ * - Claude Code 由 daemon 在这个号的私有配置目录里后台运行真的 `claude auth login`：authUrl 是它要打开的、
+ *   登录完跳回主机的页面；codeUrl 是它打印的、登录完显示一段代码的页面，不在主机前时打开它，
+ *   把代码粘回来（submit 的 code）完成。Claude Code 没打开页面时 callbackBlocked 为真，只能粘贴代码。
  * 10 分钟没完成算超时。状态变化经 provider.account.changed 广播，客户端用 get 重读这次登录。
  */
 
@@ -352,8 +356,10 @@ const ProviderAccountSignInBaseSchema = z.object({
   accountId: z.string().optional(),
   // 要在浏览器里打开的登录页。
   authUrl: z.string(),
-  // 主机上的回调端口开不了，只能粘贴地址完成。
+  // 浏览器回不到主机（Codex 的回调端口开不了、Claude Code 没打开页面），只能粘贴完成。
   callbackBlocked: z.boolean(),
+  // Claude Code 打印的登录页：登录完显示一段代码，粘回来完成。工单 07 起的 daemon 才发。
+  codeUrl: z.string().optional(),
 });
 
 /**
@@ -362,7 +368,8 @@ const ProviderAccountSignInBaseSchema = z.object({
  * failed：code 是已知取值之一或别的字符串，message 是英文原因（exchange_failed 只是技术细节，
  * 如「HTTP 400: invalid_grant」，refused 是登录页给的原文）：
  *   timed_out（10 分钟没完成）、refused（登录页回了错误）、exchange_failed（换 token 失败）、
- *   no_account（登录没说是哪个号）、different_account（重新登录登的不是这个号）、cli_sign_ins_off、failed。
+ *   no_account（登录没说是哪个号）、different_account（重新登录登的不是这个号）、cli_sign_ins_off、failed；
+ *   Claude Code 另有 no_email（登录后没记下邮箱）、login_failed（`claude auth login` 没登成，message 是它最后说的话）。
  */
 export const ProviderAccountSignInSchema = z.discriminatedUnion("status", [
   ProviderAccountSignInBaseSchema.extend({ status: z.literal("waiting") }),
@@ -386,7 +393,8 @@ export type ProviderAccountSignIn = z.infer<typeof ProviderAccountSignInSchema>;
  * 加号、重新登录各个请求的回复。signIn 是这次登录现在的样子（没找到时为 null）；
  * error：请求本身被拒——cli_sign_ins_off、unsupported_provider、not_found（没有这次登录或这个号）、
  * paste_invalid（粘贴的不是浏览器最后跳到的整段地址）、paste_mismatch（地址不是这次登录的）、
- * not_waiting（这次登录已经结束）、failed。
+ * code_invalid（粘贴的不是 Claude 登录页显示的代码）、not_waiting（这次登录已经结束）、
+ * cli_not_found（主机上找不到 Claude Code 的 `claude` 命令）、failed。
  */
 const ProviderAccountSignInPayloadSchema = z.object({
   requestId: z.string(),
@@ -442,12 +450,17 @@ export type ProviderAccountSignInCancelResponse = z.infer<
   typeof ProviderAccountSignInCancelResponseSchema
 >;
 
-/** 用粘贴的地址（浏览器最后跳到的那个）完成登录；回复等这次登录结束（完成或失败）再回。 */
+/**
+ * 用粘贴的内容完成登录：Codex 是浏览器最后跳到的地址（callbackUrl），Claude Code 是登录页显示的代码（code）。
+ * 回复等这次登录结束（完成或失败）再回。
+ */
 export const ProviderAccountSignInSubmitRequestSchema = z.object({
   type: z.literal("provider.account.sign_in.submit.request"),
   requestId: z.string(),
   signInId: z.string(),
-  callbackUrl: z.string(),
+  callbackUrl: z.string().optional(),
+  // 工单 07 起的 daemon 才认。
+  code: z.string().optional(),
 });
 export type ProviderAccountSignInSubmitRequest = z.infer<
   typeof ProviderAccountSignInSubmitRequestSchema

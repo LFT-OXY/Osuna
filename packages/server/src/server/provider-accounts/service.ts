@@ -2,6 +2,7 @@
 // keepalive.go、logins.go 的 switchSavedLogin、codex_switch.go，internal/provider/routing.go 的 OnCredits
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
+import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import type pino from "pino";
@@ -28,8 +29,27 @@ import type {
   ChatGptSignIn,
 } from "../api-endpoints/gateway/chatgpt-accounts.js";
 import type { SavedAccountLogins } from "../plugins/usage-sources/index.js";
-import type { CliLoginReading } from "./cli-login.js";
-import { readClaudeLogin } from "./claude-login.js";
+import { nonEmptyString, planLabel, type CliLoginReading } from "./cli-login.js";
+import {
+  ClaudeCliNotFound,
+  readClaudeAuthStatus,
+  type ClaudeCliLaunch,
+  type ResolveClaudeCli,
+} from "./claude-cli.js";
+import {
+  checkProviderLaunchAvailable,
+  createProviderEnv,
+  resolveProviderLaunch,
+  type ProviderRuntimeSettings,
+} from "../agent/provider-launch-config.js";
+import {
+  readClaudeLogin,
+  readOauthAccount,
+  removeClaudeConfigDir,
+  type ClaudeLoginLocation,
+} from "./claude-login.js";
+import { ClaudeSignIn } from "./claude-sign-in.js";
+import { readClaudeUsageCli } from "./claude-usage-cli.js";
 import {
   codexLoginProfile,
   readCodexCliLogin,
@@ -44,6 +64,7 @@ import {
   CodexTokenRequestError,
   codexLoginFromTokens,
   codexLoginTokens,
+  randomToken,
   refreshCodexLogin,
   type CodexOAuthEndpoints,
   type CodexTokens,
@@ -112,7 +133,32 @@ export interface ProviderAccountServiceOptions {
   // 续期的跨进程锁文件。
   renewLockPath: string;
   codexSignIn: CodexSignInSettings;
+  claude: ClaudeAccountSettings;
   checks?: AccountCheckTiming;
+}
+
+/**
+ * 存着的 Claude 号：私有配置目录放在 accountsDir 下，登录与读额度运行真的 Claude Code（resolveCli 找到的那个）；
+ * login 是读这些目录里的登录要的家目录、$USER、系统与钥匙串。测试换成假的 claude 与短超时。
+ */
+export interface ClaudeAccountSettings {
+  accountsDir: string;
+  resolveCli: ResolveClaudeCli;
+  login: Omit<ClaudeLoginLocation, "configDir">;
+  signInTimeoutMs: number;
+  // `claude auth login` 多久没给出链接算启动失败。
+  linkWaitMs: number;
+}
+
+/** 一次加号或重新登录（Codex 的 OAuth、Claude Code 的 `claude auth login`）。 */
+interface AccountSignIn {
+  readonly id: string;
+  readonly waiting: boolean;
+  view(): ProviderAccountSignIn;
+  cancel(): void;
+  // 用户粘回来的地址（Codex）或代码（Claude）。
+  submit(raw: string): Promise<void>;
+  dispose(): void;
 }
 
 /** Codex 加号的登录服务、回调端口与超时；测试指向本机的假服务、随便一个空端口。 */
@@ -201,7 +247,8 @@ export class ProviderAccountRequestError extends Error {
       | "needs_sign_in"
       | "write_failed"
       | "order_mismatch"
-      | "invalid_limit",
+      | "invalid_limit"
+      | "cli_not_found",
     message: string,
   ) {
     super(message);
@@ -216,6 +263,8 @@ const RENEW_BEFORE_EXPIRY_MS = 5 * 60_000;
 const KEEP_ALIVE_MS = 24 * 60 * 60_000;
 // 照 magpie：登录 10 分钟内没完成算超时（signin.go 的 signInTimeout）。
 const SIGN_IN_TIMEOUT_MS = 10 * 60_000;
+// 照 magpie：`claude auth login` 30 秒内没给出链接算启动失败（linkWait）。
+const CLAUDE_LINK_WAIT_MS = 30_000;
 // 照 magpie：daemon 启动 1 分钟后检查一次，之后每 5 分钟（codex_switch.go）。
 const DEFAULT_CHECKS: AccountCheckTiming = { firstDelayMs: 60_000, intervalMs: 5 * 60_000 };
 
@@ -238,11 +287,12 @@ export class ProviderAccountService {
   private readonly reading = new Map<string, Promise<ProviderAccountUsage>>();
   private readonly renewLockPath: string;
   private readonly codexSignInSettings: CodexSignInSettings;
+  private readonly claude: ClaudeAccountSettings;
   private readonly checks: AccountCheckTiming;
   // 同一个号的续期在这个进程里排队；跨进程靠锁文件。
   private readonly renewals = new Map<string, Promise<unknown>>();
   // 每家同时只有一次登录；查过的登录留着，直到这家开始新的一次。
-  private readonly signIns = new Map<AccountRotationProvider, CodexSignIn>();
+  private readonly signIns = new Map<AccountRotationProvider, AccountSignIn>();
   private checkTimer: ReturnType<typeof setTimeout> | null = null;
   private stopped = false;
   // 正在跑的检查；跑着时又要求检查（立即使用、重新登录、固定之后），跑完再来一次。
@@ -260,6 +310,7 @@ export class ProviderAccountService {
     this.now = options.now ?? Date.now;
     this.renewLockPath = options.renewLockPath;
     this.codexSignInSettings = options.codexSignIn;
+    this.claude = options.claude;
     this.checks = options.checks ?? DEFAULT_CHECKS;
   }
 
@@ -284,27 +335,54 @@ export class ProviderAccountService {
         "Read CLI sign-ins is off, so accounts can't be added",
       );
     }
-    if (provider !== "codex") {
-      throw new ProviderAccountRequestError(
-        "unsupported_provider",
-        "Adding Claude Code accounts isn't available on this daemon yet",
-      );
-    }
     if (accountId !== undefined && this.store.account(accountId)?.provider !== provider) {
       throw new ProviderAccountRequestError("not_found", "That account isn't in the list anymore");
     }
     // 新开的取代还在等的那次（magpie 也是每家只留一次）。
     this.signIns.get(provider)?.cancel();
-    const signIn = await CodexSignIn.start({
+    const signIn =
+      provider === "claude"
+        ? await this.startClaudeSignIn(accountId)
+        : await this.startCodexSignIn(accountId);
+    this.signIns.set(provider, signIn);
+    this.logger.info({ provider, reSignIn: accountId !== undefined }, "Account sign-in started");
+    return signIn.view();
+  }
+
+  private startCodexSignIn(accountId: string | undefined): Promise<CodexSignIn> {
+    return CodexSignIn.start({
       ...this.codexSignInSettings,
       ...(accountId !== undefined ? { accountId } : {}),
       allowed: () => this.cliSignIns.allowed(),
       keep: (tokens) => this.keepCodexLogin({ tokens, accountId }),
-      onChange: () => this.onChanged(provider),
+      onChange: () => this.onChanged("codex"),
     });
-    this.signIns.set(provider, signIn);
-    this.logger.info({ provider, reSignIn: accountId !== undefined }, "Account sign-in started");
-    return signIn.view();
+  }
+
+  /** 在这个号新的私有配置目录里运行 `claude auth login`（照 magpie）；找不到 Claude Code 时拒绝。 */
+  private async startClaudeSignIn(accountId: string | undefined): Promise<ClaudeSignIn> {
+    let launch;
+    try {
+      launch = await this.claude.resolveCli();
+    } catch (error) {
+      if (error instanceof ClaudeCliNotFound) {
+        throw new ProviderAccountRequestError("cli_not_found", error.message);
+      }
+      throw error;
+    }
+    const configDir = path.join(this.claude.accountsDir, randomToken(12));
+    await mkdir(configDir, { recursive: true, mode: 0o700 });
+    return ClaudeSignIn.start({
+      launch,
+      configDir,
+      ...(accountId !== undefined ? { accountId } : {}),
+      timeoutMs: this.claude.signInTimeoutMs,
+      linkWaitMs: this.claude.linkWaitMs,
+      allowed: () => this.cliSignIns.allowed(),
+      keep: () => this.keepClaudeLogin({ configDir, accountId, launch }),
+      discard: () => this.removeClaudeDir(configDir),
+      onChange: () => this.onChanged("claude"),
+    });
   }
 
   signIn(signInId: string): ProviderAccountSignIn {
@@ -317,17 +395,18 @@ export class ProviderAccountService {
     return signIn.view();
   }
 
-  /** 粘贴的回调地址；等这次登录结束再回。 */
+  /** 粘贴的回调地址（Codex）或代码（Claude）；等这次登录结束再回。 */
   async submitSignIn(input: {
     signInId: string;
-    callbackUrl: string;
+    callbackUrl?: string;
+    code?: string;
   }): Promise<ProviderAccountSignIn> {
     const signIn = this.findSignIn(input.signInId);
-    await signIn.submit(input.callbackUrl);
+    await signIn.submit(input.callbackUrl ?? input.code ?? "");
     return signIn.view();
   }
 
-  private findSignIn(signInId: string): CodexSignIn {
+  private findSignIn(signInId: string): AccountSignIn {
     for (const signIn of this.signIns.values()) {
       if (signIn.id === signInId) return signIn;
     }
@@ -378,6 +457,115 @@ export class ProviderAccountService {
       ...(kept.account.email ? { email: kept.account.email } : {}),
       alreadyAdded: kept.alreadyAdded,
     };
+  }
+
+  /**
+   * `claude auth login` 在 configDir 登录成功后：读出是哪个号，存进账号存储，没读到邮箱的拒收。
+   * 已有的号改用这个目录（旧目录清掉）；CLI 现在登录的就是这个号时，这次的登录连同目录清掉，只记资料
+   * （一个登录只有一个持有者）。Osuna 不续这份登录：之后由 Claude Code 在这个目录里自己续。
+   */
+  private async keepClaudeLogin(input: {
+    configDir: string;
+    accountId: string | undefined;
+    launch: ClaudeCliLaunch;
+  }): Promise<SignInKept> {
+    const { configDir, accountId, launch } = input;
+    if (!this.cliSignIns.allowed()) {
+      throw new SignInFailure("cli_sign_ins_off", "Read CLI sign-ins was turned off");
+    }
+    const location = { ...this.claude.login, configDir };
+    const reading = await readClaudeLogin(location);
+    if (reading.kind !== "signed_in") {
+      throw new SignInFailure(
+        "no_account",
+        reading.kind === "unsupported"
+          ? reading.reason
+          : "Claude Code signed in, but kept no sign-in Osuna can read",
+      );
+    }
+    // .claude.json 没记下邮箱或套餐时问 `claude auth status --json`（照 magpie）。
+    const status =
+      reading.email && reading.plan ? {} : await readClaudeAuthStatus({ launch, configDir });
+    const email = reading.email ?? status.email;
+    const plan = reading.plan ?? planLabel(status.plan);
+    if (!email) {
+      throw new SignInFailure("no_email", "Claude Code didn't record the account's email");
+    }
+    if (accountId !== undefined) {
+      const target = this.store.account(accountId);
+      if (!target) throw new SignInFailure("not_found", "That account isn't in the list anymore");
+      if (target.identity !== reading.identity) {
+        throw new SignInFailure(
+          "different_account",
+          `This signed in to ${email}, not ${target.email ?? "that account"}`,
+        );
+      }
+    }
+    const profile = readOauthAccount(location);
+    const oauthAccount =
+      profile && profile !== "unparsable"
+        ? {
+            ...profile,
+            emailAddress: nonEmptyString(profile.emailAddress) ?? email,
+            ...(status.orgName && !nonEmptyString(profile.organizationName)
+              ? { organizationName: status.orgName }
+              : {}),
+          }
+        : undefined;
+    let heldByCli = false;
+    const kept = await withFileLock(this.renewLockPath, async () => {
+      const cli = await this.readLogin("claude");
+      heldByCli = cli.kind === "signed_in" && cli.identity === reading.identity;
+      const existing = this.store.findByIdentity("claude", reading.identity);
+      const details = {
+        email,
+        ...(plan ? { plan } : {}),
+        ...(oauthAccount ? { oauthAccount } : {}),
+      };
+      // 一个登录只有一个持有者：CLI 拿着的号，Osuna 这边不留目录。
+      if (heldByCli) await this.removeClaudeDir(configDir);
+      const ownDir = heldByCli ? undefined : configDir;
+      if (existing) {
+        if (existing.configDir && existing.configDir !== ownDir) {
+          await this.removeClaudeDir(existing.configDir);
+        }
+        const patch = { ...details, configDir: ownDir, needsSignIn: undefined };
+        return {
+          account: this.store.updateAccount(existing.id, patch) ?? existing,
+          alreadyAdded: true,
+        };
+      }
+      const added = this.store.addAccount({
+        provider: "claude",
+        identity: reading.identity,
+        ...details,
+        ...(ownDir ? { configDir: ownDir } : {}),
+      });
+      return { account: added, alreadyAdded: false };
+    });
+    this.usage.delete(kept.account.id);
+    this.logger.info(
+      { provider: "claude", alreadyAdded: kept.alreadyAdded, heldByCli },
+      "Account signed in",
+    );
+    this.onChanged("claude");
+    if (accountId !== undefined) this.requestCheck();
+    return {
+      accountId: kept.account.id,
+      ...(kept.account.email ? { email: kept.account.email } : {}),
+      alreadyAdded: kept.alreadyAdded,
+    };
+  }
+
+  private async removeClaudeDir(configDir: string): Promise<void> {
+    try {
+      await removeClaudeConfigDir({ ...this.claude.login, configDir });
+    } catch (error) {
+      this.logger.warn(
+        { err: error, provider: "claude" },
+        "Removing an account's directory failed",
+      );
+    }
   }
 
   /** 在锁里写进账号存储：CLI 拿着这个号就只留资料并清掉 Osuna 这边的旧 token，否则存整份登录。 */
@@ -549,7 +737,7 @@ export class ProviderAccountService {
         continue;
       }
       for (const account of this.store.accounts(provider)) {
-        if (!account.login || account.needsSignIn) continue;
+        if (!isSaved(account) || account.needsSignIn) continue;
         const known = this.usage.get(account.id);
         if (!known || this.now() - known.at >= USAGE_TTL_MS)
           void this.readUsage({ account, signedIn: false });
@@ -1080,6 +1268,8 @@ export class ProviderAccountService {
       this.store.updateSettings(provider, { keepSignedInTo: undefined });
     }
     this.usage.delete(accountId);
+    // 存着的 Claude 号的登录在它的私有目录里：一起清掉。
+    if (account.configDir) await this.removeClaudeDir(account.configDir);
     this.logger.info({ provider }, "Removed an account");
     this.onChanged(provider);
     return this.list(provider);
@@ -1247,8 +1437,8 @@ export class ProviderAccountService {
   }
 
   private project({ account, signedIn, mayRead, standing }: ProjectInput): ProviderAccount {
-    // 当前号走套餐用量来源；存着的号用它自己的 token，失效的不读。
-    const readable = signedIn || (account.login !== undefined && !account.needsSignIn);
+    // 当前号走套餐用量来源；存着的号用它自己的登录，失效的不读。
+    const readable = signedIn || (isSaved(account) && !account.needsSignIn);
     return {
       id: account.id,
       ...(account.email ? { email: account.email } : {}),
@@ -1288,8 +1478,10 @@ export class ProviderAccountService {
     const run = (async () => {
       let usage: ProviderAccountUsage;
       try {
-        if (signedIn || !account.login) {
+        if (signedIn || !isSaved(account)) {
           usage = await this.readSignedInUsage(account);
+        } else if (account.provider === "claude") {
+          usage = await this.readSavedClaudeUsage(account.id);
         } else {
           usage = await this.readSavedUsage(account.id);
         }
@@ -1319,6 +1511,48 @@ export class ProviderAccountService {
     })();
     this.reading.set(account.id, run);
     return run;
+  }
+
+  /**
+   * 存着的 Claude 号的额度：在它的私有目录里运行真的 `claude -p /usage`（照 magpie）。登录不能用就标「需要重新登录」。
+   */
+  private async readSavedClaudeUsage(accountId: string): Promise<AccountUsageResult> {
+    const account = this.store.account(accountId);
+    if (!account?.configDir) {
+      return { status: "failed", code: "not_found", reason: "The account was removed" };
+    }
+    if (!this.cliSignIns.allowed()) {
+      return { status: "failed", reason: "Read CLI sign-ins is off" };
+    }
+    let launch;
+    try {
+      launch = await this.claude.resolveCli();
+    } catch (error) {
+      if (error instanceof ClaudeCliNotFound) return { status: "failed", reason: error.message };
+      throw error;
+    }
+    const reading = await readClaudeUsageCli({
+      launch,
+      configDir: account.configDir,
+      now: this.now(),
+    });
+    if (reading.kind === "read") {
+      return {
+        status: "read",
+        fetchedAt: new Date(this.now()).toISOString(),
+        windows: reading.windows,
+      };
+    }
+    if (reading.kind === "failed") return { status: "failed", reason: reading.reason };
+    this.logger.warn(
+      { provider: "claude" },
+      "A saved account's sign-in stopped working; it needs signing in again",
+    );
+    this.store.updateAccount(account.id, {
+      needsSignIn: { reason: reading.reason, code: "signed_out" },
+    });
+    this.onChanged("claude");
+    return { status: "failed", code: "needs_sign_in", reason: reading.reason };
   }
 
   /** 存着的号的额度：要用时先续（快到期才续），用它自己的 token 读；被拒就强制续一次再读。 */
@@ -1367,6 +1601,8 @@ export interface ProviderAccountOverrides {
   usage?: AccountUsageReader;
   // Codex 加号与续期的登录服务、回调端口、超时。
   codexSignIn?: Partial<CodexSignInSettings>;
+  // Claude Code 加号与读存着的号的额度运行的 claude（测试指向假程序）、超时。
+  claude?: { command?: string; signInTimeoutMs?: number; linkWaitMs?: number };
   checks?: AccountCheckTiming;
   now?: () => number;
 }
@@ -1380,12 +1616,22 @@ function sealedCallbackPort(): number | undefined {
   return typeof port === "number" ? port : undefined;
 }
 
+// 浏览器测试的 daemon 由同一个封条在这里放假 claude 的路径（没给就是不存在的路径），绝不运行真的 Claude Code。
+const SEALED_CLAUDE_COMMAND = Symbol.for("paseo.e2e.claudeCommand");
+
+function sealedClaudeCommand(): string | undefined {
+  const command: unknown = Reflect.get(globalThis, SEALED_CLAUDE_COMMAND);
+  return typeof command === "string" ? command : undefined;
+}
+
 export interface CreateProviderAccountServiceInput {
   paseoHome: string;
   logger: pino.Logger;
   cliSignIns: CliSignInGate;
   planUsage: PlanUsageReports;
   onChanged: (provider: AccountRotationProvider) => void;
+  // Claude 提供方的设置（命令与环境），与新会话同一份。
+  claudeRuntime: () => ProviderRuntimeSettings | undefined;
   overrides?: ProviderAccountOverrides;
 }
 
@@ -1399,19 +1645,15 @@ export function createProviderAccountService(
   const keychain = overrides.keychain ?? createSystemKeychain(platform);
   // 与终端 hooks、第三方接口同一套规则：CODEX_HOME 优先，缺省 ~/.codex。
   const codexLogin = { codexHome: env.CODEX_HOME || path.join(homeDir, ".codex"), keychain };
+  const claudeLogin = { homeDir, user: env.USER, platform, keychain };
+  const claudeCommand = overrides.claude?.command ?? sealedClaudeCommand();
   return new ProviderAccountService({
     store: new ProviderAccountStore({ paseoHome: input.paseoHome, logger: input.logger }),
     cliSignIns: input.cliSignIns,
     readLogin: (provider) =>
       provider === "codex"
         ? readCodexLogin(codexLogin)
-        : readClaudeLogin({
-            configDir: env.CLAUDE_CONFIG_DIR || null,
-            homeDir,
-            user: env.USER,
-            platform,
-            keychain,
-          }),
+        : readClaudeLogin({ ...claudeLogin, configDir: env.CLAUDE_CONFIG_DIR || null }),
     codexLogin,
     usage: overrides.usage ?? createPlanUsageAccountReader(input.planUsage),
     onChanged: input.onChanged,
@@ -1423,9 +1665,45 @@ export function createProviderAccountService(
       timeoutMs: SIGN_IN_TIMEOUT_MS,
       ...overrides.codexSignIn,
     },
+    claude: {
+      accountsDir: path.join(input.paseoHome, "accounts", "claude"),
+      login: claudeLogin,
+      resolveCli: () =>
+        resolveClaudeCli({ runtime: input.claudeRuntime(), env, command: claudeCommand }),
+      signInTimeoutMs: overrides.claude?.signInTimeoutMs ?? SIGN_IN_TIMEOUT_MS,
+      linkWaitMs: overrides.claude?.linkWaitMs ?? CLAUDE_LINK_WAIT_MS,
+    },
     ...(overrides.checks ? { checks: overrides.checks } : {}),
     ...(overrides.now ? { now: overrides.now } : {}),
   });
+}
+
+/** 存着的号：Osuna 这边拿着它的登录（Codex 的整份登录，或 Claude 的私有配置目录）。 */
+function isSaved(account: StoredAccount): boolean {
+  return account.login !== undefined || account.configDir !== undefined;
+}
+
+/** Claude 提供方配置的命令与环境（与新会话同一套解析）；command 是测试或封条给的假程序。 */
+async function resolveClaudeCli(input: {
+  runtime: ProviderRuntimeSettings | undefined;
+  env: NodeJS.ProcessEnv;
+  command: string | undefined;
+}): Promise<ClaudeCliLaunch> {
+  const providerEnv = {
+    ...createProviderEnv({ baseEnv: input.env, runtimeSettings: input.runtime }),
+  };
+  if (input.command !== undefined) return { command: input.command, args: [], env: providerEnv };
+  const launch = await resolveProviderLaunch({
+    commandConfig: input.runtime?.command,
+    defaultBinary: "claude",
+  });
+  const availability = await checkProviderLaunchAvailable(launch);
+  if (!availability.available) throw new ClaudeCliNotFound();
+  return {
+    command: availability.resolvedPath ?? launch.command,
+    args: launch.args,
+    env: providerEnv,
+  };
 }
 
 function switchEnd(account: StoredAccount): ProviderAccountSwitchEnd {
