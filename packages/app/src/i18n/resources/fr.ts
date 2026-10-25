@@ -4966,6 +4966,9 @@ export const fr: TranslationResources = {
       refreshing: "Actualisation...",
       loading: "Chargement de la consommation du forfait...",
       empty: "Aucune donnée de consommation du forfait",
+      cliSignInsOff:
+        "« Lire les connexions des CLI » est désactivé : la consommation du forfait ne s'affiche pas",
+      openPrivacySettings: "Ouvrir les réglages",
       errorTitle: "Impossible de charger la consommation du forfait",
       hostUnavailable: "Connectez-vous à cet hôte pour voir la consommation du forfait",
       clientUnavailable: "La connexion à l'hôte n'est pas prête",

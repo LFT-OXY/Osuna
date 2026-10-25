@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
@@ -9,6 +10,7 @@ import { extractFailureReason } from "@/price-table/pricing";
 import { useHostFeature } from "@/runtime/host-features";
 import { useSessionStore } from "@/stores/session-store";
 import { settingsStyles } from "@/styles/settings";
+import { hostUsageQueryKey } from "@/usage/queries";
 
 /** 主机设置的「隐私」一节：「读取 CLI 登录凭证」开关。daemon 不认这个开关时整节不出现。 */
 export function HostPrivacySection({ serverId }: { serverId: string }) {
@@ -20,6 +22,7 @@ export function HostPrivacySection({ serverId }: { serverId: string }) {
       state.sessions[serverId]?.serverInfo?.permissions?.includes("daemon.manage") === true,
   );
   const { config, patchConfig } = useDaemonConfig(serverId);
+  const queryClient = useQueryClient();
   // 保存中显示要改成的值；失败后清掉，开关回到 daemon 的值。
   const [pending, setPending] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +34,8 @@ export function HostPrivacySection({ serverId }: { serverId: string }) {
       void (async () => {
         try {
           await patchConfig({ readCliSignIns: next });
+          // 套餐用量的弹窗、侧栏摘要、用量条马上按新的开关重新问一次。
+          void queryClient.invalidateQueries({ queryKey: hostUsageQueryKey(serverId) });
         } catch (cause) {
           console.error("[HostPage] Failed to change Read CLI sign-ins", cause);
           setError(describeSaveFailure(t, extractFailureReason(cause)));
@@ -39,7 +44,7 @@ export function HostPrivacySection({ serverId }: { serverId: string }) {
         }
       })();
     },
-    [patchConfig, t],
+    [patchConfig, queryClient, serverId, t],
   );
 
   if (!supported) return null;

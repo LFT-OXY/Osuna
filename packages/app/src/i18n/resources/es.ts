@@ -4942,6 +4942,9 @@ export const es: TranslationResources = {
       refreshing: "Actualizando...",
       loading: "Cargando el uso del plan...",
       empty: "Sin datos de uso del plan",
+      cliSignInsOff:
+        "«Leer inicios de sesión de las CLI» está desactivado, así que el uso del plan no se muestra",
+      openPrivacySettings: "Abrir ajustes",
       errorTitle: "No se pudo cargar el uso del plan",
       hostUnavailable: "Conéctate a este host para ver el uso del plan",
       clientUnavailable: "La conexión con el host no está lista",

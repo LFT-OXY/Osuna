@@ -67,6 +67,12 @@ export const usageCopy = {
   get empty(): string {
     return i18n.t(key("empty"));
   },
+  get cliSignInsOff(): string {
+    return i18n.t(key("cliSignInsOff"));
+  },
+  get openPrivacySettings(): string {
+    return i18n.t(key("openPrivacySettings"));
+  },
   get noHosts(): string {
     return i18n.t(key("noHosts"));
   },

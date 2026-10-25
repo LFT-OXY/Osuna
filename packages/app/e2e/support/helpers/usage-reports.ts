@@ -45,6 +45,8 @@ interface UsageReportsFixtureOptions {
 export type UsageListResponse =
   | UsageReportEntry[]
   | { error: string }
+  /** 主机关了「读取 CLI 登录凭证」：空列表，回答里带 cliSignInsOff。 */
+  | { cliSignInsOff: true }
   | { stream: Array<UsageReportEntry | Promise<unknown>> };
 
 type WebSocketMessage = string | Buffer;
@@ -202,6 +204,19 @@ export async function installUsageReportsFixture(
                     type: "usage.list_reports.response",
                     payload: { requestId, error: response.error },
                   },
+            }),
+          );
+          listCounter.increment();
+          return;
+        }
+        if ("cliSignInsOff" in response) {
+          ws.send(
+            JSON.stringify({
+              type: "session",
+              message: {
+                type: "usage.list_reports.response",
+                payload: { requestId, error: null, cliSignInsOff: true },
+              },
             }),
           );
           listCounter.increment();

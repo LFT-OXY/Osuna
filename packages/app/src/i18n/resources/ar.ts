@@ -4827,6 +4827,8 @@ export const ar: TranslationResources = {
       refreshing: "جارٍ التحديث...",
       loading: "جارٍ تحميل استهلاك الخطة...",
       empty: "لا توجد بيانات عن استهلاك الخطة",
+      cliSignInsOff: "«قراءة تسجيلات دخول CLI» متوقفة، لذلك لا يظهر استهلاك الخطة",
+      openPrivacySettings: "فتح الإعدادات",
       errorTitle: "تعذّر تحميل استهلاك الخطة",
       hostUnavailable: "اتصل بهذا المضيف لعرض استهلاك الخطة",
       clientUnavailable: "اتصال المضيف غير جاهز",

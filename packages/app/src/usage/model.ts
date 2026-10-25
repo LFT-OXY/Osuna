@@ -98,6 +98,8 @@ export interface UsageQueryState {
   data: UsageReportEntry[] | undefined;
   error: unknown;
   isFetching: boolean;
+  /** Osuna：最近一次列表的回答说主机关了「读取 CLI 登录凭证」；旧 daemon 不带。 */
+  cliSignInsOff?: boolean;
 }
 
 export function resolveUsageView(input: {
@@ -112,6 +114,9 @@ export function resolveUsageView(input: {
     return { kind: "unavailable", message: usageCopy.hostUpgradeRequired(hostLabel) };
   }
   if (query?.data) {
+    // 开回来后报告边到边显示，不等列表的回答把标记换掉。
+    const answeredOff = query.cliSignInsOff === true && query.data.length === 0;
+    if (answeredOff) return { kind: "cliSignInsOff" };
     return { kind: "ready", reports: query.data, isRefreshing: query.isFetching };
   }
   if (query?.error) {

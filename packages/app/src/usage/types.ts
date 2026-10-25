@@ -13,6 +13,8 @@ export type UsageView =
   | { kind: "unavailable"; message: string }
   | { kind: "loading" }
   | { kind: "error"; message: string }
+  /** Osuna：主机关了「读取 CLI 登录凭证」，列表因此是空的。 */
+  | { kind: "cliSignInsOff" }
   | { kind: "ready"; reports: UsageReportEntry[]; isRefreshing: boolean };
 
 /** Osuna：窗口的配速文字（「配速 +12%」）；over 是照这样会在重置前用完。 */

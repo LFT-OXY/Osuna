@@ -4811,6 +4811,8 @@ export const zhCN: TranslationResources = {
       refreshing: "刷新中…",
       loading: "正在加载套餐用量…",
       empty: "暂无套餐用量数据",
+      cliSignInsOff: "已关闭读取 CLI 登录凭证，套餐用量不显示",
+      openPrivacySettings: "打开设置",
       errorTitle: "无法加载套餐用量",
       hostUnavailable: "连接到这台主机后可查看套餐用量",
       clientUnavailable: "主机连接尚未就绪",

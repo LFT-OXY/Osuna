@@ -4972,6 +4972,8 @@ export const en = {
       refreshing: "Refreshing...",
       loading: "Loading plan usage...",
       empty: "No plan usage data",
+      cliSignInsOff: "“Read CLI sign-ins” is off, so plan usage doesn't show",
+      openPrivacySettings: "Open settings",
       errorTitle: "Unable to load plan usage",
       hostUnavailable: "Connect to this host to see plan usage",
       clientUnavailable: "Host connection is not ready",

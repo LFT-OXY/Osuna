@@ -4914,6 +4914,8 @@ export const ptBR: TranslationResources = {
       refreshing: "Atualizando...",
       loading: "Carregando o uso do plano...",
       empty: "Sem dados de uso do plano",
+      cliSignInsOff: "“Ler logins das CLIs” está desativado, então o uso do plano não aparece",
+      openPrivacySettings: "Abrir configurações",
       errorTitle: "Não foi possível carregar o uso do plano",
       hostUnavailable: "Conecte-se a este host para ver o uso do plano",
       clientUnavailable: "A conexão com o host não está pronta",

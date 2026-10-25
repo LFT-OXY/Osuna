@@ -9,6 +9,7 @@ import { usageCopy } from "./copy";
 import type { UsageDisplay } from "./display";
 import { UsageControls } from "./controls";
 import { UsageList } from "./list";
+import { OpenPrivacySettingsButton } from "./open-privacy-settings-button";
 import type { UsageView } from "./types";
 
 export function UsageSection({
@@ -44,11 +45,14 @@ export function UsageBody({
   view,
   display,
   onRefresh,
+  onLeave,
 }: {
   serverId: string;
   view: UsageView;
   display: UsageDisplay;
   onRefresh: () => void;
+  /** Osuna：要跳去别的页面时先调用，弹窗借它先关掉。 */
+  onLeave?: () => void;
 }) {
   if (view.kind === "unavailable") {
     return <UsageMessage text={view.message} />;
@@ -65,6 +69,17 @@ export function UsageBody({
           {usageCopy.retry}
         </Button>
       </Alert>
+    );
+  }
+
+  if (view.kind === "cliSignInsOff") {
+    return (
+      <View style={[settingsStyles.card, styles.emptyCard, styles.offCard]}>
+        <Text style={[styles.emptyText, styles.offText]} testID="usage-cli-sign-ins-off">
+          {usageCopy.cliSignInsOff}
+        </Text>
+        <OpenPrivacySettingsButton serverId={serverId} onLeave={onLeave} />
+      </View>
     );
   }
 
@@ -87,6 +102,13 @@ const styles = StyleSheet.create((theme) => ({
   emptyCard: {
     padding: theme.spacing[4],
     alignItems: "center",
+  },
+  offCard: {
+    gap: theme.spacing[3],
+  },
+  // 窄屏折成两行时仍和下面的按钮一样居中。
+  offText: {
+    textAlign: "center",
   },
   emptyText: {
     color: theme.colors.foregroundMuted,

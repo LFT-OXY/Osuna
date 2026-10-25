@@ -78,6 +78,32 @@ describe("resolveUsageView", () => {
       }),
     ).toEqual({ kind: "error", message: "boom" });
   });
+
+  it("says Read CLI sign-ins is off when the host answered an empty list for that reason", () => {
+    const base = { hostLabel: "Laptop", isConnected: true, supportsUsage: true };
+    expect(
+      resolveUsageView({
+        ...base,
+        query: { data: [], error: null, isFetching: false, cliSignInsOff: true },
+      }),
+    ).toEqual({ kind: "cliSignInsOff" });
+    // 没有这个字段（旧 daemon）时照旧是空列表。
+    expect(
+      resolveUsageView({ ...base, query: { data: [], error: null, isFetching: false } }),
+    ).toEqual({ kind: "ready", reports: [], isRefreshing: false });
+  });
+
+  it("keeps showing reports that stream in while the off answer is still the last one", () => {
+    const reports = [entry({})];
+    expect(
+      resolveUsageView({
+        hostLabel: "Laptop",
+        isConnected: true,
+        supportsUsage: true,
+        query: { data: reports, error: null, isFetching: true, cliSignInsOff: true },
+      }),
+    ).toEqual({ kind: "ready", reports, isRefreshing: true });
+  });
 });
 
 const hosts: UsageHost[] = [

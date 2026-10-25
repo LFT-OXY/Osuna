@@ -6,6 +6,7 @@ import {
   useQueryClient,
   type QueryClient,
   type QueryKey,
+  type SkipToken,
 } from "@tanstack/react-query";
 import { useShallow } from "zustand/shallow";
 import { useFetchQuery } from "@/data/query";
@@ -44,6 +45,14 @@ function usageReportsQueryKey(serverId: string) {
   return [...hostUsageQueryKey(serverId), "reports"] as const;
 }
 
+/**
+ * Osuna：主机最近一次列表的回答有没有说关了「读取 CLI 登录凭证」。和报告分开放，
+ * 报告的查询数据照旧是数组；只由列表写入，自己从不取数。
+ */
+function cliSignInsOffQueryKey(serverId: string) {
+  return [...hostUsageQueryKey(serverId), "cliSignInsOff"] as const;
+}
+
 function agentUsageQueryKey(serverId: string, agentId: string) {
   return [...hostUsageQueryKey(serverId), "agent", agentId] as const;
 }
@@ -67,9 +76,9 @@ async function streamReports(input: {
   forceRefresh?: boolean;
   /** Once aborted, reports still on their way are dropped instead of written. */
   signal?: AbortSignal;
-}): Promise<UsageReportEntry[]> {
+}): Promise<{ reports: UsageReportEntry[]; cliSignInsOff: boolean }> {
   const { queryClient, queryKey, serverId, agentId, forceRefresh = false, signal } = input;
-  const { reports } = await requireClient(serverId).listUsageReports(
+  const listed = await requireClient(serverId).listUsageReports(
     { agentId, forceRefresh },
     (report) => {
       if (signal?.aborted) return;
@@ -78,20 +87,42 @@ async function streamReports(input: {
       );
     },
   );
-  return settleReports(queryClient.getQueryData<UsageReportEntry[]>(queryKey), reports);
+  const reports = settleReports(
+    queryClient.getQueryData<UsageReportEntry[]>(queryKey),
+    listed.reports,
+  );
+  return { reports, cliSignInsOff: listed.cliSignInsOff === true };
 }
 
-function listReports(
+async function listReports(
   queryClient: QueryClient,
   serverId: string,
   forceRefresh = false,
 ): Promise<UsageReportEntry[]> {
-  return streamReports({
+  const { reports, cliSignInsOff } = await streamReports({
     queryClient,
     queryKey: usageReportsQueryKey(serverId),
     serverId,
     forceRefresh,
   });
+  // 先于报告写入，空列表落下时说明已经在了，不会先闪一下「没有套餐用量」。
+  queryClient.setQueryData(cliSignInsOffQueryKey(serverId), cliSignInsOff);
+  return reports;
+}
+
+/** 读主机列表留下的「已关闭」标记，不发请求。 */
+function cliSignInsOffQueryInput(serverId: string): {
+  queryKey: QueryKey;
+  queryFn: SkipToken;
+  dataShape: "value";
+  staleTimeMs: number;
+} {
+  return {
+    queryKey: cliSignInsOffQueryKey(serverId),
+    queryFn: skipToken,
+    dataShape: "value",
+    staleTimeMs: REPORTS_STALE_TIME_MS,
+  };
 }
 
 async function getReport(
@@ -121,12 +152,15 @@ async function refreshReports(queryClient: QueryClient, serverId: string): Promi
   });
 }
 
-function toQueryState(query: {
-  data: UsageReportEntry[] | undefined;
-  error: unknown;
-  isFetching: boolean;
-}): UsageQueryState {
-  return { data: query.data, error: query.error, isFetching: query.isFetching };
+function toQueryState(
+  query: {
+    data: UsageReportEntry[] | undefined;
+    error: unknown;
+    isFetching: boolean;
+  },
+  cliSignInsOff = false,
+): UsageQueryState {
+  return { data: query.data, error: query.error, isFetching: query.isFetching, cliSignInsOff };
 }
 
 /** Usage reports for one host, as shown on its settings page. */
@@ -141,6 +175,7 @@ export function useHostUsage(serverId: string): { view: UsageView; refresh: () =
     dataShape: "list",
     staleTimeMs: REPORTS_STALE_TIME_MS,
   });
+  const cliSignInsOff = useFetchQuery<boolean>(cliSignInsOffQueryInput(serverId)).data === true;
   const refresh = useCallback(() => {
     void refreshReports(queryClient, serverId).catch(() => undefined);
   }, [queryClient, serverId]);
@@ -149,7 +184,7 @@ export function useHostUsage(serverId: string): { view: UsageView; refresh: () =
     hostLabel,
     isConnected,
     supportsUsage: isSupported,
-    query: toQueryState(query),
+    query: toQueryState(query, cliSignInsOff),
   });
   return { view, refresh };
 }
@@ -183,7 +218,8 @@ export function useAgentUsage(serverId: string, agentId: string): AgentUsageView
     queryKey,
     // Consuming the signal cancels the request when the details close, so a reopen sends a new
     // request instead of joining one scoped to the login the agent ran under before.
-    queryFn: ({ signal }) => streamReports({ queryClient, queryKey, serverId, agentId, signal }),
+    queryFn: async ({ signal }) =>
+      (await streamReports({ queryClient, queryKey, serverId, agentId, signal })).reports,
     enabled: canReport,
     // Another agent's reports never stand in while this one's load.
     dataShape: "value",
@@ -257,6 +293,7 @@ export function useReportRefresh(
 export {
   hostUsageQueryKey,
   usageReportsQueryKey,
+  cliSignInsOffQueryInput,
   requireClient as requireUsageClient,
   listReports as listHostUsageReports,
   refreshReports as refreshHostUsageReports,

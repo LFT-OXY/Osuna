@@ -4870,6 +4870,8 @@ export const ko: TranslationResources = {
       refreshing: "새로고침 중...",
       loading: "플랜 사용량 불러오는 중...",
       empty: "플랜 사용량 데이터 없음",
+      cliSignInsOff: "'CLI 로그인 정보 읽기'가 꺼져 있어 플랜 사용량이 표시되지 않습니다",
+      openPrivacySettings: "설정 열기",
       errorTitle: "플랜 사용량을 불러올 수 없습니다",
       hostUnavailable: "이 호스트에 연결하면 플랜 사용량을 볼 수 있습니다",
       clientUnavailable: "호스트 연결이 준비되지 않았습니다",

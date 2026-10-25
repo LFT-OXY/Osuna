@@ -4902,6 +4902,8 @@ export const ja: TranslationResources = {
       refreshing: "更新中...",
       loading: "プラン使用量を読み込み中...",
       empty: "プラン使用量のデータがありません",
+      cliSignInsOff: "「CLI のサインイン情報を読む」がオフのため、プラン使用量は表示されません",
+      openPrivacySettings: "設定を開く",
       errorTitle: "プラン使用量を読み込めません",
       hostUnavailable: "このホストに接続するとプラン使用量を表示できます",
       clientUnavailable: "ホスト接続の準備ができていません",

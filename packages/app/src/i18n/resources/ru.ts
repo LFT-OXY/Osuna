@@ -4920,6 +4920,8 @@ export const ru: TranslationResources = {
       refreshing: "Обновление...",
       loading: "Загрузка расхода по тарифу...",
       empty: "Нет данных о расходе по тарифу",
+      cliSignInsOff: "«Читать входы CLI» выключено, поэтому расход по тарифу не показывается",
+      openPrivacySettings: "Открыть настройки",
       errorTitle: "Не удалось загрузить расход по тарифу",
       hostUnavailable: "Подключитесь к этому хосту, чтобы увидеть расход по тарифу",
       clientUnavailable: "Соединение с хостом не готово",
