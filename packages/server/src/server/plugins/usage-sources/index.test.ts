@@ -669,3 +669,49 @@ test("a failed reset leaves the cached reading alone", async () => {
   await registry.listReports({ reportIds: ["codex:work"] });
   expect(fetches).toBe(1);
 });
+
+test("with CLI sign-ins off no source is asked, and a read in flight when they go off is dropped", async () => {
+  let allowed = true;
+  const calls: string[] = [];
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const registry = new UsageSourceRegistry(Date.now, 300_000, undefined, undefined, undefined, {
+    allowed: () => allowed,
+  });
+  registry.register({
+    ...source({
+      id: "codex",
+      discover: async () => {
+        calls.push("discover");
+        return [{ key: "work", input: {} }];
+      },
+      fetch: async () => {
+        calls.push("fetch");
+        await held;
+        return { status: "available", windows: [] };
+      },
+    }),
+    consumeReset: async () => {
+      calls.push("consumeReset");
+      return { code: "reset", windows: 1 };
+    },
+  });
+  const inFlight = registry.listReports();
+  await expect.poll(() => calls).toEqual(["discover", "fetch"]);
+  allowed = false;
+  registry.forget();
+  release();
+  expect(await inFlight).toEqual([]);
+  expect(await registry.listReports()).toEqual([]);
+  expect(await registry.listReports({ reportIds: ["codex:work"] })).toEqual([]);
+  expect((await registry.listLegacyUsage()).providers).toEqual([]);
+  await expect(registry.consumeReset("codex:work")).rejects.toThrow(
+    "Read CLI sign-ins is off, so a reset can't be used",
+  );
+  expect(calls).toEqual(["discover", "fetch"]);
+  allowed = true;
+  expect((await registry.listReports()).map((entry) => entry.id)).toEqual(["codex:work"]);
+  expect(calls).toEqual(["discover", "fetch", "discover", "fetch"]);
+});

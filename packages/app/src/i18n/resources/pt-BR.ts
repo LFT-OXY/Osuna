@@ -4047,6 +4047,14 @@ export const ptBR: TranslationResources = {
           workspaceName: "my-workspace",
         },
       },
+      privacy: {
+        title: "Privacidade",
+        readCliSignIns: {
+          title: "Ler logins das CLIs",
+          hint: "Permite que o Osuna leia os logins que cada CLI guarda (arquivos de login, o Keychain) para mostrar o uso do plano. Desligado, o Osuna não os lê e o uso do plano não aparece; as CLIs continuam usando seus próprios logins e os endpoints de API não são afetados. O código de plugins fora do uso do plano não é coberto por esta chave.",
+          saveFailed: "Não foi possível alterar Ler logins das CLIs.",
+        },
+      },
       notFound: "Host não encontrado",
       badges: {
         relay: "Relay",

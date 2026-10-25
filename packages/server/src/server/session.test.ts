@@ -523,6 +523,7 @@ test("routes plugin requests and releases its owned catalog subscription on clea
     invokePluginRpc: async () => ({ ok: true }),
     listUsageReports: async () => [],
     listLegacyUsage: async () => ({ fetchedAt: "2026-01-01T00:00:00.000Z", providers: [] }),
+    readsCliSignIns: () => true,
   };
   const session = createSessionForTest({ messages, pluginRuntime });
 

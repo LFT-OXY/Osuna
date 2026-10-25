@@ -550,6 +550,7 @@ export interface SessionOptions {
       reportIds?: string[];
     }): Promise<UsageReportEntry[]>;
     listLegacyUsage(): Promise<{ fetchedAt: string; providers: ProviderUsage[] }>;
+    readsCliSignIns(): boolean;
     consumeUsageReset(
       reportId: string,
     ): Promise<import("./plugins/usage-sources/index.js").UsageResetResult>;

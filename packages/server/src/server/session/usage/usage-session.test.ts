@@ -22,6 +22,7 @@ test("lists reports from usage sources", async () => {
         options.onReport?.(entry);
         return [entry];
       },
+      readsCliSignIns: () => true,
       async listLegacyUsage() {
         return { fetchedAt: "2026-01-01T00:00:00.000Z", providers: [] };
       },
@@ -48,6 +49,7 @@ test("surfaces a legacy usage-list failure as an rpc_error envelope", async () =
       async listUsageReports() {
         return [];
       },
+      readsCliSignIns: () => true,
       async listLegacyUsage(): Promise<never> {
         throw new Error("quota service down");
       },
@@ -96,6 +98,7 @@ test("answers a used reset with its outcome and the account read afresh, or the 
       async listUsageReports() {
         return [];
       },
+      readsCliSignIns: () => true,
       async listLegacyUsage() {
         return { fetchedAt: "2026-01-01T00:00:00.000Z", providers: [] };
       },

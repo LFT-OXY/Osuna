@@ -3968,6 +3968,14 @@ export const zhCN: TranslationResources = {
           workspaceName: "my-workspace",
         },
       },
+      privacy: {
+        title: "隐私",
+        readCliSignIns: {
+          title: "读取 CLI 登录凭证",
+          hint: "让 Osuna 读取各 CLI 自己保存的登录（登录文件、钥匙串），用来显示套餐用量。关掉后 Osuna 不读这些，套餐用量不显示；CLI 自己照常用自己的登录，第三方接口不受影响。插件里除了套餐用量以外的代码，这个开关管不到。",
+          saveFailed: "没能更改「读取 CLI 登录凭证」。",
+        },
+      },
       notFound: "主机未找到",
       badges: {
         relay: "中继",

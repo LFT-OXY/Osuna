@@ -11,6 +11,7 @@ export interface UsageSessionOptions {
   runtime?: {
     listUsageReports(options: ListUsageReportsOptions): Promise<UsageReportEntry[]>;
     listLegacyUsage(): Promise<{ fetchedAt: string; providers: ProviderUsage[] }>;
+    readsCliSignIns(): boolean;
     consumeUsageReset(reportId: string): Promise<UsageResetResult>;
   };
   logger: pino.Logger;
@@ -36,7 +37,11 @@ export class UsageSession {
       });
       this.options.emit({
         type: "usage.list_reports.response",
-        payload: { requestId: msg.requestId, error: null },
+        payload: {
+          requestId: msg.requestId,
+          error: null,
+          ...(this.options.runtime.readsCliSignIns() ? {} : { cliSignInsOff: true }),
+        },
       });
     } catch (error) {
       this.options.emit({

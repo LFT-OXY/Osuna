@@ -641,6 +641,7 @@ export function resolveConfigFromPersisted(
     agentProfiles,
     skillSelection: persisted.agents?.skills?.selection,
     pluginsEnabled: persisted.pluginsEnabled ?? false,
+    readCliSignIns: persisted.readCliSignIns ?? true,
     plugins: persisted.plugins,
     usage: { pricing: resolveUsagePricingConfig(env, persisted) },
     pluginRegistries: persisted.pluginRegistries,

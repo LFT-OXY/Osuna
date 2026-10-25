@@ -327,6 +327,7 @@ export const PersistedConfigSchema = z
     pluginRegistries: PluginRegistriesSchema.optional(),
     pluginsEnabled: z.boolean().optional(),
     plugins: z.record(PluginIdSchema, PluginSourceSchema).optional(),
+    readCliSignIns: z.boolean().optional(),
     worktrees: WorktreesConfigSchema.optional(),
     agents: z
       .object({

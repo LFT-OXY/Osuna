@@ -48,6 +48,11 @@ export interface ListUsageReportsOptions {
   onReport?: (report: UsageReportEntry) => void;
 }
 
+/** Answers whether Osuna may read the logins the CLIs keep (Read CLI sign-ins). */
+export interface CliSignInGate {
+  allowed(): boolean;
+}
+
 /** What using a reset did, and the account read afresh after it. */
 export interface UsageResetResult {
   outcome: UsageResetOutcome;
@@ -71,6 +76,8 @@ export class UsageSourceRegistry {
   private readonly pending = new Map<string, Promise<UsageReportEntry>>();
   /** The login whose report each account's card last showed: a reset is used through it. */
   private readonly answeredBy = new Map<string, Login>();
+  // forget() 加一；之前开始的读取回来时代数已变，结果丢掉、不进缓存。
+  private generation = 0;
 
   constructor(
     private readonly now: () => number = Date.now,
@@ -78,7 +85,19 @@ export class UsageSourceRegistry {
     private readonly logger: Pick<Logger, "warn"> = { warn: console.warn },
     private readonly agents: AgentUsageLookup = { hasAgent: () => false, usageSession: () => null },
     private readonly deadlineMs = 20_000,
+    private readonly cliSignIns: CliSignInGate = { allowed: () => true },
   ) {}
+
+  /** Drops every account, report and login answer read so far; called when CLI sign-ins go off. */
+  forget(): void {
+    this.generation++;
+    this.known.clear();
+    this.defaults = new Map();
+    this.byAgent.clear();
+    this.cache.clear();
+    this.pending.clear();
+    this.answeredBy.clear();
+  }
 
   register(source: UsageSource): void {
     if (this.sources.has(source.id)) throw new Error(`Duplicate usage source: ${source.id}`);
@@ -105,6 +124,8 @@ export class UsageSourceRegistry {
    * afresh past the cache. Can't be undone: callers ask the user first.
    */
   async consumeReset(reportId: string): Promise<UsageResetResult> {
+    if (!this.cliSignIns.allowed())
+      throw new Error("Read CLI sign-ins is off, so a reset can't be used");
     const known = this.known.get(reportId);
     if (!known) throw new Error(`Unknown usage report: ${reportId}`);
     const { consumeReset } = known.source;
@@ -124,6 +145,8 @@ export class UsageSourceRegistry {
   async listReports(options: ListUsageReportsOptions = {}): Promise<UsageReportEntry[]> {
     if (options.agentId !== undefined && options.reportIds !== undefined)
       throw new Error("agentId and reportIds cannot be combined");
+    if (!this.cliSignIns.allowed()) return [];
+    const generation = this.generation;
     this.pruneAgents();
     let ids: string[];
     let reports = this.known;
@@ -133,22 +156,26 @@ export class UsageSourceRegistry {
     } else if (options.reportIds !== undefined) {
       ids = options.reportIds;
     } else {
-      this.defaults = await this.discover({ kind: "global" });
+      const defaults = await this.discover({ kind: "global" });
+      if (generation !== this.generation) return [];
+      this.defaults = defaults;
       this.mergeKnown();
       ids = [...this.known.keys()];
     }
-    return Promise.all(
+    if (generation !== this.generation) return [];
+    const entries = await Promise.all(
       [...new Set(ids)].flatMap((id) => {
         const known = reports.get(id);
         if (!known) return [];
         return [
           this.fetchId(id, known, options.forceRefresh).then((entry) => {
-            options.onReport?.(entry);
+            if (generation === this.generation) options.onReport?.(entry);
             return entry;
           }),
         ];
       }),
     );
+    return generation === this.generation ? entries : [];
   }
 
   private pruneAgents(): void {
@@ -168,12 +195,14 @@ export class UsageSourceRegistry {
       previous.provider === session.provider &&
       previous.model === session.model;
     if (sameScope) return [...previous.reports.keys()];
+    const generation = this.generation;
     const reports = await this.discover({
       kind: "session",
       provider: session.provider,
       model: session.model,
       env: session.env,
     });
+    if (generation !== this.generation) return [];
     // A query that finishes after a resume must not publish the previous launch's mapping.
     if (this.agents.usageSession(agentId)?.sessionKey !== session.sessionKey) return [];
     this.byAgent.set(agentId, {
@@ -280,6 +309,7 @@ export class UsageSourceRegistry {
       return Promise.resolve(cached.entry);
     const pending = this.pending.get(cacheKey);
     if (pending) return pending;
+    const generation = this.generation;
     const request = (async () => {
       const entry: UsageReportEntry = {
         id,
@@ -289,9 +319,10 @@ export class UsageSourceRegistry {
         account: { label: known.label },
         fetchedAt: new Date(this.now()).toISOString(),
         ...(known.source.consumeReset ? { consumesResets: true } : {}),
-        ...(await this.fetchWithFallback(id, known)),
+        ...(await this.fetchWithFallback(id, known, generation)),
       };
-      if (this.sources.get(known.source.id) === known.source) this.writeCache(cacheKey, entry);
+      if (generation === this.generation && this.sources.get(known.source.id) === known.source)
+        this.writeCache(cacheKey, entry);
       return entry;
     })();
     this.pending.set(cacheKey, request);
@@ -327,6 +358,7 @@ export class UsageSourceRegistry {
   private async fetchWithFallback(
     id: string,
     known: KnownReport,
+    generation: number,
   ): Promise<Pick<UsageReportEntry, "report" | "loginErrors">> {
     // Start each login within the same deadline window, then prefer discovery order.
     // Sequential deadlines can exceed the client's RPC timeout before all errors arrive.
@@ -337,7 +369,7 @@ export class UsageSourceRegistry {
     for (const [index, login] of known.logins.entries()) {
       const report = await attempts[index]!;
       if (report.status === "available") {
-        this.answeredBy.set(id, login);
+        if (generation === this.generation) this.answeredBy.set(id, login);
         return { report };
       }
       loginErrors.push({ harness: login.harness, report });

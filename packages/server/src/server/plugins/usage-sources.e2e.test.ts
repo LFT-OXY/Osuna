@@ -335,3 +335,101 @@ export default function contribute(server) {
     await rm(root, { recursive: true, force: true });
   }
 }, 60_000);
+
+// 每次 discover / fetch / consumeReset 往调用记录里追加一行，测「关着时来源一次都没被调用」。
+async function writeRecordingSource(directory: string, sourceId: string, calls: string) {
+  await mkdir(directory, { recursive: true });
+  await writeFile(
+    path.join(directory, "paseo-plugin.json"),
+    JSON.stringify({ id: sourceId, requirements: { paseo: ">=0.9.2" } }),
+  );
+  await writeFile(
+    path.join(directory, "index.server.ts"),
+    `import { appendFileSync } from "node:fs";
+import { z } from "zod";
+const record = (kind) => appendFileSync(${JSON.stringify(calls)}, "${sourceId} " + kind + "\\n");
+export default function contribute(server) {
+  server.registerUsageSource({ id: "${sourceId}", label: "${sourceId}", input: z.object({}),
+    discover: async () => { record("discover"); return [{ key: "one", label: "a@b.com", input: {} }]; },
+    fetch: async () => { record("fetch"); return { status: "available", windows: [{ id: "session", label: "Session", usedPct: 37 }] }; },
+    consumeReset: async () => { record("consumeReset"); return { code: "reset", windows: 1 }; },
+  });
+  return () => {};
+}`,
+  );
+}
+
+test("with Read CLI sign-ins off no usage source runs, both lists are empty and a reset is refused; on again reads afresh", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const root = await mkdtemp(path.join(os.tmpdir(), "usage-cli-sign-ins-"));
+  const calls = path.join(root, "calls.log");
+  await writeFile(calls, "");
+  const builtins = path.join(root, "builtin");
+  await writeRecordingSource(path.join(builtins, "recording-builtin"), "recording-builtin", calls);
+  const directory = path.join(root, "recording-directory");
+  await writeRecordingSource(directory, "recording-directory", calls);
+  const readCalls = async () => (await readFile(calls, "utf8")).trim().split("\n").filter(Boolean);
+  const daemon = await createTestPaseoDaemon({
+    daemonVersion: "0.9.2",
+    pluginsEnabled: true,
+    builtinPlugins: new BuiltinPluginLoader(builtins, ["recording-builtin"]),
+  });
+  const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.9.2" });
+  try {
+    await client.connect();
+    expect(client.getLastServerInfoMessage()?.features?.readCliSignIns).toBe(true);
+    expect((await client.getDaemonConfig()).config.readCliSignIns).toBe(true);
+    await client.installDirectoryPlugin(directory, "recording-directory");
+    const on = await client.listUsageReports();
+    expect(on.reports.map((entry) => entry.id).sort()).toEqual([
+      "recording-builtin:one",
+      "recording-directory:one",
+    ]);
+    expect(on).not.toHaveProperty("cliSignInsOff");
+    expect((await readCalls()).sort()).toEqual([
+      "recording-builtin discover",
+      "recording-builtin fetch",
+      "recording-directory discover",
+      "recording-directory fetch",
+    ]);
+
+    expect((await client.patchDaemonConfig({ readCliSignIns: false })).config.readCliSignIns).toBe(
+      false,
+    );
+    expect((await client.getDaemonConfig()).config.readCliSignIns).toBe(false);
+    await writeFile(calls, "");
+    expect(await client.listUsageReports({ forceRefresh: true })).toEqual({
+      requestId: expect.any(String),
+      reports: [],
+      cliSignInsOff: true,
+    });
+    expect(
+      (await client.listUsageReports({ reportIds: ["recording-builtin:one"] })).reports,
+    ).toEqual([]);
+    const legacy = await client.listProviderUsage();
+    expect(legacy.providers).toEqual([]);
+    expect(Object.keys(legacy).sort()).toEqual(["fetchedAt", "providers", "requestId"]);
+    const reset = await client.consumeUsageReset("recording-builtin:one");
+    expect(reset).toMatchObject({ outcome: null, report: null });
+    expect(reset.error).toBe("Read CLI sign-ins is off, so a reset can't be used");
+    expect(await readCalls()).toEqual([]);
+
+    await client.patchDaemonConfig({ readCliSignIns: true });
+    // 关的那一刻缓存已丢：不强制刷新的第一次列表也要重新问来源。
+    const back = await client.listUsageReports();
+    expect(back.reports.map((entry) => entry.id).sort()).toEqual([
+      "recording-builtin:one",
+      "recording-directory:one",
+    ]);
+    expect((await readCalls()).sort()).toEqual([
+      "recording-builtin discover",
+      "recording-builtin fetch",
+      "recording-directory discover",
+      "recording-directory fetch",
+    ]);
+  } finally {
+    await client.close();
+    await daemon.close();
+    await rm(root, { recursive: true, force: true });
+  }
+}, 60_000);

@@ -4111,6 +4111,14 @@ export const en = {
           workspaceName: "my-workspace",
         },
       },
+      privacy: {
+        title: "Privacy",
+        readCliSignIns: {
+          title: "Read CLI sign-ins",
+          hint: "Lets Osuna read the logins each CLI keeps for itself (login files, the Keychain) to show plan usage. Off, Osuna doesn't read them and plan usage doesn't show; the CLIs keep using their own logins, and API endpoints aren't affected. Code in plugins other than plan usage isn't covered by this switch.",
+          saveFailed: "Couldn't change Read CLI sign-ins.",
+        },
+      },
       notFound: "Host not found",
       badges: {
         relay: "Relay",

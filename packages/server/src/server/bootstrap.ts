@@ -167,6 +167,7 @@ import { ApiEndpointStore } from "./api-endpoints/store.js";
 import type { ProviderVersionsConfig } from "./agent/provider-version-check.js";
 import { resolveUsagePricingSettings, type UsageConfig } from "./usage/config.js";
 import { DaemonConfigStore, type MutableDaemonConfig } from "./daemon-config-store.js";
+import { CliSignInAccess } from "./cli-sign-ins.js";
 import { createOrchestrationSkills } from "./orchestration-skills/index.js";
 import { resolveConfigFromPersisted, type CliConfigOverrides } from "./config.js";
 import { resolvePaseoToolPolicy } from "./agent/paseo-tool-policy.js";
@@ -469,6 +470,7 @@ export interface PaseoDaemonConfig {
   skillSelection?: AgentSkillSelection;
   pluginsEnabled?: boolean;
   plugins?: Record<string, PluginSource>;
+  readCliSignIns?: boolean;
   pluginRegistries?: PluginRegistries;
   pluginRegistryUrl?: string;
   staticDir: string;
@@ -630,6 +632,7 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
     appendSystemPrompt: config.appendSystemPrompt ?? "",
     pluginsEnabled: config.pluginsEnabled ?? false,
     plugins: config.plugins ?? {},
+    readCliSignIns: config.readCliSignIns !== false,
     skills: { selection: config.skillSelection },
     usage: resolveMutableUsageSection(config),
   };
@@ -691,7 +694,9 @@ export async function createPaseoDaemon(
   });
   const browserToolsPolicy = new DaemonConfigBrowserToolsPolicy(daemonConfigStore);
   const browserToolsBroker = new BrowserToolsBroker({});
+  const cliSignIns = new CliSignInAccess(daemonConfigStore);
   const pluginRuntime: PluginService = new PluginService(logger, daemonConfigStore, daemonVersion, {
+    cliSignIns,
     usageAgents: {
       hasAgent: (id) => agentManager.getAgent(id) !== null,
       usageSession: (id) => agentManager.usageSession(id),

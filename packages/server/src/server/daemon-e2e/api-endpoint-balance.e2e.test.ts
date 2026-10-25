@@ -175,6 +175,15 @@ describe("API endpoint balance over the daemon RPC", () => {
     expect(sent?.headers["user-agent"]).toBe(`Osuna/${VERSION}`);
   });
 
+  test("with Read CLI sign-ins off an endpoint's balance is still read with its key", async () => {
+    await client.patchDaemonConfig({ readCliSignIns: false });
+    const reading = await readOne(await saveDeepSeek());
+    expect(reading.status).toBe("ok");
+    expect(reading.items[0]).toEqual({ label: null, text: "¥110.00", value: 110, unit: "CNY" });
+    expect(deepseek.requests).toHaveLength(1);
+    expect(deepseek.requests[0]?.headers.authorization).toBe(`Bearer ${KEY}`);
+  });
+
   test("a currency other than yuan or dollars is written with its code, two decimals", async () => {
     deepseek.reply = (response) =>
       sendJson(response, 200, { balance_infos: [{ currency: "eur", total_balance: 3.5 }] });
