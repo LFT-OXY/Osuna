@@ -4070,6 +4070,7 @@ export const ru: TranslationResources = {
             apiEndpointsKeepWorking: "API-эндпоинты продолжают работать.",
             confirm: "Выключить",
             listSeparator: ", ",
+            rotationStops: "Автосмена аккаунтов для {{providers}} остановится.",
           },
         },
       },
@@ -4459,6 +4460,56 @@ export const ru: TranslationResources = {
         antigravity: {
           body: "В FAQ Antigravity от Google сказано, что встраивание Antigravity CLI (agy) в сторонние приложения не поддерживается в потребительских тарифах. Там же сказано, что доступ к Antigravity через стороннее ПО нарушает Условия использования и может привести к приостановке или закрытию аккаунта. Osuna управляет Antigravity через agy. Волна блокировок в феврале 2026 года заодно отключила Gemini CLI и Gemini Code Assist. Используйте аккаунт, который не жалко потерять.",
           termsLink: "FAQ Antigravity",
+        },
+      },
+      accounts: {
+        title: "Аккаунты",
+        rotate: {
+          title: "Автосмена аккаунтов",
+          hint: "Смена действует только для новых сессий; открытые сессии остаются на прежнем аккаунте.",
+          codexHint:
+            "Запросы идут через Osuna, поэтому, пока Osuna не запущена, Codex в терминале не подключится.",
+          saveFailed: "Не удалось изменить автосмену аккаунтов: {{reason}}",
+        },
+        cliSignInsOff: "«Читать входы CLI» выключено, поэтому автосмена аккаунтов остановлена",
+        openPrivacySettings: "Открыть настройки",
+        loginUnsupported: "Osuna не может сменить этот вход {{name}}: {{reason}}",
+        unsupportedReasons: {
+          ephemeral: 'Codex хранит вход только в памяти (cli_auth_credentials_store = "ephemeral")',
+          unknown_store: "Codex хранит вход способом, который Osuna не знает",
+          config_unparsable: "не удаётся прочитать config.toml Codex",
+          keyring_unavailable: "на этой системе Osuna не может читать связку ключей",
+          login_unparsable: "не удаётся прочитать сохранённый вход",
+          account_unknown: "Claude Code не записал, какой аккаунт выполнил вход",
+        },
+        loadFailed: "Не удалось загрузить аккаунты: {{reason}}",
+        empty: "Аккаунтов пока нет. Когда {{name}} войдёт в подписку, этот аккаунт станет первым.",
+        single: "Добавьте ещё один аккаунт, чтобы началась смена.",
+        unknownEmail: "Неизвестный аккаунт",
+        badges: { inUse: "Используется", first: "Первый" },
+        usage: {
+          reading: "Читаем использование…",
+          failed: "Не удалось прочитать использование: {{reason}}",
+          reasons: {
+            not_found: "использование тарифа не видит этот вход",
+            not_read_yet: "ещё не прочитано",
+          },
+        },
+        riskNotice: {
+          sheetTitle: "Включить автосмену аккаунтов для {{name}}?",
+          confirm: "Понятно, включить",
+          codexTitle:
+            "Автосмена аккаунтов может привести к ограничению или блокировке аккаунта ChatGPT",
+          codexBody:
+            'Раздел 4 условий Sign in with ChatGPT от OpenAI запрещает содействовать или поощрять "Creating multiple accounts, splitting usage, rotating accounts, or otherwise bypassing usage limits"; раздел 1 гласит: "Do not impersonate OpenAI, another application, or another open-source project." Добавляя аккаунты и продлевая входы, Osuna использует идентификацию Codex. Мейнтейнер Codex из OpenAI также публично сказал, что не стоит использовать несколько аккаунтов, чтобы обходить лимиты тарифа (это слова сотрудника, а не условия).',
+          codexTermsLink: "Условия Sign in with ChatGPT",
+          codexMaintainerLink: "Слова мейнтейнера",
+          claudeTitle:
+            "Автосмена аккаунтов может привести к ограничению или блокировке аккаунта Claude",
+          claudeBody:
+            'Политика использования Anthropic относит "create multiple accounts, to avoid detection, circumvent product guardrails" к злоупотреблению платформой. Юридическая страница Claude Code говорит, что опубликованные лимиты Pro и Max рассчитаны на "ordinary, individual usage", и что "developers may not collect, store, or intermediate Claude.ai credentials or session tokens". Osuna хранит входы ваших других аккаунтов. О смене аккаунтов Anthropic отдельно не пишет.',
+          claudePolicyLink: "Политика использования",
+          claudeLegalLink: "Юридическая страница Claude Code",
         },
       },
       actions: {

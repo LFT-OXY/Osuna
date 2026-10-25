@@ -1,0 +1,128 @@
+import { randomUUID } from "node:crypto";
+import path from "node:path";
+import type pino from "pino";
+import { z } from "zod";
+import {
+  ACCOUNT_ROTATION_PROVIDERS,
+  ProviderAccountWindowSchema,
+  type AccountRotationProvider,
+} from "@getpaseo/protocol/provider-account/rpc-schemas";
+import {
+  type DataFileSystem,
+  LastGoodFile,
+  NODE_DATA_FILE_SYSTEM,
+} from "../api-endpoints/last-good.js";
+
+/*
+ * $PASEO_HOME/accounts/accounts.json（目录 0700、文件 0600、明文，与第三方接口的 keys.json 同样处理）：
+ * Codex、Claude Code 的号与每家的多号自动轮换设置。写坏时用上一份好的 .bak（last-good.ts）。
+ * 不进 config.json：get_daemon_config 会把配置原样发给客户端。
+ * 一个登录只有一个持有者：CLI 现在登录的号在这里只有资料，它的 token 只在 CLI 自己那里。
+ * 只有 daemon 写这个文件，不加跨进程锁。
+ */
+
+const StoredUsageSchema = z.object({
+  fetchedAt: z.string(),
+  windows: z.array(ProviderAccountWindowSchema),
+});
+export type StoredUsage = z.infer<typeof StoredUsageSchema>;
+
+const StoredAccountSchema = z.object({
+  id: z.string(),
+  provider: z.enum(ACCOUNT_ROTATION_PROVIDERS),
+  // 账号的稳定标识，与 CliLoginReading 的 identity 同一个口径；认重复的号靠它。
+  identity: z.string(),
+  email: z.string().optional(),
+  plan: z.string().optional(),
+  // 最近一次读到的额度。
+  usage: StoredUsageSchema.optional(),
+});
+export type StoredAccount = z.infer<typeof StoredAccountSchema>;
+
+const StoredSettingsSchema = z.object({
+  rotationEnabled: z.boolean().optional(),
+  // 这台主机上已经确认过这家的风险提示。
+  riskNoticeSeen: z.boolean().optional(),
+});
+export type StoredSettings = z.infer<typeof StoredSettingsSchema>;
+
+// 号按用户排的顺序存：数组里第一个就是「第一」。
+const AccountsFileSchema = z.object({
+  accounts: z.array(StoredAccountSchema),
+  settings: z.partialRecord(z.enum(ACCOUNT_ROTATION_PROVIDERS), StoredSettingsSchema),
+});
+type AccountsFile = z.infer<typeof AccountsFileSchema>;
+
+export interface ProviderAccountStoreOptions {
+  paseoHome: string;
+  logger: pino.Logger;
+  // 只给测试换：.bad-<时间> 用的时钟、模拟占用的文件系统。
+  now?: () => Date;
+  fileSystem?: DataFileSystem;
+}
+
+export class ProviderAccountStore {
+  private readonly file: LastGoodFile<AccountsFile>;
+
+  constructor(options: ProviderAccountStoreOptions) {
+    this.file = new LastGoodFile({
+      filePath: path.join(options.paseoHome, "accounts", "accounts.json"),
+      parse: (raw) => AccountsFileSchema.parse(raw),
+      logger: options.logger,
+      now: options.now ?? (() => new Date()),
+      fileSystem: options.fileSystem ?? NODE_DATA_FILE_SYSTEM,
+    });
+  }
+
+  /** 这家的号，按用户排的顺序。 */
+  accounts(provider: AccountRotationProvider): StoredAccount[] {
+    return this.read().accounts.filter((account) => account.provider === provider);
+  }
+
+  settings(provider: AccountRotationProvider): StoredSettings {
+    return this.read().settings[provider] ?? {};
+  }
+
+  updateSettings(provider: AccountRotationProvider, patch: StoredSettings): void {
+    const current = this.read();
+    this.file.write({
+      ...current,
+      settings: { ...current.settings, [provider]: { ...current.settings[provider], ...patch } },
+    });
+  }
+
+  /** 把号排到这家的最后；已有同一个账号（identity 相同）时只更新资料，返回那个号。 */
+  addAccount(input: Omit<StoredAccount, "id" | "usage">): StoredAccount {
+    const current = this.read();
+    const existing = current.accounts.find(
+      (account) => account.provider === input.provider && account.identity === input.identity,
+    );
+    if (existing) {
+      const updated = { ...existing, ...input };
+      this.file.write({
+        ...current,
+        accounts: current.accounts.map((account) => (account === existing ? updated : account)),
+      });
+      return updated;
+    }
+    const added: StoredAccount = { id: randomUUID(), ...input };
+    this.file.write({ ...current, accounts: [...current.accounts, added] });
+    return added;
+  }
+
+  /** 记下这个号最近一次读到的额度；号已被移除时什么都不做。 */
+  recordUsage(accountId: string, usage: StoredUsage): void {
+    const current = this.read();
+    const index = current.accounts.findIndex((account) => account.id === accountId);
+    if (index === -1) return;
+    const accounts = [...current.accounts];
+    const account = current.accounts[index];
+    if (!account) return;
+    accounts[index] = { ...account, usage };
+    this.file.write({ ...current, accounts });
+  }
+
+  private read(): AccountsFile {
+    return this.file.read() ?? { accounts: [], settings: {} };
+  }
+}

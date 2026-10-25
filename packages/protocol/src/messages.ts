@@ -88,6 +88,13 @@ import {
   UsageExchangeRateGetRequestSchema,
   UsageExchangeRateGetResponseSchema,
 } from "./usage/rpc-schemas.js";
+import {
+  ProviderAccountChangedMessageSchema,
+  ProviderAccountListRequestSchema,
+  ProviderAccountListResponseSchema,
+  ProviderAccountSetRotationRequestSchema,
+  ProviderAccountSetRotationResponseSchema,
+} from "./provider-account/rpc-schemas.js";
 import { UsagePricingOverrideSchema } from "./usage/types.js";
 import {
   ApiEndpointCancelRequestSchema,
@@ -3549,6 +3556,9 @@ export const SessionEventSubscriptionSchema = z.enum([
   // COMPAT(logicMap): added in v0.17.0, remove gate after 2027-04-19. A client only
   // asks for it once `features.logicMap` is advertised.
   "workspace.logic_map.changed",
+  // COMPAT(accountRotation): added in v0.17.0, remove gate after 2027-04-25. A client only
+  // asks for it once `features.accountRotation` is advertised.
+  "provider.account.changed",
 ]);
 export type SessionEventSubscription = z.infer<typeof SessionEventSubscriptionSchema>;
 export const SessionEventsSetSubscriptionRequestSchema = z.object({
@@ -3584,6 +3594,8 @@ export const SubscriptionReleaseResponseSchema = z.object({
 });
 
 export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
+  ProviderAccountListRequestSchema,
+  ProviderAccountSetRotationRequestSchema,
   BrowserHostRegisterRequestSchema,
   SubscriptionReleaseRequestSchema,
   SessionEventsSetSubscriptionRequestSchema,
@@ -4263,6 +4275,10 @@ export const ServerInfoStatusPayloadSchema = z
         // COMPAT(checkoutDiffFilesOnly): added in v0.17.0, remove gate after 2027-04-19.
         // daemon 理解 checkout diff compare 的 filesOnly，只发文件清单。
         checkoutDiffFilesOnly: z.boolean().optional(),
+        // COMPAT(accountRotation): added in v0.17.0, remove gate after 2027-04-25.
+        // 任务 10-16-multi-account-rotation：provider.account.list / set_rotation 与 provider.account.changed 事件
+        // （Codex、Claude Code 设置页的「账号」一节与「多号自动轮换」）。
+        accountRotation: z.boolean().optional(),
       })
       .optional(),
   })
@@ -7451,6 +7467,9 @@ export const AgentSkillsImportLegacySelectionResponseSchema = z.object({
 });
 
 export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
+  ProviderAccountListResponseSchema,
+  ProviderAccountSetRotationResponseSchema,
+  ProviderAccountChangedMessageSchema,
   BrowserHostRegisterResponseSchema,
   SubscriptionReleaseResponseSchema,
   SessionEventsSetSubscriptionResponseSchema,

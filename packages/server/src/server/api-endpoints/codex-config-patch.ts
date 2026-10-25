@@ -836,6 +836,24 @@ export function readCodexCatalogPath(text: string | null): string | null {
   return typeof catalogPath === "string" ? catalogPath : null;
 }
 
+/** Codex 把登录存在哪（`cli_auth_credentials_store`）；没设是 file（Codex 的缺省）。 */
+export type CodexCredentialsStore =
+  | { kind: "file" | "keyring" | "auto" | "ephemeral" }
+  | { kind: "unknown"; value: string }
+  | Unparsable;
+
+/** 顶层的 cli_auth_credentials_store；多号自动轮换据此读写 Codex 的登录。没有文件按没设算。 */
+export function readCodexCredentialsStore(text: string | null): CodexCredentialsStore {
+  if (text === null) return { kind: "file" };
+  const parsed = parseConfig(splitBom(text)[1]);
+  if (parsed.kind === "unparsable") return parsed;
+  const store = parsed.value.cli_auth_credentials_store;
+  if (store === undefined) return { kind: "file" };
+  if (store === "file" || store === "keyring" || store === "auto" || store === "ephemeral")
+    return { kind: store };
+  return { kind: "unknown", value: String(store) };
+}
+
 /** Codex 自己的 multi_agent_v2：开着、没开，或文件读不懂（不当作没开）。 */
 export type CodexMultiAgentV2 = { kind: "on" } | { kind: "off" } | Unparsable;
 

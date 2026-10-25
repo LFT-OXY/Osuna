@@ -5,6 +5,10 @@ import { StyleSheet } from "react-native-unistyles";
 import { FileText, RotateCw } from "lucide-react-native";
 import type { AgentModelDefinition, ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
 import type { ProviderProfileModel } from "@getpaseo/protocol/provider-config";
+import {
+  isAccountRotationProvider,
+  type AccountRotationProvider,
+} from "@getpaseo/protocol/provider-account/rpc-schemas";
 import { selectInheritedApiEndpoint, showsApiEndpointSettings } from "@/api-endpoints";
 import { BanRiskNotice } from "@/components/ban-risk-notice";
 import { Alert } from "@/components/ui/alert";
@@ -20,7 +24,7 @@ import { ProviderDiagnosticSection } from "./diagnostic-section";
 import { ProviderModelsSection } from "./models";
 
 /*
- * 提供方详情的内容区，区块顺序固定：封号风险提示 → 删除失败 → 开关失败 → 错误卡 → 继承接口提示 → 版本 → 安装与升级 → 第三方接口 → Models → 诊断。
+ * 提供方详情的内容区，区块顺序固定：封号风险提示 → 删除失败 → 开关失败 → 错误卡 → 继承接口提示 → 版本 → 安装与升级 → 第三方接口 → 账号 → Models → 诊断。
  * 版本只在已安装时出现；安装与升级装没装都在同一处，一键升级失败时用户靠它手动升级。
  * 已停用时只有封号风险提示、两个失败提示和一张停用说明卡：daemon 不探测已停用的提供方，快照里的状态说明不了装没装。
  * 外框（弹窗或页面）由调用方决定。
@@ -69,6 +73,8 @@ export interface ProviderDetailSurfaceProps {
   onAddCustomModel: (modelId: string) => Promise<void>;
   renderInstallGuide: (guide: ProviderInstallGuide, cliLabel: string) => ReactNode;
   renderApiEndpoints: (providerLabel: string) => ReactNode;
+  // Codex、Claude Code 的「账号」一节；主机没声明 accountRotation 时插槽自己什么都不画。
+  renderAccounts: (provider: AccountRotationProvider, providerLabel: string) => ReactNode;
   renderVersion: (slot: ProviderVersionSlotContext) => ReactNode;
 }
 
@@ -205,6 +211,7 @@ export function ProviderDetailSurface({
   onAddCustomModel,
   renderInstallGuide,
   renderApiEndpoints,
+  renderAccounts,
   renderVersion,
 }: ProviderDetailSurfaceProps) {
   const { t } = useTranslation();
@@ -332,6 +339,7 @@ export function ProviderDetailSurface({
       {versionContent}
       {installGuideContent}
       {apiEndpointsContent}
+      {isAccountRotationProvider(provider) ? renderAccounts(provider, providerLabel) : null}
       <ProviderModelsSection
         key={provider}
         providerLoading={providerSnapshotRefreshing}

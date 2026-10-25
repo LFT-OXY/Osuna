@@ -199,6 +199,12 @@ import {
 } from "./session/usage-stats/usage-stats-session.js";
 import type { UsageService } from "./usage/service.js";
 import type { ApiEndpointService } from "./api-endpoints/service.js";
+import type { ProviderAccountService } from "./provider-accounts/service.js";
+import {
+  createProviderAccountSession,
+  type ProviderAccountRequest,
+  type ProviderAccountSession,
+} from "./session/provider-account/provider-account-session.js";
 import {
   createApiEndpointSession,
   isApiEndpointRequest,
@@ -501,6 +507,7 @@ export interface SessionOptions {
   scheduleService: ScheduleService;
   usageService?: UsageService;
   apiEndpointService?: ApiEndpointService;
+  providerAccountService?: ProviderAccountService;
   checkoutDiffManager: CheckoutDiffManager;
   github?: ForgeService;
   createAgentMcpTransport?: AgentMcpTransportFactory;
@@ -837,6 +844,7 @@ export class Session {
   private readonly usageStatsSession: UsageStatsSession | null;
   private readonly apiEndpointSession: ApiEndpointSession | null;
   private readonly codexConversationSession: CodexConversationSession | null;
+  private readonly providerAccountSession: ProviderAccountSession | null;
   private readonly providerCatalogSession: ProviderCatalogSession;
   private readonly usageSession: UsageSession;
   private readonly workspaceFilesSession: WorkspaceFilesSession;
@@ -878,6 +886,7 @@ export class Session {
       scheduleService,
       usageService,
       apiEndpointService,
+      providerAccountService,
       checkoutDiffManager,
       github,
       renameCurrentBranch,
@@ -1025,6 +1034,11 @@ export class Session {
     this.apiEndpointSession = createApiEndpointSession({
       host: { emit: (msg) => this.emit(msg) },
       service: apiEndpointService,
+      logger: this.sessionLogger,
+    });
+    this.providerAccountSession = createProviderAccountSession({
+      host: { emit: (msg) => this.emit(msg) },
+      service: providerAccountService,
       logger: this.sessionLogger,
     });
     this.codexConversationSession = createCodexConversationSession({
@@ -3121,6 +3135,9 @@ export class Session {
         return this.providerCatalogSession.handleProviderVersionCheckRequest(msg);
       case "provider.upgrade.request":
         return this.providerCatalogSession.handleProviderUpgradeRequest(msg);
+      case "provider.account.list.request":
+      case "provider.account.set_rotation.request":
+        return this.dispatchProviderAccountMessage(msg);
       case "provider.codex.session.list_model_providers.request":
       case "provider.codex.session.move_model_provider.request":
         if (!this.codexConversationSession) {
@@ -3180,6 +3197,22 @@ export class Session {
       default:
         return undefined;
     }
+  }
+
+  private dispatchProviderAccountMessage(msg: ProviderAccountRequest): Promise<void> {
+    if (!this.providerAccountSession) {
+      this.emit({
+        type: "rpc_error",
+        payload: {
+          requestId: msg.requestId,
+          requestType: msg.type,
+          error: "Account rotation is not available on this daemon",
+          code: "account_rotation_unavailable",
+        },
+      });
+      return Promise.resolve();
+    }
+    return this.providerAccountSession.handle(msg);
   }
 
   private dispatchApiEndpointMessage(msg: SessionInboundMessage): Promise<void> | undefined {
@@ -8881,6 +8914,7 @@ function sessionEventCategory(message: SessionOutboundMessage): SessionEventSubs
     case "usage.updated":
     case "usage.pricing.updated":
     case "workspace.logic_map.changed":
+    case "provider.account.changed":
       return message.type;
     case "status":
       return statusEventCategory(message.payload.status);
@@ -8931,8 +8965,9 @@ function legacyWantsEvent(
     case "usage.backfill.progress":
     case "usage.updated":
     case "usage.pricing.updated":
-    // 逻辑图事件同样晚于订阅机制出现，只发给订阅了它的连接。
+    // 逻辑图与账号事件同样晚于订阅机制出现，只发给订阅了它的连接。
     case "workspace.logic_map.changed":
+    case "provider.account.changed":
       return false;
     default:
       return true;

@@ -153,11 +153,11 @@ Codex、Claude Code 的提供方设置页各多一节「账号」（**Account**�
 
 ### 账号存放
 
-- 新增一个账号存储，放在 `$PASEO_HOME` 下 Osuna 自己的目录里。规矩与第三方接口的 key 文件相同：目录 0700、文件 0600、明文不加密、原子替换、保留上一份好的、写坏时用上一份。遵守 `docs/data-model.md`，由存储模块负责原子性。
+- 新增一个账号存储 `$PASEO_HOME/accounts/accounts.json`。规矩与第三方接口的 key 文件相同：目录 0700、文件 0600、明文不加密、原子替换、保留上一份好的、写坏时用上一份。遵守 `docs/data-model.md`，由存储模块负责原子性。
 - 每个号记：稳定 ID、提供方（`codex` / `claude`）、邮箱、套餐、用户排的位置、各窗口的上限、状态（正常 / 需要重新登录及原因）、最近一次读到的额度与读取时间。
   - Codex 的号另存整份登录（与 `auth.json` 同形）。
   - Claude 的号另存 `oauthAccount` 资料。它的凭证放在这个号的私有 `CLAUDE_CONFIG_DIR` 里，由 Claude Code 自己的存法决定：macOS 在钥匙串里、按目录取后缀的那一项，其他系统在该目录的 `.credentials.json`。
-- 每个提供方的轮换设置：「多号自动轮换」、「固定登录到」哪个号、Codex 的「只换登录」、这台主机看过哪家的风险提示、最近 50 条换号记录。这些不含秘密，但同样放在账号存储里，不放进会发给客户端的 daemon 配置。
+- 每个提供方的轮换设置：「多号自动轮换」、「固定登录到」哪个号、Codex 的「只换登录」、这台主机看过哪家的风险提示、最近 50 条换号记录。这些不含秘密，但同样放在账号存储里，不放进会发给客户端的 daemon 配置。工单 02 只存开关与「看过风险提示」，其余各项由用到它的工单加成可选字段。
 - **一个登录只有一个持有者**（照 magpie）：
   - 当前在用的号，登录只在 CLI 自己的存储里，Osuna 的存储只留它的资料，不留第二份 token。
   - 存着的号，token 只在 Osuna 的存储里（Codex）或它的私有目录里（Claude）。
@@ -205,7 +205,7 @@ Codex、Claude Code 的提供方设置页各多一节「账号」（**Account**�
 - **私有目录**：每个存着的号一个，放在账号存储下。号被换上时，它的凭证移进 CLI 的默认存储，私有目录里的凭证清掉；号被换下时，从默认存储收回到私有目录。
 - **续期**：Osuna 从不续 Claude 的 token，也从不连 Anthropic 的登录服务。存着的号在查额度时由 Claude Code 在私有目录里自己续；续出的新 token 留在私有目录。
 - **读额度**：
-  - 当前登录的号：沿用现有 Claude 套餐用量来源的读法。
+  - 当前登录的号：沿用现有 Claude 套餐用量来源的读法（两家都按报告 ID `codex:<账号 ID>`、`claude:<账号 UUID>.<组织 UUID>` 从套餐用量注册表取；注册表还没发现这个号时，照用量页那样整体发现一次）。
   - 存着的号：照 magpie 在该号的私有目录、临时工作目录里运行真的 `claude -p /usage --output-format json --tools "" --strict-mcp-config --setting-sources "" --no-session-persistence`，解析其中的「Current session / Current week」用量与重置时间。跟随每 5 分钟的检查自动读（Q19，magpie 只在用户刷新时读）。
   - 从没读到过额度的号不当目标。
 - **判定、选目标、换回、节奏**：与 Codex 第一层相同。
@@ -221,7 +221,7 @@ Codex、Claude Code 的提供方设置页各多一节「账号」（**Account**�
 - **Claude**（照 magpie）：在新的私有 `CLAUDE_CONFIG_DIR` 里后台运行真的 `claude auth login`，Osuna 截下它要打开的登录地址交给客户端。
   - 主机上的桌面端直接打开浏览器；远程设备显示链接，并提供粘贴代码的输入框，转给这个登录进程。
   - 登录完成后从该目录读出邮箱与套餐，存进账号存储；没读到邮箱的拒收。
-- **第一个号**：打开轮换时，把 CLI 当前登录的号登记为第 1 个号（只记资料，登录仍只在 CLI 那里）。
+- **第一个号**：打开轮换时，把 CLI 当前登录的号登记为第 1 个号（只记资料，登录仍只在 CLI 那里）。打开时 CLI 还没登录的，列表为空；之后 CLI 登录了，下一次读列表时把它补登为第 1 个号。
 - **重新登录**：走同一流程，把结果写回同一个号。
 - **不做导入**（02·B15）。
 
@@ -234,7 +234,7 @@ Codex、Claude Code 的提供方设置页各多一节「账号」（**Account**�
 
 ### 协议与兼容
 
-- 新增能力位 `server_info.features.accountRotation`；客户端只在它为真时显示账号一节。
+- 新增能力位 `server_info.features.accountRotation`；客户端只在它为真时显示账号一节。已有的 RPC：`provider.account.list`、`provider.account.set_rotation`（第一次为某家打开时要带 `acknowledgeRiskNotice`，否则回 `risk_notice_required`），推送 `provider.account.changed`；能打开轮换的提供方是协议里的 `ACCOUNT_ROTATION_PROVIDERS`。契约细节见 `.atw/spec/server/backend/rpc-and-protocol.md` 的 accountRotation 一节。
 - 新 RPC 用带点命名空间加 `.request` / `.response`（`docs/rpc-namespacing.md`），归在提供方账号这一域下，覆盖：
   - 读账号列表与设置；
   - 改设置（轮换、固定、只换登录、上限、顺序）；
@@ -249,7 +249,7 @@ Codex、Claude Code 的提供方设置页各多一节「账号」（**Account**�
 
 ### 风险提示
 
-- 用子任务 8 的 **Ban risk notice** 组件的样式做一个确认框：标题、正文、条款链接，按钮「我知道了，打开」与「取消」。「看过了」记在主机上的轮换设置里，按提供方分开。
+- 用子任务 8 的 **Ban risk notice** 组件的样式做一个确认框：标题、正文、条款链接，按钮「我知道了，打开」与「取消」。框的标题栏写「为 {{name}} 打开多号自动轮换？」，下面的警告块是下文的标题与正文。「看过了」记在主机上的轮换设置里，按提供方分开。
 - 中文文字如下，其余 8 种语言照意思翻译，原文引语保持英文。
 
   Codex：

@@ -2249,3 +2249,51 @@ if (!runtime.readsCliSignIns()) {
   return;
 }
 ```
+
+## Scenario: the Accounts section and Rotate accounts switch (multi-account-rotation ticket 02, `accountRotation`)
+
+### 1. Scope / Trigger
+- New session RPCs, a push event, a feature flag and a new `$PASEO_HOME` store that reads the CLIs' own logins (Codex `auth.json` / keyring, Claude Code keychain / `.credentials.json` + `.claude.json`).
+
+### 2. Signatures
+- Protocol `packages/protocol/src/provider-account/rpc-schemas.ts`: `ACCOUNT_ROTATION_PROVIDERS = ["codex","claude"]`, `isAccountRotationProvider()`; wire `provider` stays `z.string()`.
+- `provider.account.list.request {provider}` → `.response {requestId, provider, settings{rotationEnabled, riskNoticeSeen}, accounts[{id, email?, plan?, signedIn, usage}], blocked: {kind:"cli_sign_ins_off"} | {kind:"login_unsupported", code, reason} | null, error: {code, message} | null}` (`daemon.read`).
+- `provider.account.set_rotation.request {provider, enabled, acknowledgeRiskNotice?}` → `.response` same payload (`daemon.manage`).
+- Push `provider.account.changed` (no payload; subscribe-only event, `daemon.read`). Flag `server_info.features.accountRotation`, set only when the daemon has a `ProviderAccountService`.
+- Server: `ProviderAccountService.list(provider)`, `.setRotation(SetRotationInput)`; built by `createProviderAccountService({paseoHome, logger, cliSignIns, planUsage, onChanged, overrides})`; `overrides: ProviderAccountOverrides {env, homeDir, platform, keychain: CliKeychain, usage: AccountUsageReader}` via `PaseoDaemonConfig.providerAccounts`.
+
+### 3. Contracts
+- Store `$PASEO_HOME/accounts/accounts.json` (`LastGoodFile`, dir 0700, file 0600): `{accounts: [{id, provider, identity, email?, plan?, usage?}], settings: {codex?: {rotationEnabled?, riskNoticeSeen?}, claude?: …}}`. No token is ever stored for the signed-in account. Later tickets add their own optional fields (pin, only-switch-sign-in, switch log).
+- `identity` = the Plan usage report key: Codex ChatGPT account id, Claude `accountUuid.organizationUuid`. The signed-in account's usage is read through the usage-source registry by report id `codex:<id>` / `claude:<uuid.org>`; when the registry hasn't discovered it, one global discovery runs (same requests as opening the usage page). Read in the background, 5-minute TTL, `changed` pushed when done; the list answers `{status:"reading"}` meanwhile.
+- Plan names are capitalised (`plus` → `Plus`).
+- Codex store: `cli_auth_credentials_store` via `readCodexCredentialsStore()`; keyring item `Codex Auth` / `cli|<sha256(realpath CODEX_HOME)[0..16]>`.
+
+### 4. Validation & Error Matrix
+| Condition | Result |
+|---|---|
+| provider not codex/claude | `error.code = unsupported_provider` |
+| Read CLI sign-ins off, list | `blocked: cli_sign_ins_off`, no login read, stored accounts listed with `signedIn: false` |
+| off, set_rotation enabled | `error.code = cli_sign_ins_off`; turning off is always allowed |
+| first enable for this provider without `acknowledgeRiskNotice` | `error.code = risk_notice_required`, switch unchanged |
+| `ephemeral` / unknown store / unreadable config or login / keyring unavailable / Claude without `oauthAccount` | list `blocked: login_unsupported` with `code`; enable → `error.code = login_unsupported` |
+| enabled, CLI signed out | allowed, empty list; a later list after the CLI signs in registers it as the first account |
+
+### 5. Good/Base/Bad Cases
+- Good: enable with acknowledgement → riskNoticeSeen stored on the host; toggling off/on never asks again; Claude still asks once.
+- Base: no accounts file → rotation off, nothing seen.
+- Bad: copying the CLI's tokens into `accounts.json` for the signed-in account (two holders of a single-use refresh token).
+
+### 6. Tests Required
+- `daemon-e2e/provider-accounts.e2e.test.ts`: risk notice per host and provider across restart; file and keyring Codex; ephemeral refused; Claude keychain + `.claude.json`; off reads nothing; store has no token, 0600/0700.
+- `app/e2e/browser/settings-provider-accounts.spec.ts`: cancel/confirm, refused save, view-only, empty and one account, off notice.
+
+### 7. Wrong vs Correct
+#### Wrong
+```ts
+const keychain = createSystemKeychain(); // a Playwright daemon would run the real `security`
+```
+#### Correct
+```ts
+// e2e seal installs Symbol.for("paseo.e2e.cliKeychain"), backed by PASEO_E2E_KEYCHAIN_PATH;
+// createSystemKeychain() returns it before touching `security`. Vitest daemons pass FakeCliKeychain.
+```

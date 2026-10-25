@@ -4130,6 +4130,7 @@ export const en = {
             apiEndpointsKeepWorking: "API endpoints keep working.",
             confirm: "Turn off",
             listSeparator: ", ",
+            rotationStops: "Rotate accounts for {{providers}} will stop.",
           },
         },
       },
@@ -4512,6 +4513,56 @@ export const en = {
         antigravity: {
           body: "Google's Antigravity FAQ says that wrapping the Antigravity CLI (agy) inside third-party applications is not supported under consumer plans. It also says that using third-party software to access Antigravity violates its Terms of Service and can get the account suspended or terminated. Osuna drives Antigravity through agy. The February 2026 wave of bans also blocked Gemini CLI and Gemini Code Assist. Use an account you can afford to lose.",
           termsLink: "Antigravity FAQ",
+        },
+      },
+      accounts: {
+        title: "Accounts",
+        rotate: {
+          title: "Rotate accounts",
+          hint: "Switching only applies to new sessions; open sessions stay on their account.",
+          codexHint:
+            "Requests go through Osuna, so while Osuna isn't running, Codex in a terminal can't connect.",
+          saveFailed: "Couldn't change Rotate accounts: {{reason}}",
+        },
+        cliSignInsOff: "“Read CLI sign-ins” is off, so Rotate accounts has stopped",
+        openPrivacySettings: "Open settings",
+        loginUnsupported: "Osuna can't switch this {{name}} sign-in: {{reason}}",
+        unsupportedReasons: {
+          ephemeral:
+            'Codex keeps its sign-in in memory only (cli_auth_credentials_store = "ephemeral")',
+          unknown_store: "Codex stores its sign-in in a way Osuna doesn't know",
+          config_unparsable: "Codex's config.toml can't be read",
+          keyring_unavailable: "Osuna can't read the system keychain on this platform",
+          login_unparsable: "the saved sign-in can't be read",
+          account_unknown: "Claude Code hasn't recorded which account is signed in",
+        },
+        loadFailed: "Couldn't load accounts: {{reason}}",
+        empty:
+          "No accounts yet. Once {{name}} is signed in to a subscription, that account becomes the first one.",
+        single: "Add another account to start rotating.",
+        unknownEmail: "Unknown account",
+        badges: { inUse: "In use", first: "First" },
+        usage: {
+          reading: "Reading usage…",
+          failed: "Couldn't read usage: {{reason}}",
+          reasons: {
+            not_found: "plan usage doesn't see this sign-in",
+            not_read_yet: "not read yet",
+          },
+        },
+        riskNotice: {
+          sheetTitle: "Turn on Rotate accounts for {{name}}?",
+          confirm: "I understand, turn on",
+          codexTitle: "Rotating accounts may get your ChatGPT account limited or banned",
+          codexBody:
+            "Section 4 of OpenAI's Sign in with ChatGPT terms says you may not facilitate or encourage \"Creating multiple accounts, splitting usage, rotating accounts, or otherwise bypassing usage limits\"; section 1 says \"Do not impersonate OpenAI, another application, or another open-source project.\" Osuna uses Codex's identity when it adds accounts and renews sign-ins for you. An OpenAI Codex maintainer has also said publicly that you shouldn't use multiple accounts to get around a plan's limits (an employee's statement, not the terms).",
+          codexTermsLink: "Sign in with ChatGPT terms",
+          codexMaintainerLink: "The maintainer's words",
+          claudeTitle: "Rotating accounts may get your Claude account limited or banned",
+          claudeBody:
+            'Anthropic\'s usage policy lists "create multiple accounts, to avoid detection, circumvent product guardrails" as platform abuse. The Claude Code legal page says the usage limits published for Pro and Max assume "ordinary, individual usage", and that "developers may not collect, store, or intermediate Claude.ai credentials or session tokens". Osuna keeps the sign-ins of your other accounts. Anthropic doesn\'t mention rotation specifically.',
+          claudePolicyLink: "Usage policy",
+          claudeLegalLink: "Claude Code legal page",
         },
       },
       actions: {

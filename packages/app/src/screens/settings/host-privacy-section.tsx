@@ -10,6 +10,11 @@ import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { extractFailureReason } from "@/price-table/pricing";
 import { revealInScrollContainer } from "@/provider-detail/reveal";
 import { useHostFeature } from "@/runtime/host-features";
+import { useHostRuntimeClient } from "@/runtime/host-runtime";
+import {
+  ACCOUNT_ROTATION_PROVIDERS,
+  type AccountRotationProvider,
+} from "@getpaseo/protocol/provider-account/rpc-schemas";
 import { useSessionStore } from "@/stores/session-store";
 import { settingsStyles } from "@/styles/settings";
 import { planUsageAccountNames } from "@/usage/model";
@@ -32,8 +37,14 @@ export function HostPrivacySection({ serverId }: { serverId: string }) {
   // 保存中显示要改成的值；失败后清掉，开关回到 daemon 的值。
   const [pending, setPending] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // 确认框开着时是按下开关那一刻客户端手里的账号名；null 是没在问。
-  const [confirmingAccounts, setConfirmingAccounts] = useState<string[] | null>(null);
+  // 确认框开着时是按下开关那一刻客户端手里的账号名与开着轮换的提供方；null 是没在问。
+  const [confirming, setConfirming] = useState<{
+    accountNames: string[];
+    rotatingProviders: string[];
+  } | null>(null);
+  // COMPAT(accountRotation): added in v0.17.0, remove gate after 2027-04-25.
+  const supportsAccountRotation = useHostFeature(serverId, "accountRotation");
+  const client = useHostRuntimeClient(serverId);
   const sectionRef = useRef<View>(null);
   const { focus } = useLocalSearchParams<{ focus?: string }>();
   const loaded = config !== null;
@@ -74,13 +85,19 @@ export function HostPrivacySection({ serverId }: { serverId: string }) {
         return;
       }
       const reports = queryClient.getQueryData<UsageReportEntry[]>(usageReportsQueryKey(serverId));
-      setConfirmingAccounts(planUsageAccountNames(reports ?? []));
+      const accountNames = planUsageAccountNames(reports ?? []);
+      void (async () => {
+        const rotatingProviders = supportsAccountRotation
+          ? await readRotatingProviders(client)
+          : [];
+        setConfirming({ accountNames, rotatingProviders });
+      })();
     },
-    [queryClient, saveValue, serverId],
+    [client, queryClient, saveValue, serverId, supportsAccountRotation],
   );
-  const closeConfirmation = useCallback(() => setConfirmingAccounts(null), []);
+  const closeConfirmation = useCallback(() => setConfirming(null), []);
   const confirmTurnOff = useCallback(() => {
-    setConfirmingAccounts(null);
+    setConfirming(null);
     saveValue(false);
   }, [saveValue]);
 
@@ -123,15 +140,39 @@ export function HostPrivacySection({ serverId }: { serverId: string }) {
           </View>
         </View>
       </SettingsSection>
-      {confirmingAccounts ? (
+      {confirming ? (
         <CliSignInsTurnOffSheet
-          accountNames={confirmingAccounts}
+          accountNames={confirming.accountNames}
+          rotatingProviders={confirming.rotatingProviders}
           onConfirm={confirmTurnOff}
           onClose={closeConfirmation}
         />
       ) : null}
     </View>
   );
+}
+
+const ROTATION_PROVIDER_LABELS: Record<AccountRotationProvider, string> = {
+  codex: "Codex",
+  claude: "Claude Code",
+};
+
+/** 开着「多号自动轮换」的提供方名字；问不到的那家记一行日志、不提，确认框照样能开。 */
+async function readRotatingProviders(
+  client: ReturnType<typeof useHostRuntimeClient>,
+): Promise<string[]> {
+  if (!client) return [];
+  const answers = await Promise.allSettled(
+    ACCOUNT_ROTATION_PROVIDERS.map((provider) => client.providerAccountList({ provider })),
+  );
+  return answers.flatMap((answer, index) => {
+    const provider = ACCOUNT_ROTATION_PROVIDERS[index]!;
+    if (answer.status === "rejected") {
+      console.warn("[HostPage] Couldn't read Rotate accounts for", provider, answer.reason);
+      return [];
+    }
+    return answer.value.settings.rotationEnabled ? [ROTATION_PROVIDER_LABELS[provider]] : [];
+  });
 }
 
 function describeSaveFailure(t: TFunction, reason: string): string {

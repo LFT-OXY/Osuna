@@ -18,6 +18,7 @@ import { AGENT_PROVIDER_DEFINITIONS } from "@getpaseo/protocol/provider-manifest
 import { FakeHostProcesses } from "./fake-host-processes.js";
 import { BALANCE_VENDOR_URLS } from "../api-endpoints/balance.js";
 import { loadConfig } from "../config.js";
+import { FakeCliKeychain } from "./fake-cli-keychain.js";
 
 interface TestPaseoDaemonOptions {
   daemonVersion?: string;
@@ -66,6 +67,7 @@ interface TestPaseoDaemonOptions {
   usage?: PaseoDaemonConfig["usage"];
   apiEndpoints?: PaseoDaemonConfig["apiEndpoints"];
   providerVersions?: PaseoDaemonConfig["providerVersions"];
+  providerAccounts?: PaseoDaemonConfig["providerAccounts"];
 }
 
 export interface TestPaseoDaemon {
@@ -308,6 +310,23 @@ async function prepareTestDaemonConfig(
         openCodeAuth: path.join(paseoHomeRoot, "import-sources", "opencode", "auth.json"),
         ...options.apiEndpoints?.importSourcePaths,
       },
+    },
+    // 多号自动轮换读 CLI 登录：测试 daemon 默认指向临时目录与空的假钥匙串，额度一律读不到，
+    // 绝不碰真实的 ~/.codex、~/.claude 与钥匙串。关心它的用例自己传。
+    providerAccounts: {
+      env: {
+        CLAUDE_CONFIG_DIR: path.join(paseoHomeRoot, "claude-config"),
+        CODEX_HOME: path.join(paseoHomeRoot, "codex-home"),
+      },
+      homeDir: paseoHomeRoot,
+      keychain: new FakeCliKeychain(),
+      usage: {
+        read: async () => ({
+          status: "failed",
+          reason: "The test daemon never reads plan usage: pass providerAccounts.usage",
+        }),
+      },
+      ...options.providerAccounts,
     },
     // 测试 daemon 绝不去 npm registry 查最新版本；关心这件事的测试注入自己的桩。
     providerVersions: {

@@ -172,6 +172,8 @@ const zhCNRetiredTermExemptKeys = [
   "settings.apiEndpoints.agent.reopen.appServer",
   "settings.apiEndpoints.agent.reopen.appServerRestarted",
   "settings.apiEndpoints.agent.reopen.appServerRestartedLine",
+  // 风险提示里 OpenAI 条款的英文原文（"…another open-source project."）照原样引。
+  "settings.providers.accounts.riskNotice.codexBody",
   // OMP 的角色名后面括着 config.yml 里的角色键（commit），照原样写。
   "settings.apiEndpoints.agent.modelRoles.roles.commit",
   // 请求头名 anthropic-beta 照原样写。

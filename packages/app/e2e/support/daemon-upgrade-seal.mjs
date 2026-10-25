@@ -29,6 +29,9 @@
  *    （读余额、保存后拉模型清单都是）。PASEO_E2E_FAKE_SITES_PATH 里写了这个网址的，回那里写的回复（JSON）；
  *    没写的当作连不上。厂商表加了新厂商，这里跟着加。
  *
+ * 9. 不读本机真实的钥匙串：多号自动轮换读 CLI 登录用的钥匙串（provider-accounts/keychain.ts）换成这里装上的假的，
+ *    内容读 PASEO_E2E_KEYCHAIN_PATH 文件（{ "服务名\u0000账号": 内容 }，没设或没有这个文件就是空的），绝不跑 `security`。
+ *
  * 2026-10-18 一条浏览器用例点中了升级按钮，测试 daemon 真的跑了 `brew upgrade --cask claude-code@latest`
  * 又被中途杀掉，弄坏了开发者本机的 Claude Code。
  */
@@ -198,6 +201,15 @@ globalThis[Symbol.for("paseo.e2e.hostProcesses")] = {
     return { exitCode: 0, output: "" };
   },
   readSystemProxy: async () => readFakeSystemProxy(),
+};
+
+globalThis[Symbol.for("paseo.e2e.cliKeychain")] = {
+  available: true,
+  read: async (service, account) => {
+    const file = process.env.PASEO_E2E_KEYCHAIN_PATH;
+    if (!file || !existsSync(file)) return null;
+    return JSON.parse(readFileSync(file, "utf8"))[`${service}\u0000${account}`] ?? null;
+  },
 };
 
 function readFakeSites() {

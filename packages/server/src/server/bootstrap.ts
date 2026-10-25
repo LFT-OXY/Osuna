@@ -251,6 +251,10 @@ import {
 } from "./hub/relationship-remote.js";
 import { DaemonExecutions } from "./hub/daemon-executions.js";
 import { PluginService } from "./plugins/index.js";
+import {
+  createProviderAccountService,
+  type ProviderAccountOverrides,
+} from "./provider-accounts/service.js";
 import { BuiltinPluginLoader } from "./plugins/builtin/index.js";
 import { ManagedPluginSources } from "./plugins/managed-source.js";
 
@@ -518,6 +522,8 @@ export interface PaseoDaemonConfig {
   apiEndpoints?: ApiEndpointServiceOverrides & ApiEndpointGatewayOverrides & RetiredModelsOverrides;
   // 查内置提供方 CLI 最新版本的联网函数与升级超时；缺省查 npm registry、10 分钟，测试换成桩和短超时。
   providerVersions?: ProviderVersionsConfig;
+  // 多号自动轮换读 CLI 登录的环境、钥匙串与读额度的办法；缺省用 daemon 自己的环境、系统钥匙串与套餐用量来源。
+  providerAccounts?: ProviderAccountOverrides;
   log?: PersistedConfig["log"];
   onLifecycleIntent?: (intent: DaemonLifecycleIntent) => void;
   pushNotificationSender?: PushNotificationSender;
@@ -1052,6 +1058,20 @@ export async function createPaseoDaemon(
     isDirectory: async (target) => (await stat(target).catch(() => null))?.isDirectory() ?? false,
     logger,
   });
+  // Codex、Claude Code 设置页的「账号」一节；变化经 provider.account.changed 告诉客户端重读。
+  const broadcastProviderAccountsChanged = () => {
+    wsServer?.broadcast(wrapSessionMessage({ type: "provider.account.changed" }));
+  };
+  const providerAccountService = createProviderAccountService({
+    paseoHome: config.paseoHome,
+    logger,
+    cliSignIns,
+    planUsage: pluginRuntime,
+    onChanged: broadcastProviderAccountsChanged,
+    overrides: config.providerAccounts,
+  });
+  // 「读取 CLI 登录凭证」一开一关，这一节跟着显示停着或恢复。
+  cliSignIns.onChange(broadcastProviderAccountsChanged);
   // 先于提供方快照创建：第三方接口启用时，快照和新会话的默认模型都取自它。
   // 两个回调里的 providerSnapshotManager 在下面创建，回调只在 daemon 启动后才会被调用。
   const apiEndpointService = new ApiEndpointService({
@@ -1986,6 +2006,7 @@ export async function createPaseoDaemon(
               usageService,
               apiEndpointService,
               config.providerVersions,
+              providerAccountService,
             );
             pluginRuntime.bindPaseoSessionHost(wsServer);
             await pluginRuntime.start();

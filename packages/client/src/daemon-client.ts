@@ -728,6 +728,14 @@ type ApiEndpointForgetCatalogPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.forget_catalog.response" }
 >["payload"];
+type ProviderAccountListPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.account.list.response" }
+>["payload"];
+type ProviderAccountSetRotationPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.account.set_rotation.response" }
+>["payload"];
 type ApiEndpointVendorStatusPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.vendor_status.response" }
@@ -6780,6 +6788,31 @@ export class DaemonClient {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId,
       message: { type: "provider.api_endpoint.forget_catalog.request", endpointId },
+    });
+  }
+
+  /** 「账号」一节：这家的号、轮换设置与这一节为什么停着。只有声明了 accountRotation 的 daemon 认。 */
+  async providerAccountList(
+    options: { provider: string },
+    requestId?: string,
+  ): Promise<ProviderAccountListPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.account.list.request", ...options },
+    });
+  }
+
+  /**
+   * 打开或关掉这家的多号自动轮换；第一次打开要带 acknowledgeRiskNotice，否则回 risk_notice_required。
+   * 只有声明了 accountRotation 的 daemon 认。
+   */
+  async providerAccountSetRotation(
+    options: { provider: string; enabled: boolean; acknowledgeRiskNotice?: boolean },
+    requestId?: string,
+  ): Promise<ProviderAccountSetRotationPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.account.set_rotation.request", ...options },
     });
   }
 

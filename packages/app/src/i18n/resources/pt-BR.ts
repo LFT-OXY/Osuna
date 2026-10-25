@@ -4066,6 +4066,7 @@ export const ptBR: TranslationResources = {
             apiEndpointsKeepWorking: "Os endpoints de API continuam funcionando.",
             confirm: "Desligar",
             listSeparator: ", ",
+            rotationStops: "O rodízio de contas para {{providers}} vai parar.",
           },
         },
       },
@@ -4454,6 +4455,56 @@ export const ptBR: TranslationResources = {
         antigravity: {
           body: "As perguntas frequentes do Antigravity do Google dizem que usar a CLI do Antigravity (agy) dentro de aplicativos de terceiros não é suportado nos planos para consumidores. Também dizem que acessar o Antigravity por software de terceiros viola os Termos de Serviço e pode levar à suspensão ou ao encerramento da conta. O Osuna controla o Antigravity por meio do agy. A onda de suspensões de fevereiro de 2026 também bloqueou o Gemini CLI e o Gemini Code Assist. Use uma conta cuja perda você possa aceitar.",
           termsLink: "Perguntas frequentes do Antigravity",
+        },
+      },
+      accounts: {
+        title: "Contas",
+        rotate: {
+          title: "Rodízio de contas",
+          hint: "A troca só vale para sessões novas; sessões abertas continuam na conta delas.",
+          codexHint:
+            "As requisições passam pelo Osuna, então, enquanto o Osuna não estiver rodando, o Codex no terminal não consegue se conectar.",
+          saveFailed: "Não foi possível alterar o rodízio de contas: {{reason}}",
+        },
+        cliSignInsOff: "“Ler logins das CLIs” está desligado, então o rodízio de contas parou",
+        openPrivacySettings: "Abrir configurações",
+        loginUnsupported: "O Osuna não consegue trocar este login do {{name}}: {{reason}}",
+        unsupportedReasons: {
+          ephemeral:
+            'o Codex guarda o login só na memória (cli_auth_credentials_store = "ephemeral")',
+          unknown_store: "o Codex guarda o login de um jeito que o Osuna não conhece",
+          config_unparsable: "não é possível ler o config.toml do Codex",
+          keyring_unavailable: "o Osuna não consegue ler as chaves do sistema nesta plataforma",
+          login_unparsable: "não é possível ler o login salvo",
+          account_unknown: "o Claude Code não registrou qual conta está conectada",
+        },
+        loadFailed: "Não foi possível carregar as contas: {{reason}}",
+        empty:
+          "Ainda não há contas. Quando o {{name}} entrar em uma assinatura, essa conta vira a primeira.",
+        single: "Adicione outra conta para começar o rodízio.",
+        unknownEmail: "Conta desconhecida",
+        badges: { inUse: "Em uso", first: "Primeira" },
+        usage: {
+          reading: "Lendo o uso…",
+          failed: "Não foi possível ler o uso: {{reason}}",
+          reasons: {
+            not_found: "o uso do plano não vê este login",
+            not_read_yet: "ainda não lido",
+          },
+        },
+        riskNotice: {
+          sheetTitle: "Ligar o rodízio de contas para o {{name}}?",
+          confirm: "Entendi, ligar",
+          codexTitle: "O rodízio de contas pode fazer sua conta do ChatGPT ser limitada ou banida",
+          codexBody:
+            'A seção 4 dos termos do Sign in with ChatGPT da OpenAI proíbe facilitar ou incentivar "Creating multiple accounts, splitting usage, rotating accounts, or otherwise bypassing usage limits"; a seção 1 diz "Do not impersonate OpenAI, another application, or another open-source project." O Osuna usa a identidade do Codex ao adicionar contas e renovar logins. Um mantenedor do Codex na OpenAI também disse publicamente que não se deve usar várias contas para contornar os limites de um plano (fala de um funcionário, não dos termos).',
+          codexTermsLink: "Termos do Sign in with ChatGPT",
+          codexMaintainerLink: "As palavras do mantenedor",
+          claudeTitle: "O rodízio de contas pode fazer sua conta do Claude ser limitada ou banida",
+          claudeBody:
+            'A política de uso da Anthropic classifica "create multiple accounts, to avoid detection, circumvent product guardrails" como abuso da plataforma. A página jurídica do Claude Code diz que os limites publicados para Pro e Max pressupõem "ordinary, individual usage", e que "developers may not collect, store, or intermediate Claude.ai credentials or session tokens". O Osuna guarda os logins das suas outras contas. A Anthropic não fala especificamente de rodízio.',
+          claudePolicyLink: "Política de uso",
+          claudeLegalLink: "Página jurídica do Claude Code",
         },
       },
       actions: {

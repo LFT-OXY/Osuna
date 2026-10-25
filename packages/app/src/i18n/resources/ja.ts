@@ -4058,6 +4058,7 @@ export const ja: TranslationResources = {
             apiEndpointsKeepWorking: "API エンドポイントは引き続き動作します。",
             confirm: "オフにする",
             listSeparator: "、",
+            rotationStops: "{{providers}} のアカウントの自動切り替えは停止します。",
           },
         },
       },
@@ -4443,6 +4444,59 @@ export const ja: TranslationResources = {
         antigravity: {
           body: "Google の Antigravity FAQ には、Antigravity CLI（agy）をサードパーティのアプリに組み込んで使うことは一般向けプランのサポート対象外だと書かれています。また、サードパーティのソフトウェアから Antigravity にアクセスすることは利用規約違反であり、アカウントの停止または解約につながる可能性があるとも書かれています。Osuna は agy を通じて Antigravity を動かしています。2026 年 2 月の一連の停止では Gemini CLI と Gemini Code Assist も使えなくなりました。失っても困らないアカウントを使ってください。",
           termsLink: "Antigravity FAQ",
+        },
+      },
+      accounts: {
+        title: "アカウント",
+        rotate: {
+          title: "アカウントの自動切り替え",
+          hint: "切り替えは新しいセッションにだけ適用され、開いているセッションは元のアカウントのままです。",
+          codexHint:
+            "リクエストは Osuna を経由するため、Osuna が動いていないとターミナルの Codex は接続できません。",
+          saveFailed: "アカウントの自動切り替えを変更できません：{{reason}}",
+        },
+        cliSignInsOff:
+          "「CLI のログイン情報を読み取る」がオフのため、アカウントの自動切り替えは停止しています",
+        openPrivacySettings: "設定を開く",
+        loginUnsupported: "Osuna はこの {{name}} のログインを切り替えられません：{{reason}}",
+        unsupportedReasons: {
+          ephemeral:
+            'Codex はログインをメモリにだけ保存しています（cli_auth_credentials_store = "ephemeral"）',
+          unknown_store: "Codex のログインの保存方法を Osuna が認識できません",
+          config_unparsable: "Codex の config.toml を読み取れません",
+          keyring_unavailable: "このシステムでは Osuna がキーチェーンを読み取れません",
+          login_unparsable: "保存されたログインを読み取れません",
+          account_unknown: "Claude Code がどのアカウントでログインしているか記録していません",
+        },
+        loadFailed: "アカウントを読み込めません：{{reason}}",
+        empty:
+          "まだアカウントがありません。{{name}} がサブスクリプションにログインすると、そのアカウントが最初のアカウントになります。",
+        single: "切り替えるにはもう 1 つアカウントを追加してください。",
+        unknownEmail: "不明なアカウント",
+        badges: { inUse: "使用中", first: "優先" },
+        usage: {
+          reading: "使用量を読み取り中…",
+          failed: "使用量を読み取れません：{{reason}}",
+          reasons: {
+            not_found: "プランの使用量からこのログインが見えません",
+            not_read_yet: "まだ読み取っていません",
+          },
+        },
+        riskNotice: {
+          sheetTitle: "{{name}} のアカウントの自動切り替えをオンにしますか？",
+          confirm: "理解しました。オンにする",
+          codexTitle:
+            "アカウントの自動切り替えにより ChatGPT アカウントが制限・停止される可能性があります",
+          codexBody:
+            'OpenAI の Sign in with ChatGPT 規約の第 4 条は、"Creating multiple accounts, splitting usage, rotating accounts, or otherwise bypassing usage limits" を助長・奨励してはならないとし、第 1 条は "Do not impersonate OpenAI, another application, or another open-source project." と定めています。Osuna はアカウントの追加と更新に Codex の身元を使います。OpenAI の Codex メンテナーも、複数のアカウントでプランの上限を回避すべきではないと公言しています（社員の発言であり、規約ではありません）。',
+          codexTermsLink: "Sign in with ChatGPT 規約",
+          codexMaintainerLink: "メンテナーの発言",
+          claudeTitle:
+            "アカウントの自動切り替えにより Claude アカウントが制限・停止される可能性があります",
+          claudeBody:
+            'Anthropic の利用ポリシーは "create multiple accounts, to avoid detection, circumvent product guardrails" をプラットフォームの悪用としています。Claude Code の法的情報ページは、Pro と Max の公表された上限が "ordinary, individual usage" を前提とすること、そして "developers may not collect, store, or intermediate Claude.ai credentials or session tokens" と明記しています。Osuna はほかのアカウントのログインを保存します。Anthropic は切り替えについて特に言及していません。',
+          claudePolicyLink: "利用ポリシー",
+          claudeLegalLink: "Claude Code の法的情報ページ",
         },
       },
       actions: {

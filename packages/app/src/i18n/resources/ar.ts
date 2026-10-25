@@ -3987,6 +3987,7 @@ export const ar: TranslationResources = {
             apiEndpointsKeepWorking: "تواصل نقاط نهاية API العمل.",
             confirm: "إيقاف",
             listSeparator: "، ",
+            rotationStops: "سيتوقف تدوير الحسابات لـ {{providers}}.",
           },
         },
       },
@@ -4366,6 +4367,55 @@ export const ar: TranslationResources = {
         antigravity: {
           body: "تذكر الأسئلة الشائعة لـ Antigravity من Google أن تضمين Antigravity CLI (agy) داخل تطبيقات خارجية غير مدعوم في الخطط الاستهلاكية. وتذكر أيضًا أن الوصول إلى Antigravity عبر برامج خارجية يخالف شروط الخدمة وقد يؤدي إلى تعليق الحساب أو إنهائه. يشغّل Osuna منصة Antigravity عبر agy. وقد حظرت موجة التعليق في فبراير 2026 أيضًا Gemini CLI وGemini Code Assist. استخدم حسابًا يمكنك تحمّل خسارته.",
           termsLink: "الأسئلة الشائعة لـ Antigravity",
+        },
+      },
+      accounts: {
+        title: "الحسابات",
+        rotate: {
+          title: "تدوير الحسابات",
+          hint: "ينطبق التبديل على الجلسات الجديدة فقط؛ تبقى الجلسات المفتوحة على حسابها.",
+          codexHint:
+            "تمر الطلبات عبر Osuna، لذا لا يستطيع Codex في الطرفية الاتصال ما دام Osuna لا يعمل.",
+          saveFailed: "تعذّر تغيير تدوير الحسابات: {{reason}}",
+        },
+        cliSignInsOff: "«قراءة تسجيلات دخول CLI» متوقفة، لذا توقف تدوير الحسابات",
+        openPrivacySettings: "فتح الإعدادات",
+        loginUnsupported: "لا يستطيع Osuna تبديل تسجيل دخول {{name}} هذا: {{reason}}",
+        unsupportedReasons: {
+          ephemeral:
+            'يحفظ Codex تسجيل الدخول في الذاكرة فقط (cli_auth_credentials_store = "ephemeral")',
+          unknown_store: "يحفظ Codex تسجيل الدخول بطريقة لا يعرفها Osuna",
+          config_unparsable: "تعذّرت قراءة ملف config.toml الخاص بـ Codex",
+          keyring_unavailable: "لا يستطيع Osuna قراءة سلسلة مفاتيح النظام على هذه المنصة",
+          login_unparsable: "تعذّرت قراءة تسجيل الدخول المحفوظ",
+          account_unknown: "لم يسجّل Claude Code أي حساب مسجّل الدخول",
+        },
+        loadFailed: "تعذّر تحميل الحسابات: {{reason}}",
+        empty: "لا توجد حسابات بعد. عندما يسجّل {{name}} الدخول باشتراك، يصبح ذلك الحساب الأول.",
+        single: "أضف حسابًا آخر لبدء التدوير.",
+        unknownEmail: "حساب غير معروف",
+        badges: { inUse: "قيد الاستخدام", first: "الأول" },
+        usage: {
+          reading: "جارٍ قراءة الاستخدام…",
+          failed: "تعذّرت قراءة الاستخدام: {{reason}}",
+          reasons: {
+            not_found: "استخدام الخطة لا يرى تسجيل الدخول هذا",
+            not_read_yet: "لم تتم القراءة بعد",
+          },
+        },
+        riskNotice: {
+          sheetTitle: "تشغيل تدوير الحسابات لـ {{name}}؟",
+          confirm: "فهمت، شغّل",
+          codexTitle: "قد يؤدي تدوير الحسابات إلى تقييد حساب ChatGPT أو حظره",
+          codexBody:
+            'يمنع البند 4 من شروط Sign in with ChatGPT من OpenAI تسهيل أو تشجيع "Creating multiple accounts, splitting usage, rotating accounts, or otherwise bypassing usage limits"؛ وينص البند 1 على "Do not impersonate OpenAI, another application, or another open-source project." يستخدم Osuna هوية Codex عند إضافة الحسابات وتجديد تسجيلات الدخول. كما قال أحد مشرفي Codex في OpenAI علنًا إنه لا ينبغي استخدام عدة حسابات للالتفاف على حدود الخطة (هذا قول موظف، وليس من الشروط).',
+          codexTermsLink: "شروط Sign in with ChatGPT",
+          codexMaintainerLink: "كلام المشرف",
+          claudeTitle: "قد يؤدي تدوير الحسابات إلى تقييد حساب Claude أو حظره",
+          claudeBody:
+            'تصنّف سياسة الاستخدام لدى Anthropic "create multiple accounts, to avoid detection, circumvent product guardrails" على أنه إساءة لاستخدام المنصة. وتذكر الصفحة القانونية لـ Claude Code أن الحدود المعلنة لـ Pro وMax تفترض "ordinary, individual usage"، وأن "developers may not collect, store, or intermediate Claude.ai credentials or session tokens". يحتفظ Osuna بتسجيلات دخول حساباتك الأخرى. لا تذكر Anthropic التدوير تحديدًا.',
+          claudePolicyLink: "سياسة الاستخدام",
+          claudeLegalLink: "الصفحة القانونية لـ Claude Code",
         },
       },
       actions: {

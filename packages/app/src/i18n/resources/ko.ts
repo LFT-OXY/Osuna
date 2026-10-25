@@ -4026,6 +4026,7 @@ export const ko: TranslationResources = {
             apiEndpointsKeepWorking: "API 엔드포인트는 계속 작동합니다.",
             confirm: "끄기",
             listSeparator: ", ",
+            rotationStops: "{{providers}}의 계정 자동 전환이 중지됩니다.",
           },
         },
       },
@@ -4409,6 +4410,56 @@ export const ko: TranslationResources = {
         antigravity: {
           body: "Google의 Antigravity FAQ에는 Antigravity CLI(agy)를 서드파티 앱에 넣어 사용하는 것은 소비자 요금제에서 지원되지 않는다고 적혀 있습니다. 또한 서드파티 소프트웨어로 Antigravity에 접근하는 것은 서비스 약관 위반이며 계정 정지 또는 해지로 이어질 수 있다고 적혀 있습니다. Osuna는 agy를 통해 Antigravity를 구동합니다. 2026년 2월의 정지 조치 때는 Gemini CLI와 Gemini Code Assist도 함께 차단되었습니다. 잃어도 괜찮은 계정을 사용하세요.",
           termsLink: "Antigravity FAQ",
+        },
+      },
+      accounts: {
+        title: "계정",
+        rotate: {
+          title: "계정 자동 전환",
+          hint: "전환은 새 세션에만 적용되며, 열려 있는 세션은 원래 계정에 남습니다.",
+          codexHint:
+            "요청이 Osuna를 거치므로 Osuna가 실행 중이 아니면 터미널의 Codex가 연결되지 않습니다.",
+          saveFailed: "계정 자동 전환을 변경할 수 없습니다: {{reason}}",
+        },
+        cliSignInsOff: "“CLI 로그인 읽기”가 꺼져 있어 계정 자동 전환이 중지되었습니다",
+        openPrivacySettings: "설정 열기",
+        loginUnsupported: "Osuna가 이 {{name}} 로그인을 전환할 수 없습니다: {{reason}}",
+        unsupportedReasons: {
+          ephemeral:
+            'Codex가 로그인을 메모리에만 저장합니다(cli_auth_credentials_store = "ephemeral")',
+          unknown_store: "Osuna가 모르는 방식으로 Codex가 로그인을 저장합니다",
+          config_unparsable: "Codex의 config.toml을 읽을 수 없습니다",
+          keyring_unavailable: "이 시스템에서는 Osuna가 키체인을 읽을 수 없습니다",
+          login_unparsable: "저장된 로그인을 읽을 수 없습니다",
+          account_unknown: "Claude Code가 어떤 계정으로 로그인했는지 기록하지 않았습니다",
+        },
+        loadFailed: "계정을 불러올 수 없습니다: {{reason}}",
+        empty:
+          "아직 계정이 없습니다. {{name}}이(가) 구독 계정으로 로그인하면 그 계정이 첫 번째 계정이 됩니다.",
+        single: "전환하려면 계정을 하나 더 추가하세요.",
+        unknownEmail: "알 수 없는 계정",
+        badges: { inUse: "사용 중", first: "우선" },
+        usage: {
+          reading: "사용량을 읽는 중…",
+          failed: "사용량을 읽을 수 없습니다: {{reason}}",
+          reasons: {
+            not_found: "플랜 사용량에서 이 로그인이 보이지 않습니다",
+            not_read_yet: "아직 읽지 않았습니다",
+          },
+        },
+        riskNotice: {
+          sheetTitle: "{{name}}의 계정 자동 전환을 켤까요?",
+          confirm: "이해했습니다, 켜기",
+          codexTitle: "계정 자동 전환으로 ChatGPT 계정이 제한되거나 정지될 수 있습니다",
+          codexBody:
+            'OpenAI의 Sign in with ChatGPT 약관 제4조는 "Creating multiple accounts, splitting usage, rotating accounts, or otherwise bypassing usage limits"을(를) 조장하거나 권장해서는 안 된다고 하며, 제1조는 "Do not impersonate OpenAI, another application, or another open-source project."라고 명시합니다. Osuna는 계정을 추가하고 로그인을 갱신할 때 Codex의 신원을 사용합니다. OpenAI의 Codex 메인테이너도 여러 계정으로 플랜 한도를 우회해서는 안 된다고 공개적으로 말했습니다(직원의 발언이며 약관이 아닙니다).',
+          codexTermsLink: "Sign in with ChatGPT 약관",
+          codexMaintainerLink: "메인테이너의 발언",
+          claudeTitle: "계정 자동 전환으로 Claude 계정이 제한되거나 정지될 수 있습니다",
+          claudeBody:
+            'Anthropic의 이용 정책은 "create multiple accounts, to avoid detection, circumvent product guardrails"을(를) 플랫폼 남용으로 규정합니다. Claude Code 법률 페이지는 Pro와 Max의 공개된 한도가 "ordinary, individual usage"을(를) 전제로 한다고 하며, "developers may not collect, store, or intermediate Claude.ai credentials or session tokens"라고 명시합니다. Osuna는 다른 계정의 로그인을 저장합니다. Anthropic은 전환에 대해 따로 언급하지 않습니다.',
+          claudePolicyLink: "이용 정책",
+          claudeLegalLink: "Claude Code 법률 페이지",
         },
       },
       actions: {

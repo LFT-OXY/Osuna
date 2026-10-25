@@ -3985,6 +3985,7 @@ export const zhCN: TranslationResources = {
             apiEndpointsKeepWorking: "第三方接口照常工作。",
             confirm: "关闭",
             listSeparator: "、",
+            rotationStops: "{{providers}} 的多号自动轮换会停止。",
           },
         },
       },
@@ -4354,6 +4355,50 @@ export const zhCN: TranslationResources = {
         antigravity: {
           body: "Google 的 Antigravity 常见问题写明：把 Antigravity CLI（agy）包进第三方应用使用，不在消费者套餐的支持范围内；用第三方软件访问 Antigravity 违反其服务条款，可能导致账号被暂停或终止。Osuna 正是通过 agy 驱动 Antigravity 的。2026 年 2 月那一轮封号还连带封了 Gemini CLI 和 Gemini Code Assist。请用丢了也不心疼的账号。",
           termsLink: "Antigravity 常见问题",
+        },
+      },
+      accounts: {
+        title: "账号",
+        rotate: {
+          title: "多号自动轮换",
+          hint: "换号只对新会话生效，开着的会话仍在原来的号上。",
+          codexHint: "请求会经过 Osuna，Osuna 没在运行时终端里的 Codex 连不上。",
+          saveFailed: "改不了多号自动轮换：{{reason}}",
+        },
+        cliSignInsOff: "已关闭读取 CLI 登录凭证，多号自动轮换已停止",
+        openPrivacySettings: "打开设置",
+        loginUnsupported: "Osuna 换不了这种 {{name}} 登录：{{reason}}",
+        unsupportedReasons: {
+          ephemeral: 'Codex 只在内存里存登录（cli_auth_credentials_store = "ephemeral"）',
+          unknown_store: "Codex 存登录的方式 Osuna 不认识",
+          config_unparsable: "Codex 的 config.toml 读不懂",
+          keyring_unavailable: "在这个系统上 Osuna 读不了系统钥匙串",
+          login_unparsable: "存着的登录读不懂",
+          account_unknown: "Claude Code 没记下登录的是哪个号",
+        },
+        loadFailed: "读不到账号：{{reason}}",
+        empty: "还没有号。{{name}} 登录订阅号后，那个号就成为第一个号。",
+        single: "再加一个号才会轮换。",
+        unknownEmail: "不知道是哪个号",
+        badges: { inUse: "使用中", first: "第一" },
+        usage: {
+          reading: "正在读取用量…",
+          failed: "读不到用量：{{reason}}",
+          reasons: { not_found: "套餐用量看不到这个登录", not_read_yet: "还没读过" },
+        },
+        riskNotice: {
+          sheetTitle: "为 {{name}} 打开多号自动轮换？",
+          confirm: "我知道了，打开",
+          codexTitle: "多号自动轮换可能导致 ChatGPT 账号被限制或封禁",
+          codexBody:
+            'OpenAI 的 Sign in with ChatGPT 条款第 4 条写明不得促成或鼓励："Creating multiple accounts, splitting usage, rotating accounts, or otherwise bypassing usage limits"；第 1 条写明："Do not impersonate OpenAI, another application, or another open-source project." Osuna 为你加号和续期时用的是 Codex 的身份。OpenAI 的 Codex 维护者也公开说过不该用多个号绕过套餐的限额（这是员工的说法，不是条款）。',
+          codexTermsLink: "Sign in with ChatGPT 条款",
+          codexMaintainerLink: "维护者的原话",
+          claudeTitle: "多号自动轮换可能导致 Claude 账号被限制或封禁",
+          claudeBody:
+            'Anthropic 的使用政策把 "create multiple accounts, to avoid detection, circumvent product guardrails" 列为滥用平台；Claude Code 法律页写明 Pro、Max 公布的额度以 "ordinary, individual usage" 为前提，并写明 "developers may not collect, store, or intermediate Claude.ai credentials or session tokens"。Osuna 会存着你其他号的登录。Anthropic 没有专门写「轮换」。',
+          claudePolicyLink: "使用政策",
+          claudeLegalLink: "Claude Code 法律页",
         },
       },
       actions: {

@@ -175,6 +175,8 @@ const INBOUND_PERMISSION = {
   // 内置模板清单，不含任何 key，和列表同一级。
   "provider.api_endpoint.list_templates.request": "daemon.read",
   "provider.api_endpoint.vendor_status.request": "daemon.read",
+  "provider.account.list.request": "daemon.read",
+  "provider.account.set_rotation.request": "daemon.manage",
   "provider.api_endpoint.read_balance.request": "daemon.read",
   "provider.api_endpoint.set_balance_auto_refresh.request": "daemon.manage",
   // 用表单里的 key 当场查，和测试连接同一级。
@@ -464,6 +466,8 @@ const OUTBOUND_PERMISSION = {
   "provider.api_endpoint.forget_catalog.response": "daemon.manage",
   "provider.api_endpoint.list_templates.response": "daemon.read",
   "provider.api_endpoint.vendor_status.response": "daemon.read",
+  "provider.account.list.response": "daemon.read",
+  "provider.account.set_rotation.response": "daemon.manage",
   "provider.api_endpoint.read_balance.response": "daemon.read",
   "provider.api_endpoint.set_balance_auto_refresh.response": "daemon.manage",
   "provider.api_endpoint.check_balance.response": "daemon.manage",
@@ -539,6 +543,7 @@ const OUTBOUND_PERMISSION = {
   "usage.exchange_rate.get.response": "daemon.read",
   "usage.reset.consume.response": "daemon.manage",
   "usage.pricing.updated": "daemon.read",
+  "provider.account.changed": "daemon.read",
   "usage.updated": "daemon.read",
   validate_branch_response: "workspace.read",
   voice_input_state: "workspace.write",

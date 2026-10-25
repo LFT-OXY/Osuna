@@ -4109,6 +4109,7 @@ export const fr: TranslationResources = {
             apiEndpointsKeepWorking: "Les endpoints d'API continuent de fonctionner.",
             confirm: "Désactiver",
             listSeparator: ", ",
+            rotationStops: "La rotation des comptes pour {{providers}} s'arrêtera.",
           },
         },
       },
@@ -4502,6 +4503,57 @@ export const fr: TranslationResources = {
         antigravity: {
           body: "La FAQ Antigravity de Google indique qu'intégrer la CLI Antigravity (agy) dans des applications tierces n'est pas pris en charge avec les forfaits grand public. Elle indique aussi qu'accéder à Antigravity via un logiciel tiers enfreint ses Conditions d'utilisation et peut entraîner la suspension ou la résiliation du compte. Osuna pilote Antigravity via agy. La vague de suspensions de février 2026 a aussi bloqué Gemini CLI et Gemini Code Assist. Utilisez un compte que vous pouvez vous permettre de perdre.",
           termsLink: "FAQ Antigravity",
+        },
+      },
+      accounts: {
+        title: "Comptes",
+        rotate: {
+          title: "Rotation des comptes",
+          hint: "Le changement ne s'applique qu'aux nouvelles sessions ; les sessions ouvertes restent sur leur compte.",
+          codexHint:
+            "Les requêtes passent par Osuna : tant qu'Osuna ne tourne pas, Codex dans un terminal ne peut pas se connecter.",
+          saveFailed: "Impossible de modifier la rotation des comptes : {{reason}}",
+        },
+        cliSignInsOff:
+          "« Lire les connexions des CLI » est désactivé, la rotation des comptes est donc arrêtée",
+        openPrivacySettings: "Ouvrir les réglages",
+        loginUnsupported: "Osuna ne peut pas changer cette connexion {{name}} : {{reason}}",
+        unsupportedReasons: {
+          ephemeral:
+            'Codex ne garde sa connexion qu\'en mémoire (cli_auth_credentials_store = "ephemeral")',
+          unknown_store: "Codex stocke sa connexion d'une façon qu'Osuna ne connaît pas",
+          config_unparsable: "le config.toml de Codex est illisible",
+          keyring_unavailable: "Osuna ne peut pas lire le trousseau système sur cette plateforme",
+          login_unparsable: "la connexion enregistrée est illisible",
+          account_unknown: "Claude Code n'a pas noté quel compte est connecté",
+        },
+        loadFailed: "Impossible de charger les comptes : {{reason}}",
+        empty:
+          "Aucun compte pour l'instant. Dès que {{name}} est connecté à un abonnement, ce compte devient le premier.",
+        single: "Ajoutez un autre compte pour lancer la rotation.",
+        unknownEmail: "Compte inconnu",
+        badges: { inUse: "Utilisé", first: "Premier" },
+        usage: {
+          reading: "Lecture de l'utilisation…",
+          failed: "Impossible de lire l'utilisation : {{reason}}",
+          reasons: {
+            not_found: "l'utilisation du forfait ne voit pas cette connexion",
+            not_read_yet: "pas encore lue",
+          },
+        },
+        riskNotice: {
+          sheetTitle: "Activer la rotation des comptes pour {{name}} ?",
+          confirm: "J'ai compris, activer",
+          codexTitle: "La rotation des comptes peut faire limiter ou bannir votre compte ChatGPT",
+          codexBody:
+            "La section 4 des conditions Sign in with ChatGPT d'OpenAI interdit de faciliter ou d'encourager \"Creating multiple accounts, splitting usage, rotating accounts, or otherwise bypassing usage limits\" ; la section 1 indique \"Do not impersonate OpenAI, another application, or another open-source project.\" Osuna utilise l'identité de Codex pour ajouter des comptes et renouveler les connexions. Un mainteneur de Codex chez OpenAI a aussi dit publiquement qu'il ne faut pas utiliser plusieurs comptes pour contourner les limites d'un forfait (propos d'un employé, pas les conditions).",
+          codexTermsLink: "Conditions Sign in with ChatGPT",
+          codexMaintainerLink: "Les propos du mainteneur",
+          claudeTitle: "La rotation des comptes peut faire limiter ou bannir votre compte Claude",
+          claudeBody:
+            'La politique d\'utilisation d\'Anthropic range "create multiple accounts, to avoid detection, circumvent product guardrails" parmi les abus de la plateforme. La page juridique de Claude Code indique que les limites publiées pour Pro et Max supposent "ordinary, individual usage", et que "developers may not collect, store, or intermediate Claude.ai credentials or session tokens". Osuna garde les connexions de vos autres comptes. Anthropic ne parle pas spécifiquement de rotation.',
+          claudePolicyLink: "Politique d'utilisation",
+          claudeLegalLink: "Page juridique de Claude Code",
         },
       },
       actions: {

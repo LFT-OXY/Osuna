@@ -4091,6 +4091,7 @@ export const es: TranslationResources = {
             apiEndpointsKeepWorking: "Los endpoints de API siguen funcionando.",
             confirm: "Desactivar",
             listSeparator: ", ",
+            rotationStops: "Rotar cuentas para {{providers}} se detendrá.",
           },
         },
       },
@@ -4482,6 +4483,57 @@ export const es: TranslationResources = {
         antigravity: {
           body: "Las preguntas frecuentes de Antigravity de Google indican que integrar la CLI de Antigravity (agy) en aplicaciones de terceros no está admitido en los planes de consumo. También indican que usar software de terceros para acceder a Antigravity infringe sus Condiciones del Servicio y puede llevar a la suspensión o cancelación de la cuenta. Osuna controla Antigravity a través de agy. La ola de suspensiones de febrero de 2026 también bloqueó Gemini CLI y Gemini Code Assist. Usa una cuenta que puedas permitirte perder.",
           termsLink: "Preguntas frecuentes de Antigravity",
+        },
+      },
+      accounts: {
+        title: "Cuentas",
+        rotate: {
+          title: "Rotar cuentas",
+          hint: "El cambio solo se aplica a sesiones nuevas; las sesiones abiertas siguen en su cuenta.",
+          codexHint:
+            "Las solicitudes pasan por Osuna, así que mientras Osuna no esté en marcha, Codex en una terminal no podrá conectarse.",
+          saveFailed: "No se pudo cambiar Rotar cuentas: {{reason}}",
+        },
+        cliSignInsOff:
+          "«Leer inicios de sesión de CLI» está desactivado, así que Rotar cuentas se ha detenido",
+        openPrivacySettings: "Abrir ajustes",
+        loginUnsupported: "Osuna no puede cambiar este inicio de sesión de {{name}}: {{reason}}",
+        unsupportedReasons: {
+          ephemeral:
+            'Codex guarda su inicio de sesión solo en memoria (cli_auth_credentials_store = "ephemeral")',
+          unknown_store: "Codex guarda su inicio de sesión de una forma que Osuna no conoce",
+          config_unparsable: "no se puede leer el config.toml de Codex",
+          keyring_unavailable: "Osuna no puede leer el llavero del sistema en esta plataforma",
+          login_unparsable: "no se puede leer el inicio de sesión guardado",
+          account_unknown: "Claude Code no ha registrado qué cuenta inició sesión",
+        },
+        loadFailed: "No se pudieron cargar las cuentas: {{reason}}",
+        empty:
+          "Aún no hay cuentas. Cuando {{name}} inicie sesión con una suscripción, esa cuenta será la primera.",
+        single: "Añade otra cuenta para empezar a rotar.",
+        unknownEmail: "Cuenta desconocida",
+        badges: { inUse: "En uso", first: "Primera" },
+        usage: {
+          reading: "Leyendo el uso…",
+          failed: "No se pudo leer el uso: {{reason}}",
+          reasons: {
+            not_found: "el uso del plan no ve este inicio de sesión",
+            not_read_yet: "aún no leído",
+          },
+        },
+        riskNotice: {
+          sheetTitle: "¿Activar Rotar cuentas para {{name}}?",
+          confirm: "Entendido, activar",
+          codexTitle: "Rotar cuentas puede hacer que tu cuenta de ChatGPT sea limitada o bloqueada",
+          codexBody:
+            'La sección 4 de los términos de Sign in with ChatGPT de OpenAI prohíbe facilitar o fomentar "Creating multiple accounts, splitting usage, rotating accounts, or otherwise bypassing usage limits"; la sección 1 dice "Do not impersonate OpenAI, another application, or another open-source project." Osuna usa la identidad de Codex al añadir cuentas y renovar inicios de sesión. Un mantenedor de Codex en OpenAI también ha dicho públicamente que no se deben usar varias cuentas para eludir los límites de un plan (es la opinión de un empleado, no los términos).',
+          codexTermsLink: "Términos de Sign in with ChatGPT",
+          codexMaintainerLink: "Las palabras del mantenedor",
+          claudeTitle: "Rotar cuentas puede hacer que tu cuenta de Claude sea limitada o bloqueada",
+          claudeBody:
+            'La política de uso de Anthropic considera "create multiple accounts, to avoid detection, circumvent product guardrails" un abuso de la plataforma. La página legal de Claude Code dice que los límites publicados para Pro y Max suponen "ordinary, individual usage", y que "developers may not collect, store, or intermediate Claude.ai credentials or session tokens". Osuna guarda los inicios de sesión de tus otras cuentas. Anthropic no menciona la rotación en concreto.',
+          claudePolicyLink: "Política de uso",
+          claudeLegalLink: "Página legal de Claude Code",
         },
       },
       actions: {

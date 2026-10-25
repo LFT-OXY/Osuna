@@ -2,6 +2,8 @@ import * as Clipboard from "expo-clipboard";
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ApiEndpointsView } from "@/api-endpoints/view";
+import type { AccountRotationProvider } from "@getpaseo/protocol/provider-account/rpc-schemas";
+import { ProviderAccountsView } from "@/provider-accounts/view";
 import {
   resolveProviderDiscoveredModels,
   type ProviderDiscoveredModelsCache,
@@ -236,6 +238,17 @@ export function ProviderDetail({
     [provider, serverId],
   );
 
+  const renderAccounts = useCallback(
+    (accountsProvider: AccountRotationProvider, providerLabel: string) => (
+      <ProviderAccountsView
+        serverId={serverId}
+        provider={accountsProvider}
+        providerLabel={providerLabel}
+      />
+    ),
+    [serverId],
+  );
+
   const renderVersion = useCallback(
     ({ installedVersion, hasInstallSectionBelow }: ProviderVersionSlotContext) => {
       const latestVersion = selectNewerVersion({
@@ -285,6 +298,7 @@ export function ProviderDetail({
       onAddCustomModel={handleAddCustomModel}
       renderInstallGuide={renderInstallGuide}
       renderApiEndpoints={renderApiEndpoints}
+      renderAccounts={renderAccounts}
       renderVersion={renderVersion}
     />
   );
