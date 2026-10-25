@@ -2584,6 +2584,7 @@ export const en = {
         info: "Osuna reads the settings of CC Switch, Claude Code, Codex, Alma and OpenCode on this host and changes nothing in them. Keys stay on the host; only the entries you pick are added.",
         reading: "Reading other apps…",
         scanFailed: "Couldn't read other apps: {{message}}",
+        openCodeNotRead: "“Read CLI sign-ins” is off, so OpenCode wasn't read",
         retry: "Try again",
         selectAll: "All",
         selectAllLabel: "Pick every entry from {{app}}",

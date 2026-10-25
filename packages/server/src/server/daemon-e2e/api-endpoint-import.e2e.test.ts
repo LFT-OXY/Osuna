@@ -389,6 +389,42 @@ describe("import from other apps", () => {
     expect(JSON.stringify(scan)).not.toContain("127.0.0.1");
   });
 
+  test("while Read CLI sign-ins is off, OpenCode's auth.json isn't read and the scan says so; the other apps import as usual", async () => {
+    const { client } = await start({ endpoints: [], keys: {} });
+    const openCode = itemsOf(
+      await client.apiEndpointImportScan({ includeOpenCode: true }),
+      "opencode",
+    ).find((item) => item.skip === null);
+    if (!openCode) throw new Error("Expected OpenCode's DeepSeek key");
+
+    await client.patchDaemonConfig({ readCliSignIns: false });
+    const off = await client.apiEndpointImportScan({ includeOpenCode: true });
+    expect(off.error).toBeNull();
+    expect(off.cliSignInsOff).toBe(true);
+    expect(off.sources.map((source) => [source.id, source.found, source.error])).toEqual([
+      ["alma", true, null],
+      ["cc-switch", true, null],
+      ["claude-code", true, null],
+      ["codex", true, null],
+    ]);
+    // 导入时重读来源也不碰 OpenCode：开着时扫到的那条对不上了。
+    const fromOpenCode = await client.apiEndpointImport([
+      { fingerprint: openCode.fingerprint, action: "add" },
+    ]);
+    expect(fromOpenCode).toMatchObject({ imported: [], error: { code: "import_gone" } });
+    const ccRelay = itemsOf(off, "cc-switch")[0];
+    const fromCcSwitch = await client.apiEndpointImport([
+      { fingerprint: ccRelay!.fingerprint, action: "add" },
+    ]);
+    expect(fromCcSwitch.error).toBeNull();
+    expect(fromCcSwitch.imported.map((entry) => entry.name)).toEqual(["CC Relay"]);
+
+    await client.patchDaemonConfig({ readCliSignIns: true });
+    const on = await client.apiEndpointImportScan({ includeOpenCode: true });
+    expect(on.cliSignInsOff).toBeUndefined();
+    expect(itemsOf(on, "opencode").map((item) => item.fingerprint)).toContain(openCode.fingerprint);
+  });
+
   test("add, replace and rename: a replaced endpoint keeps its id and its place in the order", async () => {
     const { client } = await start({
       endpoints: [

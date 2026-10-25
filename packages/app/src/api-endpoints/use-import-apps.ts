@@ -18,7 +18,13 @@ export type ImportScanState =
   | { status: "loading" }
   | { status: "error"; message: string }
   // updatedAt：这份扫描结果的时刻，变了就重新定默认选择。
-  | { status: "ready"; sources: ApiEndpointImportSource[]; updatedAt: number };
+  // openCodeNotRead：「读取 CLI 登录凭证」关着，主机没读 OpenCode。
+  | {
+      status: "ready";
+      sources: ApiEndpointImportSource[];
+      openCodeNotRead: boolean;
+      updatedAt: number;
+    };
 
 // failedFingerprint：出错的那一条（窗口在它下面说原因）；整个请求失败时为 null。
 export type ImportResult =
@@ -53,7 +59,7 @@ export function useImportApps({ serverId }: { serverId: string }): {
       if (!client) throw new Error(t("workspace.terminal.hostDisconnected"));
       const response = await client.apiEndpointImportScan({ includeOpenCode: true });
       if (response.error) throw new Error(importErrorText(t, response.error));
-      return response.sources;
+      return { sources: response.sources, openCodeNotRead: response.cliSignInsOff === true };
     },
   });
   const retryScan = useCallback(() => void query.refetch(), [query]);
@@ -103,7 +109,7 @@ export function useImportApps({ serverId }: { serverId: string }): {
     [client, query, queryClient, serverId, t, toast],
   );
   let scan: ImportScanState = { status: "loading" };
-  if (query.data) scan = { status: "ready", sources: query.data, updatedAt: query.dataUpdatedAt };
+  if (query.data) scan = { status: "ready", ...query.data, updatedAt: query.dataUpdatedAt };
   else if (query.error) scan = { status: "error", message: query.error.message };
   return { scan, retryScan, importPicked };
 }

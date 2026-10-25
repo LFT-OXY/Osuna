@@ -2555,6 +2555,7 @@ export const ru: TranslationResources = {
         info: "Osuna читает настройки CC Switch, Claude Code, Codex, Alma и OpenCode на этом хосте и ничего в них не меняет. Ключи остаются на хосте; добавляются только выбранные записи.",
         reading: "Чтение других приложений…",
         scanFailed: "Не удалось прочитать другие приложения: {{message}}",
+        openCodeNotRead: "«Читать входы CLI» выключено, поэтому OpenCode не прочитан",
         retry: "Повторить",
         selectAll: "Все",
         selectAllLabel: "Выбрать все записи из {{app}}",

@@ -2521,6 +2521,7 @@ export const ar: TranslationResources = {
         info: "يقرأ Osuna إعدادات CC Switch وClaude Code وCodex وAlma وOpenCode على هذا المضيف دون أن يغيّر فيها شيئًا. تبقى المفاتيح على المضيف، ولا يُضاف إلا ما تختاره.",
         reading: "جارٍ قراءة التطبيقات الأخرى…",
         scanFailed: "تعذّرت قراءة التطبيقات الأخرى: {{message}}",
+        openCodeNotRead: "«قراءة تسجيلات دخول CLI» متوقفة، لذلك لم تُقرأ OpenCode",
         retry: "إعادة المحاولة",
         selectAll: "الكل",
         selectAllLabel: "اختيار كل عناصر {{app}}",

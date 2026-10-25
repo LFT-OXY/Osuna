@@ -36,6 +36,7 @@ import {
   selectModelRow,
 } from "../support/helpers/agent-profiles";
 import { gotoAppShell, openSettings } from "../support/helpers/app";
+import { setReadCliSignInsOnDaemon } from "../support/helpers/host-privacy";
 import { gotoWorkspace } from "../support/helpers/launcher";
 import { expectSavedSelection } from "../support/helpers/model-memory";
 import { openGlobalNewWorkspaceComposer } from "../support/helpers/new-workspace";
@@ -6391,6 +6392,32 @@ test.describe("Import from other apps", () => {
     await expect(list).toContainText("Team Relay");
     await expect(list).toContainText("My Codex Relay");
     await expect(list).toContainText("My Relay");
+  });
+
+  test("with Read CLI sign-ins off, the dialog says OpenCode wasn't read and lists the other apps", async ({
+    page,
+  }) => {
+    await writeImportSources({ openCodeKey: true });
+    await setReadCliSignInsOnDaemon(false);
+    try {
+      await openApiEndpointsPage(page);
+      await page.getByTestId("api-endpoints-import-button").click();
+      const note = importSheet(page).getByTestId("api-endpoint-import-opencode-not-read");
+      await expect(note).toHaveText("“Read CLI sign-ins” is off, so OpenCode wasn't read");
+      await expect(importItem(page, "claude/team")).toContainText("Team Relay");
+      await expect(importItem(page, "mine")).toContainText("My Relay");
+      await expect(
+        importSheet(page).getByTestId("api-endpoint-import-source-opencode"),
+      ).toHaveCount(0);
+      // 说明在来源列表上方。
+      const noteTop = await note.evaluate((node) => node.getBoundingClientRect().top);
+      const firstSourceTop = await importSheet(page)
+        .getByTestId("api-endpoint-import-source-alma")
+        .evaluate((node) => node.getBoundingClientRect().top);
+      expect(noteTop).toBeLessThan(firstSourceTop);
+    } finally {
+      await setReadCliSignInsOnDaemon(true);
+    }
   });
 
   test("a Gemini CLI entry at a relay comes in on its Gemini base URL", async ({ page }) => {

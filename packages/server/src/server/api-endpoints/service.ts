@@ -591,6 +591,7 @@ import {
   SUB2API_BALANCE_QUERIES,
 } from "@getpaseo/protocol/api-endpoint/balance-settings";
 import { endpointKnowsModel, settleModelSettings } from "./model-settings.js";
+import type { CliSignInAccess } from "../cli-sign-ins.js";
 import {
   cleanAutoPickRules,
   followsList,
@@ -857,6 +858,8 @@ export interface ApiEndpointServiceOptions {
   retiredModels: RetiredModels;
   // 中转站记下的每个提供方最近一次收到请求的时刻；列表据此判断「被绕过」。
   sightings: GatewaySightings;
+  // 「读取 CLI 登录凭证」：关着时不问 Codex 怎么登录，导入不读 OpenCode 的 auth.json。
+  cliSignIns: CliSignInAccess;
   // 读 CLI 自己的记录（history.jsonl、Codex 的日志库）；缺省读 CLI 目录下的真实文件，测试指到临时目录或换成假的。
   readCliUse?: ReadCliUse;
   // 定位 CLI 配置文件用；缺省取 daemon 自己的环境，测试注入临时目录。
@@ -1223,6 +1226,7 @@ export class ApiEndpointService {
   // 每家最近一次成功的读数，存在磁盘上：暂时查不到时回它（balance-last.ts）。
   private readonly lastBalances: LastBalanceReadings;
   private readonly readCodexSignIn: ReadCodexSignIn;
+  private readonly cliSignIns: CliSignInAccess;
   // 最近一次判断出的 Codex 登录方式；还没判断过、或一直判断不出时为 null，按接管记录现在的接法。
   private codexSignIn: CodexSignIn | null = null;
   private codexSignInCheck: Promise<void> | null = null;
@@ -1323,6 +1327,7 @@ export class ApiEndpointService {
     this.fetchSite = options.fetchSite ?? defaultFetchSite({ userAgent });
     this.reachesUnasked = options.reachesUnasked ?? reachesAnyAddress;
     this.readCodexSignIn = options.readCodexSignIn ?? defaultCodexSignInReader(options);
+    this.cliSignIns = options.cliSignIns;
     const isModelsDevAutoUpdate = options.isModelsDevAutoUpdate ?? (() => false);
     this.isAutoUpdate = isModelsDevAutoUpdate;
     this.importSourcePaths = options.importSourcePaths;
@@ -4397,17 +4402,24 @@ export class ApiEndpointService {
 
   /**
    * 本机别的软件里的接口配置，对照已有的接口（从别的软件导入，ADR 0013）。只读；key 只给打码的。
-   * includeOpenCode 为 false 时不碰 OpenCode 的 auth.json。
+   * includeOpenCode 为 false、或「读取 CLI 登录凭证」关着时不碰 OpenCode 的 auth.json；
+   * 后一种回 cliSignInsOff，窗口据此说 OpenCode 没读。
    */
-  scanImports(input: { includeOpenCode: boolean }): ApiEndpointImportSource[] {
-    const settled = this.settledImports(input);
+  scanImports(input: { includeOpenCode: boolean }): {
+    sources: ApiEndpointImportSource[];
+    cliSignInsOff: boolean;
+  } {
+    const cliSignInsOff = input.includeOpenCode && !this.cliSignIns.allowed();
+    const settled = this.settledImports({
+      includeOpenCode: input.includeOpenCode && !cliSignInsOff,
+    });
     // 刚读过的比发现提示存着的新：提示照它算（不含 OpenCode），一分钟从这一刻重新算。
     const withoutOpenCode = settled.filter(({ source }) => source.id !== "opencode");
     this.discoveryRead = {
       at: this.now().getTime(),
       candidates: offeredCandidates(withoutOpenCode),
     };
-    return settled.map(({ source, entries }) => ({
+    const sources = settled.map(({ source, entries }) => ({
       id: source.id,
       name: source.name,
       path: this.homeRelative(source.path),
@@ -4415,6 +4427,7 @@ export class ApiEndpointService {
       error: source.error,
       items: entries.map(wireImportItem),
     }));
+    return { sources, cliSignInsOff };
   }
 
   /**
@@ -4435,7 +4448,7 @@ export class ApiEndpointService {
   }
 
   private async importPicked(picks: readonly ApiEndpointImportPick[]): Promise<ImportOutcome> {
-    const entries = this.settledImports({ includeOpenCode: true }).flatMap(
+    const entries = this.settledImports({ includeOpenCode: this.cliSignIns.allowed() }).flatMap(
       (source) => source.entries,
     );
     const imported: ApiEndpointNameRef[] = [];
@@ -5572,9 +5585,10 @@ export class ApiEndpointService {
 
   /**
    * 问一次 Codex 是怎么登录的；同一时间只问一次。判断不出（没装 Codex、超时、回答认不出）就记日志、
-   * 保持上次的结果，从没判断出时按接管记录现在的接法。
+   * 保持上次的结果，从没判断出时按接管记录现在的接法。「读取 CLI 登录凭证」关着时不问，同判断不出。
    */
   private checkCodexSignIn(): Promise<void> {
+    if (!this.cliSignIns.allowed()) return Promise.resolve();
     this.codexSignInCheck ??= this.readSignInOnce().finally(() => {
       this.codexSignInCheck = null;
     });
@@ -5585,6 +5599,8 @@ export class ApiEndpointService {
     try {
       const codexHome = path.dirname(this.resolveCodexConfigPath());
       const signIn = await this.readCodexSignIn({ codexHome });
+      // 问的途中关掉了开关：这次的回答不用。
+      if (!this.cliSignIns.allowed()) return;
       if (signIn !== this.codexSignIn) this.logger.info({ signIn }, "Codex sign-in read");
       this.codexSignIn = signIn;
     } catch (error) {

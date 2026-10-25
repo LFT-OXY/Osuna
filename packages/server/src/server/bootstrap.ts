@@ -1060,6 +1060,7 @@ export async function createPaseoDaemon(
     cooldowns: apiEndpointCooldowns,
     retiredModels: apiEndpointRetiredModels,
     sightings: apiEndpointSightings,
+    cliSignIns,
     daemonVersion,
     // 估算成本读时现算：倍率一改，用量页、会话列表与每轮花费都要重读（同改价格表）。
     onPriceMultipliersChanged: () => {

@@ -2543,6 +2543,8 @@ export const ja: TranslationResources = {
         info: "Osuna はこのホスト上の CC Switch、Claude Code、Codex、Alma、OpenCode の設定を読むだけで、何も変更しません。キーはホストに残り、選んだ項目だけが追加されます。",
         reading: "ほかのアプリを読み込み中…",
         scanFailed: "ほかのアプリを読み込めませんでした: {{message}}",
+        openCodeNotRead:
+          "「CLI のサインイン情報を読む」がオフのため、OpenCode は読み込んでいません",
         retry: "再試行",
         selectAll: "すべて",
         selectAllLabel: "{{app}} の項目をすべて選択",

@@ -2534,6 +2534,7 @@ export const ko: TranslationResources = {
         info: "Osuna는 이 호스트에 있는 CC Switch, Claude Code, Codex, Alma, OpenCode의 설정을 읽기만 하고 아무것도 바꾸지 않습니다. 키는 호스트에 남고, 선택한 항목만 추가됩니다.",
         reading: "다른 앱을 읽는 중…",
         scanFailed: "다른 앱을 읽지 못했습니다: {{message}}",
+        openCodeNotRead: "'CLI 로그인 정보 읽기'가 꺼져 있어 OpenCode는 읽지 않았습니다",
         retry: "다시 시도",
         selectAll: "전체",
         selectAllLabel: "{{app}}의 모든 항목 선택",

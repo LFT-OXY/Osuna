@@ -2547,6 +2547,7 @@ export const zhCN: TranslationResources = {
         info: "Osuna 只读这台主机上 CC Switch、Claude Code、Codex、Alma 和 OpenCode 的设置，不改动它们。key 留在主机上，只添加你选中的条目。",
         reading: "正在读取别的软件…",
         scanFailed: "读取别的软件失败：{{message}}",
+        openCodeNotRead: "已关闭读取 CLI 登录凭证，OpenCode 没读",
         retry: "重试",
         selectAll: "全选",
         selectAllLabel: "选中 {{app}} 里的全部条目",

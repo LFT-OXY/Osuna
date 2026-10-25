@@ -170,6 +170,11 @@ export function ImportAppsSheet({
       ) : null}
       {sources ? (
         <View style={styles.body}>
+          {scan.status === "ready" && scan.openCodeNotRead ? (
+            <Text color="foregroundMuted" testID="api-endpoint-import-opencode-not-read">
+              {t("settings.apiEndpoints.import.openCodeNotRead")}
+            </Text>
+          ) : null}
           {sources.map((source) => (
             <ImportSourceSection
               key={source.id}

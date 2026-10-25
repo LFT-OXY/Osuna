@@ -2573,6 +2573,8 @@ export const es: TranslationResources = {
         info: "Osuna lee la configuración de CC Switch, Claude Code, Codex, Alma y OpenCode en este host y no cambia nada en ellas. Las claves se quedan en el host; solo se añaden las entradas que elijas.",
         reading: "Leyendo otras apps…",
         scanFailed: "No se pudieron leer otras apps: {{message}}",
+        openCodeNotRead:
+          "«Leer inicios de sesión de las CLI» está desactivado, así que OpenCode no se leyó",
         retry: "Reintentar",
         selectAll: "Todo",
         selectAllLabel: "Elegir todas las entradas de {{app}}",
