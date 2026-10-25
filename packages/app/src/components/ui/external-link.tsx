@@ -1,9 +1,9 @@
-import { useCallback, type ReactNode } from "react";
+import React, { useCallback, type ReactNode } from "react";
 import { Pressable, Text } from "react-native";
 import { ArrowUpRight } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type { Theme } from "@/styles/theme";
+import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { openExternalUrl } from "@/utils/open-external-url";
 
 export interface ExternalLinkProps {
@@ -14,6 +14,8 @@ export interface ExternalLinkProps {
   tooltip?: ReactNode;
   testID?: string;
   accessibilityLabel?: string;
+  // 放进正文里时用 "base"，与所在段落同字号；默认 "sm" 是行尾的小链接。
+  textSize?: "sm" | "base";
 }
 
 /**
@@ -29,6 +31,7 @@ export function ExternalLink({
   tooltip,
   testID,
   accessibilityLabel,
+  textSize = "sm",
 }: ExternalLinkProps) {
   const handlePress = useCallback(() => {
     void openExternalUrl(href).catch(onError ?? console.error);
@@ -43,8 +46,11 @@ export function ExternalLink({
       testID={testID}
       style={styles.trigger}
     >
-      <Text style={styles.label}>{children ?? label}</Text>
-      <ThemedArrowUpRight size={12} uniProps={iconColor} />
+      <Text style={textSize === "base" ? styles.labelBase : styles.label}>{children ?? label}</Text>
+      <ThemedArrowUpRight
+        size={textSize === "base" ? ICON_SIZE.sm : ICON_SIZE.xs}
+        uniProps={iconColor}
+      />
     </Pressable>
   );
 
@@ -74,6 +80,10 @@ const styles = StyleSheet.create((theme) => ({
   label: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
+  },
+  labelBase: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.base,
   },
   tooltipText: {
     color: theme.colors.foreground,

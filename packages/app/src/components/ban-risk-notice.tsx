@@ -1,3 +1,4 @@
+import React from "react";
 import { Alert } from "@/components/ui/alert";
 import { ExternalLink } from "@/components/ui/external-link";
 
@@ -17,7 +18,7 @@ export interface BanRiskNoticeProps {
 export function BanRiskNotice({ title, body, termsLabel, termsUrl, testID }: BanRiskNoticeProps) {
   return (
     <Alert size="sm" variant="warning" title={title} description={body} testID={testID}>
-      <ExternalLink href={termsUrl} label={termsLabel} />
+      <ExternalLink href={termsUrl} label={termsLabel} textSize="base" />
     </Alert>
   );
 }
