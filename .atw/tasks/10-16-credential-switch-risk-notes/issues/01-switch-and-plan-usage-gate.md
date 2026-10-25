@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] daemon 配置新增主机级布尔字段（规格里的 `readCliSignIns`），缺省为开；读写走现有 daemon 配置 RPC，读要 `daemon.read`、改要 `daemon.manage`。字段可选，旧客户端不受影响。
 - [ ] daemon 内只有一处回答「现在能不能读 CLI 登录」，后续工单的闸门都问它（04 的环境变量也在这里合进去）。

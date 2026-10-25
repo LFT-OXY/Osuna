@@ -2194,3 +2194,51 @@ await fetch(`${RESETS_URL}/consume`, { method: "POST", body: "{}" });
 const soonest = cards[0]; // 自己点名最早过期的那张；清单读不到就一张都不用
 body: JSON.stringify({ credit_id: soonest.id, redeem_request_id: randomUUID() }),
 ```
+
+## Scenario: a host switch that stops every CLI-login read (credential-switch ticket 01, `readCliSignIns`)
+
+### 1. Scope / Trigger
+- A host-level `config.json` switch decides whether the daemon may read the logins CLIs keep for themselves. Every read path (plan usage sources now; Codex sign-in detection, import, env override in later tickets) must ask one place.
+
+### 2. Signatures
+- `CliSignInAccess` (`packages/server/src/server/cli-sign-ins.ts`): `allowed(): boolean`, `onChange(listener: (allowed: boolean) => void)`. Built once in bootstrap and injected; `PluginServiceDependencies.cliSignIns` is required.
+- `new UsageSourceRegistry(options: UsageSourceRegistryOptions)` — `{ now?, ttlMs?, logger?, agents?, deadlineMs?, cliSignIns? }`; `forget(): void`.
+- Feature flag: `server_info.features.readCliSignIns`.
+
+### 3. Contracts
+- Config: `readCliSignIns?: boolean`, absent = on; read needs `daemon.read`, write `daemon.manage`.
+- `usage.list_reports.response`: off → `{ requestId, error: null, cliSignInsOff: true }`, no reports streamed. `provider.usage.list`: off → empty, no new field. `usage.reset.consume`: off → `error` = `CliSignInsOffError.userMessage`.
+- The app hides the Privacy section when the feature flag is absent (COMPAT-tagged), no fallback.
+
+### 4. Validation & Error Matrix
+| Condition | Result |
+| --- | --- |
+| switch off | no source `discover` / `fetch` / `consumeReset` is called, built-in or installed |
+| switch turned off | `forget()` drops known accounts, report cache, answering-login records; nothing written to disk |
+| read in flight when turned off | its result is dropped on return (`generation` changed), not cached |
+| switch back on | next list discovers and fetches again, no restart |
+| API endpoint balance | unaffected |
+
+### 5. Good/Base/Bad Cases
+- Good: off → both list RPCs empty, reset refused with the reason, balance still reads. Base: field absent in config → on. Bad: a second `new CliSignInAccess(configStore)` built as a fallback somewhere — two answers that can disagree once the env override (ticket 04) lands.
+
+### 6. Tests Required
+- `plugins/index.posix.test.ts`: fixture built-in + directory plugin, off → neither called, both RPCs empty, reset refused, cache dropped, on again → read.
+- `usage-sources/index.test.ts`: a read started before `forget()` is not cached.
+- `session/usage/usage-session.test.ts`: off → no list call, response carries `cliSignInsOff`.
+- `e2e/browser/settings-host-privacy.spec.ts`: order, toggle, save-failure rollback with reason, read-only locked, old daemon hides the section.
+
+### 7. Wrong vs Correct
+#### Wrong
+```ts
+await runtime.listUsageReports(...);
+// 列完再读闸门：中途切换会让列表和标记互相矛盾
+payload: { requestId, error: null, ...(runtime.readsCliSignIns() ? {} : { cliSignInsOff: true }) }
+```
+#### Correct
+```ts
+if (!runtime.readsCliSignIns()) {
+  emit({ type: "usage.list_reports.response", payload: { requestId, error: null, cliSignInsOff: true } });
+  return;
+}
+```
