@@ -1,0 +1,17 @@
+{"file": ".atw/tasks/10-16-credential-switch-risk-notes/research/decisions.md", "reason": "两轮访谈 Q1–Q15 的决定、访谈前核实的读登录位置与 magpie 出处，判断实现是否照决定、是否越界"}
+{"file": ".atw/tasks/10-16-magpie-osuna-gaps/prd.md", "reason": "总任务的跨子任务规矩：身份如实、协议、登录相关测试约束、子任务 9 依赖本任务的开关"}
+{"file": ".atw/tasks/10-16-magpie-osuna-gaps/research/subscription-ban-risk.md", "reason": "Antigravity 风险提示文字的原文出处 [W48]、[W45]"}
+{"file": "docs/adr/0010-codex-wiring-and-gateway-caller-recognition.md", "reason": "Codex 登录方式怎么判断、判断不出时保持现在的接法"}
+{"file": "docs/adr/0013-osuna-reads-other-apps-and-tests-as-the-cli.md", "reason": "导入别的软件配置的规则，OpenCode auth.json 的读取"}
+{"file": "docs/adr/0004-api-endpoint-rewrites-cli-config.md", "reason": "关开关不得改写 CLI 配置；CLI 配置改写规则"}
+{"file": "docs/protocol-compatibility.md", "reason": "新字段可选、features 能力位、旧客户端照常工作"}
+{"file": "docs/plugins.md", "reason": "内置插件常开、套餐用量来源注册"}
+{"file": "docs/usage.md", "reason": "套餐用量来源与 Outbound requests 一节要更新"}
+{"file": "docs/glossary.md", "reason": "Read CLI sign-ins、Ban risk notice、Plan usage、Plan usage source 等名词"}
+{"file": "docs/permissions.md", "reason": "daemon.read / daemon.manage 权限"}
+{"file": ".atw/spec/server/backend/index.md", "reason": "daemon 侧规范入口：配置、套餐用量注册表、导入、Codex 接法都在 server"}
+{"file": ".atw/spec/server/backend/rpc-and-protocol.md", "reason": "可选新字段与 server_info.features 能力位的写法"}
+{"file": ".atw/spec/server/backend/persistence.md", "reason": "daemon 配置字段的存储"}
+{"file": ".atw/spec/server/backend/testing.md", "reason": "daemon 端到端测试、夹具插件、假凭证"}
+{"file": ".atw/spec/app/frontend/index.md", "reason": "主机设置页、确认框、套餐用量界面、提供方页的界面规范"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "浏览器测试与失败状态的测法"}
