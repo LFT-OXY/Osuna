@@ -3,7 +3,7 @@
   "name": "multi-account-rotation",
   "title": "Codex 与 Claude Code 多号自动轮换",
   "description": "照 magpie 两层做 Codex、Claude Code 的多订阅号自动轮换：换登录，Codex 另加经过内置中转站换号；打开时提示一次封号风险",
-  "status": "discover",
+  "status": "implement",
   "dev_type": null,
   "scope": null,
   "package": "server",
@@ -12,7 +12,7 @@
   "assignee": "oxy",
   "createdAt": "2026-10-16",
   "completedAt": null,
-  "branch": null,
+  "branch": "feat/prd-9-multi-account-rotation",
   "base_branch": "main",
   "worktree_path": null,
   "commit": null,
@@ -22,5 +22,7 @@
   "parent": "10-16-magpie-osuna-gaps",
   "relatedFiles": [],
   "notes": "",
-  "meta": {}
+  "meta": {
+    "implementation_base_sha": "a75587c0568ab76f35d3794b4beb18bafc0d9933"
+  }
 }
