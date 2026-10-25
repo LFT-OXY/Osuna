@@ -1417,3 +1417,38 @@ PR #16 并入后在主工作树拉取 main、重装依赖并重建，核对同�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 44: 登录凭证开关与风险提示：6 张工单实现、验收、归档
+<!-- atw-session: v=2 fp=322ac126d177102b -->
+
+**Date**: 2026-10-25
+**Task**: 登录凭证开关与风险提示：6 张工单实现、验收、归档
+**Package**: app
+**Branch**: `complete-magpie-osuna-gaps-subtask-8-login-credential-switch`
+
+### Summary
+
+用 atw-implement-all 做完子任务 8 的 6 张工单（读取 CLI 登录凭证开关、套餐用量关闭说明、关前确认框、PASEO_NO_CLI_SIGN_INS 强制关、Codex 登录判断与导入闸门、Antigravity 封号风险提示），每张三路审查并修一轮；验收 60/62 达成，待 CI 一条、截图覆盖不全一条，用户验收通过并归档。遗留：用量页两张截图含本机真实统计与接口名，推送前要换；测试 daemon 会读真实 Codex 登录；provider 详情测试会跑真实 codex。分支未推送。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2d24030b3` | feat(privacy): 主机设置「读取 CLI 登录凭证」开关，关掉后套餐用量来源都不运行 |
+| `69a61652c` | fix(privacy): 工单 01 审查修正 |
+| `0cf401052` | feat(privacy): 套餐用量弹窗与用量页在关掉读取 CLI 登录凭证时说明原因 |
+| `2d465cf4b` | fix(privacy): 工单 02 审查修正 |
+| `be26b2a27` | feat(privacy): 关闭读取 CLI 登录凭证前确认，按名字列出会停的套餐用量账号 |
+| `23736519e` | fix(privacy): 工单 03 审查修正 |
+| `d5da62829` | feat(privacy): 工单 04 环境变量 PASEO_NO_CLI_SIGN_INS 强制关闭读取 CLI 登录凭证 |
+| `6af4f7c6a` | fix(privacy): 工单 04 审查修正 |
+| `0b252dc42` | docs(privacy): 工单 04 写明托管启动不传 PASEO_NO_CLI_SIGN_INS |
+| `b1b3d578c` | feat(privacy): 工单 05 关着时不问 Codex 登录方式，导入跳过 OpenCode 的登录 |
+| `f401f8ff3` | fix(privacy): 工单 05 审查修正 |
+| `8b89e7892` | feat(providers): 工单 06 Antigravity 提供方页的封号风险提示 |
+| `5a0809329` | fix(providers): 工单 06 审查修正 |
+
+### Status
+
+[OK] **Completed**

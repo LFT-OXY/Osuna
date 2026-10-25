@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 43
+- **Total Sessions**: 44
 - **Last Active**: 2026-10-25
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1419 | Active |
+| `journal-1.md` | ~1454 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -30,6 +30,7 @@
 
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 44 | 2026-10-25 | 登录凭证开关与风险提示：6 张工单实现、验收、归档 | `2d24030b3`, `69a61652c`, `0cf401052`, `2d465cf4b`, `be26b2a27`, `23736519e`, `d5da62829`, `6af4f7c6a`, `0b252dc42`, `b1b3d578c`, `f401f8ff3`, `8b89e7892`, `5a0809329` | `complete-magpie-osuna-gaps-subtask-8-login-credential-switch` |
 | 43 | 2026-10-25 | 10-16-gemini-upstream 验收、开 PR #30、修 CI、合并后归档 | `3afaed04e`, `cff8cacca` | `-` |
 | 42 | 2026-10-22 | 余额与套餐用量：工单 13–14 收尾、验收、PR #27 与归档 | `ba60206be`, `88a5b70ea`, `23f96419c`, `4965ded0a` | `magpie-osuna-gaps-balance-quota` |
 | 41 | 2026-10-22 | 同步 main、收尾接口管理遗留任务、修复本机依赖 | - | `main` |
