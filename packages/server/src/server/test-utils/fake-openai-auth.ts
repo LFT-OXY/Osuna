@@ -89,6 +89,11 @@ export class FakeOpenAiAuth {
     this.codes.set(code, { account });
   }
 
+  /** CLI 自己登录拿到的那份：一个还能用的 refresh token。 */
+  issueRefreshToken(account: FakeOpenAiAccount): string {
+    return this.nextRefreshToken(account);
+  }
+
   refreshRequests(): TokenRequest[] {
     return this.requests.filter((request) => request.grantType === "refresh_token");
   }

@@ -4477,6 +4477,51 @@ export const ja: TranslationResources = {
         needsSignInHint:
           "サインインが拒否または取り消されました。もう一度サインインするまで切り替え先になりません。",
         signInAgain: "もう一度サインイン",
+        switching: "CLI をこのアカウントに切り替えています…",
+        removing: "削除しています…",
+        menu: {
+          label: "{{email}} の操作",
+          useNow: "今すぐ使う",
+          makeFirst: "最初にする",
+          moveUp: "上へ移動",
+          moveDown: "下へ移動",
+          moveToTop: "先頭へ移動",
+          moveToBottom: "末尾へ移動",
+          remove: "削除",
+        },
+        orderHint:
+          "ドラッグで並べ替え：ローテーションは上のアカウントから切り替えます。Alt+↑/↓ で移動、右クリックでメニュー。",
+        orderFailed: "順序を保存できませんでした：{{reason}}",
+        remove: {
+          title: "{{email}} を削除しますか？",
+          message:
+            "Osuna が保存しているこのアカウント（{{email}}）のコピーを削除します。CLI はサインアウトされません。",
+          confirm: "削除",
+        },
+        switchFailure: {
+          title: "アカウントを切り替えられませんでした",
+          write_failed:
+            "{{name}} を {{email}} に切り替えられませんでした：サインインを書き込めません。Osuna が {{name}} のサインインを書き込めるか確認して、もう一度「今すぐ使う」を選んでください。",
+          login_unsupported:
+            "{{name}} を {{email}} に切り替えられませんでした：Osuna はこのサインインを切り替えられません。",
+          needs_sign_in:
+            "{{name}} を {{email}} に切り替えられませんでした：もう一度サインインが必要です。その行の「もう一度サインイン」を選んでください。",
+          no_account:
+            "使用中のアカウントは再サインインが必要で、代わりに使えるアカウントがありません。再サインインするか、別のアカウントを追加してください。",
+          other: "{{name}} を切り替えられませんでした：{{reason}}",
+        },
+        switches: {
+          title: "最近の切り替え",
+          fromTo: "{{from}} → {{to}}",
+          toOnly: "{{to}} にサインイン",
+          showAll: "{{count}} 件すべて表示",
+          showFewer: "折りたたむ",
+          reasons: {
+            use_now: "「今すぐ使う」を選びました",
+            lapsed: "{{from}} のサインインが使えなくなりました",
+            other: "Osuna が切り替えました",
+          },
+        },
         unknownEmail: "不明なアカウント",
         badges: { inUse: "使用中", first: "優先", needsSignIn: "要サインイン" },
         usage: {

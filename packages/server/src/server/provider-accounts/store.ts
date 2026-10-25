@@ -5,7 +5,11 @@ import { z } from "zod";
 import {
   ACCOUNT_ROTATION_PROVIDERS,
   ProviderAccountNeedsSignInSchema,
+  ProviderAccountSwitchFailureSchema,
+  ProviderAccountSwitchSchema,
   ProviderAccountWindowSchema,
+  type ProviderAccountSwitch,
+  type ProviderAccountSwitchFailure,
   type AccountRotationProvider,
 } from "@getpaseo/protocol/provider-account/rpc-schemas";
 import {
@@ -51,8 +55,14 @@ const StoredSettingsSchema = z.object({
   rotationEnabled: z.boolean().optional(),
   // 这台主机上已经确认过这家的风险提示。
   riskNoticeSeen: z.boolean().optional(),
+  // 最近的换号，最新的在前，最多 SWITCH_LOG_LIMIT 条。
+  switches: z.array(ProviderAccountSwitchSchema).optional(),
+  // 最近一次换号没换成；下一次换成后清掉。
+  switchFailure: ProviderAccountSwitchFailureSchema.optional(),
 });
 export type StoredSettings = z.infer<typeof StoredSettingsSchema>;
+
+const SWITCH_LOG_LIMIT = 50;
 
 // 号按用户排的顺序存：数组里第一个就是「第一」。
 const AccountsFileSchema = z.object({
@@ -158,6 +168,45 @@ export class ProviderAccountStore {
     if (!account) return;
     accounts[index] = { ...account, usage };
     this.file.write({ ...current, accounts });
+  }
+
+  /** 删掉一个号（连同它存着的登录）；号已经不在时返回 false。 */
+  removeAccount(accountId: string): boolean {
+    const current = this.read();
+    const accounts = current.accounts.filter((account) => account.id !== accountId);
+    if (accounts.length === current.accounts.length) return false;
+    this.file.write({ ...current, accounts });
+    return true;
+  }
+
+  /** 这家的号按 accountIds 重排；别家的号留在原来的位置上。ids 与这家的号对不上时返回 false。 */
+  reorder(provider: AccountRotationProvider, accountIds: string[]): boolean {
+    const current = this.read();
+    const mine = current.accounts.filter((account) => account.provider === provider);
+    const byId = new Map(mine.map((account) => [account.id, account]));
+    if (accountIds.length !== mine.length || new Set(accountIds).size !== mine.length) return false;
+    const ordered = accountIds.map((id) => byId.get(id));
+    if (ordered.some((account) => account === undefined)) return false;
+    const queue = ordered.filter((account): account is StoredAccount => account !== undefined);
+    const accounts = current.accounts.map((account) =>
+      account.provider === provider ? (queue.shift() ?? account) : account,
+    );
+    this.file.write({ ...current, accounts });
+    return true;
+  }
+
+  /** 记一次换号（排在最前），清掉上一次的失败。 */
+  recordSwitch(provider: AccountRotationProvider, entry: ProviderAccountSwitch): void {
+    const settings = this.settings(provider);
+    const switches = [entry, ...(settings.switches ?? [])].slice(0, SWITCH_LOG_LIMIT);
+    this.updateSettings(provider, { switches, switchFailure: undefined });
+  }
+
+  recordSwitchFailure(
+    provider: AccountRotationProvider,
+    failure: ProviderAccountSwitchFailure,
+  ): void {
+    this.updateSettings(provider, { switchFailure: failure });
   }
 
   private read(): AccountsFile {

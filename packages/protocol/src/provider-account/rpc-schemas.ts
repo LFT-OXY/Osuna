@@ -97,6 +97,40 @@ export const ProviderAccountErrorSchema = z.object({
 });
 export type ProviderAccountError = z.infer<typeof ProviderAccountErrorSchema>;
 
+/** 换号的一端：号的 ID 与换号时的邮箱（号后来被移除，记录照样能显示）。 */
+export const ProviderAccountSwitchEndSchema = z.object({
+  accountId: z.string(),
+  email: z.string().optional(),
+});
+export type ProviderAccountSwitchEnd = z.infer<typeof ProviderAccountSwitchEndSchema>;
+
+/**
+ * 一次换号，最新的在前，每家留最近 50 条。from 没有：换号前 CLI 没登录。
+ * reason 是已知取值之一或别的字符串（以后加的原因，客户端认不出时显示通用说法）：
+ * use_now（用户按了「立即使用」）、lapsed（原来的号登录失效）。
+ */
+export const ProviderAccountSwitchSchema = z.object({
+  at: z.string(),
+  from: ProviderAccountSwitchEndSchema.optional(),
+  to: ProviderAccountSwitchEndSchema,
+  reason: z.string(),
+});
+export type ProviderAccountSwitch = z.infer<typeof ProviderAccountSwitchSchema>;
+
+/**
+ * 最近一次换号没换成，下一次换成后清掉。to 是要换去的号（当前号失效、没有号可换时没有）。
+ * code 是已知取值之一或别的字符串，message 是英文原因：
+ * write_failed（写不进 CLI 的登录）、login_unsupported（Osuna 换不了这种登录）、
+ * needs_sign_in（要换去的号需要重新登录）、no_account（当前号失效，没有别的号可换）。
+ */
+export const ProviderAccountSwitchFailureSchema = z.object({
+  at: z.string(),
+  to: ProviderAccountSwitchEndSchema.optional(),
+  code: z.string(),
+  message: z.string(),
+});
+export type ProviderAccountSwitchFailure = z.infer<typeof ProviderAccountSwitchFailureSchema>;
+
 const ProviderAccountStateSchema = z.object({
   requestId: z.string(),
   provider: z.string(),
@@ -104,6 +138,9 @@ const ProviderAccountStateSchema = z.object({
   accounts: z.array(ProviderAccountSchema),
   blocked: ProviderAccountBlockSchema.nullable(),
   error: ProviderAccountErrorSchema.nullable(),
+  // 工单 04 起的 daemon 才发。
+  switches: z.array(ProviderAccountSwitchSchema).optional(),
+  switchFailure: ProviderAccountSwitchFailureSchema.nullable().optional(),
 });
 
 export const ProviderAccountListRequestSchema = z.object({
@@ -141,6 +178,55 @@ export const ProviderAccountSetRotationResponseSchema = z.object({
 export type ProviderAccountSetRotationResponse = z.infer<
   typeof ProviderAccountSetRotationResponseSchema
 >;
+
+/**
+ * 「立即使用」：把 CLI 的登录马上换成这个号。新开的会话用它，开着的仍在原来的号上。
+ * 失败时 error 带原因（cli_sign_ins_off、not_found、login_unsupported、needs_sign_in、write_failed、
+ * unsupported_provider），写不进 CLI 或号失效时同样记进 switchFailure。
+ */
+export const ProviderAccountUseRequestSchema = z.object({
+  type: z.literal("provider.account.use.request"),
+  requestId: z.string(),
+  provider: z.string(),
+  accountId: z.string(),
+});
+export type ProviderAccountUseRequest = z.infer<typeof ProviderAccountUseRequestSchema>;
+export const ProviderAccountUseResponseSchema = z.object({
+  type: z.literal("provider.account.use.response"),
+  payload: ProviderAccountStateSchema,
+});
+export type ProviderAccountUseResponse = z.infer<typeof ProviderAccountUseResponseSchema>;
+
+/** 「移除」：只删 Osuna 存的这个号，不登出 CLI。号已经不在时回 not_found。 */
+export const ProviderAccountRemoveRequestSchema = z.object({
+  type: z.literal("provider.account.remove.request"),
+  requestId: z.string(),
+  provider: z.string(),
+  accountId: z.string(),
+});
+export type ProviderAccountRemoveRequest = z.infer<typeof ProviderAccountRemoveRequestSchema>;
+export const ProviderAccountRemoveResponseSchema = z.object({
+  type: z.literal("provider.account.remove.response"),
+  payload: ProviderAccountStateSchema,
+});
+export type ProviderAccountRemoveResponse = z.infer<typeof ProviderAccountRemoveResponseSchema>;
+
+/**
+ * 号的先后：accountIds 是这家所有号的新顺序，第一个就是「第一」。
+ * 与主机上的号对不上（别的设备刚加过或移除过）时回 order_mismatch，顺序不动。
+ */
+export const ProviderAccountSetOrderRequestSchema = z.object({
+  type: z.literal("provider.account.set_order.request"),
+  requestId: z.string(),
+  provider: z.string(),
+  accountIds: z.array(z.string()),
+});
+export type ProviderAccountSetOrderRequest = z.infer<typeof ProviderAccountSetOrderRequestSchema>;
+export const ProviderAccountSetOrderResponseSchema = z.object({
+  type: z.literal("provider.account.set_order.response"),
+  payload: ProviderAccountStateSchema,
+});
+export type ProviderAccountSetOrderResponse = z.infer<typeof ProviderAccountSetOrderResponseSchema>;
 
 /**
  * 某家的账号或设置变了（额度读完、开关被别的设备改了）；客户端重读列表。不带内容：带关联字段会被当成某个请求的回复。

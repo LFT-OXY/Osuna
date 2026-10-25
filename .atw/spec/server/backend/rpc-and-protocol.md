@@ -2352,3 +2352,60 @@ if (!this.options.allowed()) { this.finish({ status: "failed", error: { code: "c
 // the test daemon closes the seams: codexSignIn.endpoints → 127.0.0.1:9, callbackPort 0;
 // the browser seal sets Symbol.for("paseo.e2e.codexCallbackPort") = 0 and fakes https://auth.openai.com/.
 ```
+
+## Scenario: Codex Use now, Remove, order, switch log and renewing the account in use (multi-account-rotation ticket 04, `accountRotation`)
+
+### 1. Scope / Trigger
+- Osuna now **writes** the CLI's own login (ADR 0015): `auth.json` or the keychain item, swapping in a saved account. New RPCs, new store fields, a keychain write path, and a usage-registry hook so an agent's card keeps the account it was launched on.
+
+### 2. Signatures
+- Protocol (`provider-account/rpc-schemas.ts`), all `daemon.manage`, all answer the same state payload as `list` (`{requestId, provider, settings, accounts, blocked, error, switches?, switchFailure?}`):
+  - `provider.account.use.request {provider, accountId}`
+  - `provider.account.remove.request {provider, accountId}`
+  - `provider.account.set_order.request {provider, accountIds: string[]}` (every account of the provider, new order)
+- `ProviderAccountSwitch {at, from?: {accountId, email?}, to: {accountId, email?}, reason: string}` (`use_now` | `lapsed`, later tickets add more); `ProviderAccountSwitchFailure {at, to?, code, message}`; both optional on the payload (newest first, ≤ 50).
+- Server: `ProviderAccountService.useAccount / removeAccount / setOrder`, `savedAccountLogins: SavedAccountLogins`; `readCodexCliLogin(location)` → `CodexCliLogin` (`signed_in{where,text,login,profile}` | `signed_out{where,text?}` | unsupported); `writeCodexCliLogin({location, where, expected, login})` throws `CodexLoginChangedError`; `CliKeychain.write(service, account, value)` throws `KeychainWriteError`; `AgentUsageSession.launchedAt?`; `UsageSourceRegistry.useSavedAccounts(hooks)`.
+
+### 3. Contracts
+- **Switch** (magpie `switchSavedLogin`): renew the target if its access token is ≤ 5 min from expiry (own lock) → inside `renew.lock`: re-read CLI login → take the CLI's login back into its own record (an account not listed is appended) → write the target's login where the CLI read from (`file`: `writeConfigFileGuarded`, pretty JSON + `\n`, mode kept / 0600 new; `keyring`/`auto` item: one-line JSON via `security add-generic-password -U`) → clear the target's `login` → record the switch, clear `switchFailure`. A write failure undoes the take-back, so every refresh token is in exactly one place before and after.
+- Write-before-reread (ADR 0004): the write compares with the text read at the start (`expected`; `null` when signed out); a different file or item → `CodexLoginChangedError`, nothing written.
+- `switchFailure` is recorded for `needs_sign_in`, `write_failed` (message = `Codex's login couldn't be written (<errno or one line>)`, never the temp path), `login_unsupported`, and `no_account` (the account in use lapsed, nothing to move to).
+- **Account in use renewal** runs only while Codex rotation is on (story 3: an upgrade changes nothing until the user turns it on): each check renews when `exp` ≤ 5 min; a usage read of the signed-in account answering `rejected` (401/403 — the plugin doesn't expose `token_expired`) forces one renewal and one re-read. Renewed tokens go only to the CLI. Refused → that account gets `needsSignIn` (added to the list if it wasn't there) and, rotation on, Osuna switches to the first listed account with a login and no `needsSignIn` (`reason: "lapsed"`; ticket 05 refines the target rules).
+- **Remove** deletes the stored record (and its token); the CLI is never touched. **Order** must be a permutation of this provider's ids.
+- **Agent card**: the Codex app-server records `launchedAt` when it spawns. `accountAt({provider, at, env})` = `from` of the first switch after `at`, unless that account is the latest `to` again, has been removed, or the agent's `CODEX_HOME` (or `$HOME/.codex`) isn't the one Osuna switches. The registry then maps the agent to report `codex:<identity>` labelled with its email, read through `usageInput` (renew-if-expiring, token route).
+
+### 4. Validation & Error Matrix
+| Condition | Result |
+|---|---|
+| Read CLI sign-ins off, use | `error.code = cli_sign_ins_off`, nothing read or written |
+| use for `claude` | `unsupported_provider` (ticket 08) |
+| unknown / other provider's account | `not_found` (use, remove) |
+| target `needsSignIn`, or its renewal refused | `needs_sign_in` + `switchFailure` |
+| `ephemeral` / unknown store / unreadable | `login_unsupported` + `switchFailure` |
+| CLI signed in with an API key only (`signed_out` with text) | `login_unsupported`, the file is left alone |
+| CLI dir not writable / file changed meanwhile / keychain refuses | `write_failed` + `switchFailure`, take-back undone |
+| target already in use | success, no log entry; a stray stored `login` for it is cleared |
+| set_order ids ≠ the host's ids | `order_mismatch`, order unchanged |
+
+### 5. Good/Base/Bad Cases
+- Good: Use now and back again — each refresh token appears in exactly one of `auth.json` / `accounts.json` after each step; the log survives a restart and keeps 50.
+- Base: rotation off → no renewal of the account in use, even when it's about to expire.
+- Bad: writing the target's login before taking the CLI's back (the old token would be lost); renewing the account in use outside `renew.lock`; replacing an API-key `auth.json`.
+
+### 6. Tests Required
+- `daemon-e2e/provider-account-switch.e2e.test.ts`: file and keyring Use now with single-holder assertions and file mode; ephemeral refused; API key left alone; unwritable dir → `write_failed` (message `(EACCES)`), tokens unchanged, cleared on the next success; lapsed target; gate off; 50-entry log across restart; remove in-use / saved / twice; order + `order_mismatch`; renewal before expiry and on rejected usage; lapsed account in use → switch with `reason: "lapsed"` (listed and unlisted), `no_account`.
+- `plugins/usage-sources/index.test.ts`: an agent launched before a switch keeps the launch account's report, read through the saved login; back on the CLI route after switching back.
+- `app/e2e/browser/settings-provider-account-switch.spec.ts`: Use now success / failure notice, Remove confirm and failure, menu + drag order, failed order rolls back, log 5 → all, view-only, 390 sheet.
+
+### 7. Wrong vs Correct
+#### Wrong
+```ts
+await writeCodexCliLogin({ ..., login: target.login }); // then take the CLI's login back
+```
+#### Correct
+```ts
+const takenBack = cli.kind === "signed_in" ? this.takeBack(cli) : null;
+try { await writeCodexCliLogin({ location, where: cli.where, expected: cli.text, login: target.login }); }
+catch (error) { takenBack?.undo(); throw this.switchFailed({ target, code: "write_failed", ... }); }
+this.store.updateAccount(target.id, { login: undefined });
+```

@@ -22,6 +22,8 @@ interface AccountsRouteOptions {
   windows?: FakeWindow[];
   // 前几次「多号自动轮换」的保存直接回这个失败。
   failSetRotation?: { reason: string; times: number };
+  // 前几次这一种请求（如 provider.account.remove.request）不送到 daemon，直接回这个失败。
+  failRequest?: { type: string; reason: string; times: number };
   // 改写 server_info：去掉 daemon.manage 模拟只能查看的设备。
   readOnly?: boolean;
   // 列表里的号标成登录失效（「需要重新登录」）；给了 email 只标那个号。
@@ -50,16 +52,28 @@ export async function installProviderAccountsRoute(
   options: AccountsRouteOptions,
 ): Promise<void> {
   let failuresLeft = options.failSetRotation?.times ?? 0;
+  let requestFailuresLeft = options.failRequest?.times ?? 0;
   await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
     const server = ws.connectToServer();
     ws.onMessage((message) => {
       const sessionMessage = parse(message)?.message;
+      let reason: string | null = null;
       if (
         sessionMessage?.type === "provider.account.set_rotation.request" &&
         failuresLeft > 0 &&
         options.failSetRotation
       ) {
         failuresLeft -= 1;
+        reason = options.failSetRotation.reason;
+      } else if (
+        options.failRequest &&
+        sessionMessage?.type === options.failRequest.type &&
+        requestFailuresLeft > 0
+      ) {
+        requestFailuresLeft -= 1;
+        reason = options.failRequest.reason;
+      }
+      if (reason !== null && sessionMessage) {
         ws.send(
           JSON.stringify({
             type: "session",
@@ -68,7 +82,7 @@ export async function installProviderAccountsRoute(
               payload: {
                 requestId: sessionMessage.requestId,
                 requestType: sessionMessage.type,
-                error: options.failSetRotation.reason,
+                error: reason,
                 code: "handler_error",
               },
             },
@@ -98,6 +112,14 @@ export async function installProviderAccountsRoute(
   });
 }
 
+const ACCOUNT_STATE_REPLIES = new Set([
+  "provider.account.list.response",
+  "provider.account.set_rotation.response",
+  "provider.account.use.response",
+  "provider.account.remove.response",
+  "provider.account.set_order.response",
+]);
+
 /** 这一节的回复按用例改写：额度换成假读数、号标成失效、加号的回复改成已失败。 */
 function rewriteAccountsMessage(input: {
   type: unknown;
@@ -105,8 +127,7 @@ function rewriteAccountsMessage(input: {
   options: AccountsRouteOptions;
 }): void {
   const { type, payload, options } = input;
-  const isAccountsReply =
-    type === "provider.account.list.response" || type === "provider.account.set_rotation.response";
+  const isAccountsReply = typeof type === "string" && ACCOUNT_STATE_REPLIES.has(type);
   if (isAccountsReply && Array.isArray(payload?.accounts)) {
     for (const account of payload.accounts as Array<Record<string, unknown>>) {
       if (options.windows) {
@@ -241,5 +262,26 @@ export function codexAuthJson(input: { accountId: string; email: string; plan: s
       refresh_token: "e2e-refresh",
       account_id: input.accountId,
     },
+  });
+}
+
+/**
+ * 在测试 daemon 上加一个存着的 Codex 号：走真的加号流程，换 token 由封条的假外网（sitesPath）回答。
+ * 返回号的 ID。
+ */
+export async function addCodexAccountOnDaemon(input: {
+  sitesPath: string;
+  account: { accountId: string; email: string; plan: string };
+}): Promise<string> {
+  await setFakeOpenAiToken(input.sitesPath, { status: 200, body: fakeOpenAiTokens(input.account) });
+  return withAccountsClient(async (client) => {
+    const started = await client.providerAccountSignInStart({ provider: "codex" });
+    if (!started.signIn) throw new Error(started.error?.message ?? "sign-in didn't start");
+    const done = await client.providerAccountSignInSubmit({
+      signInId: started.signIn.id,
+      callbackUrl: callbackFor(started.signIn.authUrl, `code-${input.account.accountId}`),
+    });
+    if (done.signIn?.status !== "done") throw new Error(`sign-in ${done.signIn?.status}`);
+    return done.signIn.result.accountId;
   });
 }

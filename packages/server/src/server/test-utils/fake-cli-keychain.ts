@@ -12,4 +12,8 @@ export class FakeCliKeychain implements CliKeychain {
   async read(service: string, account: string): Promise<string | null> {
     return this.items.get(`${service}\u0000${account}`) ?? null;
   }
+
+  async write(service: string, account: string, value: string): Promise<void> {
+    this.set(service, account, value);
+  }
 }

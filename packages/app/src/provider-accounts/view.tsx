@@ -8,6 +8,7 @@ import type {
 import { useToast } from "@/contexts/toast-context";
 import { useIsLocalDaemon } from "@/hooks/use-is-local-daemon";
 import { openHostPrivacySettings } from "@/navigation/settings-navigation";
+import { confirmDialog } from "@/utils/confirm-dialog";
 import { ProviderAccountsRiskNoticeSheet } from "./risk-notice-sheet";
 import { ProviderAccountsSection } from "./section";
 import { ProviderAccountSignInSheet } from "./sign-in-sheet";
@@ -38,6 +39,25 @@ export function ProviderAccountsView(props: {
       startSignIn({ accountId: account.id, ...(account.email ? { email: account.email } : {}) }),
     [startSignIn],
   );
+  const { removeAccount } = accounts;
+  // 移除前确认：只删 Osuna 存的这一份，CLI 不被登出。
+  const confirmRemove = useCallback(
+    (account: ProviderAccount) => {
+      // macOS 桌面端的确认框只显示 message，所以 message 里也写明是哪个号。
+      const email = account.email ?? t("settings.providers.accounts.unknownEmail");
+      void (async () => {
+        const confirmed = await confirmDialog({
+          title: t("settings.providers.accounts.remove.title", { email }),
+          message: t("settings.providers.accounts.remove.message", { email }),
+          confirmLabel: t("settings.providers.accounts.remove.confirm"),
+          cancelLabel: t("common.actions.cancel"),
+          destructive: true,
+        });
+        if (confirmed) removeAccount(account);
+      })();
+    },
+    [removeAccount, t],
+  );
   const signInView = signIn.view;
   const copyLink = useCallback(() => {
     if (signInView.kind !== "active") return;
@@ -66,6 +86,11 @@ export function ProviderAccountsView(props: {
         onAddAccount={provider === "codex" ? addAccount : undefined}
         onSignInAgain={signInAgain}
         highlighted={highlighted}
+        pendingAction={accounts.pendingAction}
+        actionError={accounts.actionError}
+        onUseAccount={accounts.switchTo}
+        onRemoveAccount={confirmRemove}
+        onSetOrder={accounts.setOrder}
       />
       {accounts.confirmingRiskNotice ? (
         <ProviderAccountsRiskNoticeSheet

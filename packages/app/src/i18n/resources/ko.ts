@@ -4442,6 +4442,51 @@ export const ko: TranslationResources = {
         needsSignInHint:
           "로그인이 거부되었거나 취소되었습니다. 다시 로그인할 때까지 이 계정으로 전환하지 않습니다.",
         signInAgain: "다시 로그인",
+        switching: "CLI를 이 계정으로 전환하는 중…",
+        removing: "삭제하는 중…",
+        menu: {
+          label: "{{email}} 작업",
+          useNow: "지금 사용",
+          makeFirst: "첫 번째로",
+          moveUp: "위로 이동",
+          moveDown: "아래로 이동",
+          moveToTop: "맨 위로 이동",
+          moveToBottom: "맨 아래로 이동",
+          remove: "삭제",
+        },
+        orderHint:
+          "끌어서 순서 변경: 순환은 위쪽 계정부터 전환합니다. Alt+↑/↓로 이동, 오른쪽 클릭으로 메뉴.",
+        orderFailed: "순서를 저장하지 못했습니다: {{reason}}",
+        remove: {
+          title: "{{email}}을(를) 삭제할까요?",
+          message:
+            "Osuna가 보관한 이 계정({{email}})의 사본을 삭제합니다. CLI는 로그아웃되지 않습니다.",
+          confirm: "삭제",
+        },
+        switchFailure: {
+          title: "계정을 전환하지 못했습니다",
+          write_failed:
+            "{{name}}을(를) {{email}}(으)로 전환하지 못했습니다: 로그인을 쓸 수 없습니다. Osuna가 {{name}}의 로그인을 쓸 수 있는지 확인한 뒤 다시 '지금 사용'을 선택하세요.",
+          login_unsupported:
+            "{{name}}을(를) {{email}}(으)로 전환하지 못했습니다: Osuna가 이 로그인을 전환할 수 없습니다.",
+          needs_sign_in:
+            "{{name}}을(를) {{email}}(으)로 전환하지 못했습니다: 다시 로그인해야 합니다. 해당 행에서 '다시 로그인'을 선택하세요.",
+          no_account:
+            "사용 중인 계정은 다시 로그인해야 하고 대신할 계정이 없습니다. 다시 로그인하거나 다른 계정을 추가하세요.",
+          other: "{{name}}을(를) 전환하지 못했습니다: {{reason}}",
+        },
+        switches: {
+          title: "최근 전환",
+          fromTo: "{{from}} → {{to}}",
+          toOnly: "{{to}}에 로그인",
+          showAll: "{{count}}개 모두 보기",
+          showFewer: "접기",
+          reasons: {
+            use_now: "'지금 사용'을 선택함",
+            lapsed: "{{from}}의 로그인이 더 이상 작동하지 않음",
+            other: "Osuna가 전환함",
+          },
+        },
         unknownEmail: "알 수 없는 계정",
         badges: { inUse: "사용 중", first: "우선", needsSignIn: "다시 로그인 필요" },
         usage: {

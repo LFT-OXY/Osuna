@@ -2,18 +2,7 @@ import React, { Fragment, useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Pressable, Text, View, type PressableStateCallbackType } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import {
-  ArrowDown,
-  ArrowDownToLine,
-  ArrowUp,
-  ArrowUpToLine,
-  ChevronRight,
-  Copy,
-  Download,
-  GripVertical,
-  Plus,
-  ShieldAlert,
-} from "lucide-react-native";
+import { ChevronRight, Copy, Download, GripVertical, Plus, ShieldAlert } from "lucide-react-native";
 import type {
   ApiEndpoint,
   ApiEndpointBalanceReading,
@@ -30,7 +19,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { RowActionsMenuTrigger } from "@/components/ui/row-actions-menu-trigger";
 import { SearchField } from "@/components/ui/search-field";
-import { Shortcut } from "@/components/ui/shortcut";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Switch } from "@/components/ui/switch";
 import { Text as UiText } from "@/components/ui/text";
@@ -55,6 +43,7 @@ import {
 import { windowLabel } from "./balance-copy";
 import { EndpointIcon } from "./endpoint-icon";
 import { tightestWindow } from "./internal/balance-windows";
+import { OrderMenuItems, sortableRowStyles } from "./order-menu-items";
 import { SortableEndpointRows } from "./sortable-endpoint-rows";
 import type { VendorNotice } from "./internal/vendor-status";
 import { VendorNoticeLine } from "./vendor-notice";
@@ -67,10 +56,6 @@ import type { SortableEndpointRowInfo } from "./sortable-endpoint-rows.types";
 
 const ThemedChevronRight = withUnistyles(ChevronRight);
 const ThemedGripVertical = withUnistyles(GripVertical);
-const ThemedArrowUp = withUnistyles(ArrowUp);
-const ThemedArrowDown = withUnistyles(ArrowDown);
-const ThemedArrowUpToLine = withUnistyles(ArrowUpToLine);
-const ThemedArrowDownToLine = withUnistyles(ArrowDownToLine);
 const ThemedCopy = withUnistyles(Copy);
 const ThemedShieldAlert = withUnistyles(ShieldAlert);
 const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
@@ -465,10 +450,10 @@ function EndpointRow({
 
   return (
     <View
-      style={[!isFirst && settingsStyles.rowBorder, row.isDragging && styles.rowDragging]}
+      style={[!isFirst && settingsStyles.rowBorder, row.isDragging && sortableRowStyles.dragging]}
       testID={rowTestId(row)}
     >
-      {row.isPlaceholder ? <View style={styles.dropSlot} pointerEvents="none" /> : null}
+      {row.isPlaceholder ? <View style={sortableRowStyles.dropSlot} pointerEvents="none" /> : null}
       <Pressable
         style={rowStyle}
         onPress={handlePress}
@@ -599,32 +584,6 @@ function EndpointRowText({
   );
 }
 
-const ORDER_ITEMS: {
-  place: Exclude<EndpointPlace, { index: number }>;
-  labelKey: string;
-  keys: string[];
-}[] = [
-  { place: "up", labelKey: "settings.apiEndpoints.order.moveUp", keys: ["alt", "Up"] },
-  { place: "down", labelKey: "settings.apiEndpoints.order.moveDown", keys: ["alt", "Down"] },
-  {
-    place: "top",
-    labelKey: "settings.apiEndpoints.order.moveToTop",
-    keys: ["alt", "shift", "Up"],
-  },
-  {
-    place: "bottom",
-    labelKey: "settings.apiEndpoints.order.moveToBottom",
-    keys: ["alt", "shift", "Down"],
-  },
-];
-
-const ORDER_ICONS = {
-  up: ThemedArrowUp,
-  down: ThemedArrowDown,
-  top: ThemedArrowUpToLine,
-  bottom: ThemedArrowDownToLine,
-};
-
 /**
  * 行菜单：「复制」，然后上移、下移、移到最前、移到最后（照 magpie openProviderMenu）；窄屏是底部弹层。
  */
@@ -651,6 +610,19 @@ function EndpointRowMenu({
     [],
   );
   const handleDuplicate = useCallback(() => onDuplicate?.(endpoint), [endpoint, onDuplicate]);
+  const handleArrange = useCallback(
+    (place: EndpointPlace) => onArrange(endpoint, place),
+    [endpoint, onArrange],
+  );
+  const orderLabels = useMemo(
+    () => ({
+      up: t("settings.apiEndpoints.order.moveUp"),
+      down: t("settings.apiEndpoints.order.moveDown"),
+      top: t("settings.apiEndpoints.order.moveToTop"),
+      bottom: t("settings.apiEndpoints.order.moveToBottom"),
+    }),
+    [t],
+  );
   return (
     <DropdownMenu compactMode="sheet" open={isOpen} onOpenChange={onOpenChange}>
       <RowActionsMenuTrigger
@@ -670,50 +642,14 @@ function EndpointRowMenu({
             <DropdownMenuSeparator />
           </>
         ) : null}
-        {ORDER_ITEMS.map((item) => (
-          <OrderMenuItem
-            key={item.place}
-            item={item}
-            endpoint={endpoint}
-            isEnabled={moves[item.place]}
-            onArrange={onArrange}
-          />
-        ))}
+        <OrderMenuItems
+          moves={moves}
+          labels={orderLabels}
+          onArrange={handleArrange}
+          testIdPrefix="api-endpoint-order-"
+        />
       </DropdownMenuContent>
     </DropdownMenu>
-  );
-}
-
-function OrderMenuItem({
-  item,
-  endpoint,
-  isEnabled,
-  onArrange,
-}: {
-  item: (typeof ORDER_ITEMS)[number];
-  endpoint: ApiEndpoint;
-  isEnabled: boolean;
-  onArrange: (endpoint: ApiEndpoint, place: EndpointPlace) => void;
-}) {
-  const { t } = useTranslation();
-  const { place, labelKey, keys } = item;
-  const Icon = ORDER_ICONS[place];
-  const leading = useMemo(
-    () => <Icon size={ICON_SIZE.md} uniProps={foregroundMutedColorMapping} />,
-    [Icon],
-  );
-  const trailing = useMemo(() => <Shortcut keys={keys} />, [keys]);
-  const handleSelect = useCallback(() => onArrange(endpoint, place), [endpoint, onArrange, place]);
-  return (
-    <DropdownMenuItem
-      leading={leading}
-      trailing={trailing}
-      disabled={!isEnabled}
-      onSelect={handleSelect}
-      testID={`api-endpoint-order-${place}`}
-    >
-      {t(labelKey)}
-    </DropdownMenuItem>
   );
 }
 
@@ -1011,17 +947,6 @@ const styles = StyleSheet.create((theme) => ({
   rowPressed: {
     backgroundColor: theme.colors.surface3,
   },
-  // 拖着走的那一份浮在占位上：实底、强调色描边与阴影。
-  // 被拖的行在列表里留下的等高占位：强调色虚线框，后面的行让开，停在哪儿就落在哪儿。
-  dropSlot: {
-    ...StyleSheet.absoluteFillObject,
-    margin: theme.spacing[1],
-    backgroundColor: theme.colors.surface2,
-    borderColor: theme.colors.accent,
-    borderStyle: "dashed",
-    borderWidth: 2,
-    borderRadius: theme.radius.md,
-  },
   rowInner: {
     flex: 1,
     minWidth: 0,
@@ -1040,13 +965,6 @@ const styles = StyleSheet.create((theme) => ({
   // 让过行图标（28）与它后面的间距，和名称对齐。
   vendorNotice: {
     paddingLeft: 28 + theme.spacing[3],
-  },
-  rowDragging: {
-    backgroundColor: theme.colors.surface1,
-    borderColor: theme.colors.accent,
-    borderWidth: 1,
-    borderRadius: theme.radius.md,
-    ...theme.shadow.md,
   },
   rowContent: {
     flex: 1,

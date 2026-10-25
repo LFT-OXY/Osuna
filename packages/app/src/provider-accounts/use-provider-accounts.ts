@@ -3,7 +3,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import type {
   ProviderAccount,
   ProviderAccountBlock,
+  ProviderAccountError,
   ProviderAccountSettings,
+  ProviderAccountSwitch,
+  ProviderAccountSwitchFailure,
 } from "@getpaseo/protocol/provider-account/rpc-schemas";
 import { useReplicaQuery } from "@/data/query";
 import { extractFailureReason } from "@/price-table/pricing";
@@ -17,6 +20,21 @@ export interface ProviderAccountsData {
   settings: ProviderAccountSettings;
   accounts: ProviderAccount[];
   blocked: ProviderAccountBlock | null;
+  // 最近的换号，最新的在前；老 daemon 不发时为空。
+  switches: ProviderAccountSwitch[];
+  switchFailure: ProviderAccountSwitchFailure | null;
+}
+
+/** 正在进行的号操作：立即使用、移除某个号，或保存顺序。 */
+export type AccountAction =
+  | { kind: "use"; accountId: string }
+  | { kind: "remove"; accountId: string }
+  | { kind: "order" };
+
+/** 号操作失败：留在原处，直到重试或做别的操作。 */
+export interface AccountActionError {
+  action: AccountAction;
+  message: string;
 }
 
 export type ProviderAccountsLoad =
@@ -38,7 +56,15 @@ export interface UseProviderAccountsResult {
   setRotation: (enabled: boolean) => void;
   confirmRiskNotice: () => void;
   cancelRiskNotice: () => void;
+  pendingAction: AccountAction | null;
+  actionError: AccountActionError | null;
+  switchTo: (account: ProviderAccount) => void;
+  removeAccount: (account: ProviderAccount) => void;
+  setOrder: (accountIds: string[]) => void;
 }
+
+// 主机记进 switchFailure 的换号失败：在这一节顶上醒目地说，不在原处再说一遍。
+const RECORDED_SWITCH_FAILURES = new Set(["write_failed", "needs_sign_in", "login_unsupported"]);
 
 const CHANGED_EVENT = "provider.account.changed";
 
@@ -138,6 +164,64 @@ export function useProviderAccounts(serverId: string, provider: string): UseProv
   }, [save]);
   const cancelRiskNotice = useCallback(() => setConfirmingRiskNotice(false), []);
 
+  const [pendingAction, setPendingAction] = useState<AccountAction | null>(null);
+  const [actionError, setActionError] = useState<AccountActionError | null>(null);
+  const run = useCallback(
+    (input: { action: AccountAction; send: () => Promise<StatePayload> }) => {
+      const { action } = input;
+      setActionError(null);
+      setPendingAction(action);
+      void (async () => {
+        try {
+          const payload = await input.send();
+          queryClient.setQueryData(providerAccountsQueryKey(serverId, provider), dataOf(payload));
+          if (payload.error && !shownInSection({ action, error: payload.error })) {
+            setActionError({ action, message: payload.error.message });
+          }
+        } catch (cause) {
+          setActionError({ action, message: extractFailureReason(cause) || toErrorMessage(cause) });
+          // 没拿到主机的状态：重读一次，先画上的新顺序回到主机上的。
+          void queryClient.invalidateQueries({
+            queryKey: providerAccountsQueryKey(serverId, provider),
+          });
+        } finally {
+          setPendingAction(null);
+        }
+      })();
+    },
+    [provider, queryClient, serverId],
+  );
+  const switchTo = useCallback(
+    (account: ProviderAccount) =>
+      run({
+        action: { kind: "use", accountId: account.id },
+        send: () => connected(client).providerAccountUse({ provider, accountId: account.id }),
+      }),
+    [client, provider, run],
+  );
+  const removeAccount = useCallback(
+    (account: ProviderAccount) =>
+      run({
+        action: { kind: "remove", accountId: account.id },
+        send: () => connected(client).providerAccountRemove({ provider, accountId: account.id }),
+      }),
+    [client, provider, run],
+  );
+  const setOrder = useCallback(
+    (accountIds: string[]) => {
+      // 先按新顺序画，保存失败时由回复里的状态放回主机上的顺序。
+      queryClient.setQueryData<ProviderAccountsData>(
+        providerAccountsQueryKey(serverId, provider),
+        (current) => (current ? reorder(current, accountIds) : current),
+      );
+      run({
+        action: { kind: "order" },
+        send: () => connected(client).providerAccountSetOrder({ provider, accountIds }),
+      });
+    },
+    [client, provider, queryClient, run, serverId],
+  );
+
   let load: ProviderAccountsLoad = { kind: "loading" };
   if (query.data) load = { kind: "ready", data: query.data };
   else if (query.isError) load = { kind: "error", message: toErrorMessage(query.error) };
@@ -152,9 +236,41 @@ export function useProviderAccounts(serverId: string, provider: string): UseProv
     setRotation,
     confirmRiskNotice,
     cancelRiskNotice,
+    pendingAction,
+    actionError,
+    switchTo,
+    removeAccount,
+    setOrder,
   };
 }
 
-function dataOf(payload: ProviderAccountsData): ProviderAccountsData {
-  return { settings: payload.settings, accounts: payload.accounts, blocked: payload.blocked };
+type StatePayload = Omit<ProviderAccountsData, "switches" | "switchFailure"> & {
+  switches?: ProviderAccountSwitch[];
+  switchFailure?: ProviderAccountSwitchFailure | null;
+  error: ProviderAccountError | null;
+};
+
+function connected<T>(client: T | null): T {
+  if (!client) throw new Error("Not connected");
+  return client;
+}
+
+function shownInSection(input: { action: AccountAction; error: ProviderAccountError }): boolean {
+  return input.action.kind === "use" && RECORDED_SWITCH_FAILURES.has(input.error.code);
+}
+
+function reorder(data: ProviderAccountsData, accountIds: string[]): ProviderAccountsData {
+  const byId = new Map(data.accounts.map((account) => [account.id, account]));
+  const accounts = accountIds.flatMap((id) => byId.get(id) ?? []);
+  return accounts.length === data.accounts.length ? { ...data, accounts } : data;
+}
+
+function dataOf(payload: Omit<StatePayload, "error">): ProviderAccountsData {
+  return {
+    settings: payload.settings,
+    accounts: payload.accounts,
+    blocked: payload.blocked,
+    switches: payload.switches ?? [],
+    switchFailure: payload.switchFailure ?? null,
+  };
 }

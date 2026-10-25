@@ -1070,6 +1070,7 @@ export async function createPaseoDaemon(
     onChanged: broadcastProviderAccountsChanged,
     overrides: config.providerAccounts,
   });
+  pluginRuntime.useSavedAccounts(providerAccountService.savedAccountLogins);
   // 「读取 CLI 登录凭证」一开一关，这一节跟着显示停着或恢复。
   cliSignIns.onChange(broadcastProviderAccountsChanged);
   // 先于提供方快照创建：第三方接口启用时，快照和新会话的默认模型都取自它。

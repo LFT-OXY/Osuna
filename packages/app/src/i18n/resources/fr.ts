@@ -4536,6 +4536,51 @@ export const fr: TranslationResources = {
         needsSignInHint:
           "Sa connexion a été refusée ou révoquée : la rotation ne passera plus par lui tant que vous ne vous reconnectez pas.",
         signInAgain: "Se reconnecter",
+        switching: "Passage de la CLI à ce compte…",
+        removing: "Retrait…",
+        menu: {
+          label: "Actions de {{email}}",
+          useNow: "Utiliser maintenant",
+          makeFirst: "Mettre en premier",
+          moveUp: "Monter",
+          moveDown: "Descendre",
+          moveToTop: "Placer en premier",
+          moveToBottom: "Placer en dernier",
+          remove: "Retirer",
+        },
+        orderHint:
+          "Faites glisser pour réordonner : la rotation passe d'abord au compte le plus haut. Alt+↑/↓ pour déplacer, clic droit pour le menu.",
+        orderFailed: "Impossible d'enregistrer l'ordre : {{reason}}",
+        remove: {
+          title: "Retirer {{email}} ?",
+          message:
+            "Osuna supprime la copie de ce compte ({{email}}) qu'il conserve. La CLI ne sera pas déconnectée.",
+          confirm: "Retirer",
+        },
+        switchFailure: {
+          title: "Impossible de changer de compte",
+          write_failed:
+            "Impossible de passer {{name}} à {{email}} : sa connexion n'a pas pu être écrite. Vérifiez qu'Osuna peut écrire la connexion de {{name}}, puis choisissez à nouveau Utiliser maintenant.",
+          login_unsupported:
+            "Impossible de passer {{name}} à {{email}} : Osuna ne peut pas changer cette connexion.",
+          needs_sign_in:
+            "Impossible de passer {{name}} à {{email}} : il faut se reconnecter. Choisissez Se reconnecter sur sa ligne.",
+          no_account:
+            "Le compte utilisé doit se reconnecter et aucun autre compte ne peut prendre le relais. Reconnectez-vous ou ajoutez un autre compte.",
+          other: "Impossible de changer {{name}} : {{reason}}",
+        },
+        switches: {
+          title: "Changements récents",
+          fromTo: "{{from}} → {{to}}",
+          toOnly: "Connecté à {{to}}",
+          showAll: "Tout afficher ({{count}})",
+          showFewer: "Afficher moins",
+          reasons: {
+            use_now: "Vous avez choisi Utiliser maintenant",
+            lapsed: "La connexion de {{from}} ne fonctionne plus",
+            other: "Changé par Osuna",
+          },
+        },
         unknownEmail: "Compte inconnu",
         badges: { inUse: "Utilisé", first: "Premier", needsSignIn: "Reconnexion requise" },
         usage: {

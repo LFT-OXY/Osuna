@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
 import path from "node:path";
-import { readOptionalFile } from "../api-endpoints/config-file.js";
+import { readOptionalFile, writeConfigFileGuarded } from "../api-endpoints/config-file.js";
 import { readCodexCredentialsStore } from "../api-endpoints/codex-config-patch.js";
 import {
   decodeJwtClaims,
@@ -39,8 +39,34 @@ export function codexKeyringAccount(codexHome: string): string {
   return `cli|${digest.slice(0, 16)}`;
 }
 
+/** Codex 的登录放在哪：auth.json 或钥匙串里这个 CODEX_HOME 的那一项。 */
+export type CodexLoginWhere = "file" | "keyring";
+
+/**
+ * CLI 里现在的整份登录，换号与续期当前号用；text 是读到的原文，写回前比对它（写前重读）。
+ * 只在 Osuna 的进程里经过，从不进账号存储（一个登录只有一个持有者）。
+ */
+export type CodexCliLogin =
+  | {
+      kind: "signed_in";
+      where: CodexLoginWhere;
+      text: string;
+      login: Record<string, unknown>;
+      profile: CodexLoginProfile;
+    }
+  // text：只用 API key 登录时 CLI 里那份登录的原文（没有订阅号，但有东西不能盖掉）。
+  | { kind: "signed_out"; where: CodexLoginWhere; text?: string }
+  | Extract<CliLoginReading, { kind: "unsupported" }>;
+
 /** 读 Codex 现在登录的号；只解资料，不留 token。 */
 export async function readCodexLogin(location: CodexLoginLocation): Promise<CliLoginReading> {
+  const cli = await readCodexCliLogin(location);
+  if (cli.kind !== "signed_in") return cli.kind === "signed_out" ? { kind: "signed_out" } : cli;
+  return { kind: "signed_in", ...cli.profile };
+}
+
+/** 按 cli_auth_credentials_store 读 CLI 里的整份登录。 */
+export async function readCodexCliLogin(location: CodexLoginLocation): Promise<CodexCliLogin> {
   const { codexHome, keychain } = location;
   const configText =
     readOptionalFile(path.join(codexHome, "config.toml"))?.toString("utf8") ?? null;
@@ -65,12 +91,12 @@ export async function readCodexLogin(location: CodexLoginLocation): Promise<CliL
         reason: "Codex keeps its login in memory only (cli_auth_credentials_store = ephemeral)",
       };
     case "file":
-      return readAuthJson(readAuthFile(codexHome));
+      return parseCliLogin({ text: readAuthFile(codexHome), where: "file" });
     case "keyring":
     case "auto": {
       if (!keychain.available) {
         if (store.kind === "auto") {
-          return readAuthJson(readAuthFile(codexHome));
+          return parseCliLogin({ text: readAuthFile(codexHome), where: "file" });
         }
         return {
           kind: "unsupported",
@@ -79,18 +105,65 @@ export async function readCodexLogin(location: CodexLoginLocation): Promise<CliL
         };
       }
       const stored = await keychain.read(CODEX_KEYRING_SERVICE, codexKeyringAccount(codexHome));
-      if (stored !== null || store.kind === "keyring") return readAuthJson(stored ?? undefined);
-      return readAuthJson(readAuthFile(codexHome));
+      if (stored !== null || store.kind === "keyring") {
+        return parseCliLogin({ text: stored ?? undefined, where: "keyring" });
+      }
+      // auto：钥匙串没有这一项时 Codex 用文件。
+      return parseCliLogin({ text: readAuthFile(codexHome), where: "file" });
     }
   }
+}
+
+/** 写回时 CLI 的登录与读到时不一样了（Codex 自己续了或换了号）；什么都没写。 */
+export class CodexLoginChangedError extends Error {
+  constructor() {
+    super("Codex's login changed while Osuna was writing it");
+    this.name = "CodexLoginChangedError";
+  }
+}
+
+/**
+ * 把一份登录写进 CLI 读到它的那个地方，守 ADR 0004 的改写规则：写前重读、与 expected（读到的原文，
+ * 没登录时为 null）不同就不写；文件原子替换、保留权限；钥匙串那一项写成一行，与 Codex 自己写的一样。
+ */
+export async function writeCodexCliLogin(input: {
+  location: CodexLoginLocation;
+  where: CodexLoginWhere;
+  expected: string | null;
+  login: Record<string, unknown>;
+}): Promise<void> {
+  const { location, where, expected, login } = input;
+  const { codexHome, keychain } = location;
+  if (where === "keyring") {
+    const account = codexKeyringAccount(codexHome);
+    if ((await keychain.read(CODEX_KEYRING_SERVICE, account)) !== expected) {
+      throw new CodexLoginChangedError();
+    }
+    await keychain.write(CODEX_KEYRING_SERVICE, account, JSON.stringify(login));
+    return;
+  }
+  const result = writeConfigFileGuarded({
+    filePath: path.join(codexHome, "auth.json"),
+    compute: (current) => {
+      if ((current?.toString("utf8") ?? null) !== expected) throw new CodexLoginChangedError();
+      return {
+        change: { kind: "write", text: `${JSON.stringify(login, null, 2)}\n` },
+        value: null,
+      };
+    },
+    commit: () => undefined,
+    rollback: () => undefined,
+  });
+  if (result.kind === "conflict") throw new CodexLoginChangedError();
 }
 
 function readAuthFile(codexHome: string): string | undefined {
   return readOptionalFile(path.join(codexHome, "auth.json"))?.toString("utf8");
 }
 
-function readAuthJson(text: string | undefined): CliLoginReading {
-  if (text === undefined) return { kind: "signed_out" };
+function parseCliLogin(input: { text: string | undefined; where: CodexLoginWhere }): CodexCliLogin {
+  const { text, where } = input;
+  if (text === undefined) return { kind: "signed_out", where };
   let auth: unknown;
   try {
     auth = JSON.parse(text);
@@ -99,7 +172,7 @@ function readAuthJson(text: string | undefined): CliLoginReading {
   }
   const profile = codexLoginProfile(auth);
   // 只用 API key 登录的 Codex 没有 ChatGPT 的 tokens：没有可轮换的订阅号。
-  if (profile === "no_tokens") return { kind: "signed_out" };
+  if (profile === "no_tokens" || !isRecord(auth)) return { kind: "signed_out", where, text };
   if (profile === "no_account") {
     return {
       kind: "unsupported",
@@ -107,7 +180,7 @@ function readAuthJson(text: string | undefined): CliLoginReading {
       reason: "Codex's login names no ChatGPT account",
     };
   }
-  return { kind: "signed_in", ...profile };
+  return { kind: "signed_in", where, text, login: auth, profile };
 }
 
 export interface CodexLoginProfile {

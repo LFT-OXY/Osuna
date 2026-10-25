@@ -4545,6 +4545,51 @@ export const en = {
         needsSignInHint:
           "Its sign-in was refused or revoked, so it won't be rotated to until you sign in again.",
         signInAgain: "Sign in again",
+        switching: "Switching the CLI to this account…",
+        removing: "Removing…",
+        menu: {
+          label: "{{email}} actions",
+          useNow: "Use now",
+          makeFirst: "Make first",
+          moveUp: "Move up",
+          moveDown: "Move down",
+          moveToTop: "Move to top",
+          moveToBottom: "Move to bottom",
+          remove: "Remove",
+        },
+        orderHint:
+          "Drag to reorder: rotation moves to the higher account first. Alt+↑/↓ to move, right-click for the menu.",
+        orderFailed: "Couldn't save the order: {{reason}}",
+        remove: {
+          title: "Remove {{email}}?",
+          message:
+            "Osuna deletes the copy of this account ({{email}}) it keeps. The CLI won't be signed out.",
+          confirm: "Remove",
+        },
+        switchFailure: {
+          title: "Couldn't switch accounts",
+          write_failed:
+            "{{name}} couldn't be switched to {{email}}: its sign-in couldn't be written. Check that Osuna can write {{name}}'s sign-in, then choose Use now again.",
+          login_unsupported:
+            "{{name}} couldn't be switched to {{email}}: Osuna can't switch this sign-in.",
+          needs_sign_in:
+            "{{name}} couldn't be switched to {{email}}: it needs signing in again. Choose Sign in again on its row.",
+          no_account:
+            "The account in use needs signing in again and no other account can take over. Sign in again, or add another account.",
+          other: "{{name}} couldn't be switched: {{reason}}",
+        },
+        switches: {
+          title: "Recent switches",
+          fromTo: "{{from}} → {{to}}",
+          toOnly: "Signed in to {{to}}",
+          showAll: "Show all {{count}}",
+          showFewer: "Show fewer",
+          reasons: {
+            use_now: "You chose Use now",
+            lapsed: "{{from}}'s sign-in stopped working",
+            other: "Switched by Osuna",
+          },
+        },
         unknownEmail: "Unknown account",
         badges: { inUse: "In use", first: "First", needsSignIn: "Needs sign-in" },
         usage: {

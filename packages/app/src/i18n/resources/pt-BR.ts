@@ -4487,6 +4487,51 @@ export const ptBR: TranslationResources = {
         needsSignInHint:
           "O login foi recusado ou revogado, então o rodízio não passa para ela até você entrar de novo.",
         signInAgain: "Entrar de novo",
+        switching: "Trocando a CLI para esta conta…",
+        removing: "Removendo…",
+        menu: {
+          label: "Ações de {{email}}",
+          useNow: "Usar agora",
+          makeFirst: "Tornar primeira",
+          moveUp: "Mover para cima",
+          moveDown: "Mover para baixo",
+          moveToTop: "Mover para o topo",
+          moveToBottom: "Mover para o final",
+          remove: "Remover",
+        },
+        orderHint:
+          "Arraste para reordenar: a rotação passa primeiro para a conta mais acima. Alt+↑/↓ para mover, clique direito para o menu.",
+        orderFailed: "Não foi possível salvar a ordem: {{reason}}",
+        remove: {
+          title: "Remover {{email}}?",
+          message:
+            "O Osuna apaga a cópia desta conta ({{email}}) que guarda. A CLI não será desconectada.",
+          confirm: "Remover",
+        },
+        switchFailure: {
+          title: "Não foi possível trocar de conta",
+          write_failed:
+            "Não foi possível trocar {{name}} para {{email}}: o login não pôde ser gravado. Verifique se o Osuna consegue gravar o login do {{name}} e escolha Usar agora de novo.",
+          login_unsupported:
+            "Não foi possível trocar {{name}} para {{email}}: o Osuna não consegue trocar este login.",
+          needs_sign_in:
+            "Não foi possível trocar {{name}} para {{email}}: é preciso entrar de novo. Escolha Entrar de novo na linha dela.",
+          no_account:
+            "A conta em uso precisa entrar de novo e nenhuma outra conta pode assumir. Entre de novo ou adicione outra conta.",
+          other: "Não foi possível trocar {{name}}: {{reason}}",
+        },
+        switches: {
+          title: "Trocas recentes",
+          fromTo: "{{from}} → {{to}}",
+          toOnly: "Login em {{to}}",
+          showAll: "Mostrar todas as {{count}}",
+          showFewer: "Mostrar menos",
+          reasons: {
+            use_now: "Você escolheu Usar agora",
+            lapsed: "O login de {{from}} parou de funcionar",
+            other: "Trocada pelo Osuna",
+          },
+        },
         unknownEmail: "Conta desconhecida",
         badges: { inUse: "Em uso", first: "Primeira", needsSignIn: "Precisa entrar" },
         usage: {

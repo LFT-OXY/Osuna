@@ -15,6 +15,7 @@ import {
   type ApiEndpointReopenHint,
   type ApiEndpointRequestFormat,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import { arrangeIds, rowMoves, type RowMoves, type RowPlace } from "../sortable-order";
 
 /*
  * 「第三方接口」页的纯计算：接口是主机共用的，列表按接口开关分两组，每行的状态与摘要从列表响应里得出。
@@ -107,8 +108,9 @@ export function groupHostEndpoints(endpoints: ApiEndpoint[]): HostEndpointGroups
   };
 }
 
-/** 一次挪动：上移、下移、移到最前、移到最后，或拖到组里的第几个（落在那一行原来的位置）。 */
-export type EndpointPlace = "up" | "down" | "top" | "bottom" | { index: number };
+/** 一次挪动；与账号列表同一种（sortable-order.ts）。 */
+export type EndpointPlace = RowPlace;
+export type EndpointMoves = RowMoves;
 
 function groupIds(endpoints: ApiEndpoint[], id: string): string[] | null {
   const moving = endpoints.find((endpoint) => endpoint.id === id);
@@ -117,26 +119,6 @@ function groupIds(endpoints: ApiEndpoint[], id: string): string[] | null {
   return endpoints
     .filter((endpoint) => (endpoint.enabled !== false) === isEnabled)
     .map((endpoint) => endpoint.id);
-}
-
-/**
- * 挪到组里的第几个。搜索只显示一部分行时（`shown`），上移、下移跨过上下相邻的那个显示着的行，
- * 拖动的序号是显示着的行里的序号，落在那一行原来的位置；移到最前、最后仍到整组的两头（照 magpie stepProvider、shownToOn）。
- */
-function targetIndex(
-  group: string[],
-  id: string,
-  place: EndpointPlace,
-  shown: ReadonlySet<string> | null,
-): number {
-  if (place === "top") return 0;
-  if (place === "bottom") return group.length - 1;
-  const visible = shown ? group.filter((member) => member === id || shown.has(member)) : group;
-  let target: string | undefined;
-  if (place === "up") target = visible[visible.indexOf(id) - 1];
-  else if (place === "down") target = visible[visible.indexOf(id) + 1];
-  else target = visible[place.index];
-  return target === undefined ? -1 : group.indexOf(target);
 }
 
 /** 一次挪动：挪哪一家、挪到哪；`shown` 是搜索时显示着的行，没在搜索时为 null。 */
@@ -159,21 +141,11 @@ export function arrangeEndpoint(input: {
   const { endpoints, id, place, shown } = input;
   const group = groupIds(endpoints, id);
   if (!group) return null;
-  const from = group.indexOf(id);
-  const to = targetIndex(group, id, place, shown);
-  if (to < 0 || to >= group.length || to === from) return null;
-  const moved = group.filter((member) => member !== id);
-  moved.splice(to, 0, id);
+  const moved = arrangeIds({ group, id, place, shown });
+  if (!moved) return null;
   const members = new Set(group);
   let next = 0;
   return endpoints.map((endpoint) => (members.has(endpoint.id) ? moved[next++] : endpoint.id));
-}
-
-export interface EndpointMoves {
-  top: boolean;
-  up: boolean;
-  down: boolean;
-  bottom: boolean;
 }
 
 /** 行菜单里四个排序项哪些能用：会让顺序变的才能点。 */
@@ -182,8 +154,8 @@ export function endpointMoves(input: {
   id: string;
   shown: ReadonlySet<string> | null;
 }): EndpointMoves {
-  const can = (place: EndpointPlace) => arrangeEndpoint({ ...input, place }) !== null;
-  return { top: can("top"), up: can("up"), down: can("down"), bottom: can("bottom") };
+  const group = groupIds(input.endpoints, input.id) ?? [];
+  return rowMoves({ group, id: input.id, shown: input.shown });
 }
 
 /**

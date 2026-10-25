@@ -1,5 +1,5 @@
 import { Fragment, useState, type ReactElement } from "react";
-import type { SortableEndpointRowsProps } from "./sortable-endpoint-rows.types";
+import type { SortableEndpointRowsProps, SortableItem } from "./sortable-endpoint-rows.types";
 
 /*
  * 原生端：不拖动，排顺序用行菜单（sortable-endpoint-rows.web.tsx 是网页与桌面端的拖动、键盘与右键）。
@@ -8,7 +8,10 @@ import type { SortableEndpointRowsProps } from "./sortable-endpoint-rows.types";
 const keepIcon = (icon: ReactElement) => icon;
 const neverSuppressed = () => false;
 
-export function SortableEndpointRows({ endpoints, renderRow }: SortableEndpointRowsProps) {
+export function SortableEndpointRows<T extends SortableItem>({
+  endpoints,
+  renderRow,
+}: SortableEndpointRowsProps<T>) {
   const [menuEndpointId, setMenuEndpointId] = useState<string | null>(null);
   return (
     <>

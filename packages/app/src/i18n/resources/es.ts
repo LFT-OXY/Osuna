@@ -4516,6 +4516,51 @@ export const es: TranslationResources = {
         needsSignInHint:
           "Su inicio de sesión fue rechazado o revocado, así que no se rotará a ella hasta que vuelvas a iniciar sesión.",
         signInAgain: "Volver a iniciar sesión",
+        switching: "Cambiando la CLI a esta cuenta…",
+        removing: "Quitando…",
+        menu: {
+          label: "Acciones de {{email}}",
+          useNow: "Usar ahora",
+          makeFirst: "Poner primera",
+          moveUp: "Subir",
+          moveDown: "Bajar",
+          moveToTop: "Mover al principio",
+          moveToBottom: "Mover al final",
+          remove: "Quitar",
+        },
+        orderHint:
+          "Arrastra para reordenar: la rotación pasa primero a la cuenta de más arriba. Alt+↑/↓ para mover, clic derecho para el menú.",
+        orderFailed: "No se pudo guardar el orden: {{reason}}",
+        remove: {
+          title: "¿Quitar {{email}}?",
+          message:
+            "Osuna borra la copia de esta cuenta ({{email}}) que guarda. La CLI no cerrará sesión.",
+          confirm: "Quitar",
+        },
+        switchFailure: {
+          title: "No se pudo cambiar de cuenta",
+          write_failed:
+            "No se pudo cambiar {{name}} a {{email}}: no se pudo escribir su inicio de sesión. Comprueba que Osuna puede escribir el inicio de sesión de {{name}} y vuelve a elegir Usar ahora.",
+          login_unsupported:
+            "No se pudo cambiar {{name}} a {{email}}: Osuna no puede cambiar este inicio de sesión.",
+          needs_sign_in:
+            "No se pudo cambiar {{name}} a {{email}}: hay que volver a iniciar sesión. Elige Volver a iniciar sesión en su fila.",
+          no_account:
+            "La cuenta en uso necesita volver a iniciar sesión y ninguna otra cuenta puede sustituirla. Vuelve a iniciar sesión o añade otra cuenta.",
+          other: "No se pudo cambiar {{name}}: {{reason}}",
+        },
+        switches: {
+          title: "Cambios recientes",
+          fromTo: "{{from}} → {{to}}",
+          toOnly: "Sesión iniciada en {{to}}",
+          showAll: "Mostrar los {{count}}",
+          showFewer: "Mostrar menos",
+          reasons: {
+            use_now: "Elegiste Usar ahora",
+            lapsed: "El inicio de sesión de {{from}} dejó de funcionar",
+            other: "Cambiada por Osuna",
+          },
+        },
         unknownEmail: "Cuenta desconocida",
         badges: { inUse: "En uso", first: "Primera", needsSignIn: "Requiere iniciar sesión" },
         usage: {

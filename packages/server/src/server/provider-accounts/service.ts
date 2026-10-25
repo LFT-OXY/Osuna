@@ -7,11 +7,24 @@ import type {
   ProviderAccountBlock,
   ProviderAccountSettings,
   ProviderAccountSignIn,
+  ProviderAccountSwitch,
+  ProviderAccountSwitchEnd,
+  ProviderAccountSwitchFailure,
   ProviderAccountUsage,
 } from "@getpaseo/protocol/provider-account/rpc-schemas";
+import { isAccountRotationProvider } from "@getpaseo/protocol/provider-account/rpc-schemas";
+import type { SavedAccountLogins } from "../plugins/usage-sources/index.js";
 import type { CliLoginReading } from "./cli-login.js";
 import { readClaudeLogin } from "./claude-login.js";
-import { codexLoginProfile, readCodexLogin, type CodexLoginProfile } from "./codex-login.js";
+import {
+  codexLoginProfile,
+  readCodexCliLogin,
+  readCodexLogin,
+  writeCodexCliLogin,
+  type CodexCliLogin,
+  type CodexLoginLocation,
+  type CodexLoginProfile,
+} from "./codex-login.js";
 import {
   CODEX_OAUTH_ENDPOINTS,
   CodexTokenRequestError,
@@ -27,6 +40,7 @@ import {
   SignInFailure,
   type SignInKept,
 } from "./codex-sign-in.js";
+import { isErrnoException } from "../../utils/errno.js";
 import { withFileLock } from "./file-lock.js";
 import { createSystemKeychain, type CliKeychain } from "./keychain.js";
 import { createPlanUsageAccountReader, type PlanUsageReports } from "./plan-usage-reader.js";
@@ -36,7 +50,8 @@ import { ProviderAccountStore, type StoredAccount } from "./store.js";
  * 「账号」一节背后的服务：读 CLI 现在登录的号、登记第 1 个号、多号自动轮换的开关与风险提示；
  * Codex 加号（codex-sign-in.ts）、存着的 Codex 号的续期与每 24 小时保活、各号的额度。
  * 每次读 CLI 登录、续期、查额度、加号前问「读取 CLI 登录凭证」的同一个闸门；关着时什么都不做，存着的号照留。
- * 换号在后面的工单里加在这里。
+ * 「立即使用」换号（照 magpie 的 switchSavedLogin）、移除、排序、换号记录；当前登录的号快到期或读额度被拒时
+ * 由 Osuna 续期并写回 CLI，续期被拒且开着轮换时换到下一个号（原因「号失效」）。
  */
 
 /** 一个号的额度读完的结果：读到了或读不到，形状同 protocol 的 ProviderAccountUsage。 */
@@ -62,6 +77,8 @@ export interface ProviderAccountServiceOptions {
   store: ProviderAccountStore;
   cliSignIns: CliSignInGate;
   readLogin: (provider: AccountRotationProvider) => Promise<CliLoginReading>;
+  // Codex 自己存登录的地方：换号与续期当前号时读写整份登录。
+  codexLogin: CodexLoginLocation;
   usage: AccountUsageReader;
   // 账号或设置变了；daemon 广播 provider.account.changed。
   onChanged: (provider: AccountRotationProvider) => void;
@@ -92,6 +109,18 @@ export interface StartSignInInput {
   accountId?: string;
 }
 
+export interface AccountInput {
+  provider: AccountRotationProvider;
+  accountId: string;
+}
+
+export interface SetOrderInput {
+  provider: AccountRotationProvider;
+  accountIds: string[];
+}
+
+type SwitchReason = "use_now" | "lapsed";
+
 export interface SetRotationInput {
   provider: AccountRotationProvider;
   enabled: boolean;
@@ -115,6 +144,8 @@ export interface ProviderAccountState {
   settings: ProviderAccountSettings;
   accounts: ProviderAccount[];
   blocked: ProviderAccountBlock | null;
+  switches?: ProviderAccountSwitch[];
+  switchFailure?: ProviderAccountSwitchFailure | null;
 }
 
 /** 打开或关掉轮换被拒；code 见 protocol 的 ProviderAccountError。 */
@@ -125,7 +156,10 @@ export class ProviderAccountRequestError extends Error {
       | "cli_sign_ins_off"
       | "login_unsupported"
       | "unsupported_provider"
-      | "not_found",
+      | "not_found"
+      | "needs_sign_in"
+      | "write_failed"
+      | "order_mismatch",
     message: string,
   ) {
     super(message);
@@ -152,6 +186,7 @@ export class ProviderAccountService {
   private readonly store: ProviderAccountStore;
   private readonly cliSignIns: CliSignInGate;
   private readonly readLogin: (provider: AccountRotationProvider) => Promise<CliLoginReading>;
+  private readonly codexLogin: CodexLoginLocation;
   private readonly usageReader: AccountUsageReader;
   private readonly onChanged: (provider: AccountRotationProvider) => void;
   private readonly logger: pino.Logger;
@@ -172,6 +207,7 @@ export class ProviderAccountService {
     this.store = options.store;
     this.cliSignIns = options.cliSignIns;
     this.readLogin = options.readLogin;
+    this.codexLogin = options.codexLogin;
     this.usageReader = options.usage;
     this.onChanged = options.onChanged;
     this.logger = options.logger.child({ module: "provider-accounts" });
@@ -414,9 +450,12 @@ export class ProviderAccountService {
     this.checkTimer.unref?.();
   }
 
-  /** 定时检查：存着的 Codex 号保活；开着轮换的那家，各存着的号额度过期就重读。 */
+  /** 定时检查：当前登录的 Codex 号快到期就续；存着的 Codex 号保活；开着轮换的那家，各存着的号额度过期就重读。 */
   private async check(): Promise<void> {
     if (!this.cliSignIns.allowed()) return;
+    if (this.store.settings("codex").rotationEnabled) {
+      await this.renewSignedIn({ force: false });
+    }
     for (const account of this.store.accounts("codex")) {
       if (!account.login || account.needsSignIn) continue;
       if (!this.keepAliveDue(account)) continue;
@@ -445,6 +484,341 @@ export class ProviderAccountService {
     const renewedAt = Date.parse(account.renewedAt ?? "");
     const last = Math.max(Number.isFinite(renewedAt) ? renewedAt : 0, tokens?.lastRefresh ?? 0);
     return this.now() - last >= KEEP_ALIVE_MS;
+  }
+
+  /**
+   * 当前登录的号的额度走套餐用量来源；Codex 开着轮换时读被拒（401 token_expired 等）就由 Osuna 续一次、
+   * 写回 CLI，再读一次（照 magpie 3b8bcc36）。
+   */
+  private async readSignedInUsage(account: StoredAccount): Promise<AccountUsageResult> {
+    const query = { provider: account.provider, identity: account.identity };
+    const usage = await this.usageReader.read(query);
+    const rejected = usage.status === "failed" && usage.code === "rejected";
+    if (!rejected || account.provider !== "codex") return usage;
+    if (!this.store.settings("codex").rotationEnabled) return usage;
+    const renewed = await this.renewSignedIn({ force: true });
+    return renewed === "renewed" ? this.usageReader.read(query) : usage;
+  }
+
+  /**
+   * 续 CLI 现在登录的 Codex 号并写回 CLI 的存储（照 magpie）：在锁里重读，force 为假时只在 access token
+   * 离到期 5 分钟内才续。续出的 token 只写进 CLI（一个登录只有一个持有者）。续期被拒就把这个号标
+   * 「需要重新登录」，开着轮换时换到下一个号。
+   */
+  private async renewSignedIn(input: {
+    force: boolean;
+  }): Promise<"renewed" | "fresh" | "refused" | "skipped"> {
+    if (!this.cliSignIns.allowed()) return "skipped";
+    const outcome = await withFileLock(this.renewLockPath, async () => {
+      const cli = await readCodexCliLogin(this.codexLogin);
+      if (cli.kind !== "signed_in") return { kind: "skipped" as const };
+      const tokens = codexLoginTokens(cli.login);
+      const expiring =
+        tokens.expiresAt !== undefined && tokens.expiresAt - this.now() <= RENEW_BEFORE_EXPIRY_MS;
+      if (!input.force && !expiring) return { kind: "fresh" as const };
+      let login: Record<string, unknown>;
+      try {
+        login = await refreshCodexLogin({
+          endpoints: this.codexSignInSettings.endpoints,
+          login: cli.login,
+          now: this.now,
+        });
+      } catch (error) {
+        if (error instanceof CodexTokenRequestError && error.refused) {
+          return { kind: "refused" as const, cli, error };
+        }
+        throw error;
+      }
+      // 续期一旦回来就写回，不再问调用方；写不进（Codex 刚好也改了）只能记下，新 token 留不住。
+      await writeCodexCliLogin({
+        location: this.codexLogin,
+        where: cli.where,
+        expected: cli.text,
+        login,
+      });
+      return { kind: "renewed" as const };
+    });
+    if (outcome.kind !== "refused") return outcome.kind;
+    const { cli, error } = outcome;
+    this.logger.warn(
+      { provider: "codex", code: error.code },
+      "The signed-in account's sign-in was refused; it needs signing in again",
+    );
+    const needsSignIn = { reason: error.message, ...(error.code ? { code: error.code } : {}) };
+    const lapsed = this.store.findByIdentity("codex", cli.profile.identity);
+    if (lapsed) {
+      this.store.updateAccount(lapsed.id, { needsSignIn });
+    } else {
+      // 不在列表里的号也记下失效：换走时收回的这份登录不能被当成能用的号。
+      this.store.addAccount({
+        provider: "codex",
+        identity: cli.profile.identity,
+        ...(cli.profile.email ? { email: cli.profile.email } : {}),
+        ...(cli.profile.plan ? { plan: cli.profile.plan } : {}),
+        needsSignIn,
+      });
+    }
+    this.onChanged("codex");
+    if (this.store.settings("codex").rotationEnabled)
+      await this.moveOffLapsed(cli.profile.identity);
+    return "refused";
+  }
+
+  /** 当前号失效后换到排在最前、登录还能用的号；没有就在这一节醒目地说明。 */
+  private async moveOffLapsed(identity: string): Promise<void> {
+    const next = this.store
+      .accounts("codex")
+      .find((account) => account.identity !== identity && account.login && !account.needsSignIn);
+    if (!next) {
+      this.recordFailure({
+        provider: "codex",
+        to: undefined,
+        code: "no_account",
+        message: "The account in use needs signing in again and no other account can take over",
+      });
+      return;
+    }
+    try {
+      await this.switchTo({ target: next, reason: "lapsed" });
+    } catch (error) {
+      this.logger.warn({ err: error, provider: "codex" }, "Moving off a lapsed account failed");
+    }
+  }
+
+  /** 「立即使用」：把 CLI 的登录换成这个号。 */
+  async useAccount(input: AccountInput): Promise<ProviderAccountState> {
+    const { provider, accountId } = input;
+    if (!this.cliSignIns.allowed()) {
+      throw new ProviderAccountRequestError(
+        "cli_sign_ins_off",
+        "Read CLI sign-ins is off, so accounts can't be switched",
+      );
+    }
+    if (provider !== "codex") {
+      throw new ProviderAccountRequestError(
+        "unsupported_provider",
+        "Switching Claude Code accounts isn't available on this daemon yet",
+      );
+    }
+    const target = this.store.account(accountId);
+    if (target?.provider !== provider) {
+      throw new ProviderAccountRequestError("not_found", "That account isn't in the list anymore");
+    }
+    await this.switchTo({ target, reason: "use_now" });
+    return this.list(provider);
+  }
+
+  /**
+   * 换号（照 magpie 的 switchSavedLogin）：要换上的号快到期先续；然后在跨进程锁里重读，把 CLI 里现在的登录
+   * （最新一份）收回到它自己的记录，把目标号的登录写进 CLI，再清掉目标号在 Osuna 这边的那份。
+   * 写不进 CLI 时把收回的那份撤掉，一个登录始终只有一个持有者。失败记进 switchFailure 并抛出。
+   */
+  private async switchTo(input: { target: StoredAccount; reason: SwitchReason }): Promise<void> {
+    const { reason } = input;
+    let target: StoredAccount | null = input.target;
+    if (target.login && !target.needsSignIn) {
+      target = await this.renewCodex({ accountId: target.id, force: false });
+    }
+    if (!target) {
+      throw new ProviderAccountRequestError("not_found", "That account isn't in the list anymore");
+    }
+    if (target.needsSignIn) {
+      throw this.switchFailed({
+        target,
+        code: "needs_sign_in",
+        message: `${target.email ?? "That account"} needs signing in again`,
+      });
+    }
+    const switched = await withFileLock(this.renewLockPath, () =>
+      this.switchLocked({ accountId: target.id, reason }),
+    );
+    if (!switched) return;
+    this.usage.delete(target.id);
+    if (switched.from) this.usage.delete(switched.from.accountId);
+    this.logger.info({ provider: "codex", reason }, "Switched the CLI to another account");
+    this.onChanged("codex");
+  }
+
+  private async switchLocked(input: {
+    accountId: string;
+    reason: SwitchReason;
+  }): Promise<ProviderAccountSwitch | null> {
+    const target = this.store.account(input.accountId);
+    if (!target) {
+      throw new ProviderAccountRequestError("not_found", "That account isn't in the list anymore");
+    }
+    const cli = await readCodexCliLogin(this.codexLogin);
+    if (cli.kind === "unsupported") {
+      throw this.switchFailed({ target, code: "login_unsupported", message: cli.reason });
+    }
+    if (cli.kind === "signed_out" && cli.text !== undefined) {
+      // 只用 API key 登录的 Codex：换上去就会盖掉它，Osuna 不动。
+      throw this.switchFailed({
+        target,
+        code: "login_unsupported",
+        message: "Codex is signed in with an API key, which Osuna won't replace",
+      });
+    }
+    if (cli.kind === "signed_in" && cli.profile.identity === target.identity) {
+      // 已经在用：CLI 拿着它，Osuna 这边不留第二份。
+      if (target.login) this.store.updateAccount(target.id, { login: undefined });
+      return null;
+    }
+    if (!target.login) {
+      throw this.switchFailed({
+        target,
+        code: "needs_sign_in",
+        message: `Osuna has no sign-in for ${target.email ?? "that account"}; sign in again`,
+      });
+    }
+    const takenBack = cli.kind === "signed_in" ? this.takeBack(cli) : null;
+    try {
+      await writeCodexCliLogin({
+        location: this.codexLogin,
+        where: cli.where,
+        expected: cli.kind === "signed_in" ? cli.text : null,
+        login: target.login,
+      });
+    } catch (error) {
+      takenBack?.undo();
+      this.logger.warn({ err: error, provider: "codex" }, "Writing the CLI's login failed");
+      throw this.switchFailed({
+        target,
+        code: "write_failed",
+        message: `Codex's login couldn't be written (${writeFailureCause(error)})`,
+      });
+    }
+    this.store.updateAccount(target.id, { login: undefined });
+    const entry: ProviderAccountSwitch = {
+      at: new Date(this.now()).toISOString(),
+      ...(takenBack ? { from: takenBack.end } : {}),
+      to: switchEnd(target),
+      reason: input.reason,
+    };
+    this.store.recordSwitch("codex", entry);
+    return entry;
+  }
+
+  /** 把 CLI 里现在的登录收回到它自己的记录；不在列表里的号排到最后（照 magpie 的 upsertLogin）。 */
+  private takeBack(cli: Extract<CodexCliLogin, { kind: "signed_in" }>): {
+    end: ProviderAccountSwitchEnd;
+    undo: () => void;
+  } {
+    const existing = this.store.findByIdentity("codex", cli.profile.identity);
+    if (existing) {
+      const previous = existing.login;
+      this.store.updateAccount(existing.id, { login: cli.login });
+      return {
+        end: switchEnd(existing),
+        undo: () => this.store.updateAccount(existing.id, { login: previous }),
+      };
+    }
+    const added = this.store.addAccount({
+      provider: "codex",
+      identity: cli.profile.identity,
+      ...(cli.profile.email ? { email: cli.profile.email } : {}),
+      ...(cli.profile.plan ? { plan: cli.profile.plan } : {}),
+      login: cli.login,
+    });
+    return { end: switchEnd(added), undo: () => this.store.removeAccount(added.id) };
+  }
+
+  private switchFailed(input: {
+    target: StoredAccount;
+    code: "needs_sign_in" | "write_failed" | "login_unsupported";
+    message: string;
+  }): ProviderAccountRequestError {
+    this.recordFailure({
+      provider: "codex",
+      to: switchEnd(input.target),
+      code: input.code,
+      message: input.message,
+    });
+    this.onChanged("codex");
+    return new ProviderAccountRequestError(input.code, input.message);
+  }
+
+  private recordFailure(input: {
+    provider: AccountRotationProvider;
+    to: ProviderAccountSwitchEnd | undefined;
+    code: string;
+    message: string;
+  }): void {
+    const failure: ProviderAccountSwitchFailure = {
+      at: new Date(this.now()).toISOString(),
+      ...(input.to ? { to: input.to } : {}),
+      code: input.code,
+      message: input.message,
+    };
+    this.store.recordSwitchFailure(input.provider, failure);
+  }
+
+  /**
+   * 给套餐用量注册表：Agent 启动（at）后 CLI 换过号时，它启动时用的那个号，以及用那个号自己存着的登录读额度的输入。
+   * 由换号记录推出：at 之后的第一次换号是从哪个号换走的；那个号后来又被换回来了就是 null。
+   */
+  readonly savedAccountLogins: SavedAccountLogins = {
+    accountAt: ({ provider, at, env }) => {
+      if (!isAccountRotationProvider(provider)) return null;
+      // 换号记录只记 Osuna 换的这个 CODEX_HOME；用别的目录的 Agent 不在其列。
+      if (provider === "codex" && !this.isCodexHome(env)) return null;
+      const switches = this.store.settings(provider).switches ?? [];
+      const firstAfter = switches.findLast((entry) => Date.parse(entry.at) > at);
+      const from = firstAfter?.from;
+      if (!from || switches[0]?.to.accountId === from.accountId) return null;
+      const account = this.store.account(from.accountId);
+      if (!account) return null;
+      const label = account.email ?? from.email;
+      return { key: account.identity, ...(label ? { label } : {}) };
+    },
+    usageInput: async ({ provider, key }) => {
+      if (provider !== "codex" || !this.cliSignIns.allowed()) return null;
+      const saved = this.store.findByIdentity("codex", key);
+      if (!saved?.login || saved.needsSignIn) return null;
+      const account = await this.renewCodex({ accountId: saved.id, force: false });
+      const tokens =
+        account?.login && !account.needsSignIn ? codexLoginTokens(account.login) : null;
+      if (!tokens?.accessToken) return null;
+      return {
+        route: {
+          store: "token",
+          accessToken: tokens.accessToken,
+          ...(tokens.accountId ? { accountId: tokens.accountId } : {}),
+        },
+      };
+    },
+  };
+
+  private isCodexHome(env: Record<string, string>): boolean {
+    const agentHome = env.CODEX_HOME || (env.HOME ? path.join(env.HOME, ".codex") : null);
+    return (
+      agentHome === null || path.resolve(agentHome) === path.resolve(this.codexLogin.codexHome)
+    );
+  }
+
+  /** 「移除」：只删 Osuna 存的这个号，CLI 不被登出。 */
+  async removeAccount(input: AccountInput): Promise<ProviderAccountState> {
+    const { provider, accountId } = input;
+    const account = this.store.account(accountId);
+    if (account?.provider !== provider || !this.store.removeAccount(accountId)) {
+      throw new ProviderAccountRequestError("not_found", "That account isn't in the list anymore");
+    }
+    this.usage.delete(accountId);
+    this.logger.info({ provider }, "Removed an account");
+    this.onChanged(provider);
+    return this.list(provider);
+  }
+
+  async setOrder(input: SetOrderInput): Promise<ProviderAccountState> {
+    const { provider, accountIds } = input;
+    if (!this.store.reorder(provider, accountIds)) {
+      throw new ProviderAccountRequestError(
+        "order_mismatch",
+        "The accounts changed on the host; the order wasn't saved",
+      );
+    }
+    this.onChanged(provider);
+    return this.list(provider);
   }
 
   async list(provider: AccountRotationProvider): Promise<ProviderAccountState> {
@@ -529,6 +903,8 @@ export class ProviderAccountService {
       },
       accounts,
       blocked: input.blocked,
+      switches: settings.switches ?? [],
+      switchFailure: settings.switchFailure ?? null,
     };
   }
 
@@ -569,10 +945,7 @@ export class ProviderAccountService {
       let usage: ProviderAccountUsage;
       try {
         if (signedIn || !account.login) {
-          usage = await this.usageReader.read({
-            provider: account.provider,
-            identity: account.identity,
-          });
+          usage = await this.readSignedInUsage(account);
         } else {
           usage = await this.readSavedUsage(account.id);
         }
@@ -675,13 +1048,14 @@ export function createProviderAccountService(
   const homeDir = overrides.homeDir ?? homedir();
   const platform = overrides.platform ?? process.platform;
   const keychain = overrides.keychain ?? createSystemKeychain(platform);
+  // 与终端 hooks、第三方接口同一套规则：CODEX_HOME 优先，缺省 ~/.codex。
+  const codexLogin = { codexHome: env.CODEX_HOME || path.join(homeDir, ".codex"), keychain };
   return new ProviderAccountService({
     store: new ProviderAccountStore({ paseoHome: input.paseoHome, logger: input.logger }),
     cliSignIns: input.cliSignIns,
-    // 与终端 hooks、第三方接口同一套规则：CODEX_HOME 优先，缺省 ~/.codex。
     readLogin: (provider) =>
       provider === "codex"
-        ? readCodexLogin({ codexHome: env.CODEX_HOME || path.join(homeDir, ".codex"), keychain })
+        ? readCodexLogin(codexLogin)
         : readClaudeLogin({
             configDir: env.CLAUDE_CONFIG_DIR || null,
             homeDir,
@@ -689,6 +1063,7 @@ export function createProviderAccountService(
             platform,
             keychain,
           }),
+    codexLogin,
     usage: overrides.usage ?? createPlanUsageAccountReader(input.planUsage),
     onChanged: input.onChanged,
     logger: input.logger,
@@ -702,4 +1077,14 @@ export function createProviderAccountService(
     ...(overrides.checks ? { checks: overrides.checks } : {}),
     ...(overrides.now ? { now: overrides.now } : {}),
   });
+}
+
+function switchEnd(account: StoredAccount): ProviderAccountSwitchEnd {
+  return { accountId: account.id, ...(account.email ? { email: account.email } : {}) };
+}
+
+/** 写不进 CLI 登录的简短原因：系统错误码（EACCES 等）或一句话；完整的错误只进日志（带路径）。 */
+function writeFailureCause(error: unknown): string {
+  if (isErrnoException(error) && error.code) return error.code;
+  return error instanceof Error ? error.message : String(error);
 }

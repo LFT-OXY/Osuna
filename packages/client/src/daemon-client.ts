@@ -6820,6 +6820,39 @@ export class DaemonClient {
     });
   }
 
+  /** 「立即使用」：把 CLI 的登录换成这个号。只有声明了 accountRotation 的 daemon 认。 */
+  async providerAccountUse(
+    options: { provider: string; accountId: string },
+    requestId?: string,
+  ): Promise<ProviderAccountListPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.account.use.request", ...options },
+    });
+  }
+
+  /** 「移除」：只删 Osuna 存的这个号，不登出 CLI。只有声明了 accountRotation 的 daemon 认。 */
+  async providerAccountRemove(
+    options: { provider: string; accountId: string },
+    requestId?: string,
+  ): Promise<ProviderAccountListPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.account.remove.request", ...options },
+    });
+  }
+
+  /** 号的新先后（这家所有号的 ID）。只有声明了 accountRotation 的 daemon 认。 */
+  async providerAccountSetOrder(
+    options: { provider: string; accountIds: string[] },
+    requestId?: string,
+  ): Promise<ProviderAccountListPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.account.set_order.request", ...options },
+    });
+  }
+
   /** 开始加号；带 accountId 是给这个号重新登录。只有声明了 accountRotation 的 daemon 认。 */
   async providerAccountSignInStart(
     options: { provider: string; accountId?: string },

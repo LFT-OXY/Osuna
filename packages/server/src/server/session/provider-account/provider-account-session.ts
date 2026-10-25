@@ -17,10 +17,16 @@ export interface ProviderAccountSessionHost {
   emit(msg: SessionOutboundMessage): void;
 }
 
-type ListRequest = Extract<SessionInboundMessage, { type: "provider.account.list.request" }>;
-type SetRotationRequest = Extract<
+type StateRequest = Extract<
   SessionInboundMessage,
-  { type: "provider.account.set_rotation.request" }
+  {
+    type:
+      | "provider.account.list.request"
+      | "provider.account.set_rotation.request"
+      | "provider.account.use.request"
+      | "provider.account.remove.request"
+      | "provider.account.set_order.request";
+  }
 >;
 type SignInRequest = Extract<
   SessionInboundMessage,
@@ -32,16 +38,23 @@ type SignInRequest = Extract<
       | "provider.account.sign_in.submit.request";
   }
 >;
-export type ProviderAccountRequest = ListRequest | SetRotationRequest | SignInRequest;
+export type ProviderAccountRequest = StateRequest | SignInRequest;
 
 const PROVIDER_ACCOUNT_REQUESTS = new Set<string>([
   "provider.account.list.request",
   "provider.account.set_rotation.request",
+  "provider.account.use.request",
+  "provider.account.remove.request",
+  "provider.account.set_order.request",
   "provider.account.sign_in.start.request",
   "provider.account.sign_in.get.request",
   "provider.account.sign_in.cancel.request",
   "provider.account.sign_in.submit.request",
 ] satisfies ProviderAccountRequest["type"][]);
+
+function isStateRequest(request: ProviderAccountRequest): request is StateRequest {
+  return !request.type.startsWith("provider.account.sign_in.");
+}
 
 export function isProviderAccountRequest(
   msg: SessionInboundMessage,
@@ -77,12 +90,7 @@ export class ProviderAccountSession {
   ) {}
 
   async handle(request: ProviderAccountRequest): Promise<void> {
-    if (
-      request.type !== "provider.account.list.request" &&
-      request.type !== "provider.account.set_rotation.request"
-    ) {
-      return this.handleSignIn(request);
-    }
+    if (!isStateRequest(request)) return this.handleSignIn(request);
     const { requestId, provider } = request;
     let state = EMPTY_STATE;
     let error: ProviderAccountError | null = null;
@@ -92,14 +100,8 @@ export class ProviderAccountSession {
           code: "unsupported_provider",
           message: `${provider} has no account rotation`,
         };
-      } else if (request.type === "provider.account.list.request") {
-        state = await this.options.service.list(provider);
       } else {
-        state = await this.options.service.setRotation({
-          provider,
-          enabled: request.enabled,
-          acknowledgeRiskNotice: request.acknowledgeRiskNotice === true,
-        });
+        state = await this.changeState({ request, provider });
       }
     } catch (cause) {
       error = this.failure({ cause, request });
@@ -107,10 +109,46 @@ export class ProviderAccountSession {
       if (isAccountRotationProvider(provider)) state = await this.currentState(provider);
     }
     const payload = { requestId, provider, ...state, error };
-    if (request.type === "provider.account.list.request") {
-      this.options.host.emit({ type: "provider.account.list.response", payload });
-    } else {
-      this.options.host.emit({ type: "provider.account.set_rotation.response", payload });
+    switch (request.type) {
+      case "provider.account.list.request":
+        this.options.host.emit({ type: "provider.account.list.response", payload });
+        return;
+      case "provider.account.set_rotation.request":
+        this.options.host.emit({ type: "provider.account.set_rotation.response", payload });
+        return;
+      case "provider.account.use.request":
+        this.options.host.emit({ type: "provider.account.use.response", payload });
+        return;
+      case "provider.account.remove.request":
+        this.options.host.emit({ type: "provider.account.remove.response", payload });
+        return;
+      case "provider.account.set_order.request":
+        this.options.host.emit({ type: "provider.account.set_order.response", payload });
+        return;
+    }
+  }
+
+  private changeState(input: {
+    request: StateRequest;
+    provider: AccountRotationProvider;
+  }): Promise<ProviderAccountState> {
+    const { request, provider } = input;
+    const { service } = this.options;
+    switch (request.type) {
+      case "provider.account.list.request":
+        return service.list(provider);
+      case "provider.account.set_rotation.request":
+        return service.setRotation({
+          provider,
+          enabled: request.enabled,
+          acknowledgeRiskNotice: request.acknowledgeRiskNotice === true,
+        });
+      case "provider.account.use.request":
+        return service.useAccount({ provider, accountId: request.accountId });
+      case "provider.account.remove.request":
+        return service.removeAccount({ provider, accountId: request.accountId });
+      case "provider.account.set_order.request":
+        return service.setOrder({ provider, accountIds: request.accountIds });
     }
   }
 

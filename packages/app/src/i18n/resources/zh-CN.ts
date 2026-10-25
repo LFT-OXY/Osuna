@@ -4383,6 +4383,47 @@ export const zhCN: TranslationResources = {
         alreadyAdded: "已经有这个号（{{email}}），已更新它的登录。",
         needsSignInHint: "登录被拒绝或被吊销，重新登录之前不会轮换到它。",
         signInAgain: "重新登录",
+        switching: "正在把 CLI 换到这个号…",
+        removing: "正在移除…",
+        menu: {
+          label: "{{email}} 的操作",
+          useNow: "立即使用",
+          makeFirst: "设为第一",
+          moveUp: "上移",
+          moveDown: "下移",
+          moveToTop: "移到最前",
+          moveToBottom: "移到最后",
+          remove: "移除",
+        },
+        orderHint: "拖动调整先后：轮换先换到排在前面的号。Alt+↑/↓ 移动，右键打开菜单。",
+        orderFailed: "没能保存顺序：{{reason}}",
+        remove: {
+          title: "移除 {{email}}？",
+          message: "Osuna 删掉自己存的这个号（{{email}}）；CLI 不会被登出。",
+          confirm: "移除",
+        },
+        switchFailure: {
+          title: "没能换号",
+          write_failed:
+            "没能把 {{name}} 换到 {{email}}：写不进它的登录。请确认 Osuna 能写 {{name}} 的登录，再点一次「立即使用」。",
+          login_unsupported: "没能把 {{name}} 换到 {{email}}：Osuna 换不了这种登录。",
+          needs_sign_in:
+            "没能把 {{name}} 换到 {{email}}：这个号需要重新登录。请在它那一行点「重新登录」。",
+          no_account: "正在用的号需要重新登录，也没有别的号能接上。请重新登录，或再添加一个号。",
+          other: "没能给 {{name}} 换号：{{reason}}",
+        },
+        switches: {
+          title: "最近换号",
+          fromTo: "{{from}} → {{to}}",
+          toOnly: "登录到 {{to}}",
+          showAll: "显示全部 {{count}} 条",
+          showFewer: "收起",
+          reasons: {
+            use_now: "你按了「立即使用」",
+            lapsed: "{{from}} 的登录失效",
+            other: "Osuna 换的号",
+          },
+        },
         unknownEmail: "不知道是哪个号",
         badges: { inUse: "使用中", first: "第一", needsSignIn: "需要重新登录" },
         usage: {

@@ -9,6 +9,16 @@ export interface CliKeychain {
   readonly available: boolean;
   /** 一项的内容；没有这一项时为 null。 */
   read(service: string, account: string): Promise<string | null>;
+  /** 新建或替换一项（换号时把目标号的登录写进 CLI 的钥匙串）。 */
+  write(service: string, account: string, value: string): Promise<void>;
+}
+
+/** 钥匙串没收下这一项；不带输出与参数，两者都含登录。 */
+export class KeychainWriteError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "KeychainWriteError";
+  }
 }
 
 const SECURITY_TIMEOUT_MS = 10_000;
@@ -23,13 +33,19 @@ function sealedKeychain(): CliKeychain | null {
   const sealed: unknown = Reflect.get(globalThis, SEALED_CLI_KEYCHAIN);
   if (typeof sealed !== "object" || sealed === null) return null;
   const read: unknown = Reflect.get(sealed, "read");
+  const write: unknown = Reflect.get(sealed, "write");
   const available: unknown = Reflect.get(sealed, "available");
-  if (typeof read !== "function" || typeof available !== "boolean") return null;
+  if (typeof read !== "function" || typeof write !== "function" || typeof available !== "boolean") {
+    return null;
+  }
   return {
     available,
     read: async (service, account) => {
       const value: unknown = await read.call(sealed, service, account);
       return typeof value === "string" ? value : null;
+    },
+    write: async (service, account, value) => {
+      await write.call(sealed, service, account, value);
     },
   };
 }
@@ -39,7 +55,13 @@ export function createSystemKeychain(platform: NodeJS.Platform = process.platfor
   const sealed = sealedKeychain();
   if (sealed) return sealed;
   if (platform !== "darwin") {
-    return { available: false, read: async () => null };
+    return {
+      available: false,
+      read: async () => null,
+      write: async () => {
+        throw new KeychainWriteError("Osuna can't write the system keyring on this platform");
+      },
+    };
   }
   return {
     available: true,
@@ -55,6 +77,18 @@ export function createSystemKeychain(platform: NodeJS.Platform = process.platfor
       } catch (error) {
         if (exitCodeOf(error) === ITEM_NOT_FOUND_EXIT_CODE) return null;
         throw error;
+      }
+    },
+    // 照 magpie 的 securityKeychain.Put：-U 替换已有的那一项。出错时不带输出与参数，两者都含登录。
+    async write(service, account, value) {
+      try {
+        await execCommand(
+          "security",
+          ["add-generic-password", "-U", "-s", service, "-a", account, "-w", value],
+          { timeout: SECURITY_TIMEOUT_MS, envMode: "internal" },
+        );
+      } catch {
+        throw new KeychainWriteError("The keychain didn't take the sign-in");
       }
     },
   };
