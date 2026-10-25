@@ -9,6 +9,7 @@ import { useToast } from "@/contexts/toast-context";
 import { useIsLocalDaemon } from "@/hooks/use-is-local-daemon";
 import { openHostPrivacySettings } from "@/navigation/settings-navigation";
 import { confirmDialog } from "@/utils/confirm-dialog";
+import { ProviderAccountLimitsSheet } from "./limits-sheet";
 import { ProviderAccountsRiskNoticeSheet } from "./risk-notice-sheet";
 import { ProviderAccountsSection } from "./section";
 import { ProviderAccountSignInSheet } from "./sign-in-sheet";
@@ -58,6 +59,32 @@ export function ProviderAccountsView(props: {
     },
     [removeAccount, t],
   );
+  // 正在设上限的号（只记 id：列表刷新后用新的那份）。
+  const [limitsFor, setLimitsFor] = useState<string | null>(null);
+  const { setLimits } = accounts;
+  const saveLimits = useCallback(
+    (account: ProviderAccount, limits: Record<string, number>) => {
+      void (async () => {
+        if (await setLimits(account, limits)) setLimitsFor(null);
+      })();
+    },
+    [setLimits],
+  );
+  const closeLimits = useCallback(() => setLimitsFor(null), []);
+  const openLimits = useCallback((account: ProviderAccount) => setLimitsFor(account.id), []);
+  const limitsAccount =
+    limitsFor !== null && accounts.load.kind === "ready"
+      ? accounts.load.data.accounts.find((account) => account.id === limitsFor)
+      : undefined;
+  const { pendingAction, actionError } = accounts;
+  const limitsSaving = pendingAction?.kind === "limits" && pendingAction.accountId === limitsFor;
+  const limitsError = actionError?.action.kind === "limits" ? actionError.message : null;
+  const saveShownLimits = useCallback(
+    (limits: Record<string, number>) => {
+      if (limitsAccount) saveLimits(limitsAccount, limits);
+    },
+    [limitsAccount, saveLimits],
+  );
   const signInView = signIn.view;
   const copyLink = useCallback(() => {
     if (signInView.kind !== "active") return;
@@ -91,7 +118,18 @@ export function ProviderAccountsView(props: {
         onUseAccount={accounts.switchTo}
         onRemoveAccount={confirmRemove}
         onSetOrder={accounts.setOrder}
+        onSetLimits={openLimits}
+        onSetKeepSignedIn={accounts.setKeepSignedIn}
       />
+      {limitsAccount ? (
+        <ProviderAccountLimitsSheet
+          account={limitsAccount}
+          saving={limitsSaving}
+          error={limitsError}
+          onSave={saveShownLimits}
+          onClose={closeLimits}
+        />
+      ) : null}
       {accounts.confirmingRiskNotice ? (
         <ProviderAccountsRiskNoticeSheet
           provider={provider}

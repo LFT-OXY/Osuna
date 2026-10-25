@@ -4,6 +4,7 @@ import type pino from "pino";
 import type {
   AccountRotationProvider,
   ProviderAccount,
+  ProviderAccountSwitchWindow,
   ProviderAccountBlock,
   ProviderAccountSettings,
   ProviderAccountSignIn,
@@ -12,7 +13,11 @@ import type {
   ProviderAccountSwitchFailure,
   ProviderAccountUsage,
 } from "@getpaseo/protocol/provider-account/rpc-schemas";
-import { isAccountRotationProvider } from "@getpaseo/protocol/provider-account/rpc-schemas";
+import {
+  ACCOUNT_LIMIT_MAX,
+  ACCOUNT_LIMIT_MIN,
+  isAccountRotationProvider,
+} from "@getpaseo/protocol/provider-account/rpc-schemas";
 import type { SavedAccountLogins } from "../plugins/usage-sources/index.js";
 import type { CliLoginReading } from "./cli-login.js";
 import { readClaudeLogin } from "./claude-login.js";
@@ -44,6 +49,14 @@ import { isErrnoException } from "../../utils/errno.js";
 import { withFileLock } from "./file-lock.js";
 import { createSystemKeychain, type CliKeychain } from "./keychain.js";
 import { createPlanUsageAccountReader, type PlanUsageReports } from "./plan-usage-reader.js";
+import {
+  nextMove,
+  pickTarget,
+  returningAfter,
+  type RotationAccount,
+  type SwitchReason,
+  type RotationReturning,
+} from "./rotation-rules.js";
 import { ProviderAccountStore, type StoredAccount } from "./store.js";
 
 /*
@@ -52,6 +65,7 @@ import { ProviderAccountStore, type StoredAccount } from "./store.js";
  * 每次读 CLI 登录、续期、查额度、加号前问「读取 CLI 登录凭证」的同一个闸门；关着时什么都不做，存着的号照留。
  * 「立即使用」换号（照 magpie 的 switchSavedLogin）、移除、排序、换号记录；当前登录的号快到期或读额度被拒时
  * 由 Osuna 续期并写回 CLI，续期被拒且开着轮换时换到下一个号（原因「号失效」）。
+ * 定时检查按 rotation-rules.ts 的规则自动换走、换回；「设上限」「固定登录到」。
  */
 
 /** 一个号的额度读完的结果：读到了或读不到，形状同 protocol 的 ProviderAccountUsage。 */
@@ -119,7 +133,17 @@ export interface SetOrderInput {
   accountIds: string[];
 }
 
-type SwitchReason = "use_now" | "lapsed";
+export interface SetLimitsInput {
+  provider: AccountRotationProvider;
+  accountId: string;
+  limits: Record<string, number>;
+}
+
+export interface SetKeepSignedInInput {
+  provider: AccountRotationProvider;
+  // null 是「不固定」。
+  accountId: string | null;
+}
 
 export interface SetRotationInput {
   provider: AccountRotationProvider;
@@ -138,6 +162,7 @@ interface ProjectInput {
   signedIn: boolean;
   // 这一节没停着：可以在后台读当前号的额度。
   mayRead: boolean;
+  standing: ProviderAccount["standing"];
 }
 
 export interface ProviderAccountState {
@@ -159,7 +184,8 @@ export class ProviderAccountRequestError extends Error {
       | "not_found"
       | "needs_sign_in"
       | "write_failed"
-      | "order_mismatch",
+      | "order_mismatch"
+      | "invalid_limit",
     message: string,
   ) {
     super(message);
@@ -192,7 +218,8 @@ export class ProviderAccountService {
   private readonly logger: pino.Logger;
   private readonly now: () => number;
   private readonly usage = new Map<string, KnownUsage>();
-  private readonly reading = new Set<string>();
+  // 正在读的号；定时检查等它读完再判断。
+  private readonly reading = new Map<string, Promise<ProviderAccountUsage>>();
   private readonly renewLockPath: string;
   private readonly codexSignInSettings: CodexSignInSettings;
   private readonly checks: AccountCheckTiming;
@@ -202,6 +229,9 @@ export class ProviderAccountService {
   private readonly signIns = new Map<AccountRotationProvider, CodexSignIn>();
   private checkTimer: ReturnType<typeof setTimeout> | null = null;
   private stopped = false;
+  // 正在跑的检查；跑着时又要求检查（立即使用、重新登录、固定之后），跑完再来一次。
+  private checking: Promise<void> | null = null;
+  private checkAgain = false;
 
   constructor(options: ProviderAccountServiceOptions) {
     this.store = options.store;
@@ -325,6 +355,8 @@ export class ProviderAccountService {
       "Account signed in",
     );
     this.onChanged("codex");
+    // 「重新登录」修好的号可能该换回去了：不等下一次定时检查。
+    if (input.accountId !== undefined) this.requestCheck();
     return {
       accountId: kept.account.id,
       ...(kept.account.email ? { email: kept.account.email } : {}),
@@ -443,11 +475,37 @@ export class ProviderAccountService {
   private scheduleCheck(delayMs: number): void {
     if (this.stopped) return;
     this.checkTimer = setTimeout(() => {
-      void this.check()
-        .catch((error) => this.logger.warn({ err: error }, "Account check failed"))
-        .finally(() => this.scheduleCheck(this.checks.intervalMs));
+      void this.runCheck().finally(() => this.scheduleCheck(this.checks.intervalMs));
     }, delayMs);
     this.checkTimer.unref?.();
+  }
+
+  /** 马上检查一次（不改定时检查的节奏）；正在检查时，跑完再来一次。 */
+  private requestCheck(): void {
+    if (this.stopped) return;
+    void this.runCheck();
+  }
+
+  private runCheck(): Promise<void> {
+    if (this.checking) {
+      this.checkAgain = true;
+      return this.checking;
+    }
+    const run = (async () => {
+      do {
+        this.checkAgain = false;
+        try {
+          await this.check();
+        } catch (error) {
+          this.logger.warn({ err: error }, "Account check failed");
+        }
+      } while (this.checkAgain && !this.stopped);
+    })();
+    this.checking = run;
+    void run.finally(() => {
+      if (this.checking === run) this.checking = null;
+    });
+    return run;
   }
 
   /** 定时检查：当前登录的 Codex 号快到期就续；存着的 Codex 号保活；开着轮换的那家，各存着的号额度过期就重读。 */
@@ -470,13 +528,91 @@ export class ProviderAccountService {
     }
     for (const provider of ["codex", "claude"] as const) {
       if (!this.store.settings(provider).rotationEnabled) continue;
+      if (provider === "codex") {
+        await this.rotate(provider);
+        continue;
+      }
       for (const account of this.store.accounts(provider)) {
         if (!account.login || account.needsSignIn) continue;
         const known = this.usage.get(account.id);
         if (!known || this.now() - known.at >= USAGE_TTL_MS)
-          this.startReading({ account, signedIn: false });
+          void this.readUsage({ account, signedIn: false });
       }
     }
+  }
+
+  /**
+   * 按 rotation-rules.ts 判断这家该不该换号，该换就换（与「立即使用」同一套步骤与换号记录）。
+   * 先把各号的额度读到（过期的重读，等它读完）。Claude Code 的换号在后面的工单里做。
+   */
+  private async rotate(provider: AccountRotationProvider): Promise<void> {
+    if (provider !== "codex" || !this.cliSignIns.allowed()) return;
+    const login = await this.readLogin(provider);
+    if (login.kind !== "signed_in") return;
+    const listed = this.store.accounts(provider);
+    const accounts = await Promise.all(
+      listed.map((account) =>
+        this.rotationAccount({ account, inUse: account.identity === login.identity }),
+      ),
+    );
+    const move = nextMove({
+      accounts,
+      keepSignedInTo: this.keptAccount(provider),
+      returning: this.liveReturning(provider),
+      now: this.now(),
+    });
+    if (!move) return;
+    const target = this.store.account(move.to);
+    if (!target) return;
+    this.logger.info({ provider, reason: move.reason }, "Rotating to another account");
+    try {
+      await this.switchTo({
+        target,
+        reason: move.reason,
+        ...(move.window ? { window: move.window } : {}),
+        onlyFrom: login.identity,
+      });
+    } catch (error) {
+      // 失败已记进 switchFailure 并广播；下一次检查再试。
+      this.logger.warn({ err: error, provider }, "Rotating to another account failed");
+    }
+  }
+
+  /** 给换号规则看的号：读数取这次检查读到的（过期就等它重读）。 */
+  private async rotationAccount(input: {
+    account: StoredAccount;
+    inUse: boolean;
+  }): Promise<RotationAccount> {
+    const { account, inUse } = input;
+    const switchable = !account.needsSignIn && (inUse || account.login !== undefined);
+    const usage = switchable ? await this.freshUsage({ account, signedIn: inUse }) : undefined;
+    return { id: account.id, inUse, switchable, usage, limits: account.limits ?? {} };
+  }
+
+  private async freshUsage(input: {
+    account: StoredAccount;
+    signedIn: boolean;
+  }): Promise<ProviderAccountUsage> {
+    const known = this.usage.get(input.account.id);
+    if (known && this.now() - known.at < USAGE_TTL_MS) return known.usage;
+    return this.readUsage(input);
+  }
+
+  /** 「固定登录到」的号；那个号已经不在列表里时当作不固定。 */
+  private keptAccount(provider: AccountRotationProvider): string | null {
+    const kept = this.store.settings(provider).keepSignedInTo;
+    if (kept === undefined) return null;
+    return this.store.account(kept)?.provider === provider ? kept : null;
+  }
+
+  /** 「等着换回」的记录；被换走的号或换上的号已经不在列表里时不算。 */
+  private liveReturning(provider: AccountRotationProvider): RotationReturning | null {
+    const returning = this.store.settings(provider).returning;
+    if (!returning) return null;
+    const live = [returning.back, returning.to].every(
+      (id) => this.store.account(id)?.provider === provider,
+    );
+    return live ? returning : null;
   }
 
   private keepAliveDue(account: StoredAccount): boolean {
@@ -564,11 +700,19 @@ export class ProviderAccountService {
     return "refused";
   }
 
-  /** 当前号失效后换到排在最前、登录还能用的号；没有就在这一节醒目地说明。 */
+  /**
+   * 当前号失效后换到排在最前、有余量的号（选法同自动换号）；没有就在这一节醒目地说明。
+   * 「固定登录到」开着时不换。
+   */
   private async moveOffLapsed(identity: string): Promise<void> {
-    const next = this.store
-      .accounts("codex")
-      .find((account) => account.identity !== identity && account.login && !account.needsSignIn);
+    if (this.keptAccount("codex") !== null) return;
+    const candidates = await Promise.all(
+      this.store
+        .accounts("codex")
+        .map((account) => this.rotationAccount({ account, inUse: account.identity === identity })),
+    );
+    const nextId = pickTarget({ accounts: candidates, now: this.now() });
+    const next = nextId ? this.store.account(nextId) : null;
     if (!next) {
       this.recordFailure({
         provider: "codex",
@@ -579,7 +723,7 @@ export class ProviderAccountService {
       return;
     }
     try {
-      await this.switchTo({ target: next, reason: "lapsed" });
+      await this.switchTo({ target: next, reason: "lapsed", onlyFrom: identity });
     } catch (error) {
       this.logger.warn({ err: error, provider: "codex" }, "Moving off a lapsed account failed");
     }
@@ -605,6 +749,8 @@ export class ProviderAccountService {
       throw new ProviderAccountRequestError("not_found", "That account isn't in the list anymore");
     }
     await this.switchTo({ target, reason: "use_now" });
+    // 换上的号也许已经没有余量：马上按规则检查一次，不等 5 分钟。
+    this.requestCheck();
     return this.list(provider);
   }
 
@@ -613,8 +759,14 @@ export class ProviderAccountService {
    * （最新一份）收回到它自己的记录，把目标号的登录写进 CLI，再清掉目标号在 Osuna 这边的那份。
    * 写不进 CLI 时把收回的那份撤掉，一个登录始终只有一个持有者。失败记进 switchFailure 并抛出。
    */
-  private async switchTo(input: { target: StoredAccount; reason: SwitchReason }): Promise<void> {
-    const { reason } = input;
+  private async switchTo(input: {
+    target: StoredAccount;
+    reason: SwitchReason;
+    window?: ProviderAccountSwitchWindow;
+    // 自动换号：只在 CLI 登录的还是判断时的那个号时才换。
+    onlyFrom?: string;
+  }): Promise<void> {
+    const { reason, window, onlyFrom } = input;
     let target: StoredAccount | null = input.target;
     if (target.login && !target.needsSignIn) {
       target = await this.renewCodex({ accountId: target.id, force: false });
@@ -630,7 +782,12 @@ export class ProviderAccountService {
       });
     }
     const switched = await withFileLock(this.renewLockPath, () =>
-      this.switchLocked({ accountId: target.id, reason }),
+      this.switchLocked({
+        accountId: target.id,
+        reason,
+        ...(window ? { window } : {}),
+        ...(onlyFrom !== undefined ? { onlyFrom } : {}),
+      }),
     );
     if (!switched) return;
     this.usage.delete(target.id);
@@ -642,6 +799,8 @@ export class ProviderAccountService {
   private async switchLocked(input: {
     accountId: string;
     reason: SwitchReason;
+    window?: ProviderAccountSwitchWindow;
+    onlyFrom?: string;
   }): Promise<ProviderAccountSwitch | null> {
     const target = this.store.account(input.accountId);
     if (!target) {
@@ -659,6 +818,9 @@ export class ProviderAccountService {
         message: "Codex is signed in with an API key, which Osuna won't replace",
       });
     }
+    // 判断之后（读额度要等网络）用户已经「立即使用」换了号：按旧判断换会盖掉用户的选择，这次不换。
+    const signedInNow = cli.kind === "signed_in" ? cli.profile.identity : null;
+    if (input.onlyFrom !== undefined && signedInNow !== input.onlyFrom) return null;
     if (cli.kind === "signed_in" && cli.profile.identity === target.identity) {
       // 已经在用：CLI 拿着它，Osuna 这边不留第二份。
       if (target.login) this.store.updateAccount(target.id, { login: undefined });
@@ -689,13 +851,38 @@ export class ProviderAccountService {
       });
     }
     this.store.updateAccount(target.id, { login: undefined });
+    return this.recordSwitch({
+      from: takenBack?.end,
+      target,
+      reason: input.reason,
+      window: input.window,
+    });
+  }
+
+  /** 记下一次换成的换号，连同「等着换回」的记录（同在锁里，列表不会读到只记了一半的状态）。 */
+  private recordSwitch(input: {
+    from: ProviderAccountSwitchEnd | undefined;
+    target: StoredAccount;
+    reason: SwitchReason;
+    window: ProviderAccountSwitchWindow | undefined;
+  }): ProviderAccountSwitch {
+    const { from, target, reason, window } = input;
     const entry: ProviderAccountSwitch = {
       at: new Date(this.now()).toISOString(),
-      ...(takenBack ? { from: takenBack.end } : {}),
+      ...(from ? { from } : {}),
       to: switchEnd(target),
-      reason: input.reason,
+      reason,
+      ...(window ? { window } : {}),
     };
+    const returning = from
+      ? returningAfter({
+          move: { from: from.accountId, to: target.id, reason },
+          returning: this.liveReturning("codex"),
+          order: this.store.accounts("codex").map((account) => account.id),
+        })
+      : null;
     this.store.recordSwitch("codex", entry);
+    this.store.updateSettings("codex", { returning: returning ?? undefined });
     return entry;
   }
 
@@ -803,6 +990,9 @@ export class ProviderAccountService {
     if (account?.provider !== provider || !this.store.removeAccount(accountId)) {
       throw new ProviderAccountRequestError("not_found", "That account isn't in the list anymore");
     }
+    if (this.store.settings(provider).keepSignedInTo === accountId) {
+      this.store.updateSettings(provider, { keepSignedInTo: undefined });
+    }
     this.usage.delete(accountId);
     this.logger.info({ provider }, "Removed an account");
     this.onChanged(provider);
@@ -818,6 +1008,45 @@ export class ProviderAccountService {
       );
     }
     this.onChanged(provider);
+    return this.list(provider);
+  }
+
+  /** 「设上限」：整份替换这个号各窗口的上限（1–99 的整数）。 */
+  async setLimits(input: SetLimitsInput): Promise<ProviderAccountState> {
+    const { provider, accountId, limits } = input;
+    const invalid = Object.values(limits).some(
+      (value) => !Number.isInteger(value) || value < ACCOUNT_LIMIT_MIN || value > ACCOUNT_LIMIT_MAX,
+    );
+    if (invalid) {
+      throw new ProviderAccountRequestError(
+        "invalid_limit",
+        `A limit is a whole percent from ${ACCOUNT_LIMIT_MIN} to ${ACCOUNT_LIMIT_MAX}`,
+      );
+    }
+    const account = this.store.account(accountId);
+    if (account?.provider !== provider) {
+      throw new ProviderAccountRequestError("not_found", "That account isn't in the list anymore");
+    }
+    const kept = Object.keys(limits).length > 0 ? limits : undefined;
+    this.store.updateAccount(accountId, { limits: kept });
+    this.logger.info({ provider, windows: Object.keys(limits).length }, "Account limits saved");
+    this.onChanged(provider);
+    return this.list(provider);
+  }
+
+  /** 「固定登录到」：固定后完全不自动换；固定到的不是 CLI 现在登录的号时，马上检查一次、换到它上面。 */
+  async setKeepSignedIn(input: SetKeepSignedInInput): Promise<ProviderAccountState> {
+    const { provider, accountId } = input;
+    if (accountId !== null && this.store.account(accountId)?.provider !== provider) {
+      throw new ProviderAccountRequestError("not_found", "That account isn't in the list anymore");
+    }
+    this.store.updateSettings(provider, {
+      keepSignedInTo: accountId ?? undefined,
+      returning: undefined,
+    });
+    this.logger.info({ provider, pinned: accountId !== null }, "Keep signed in to saved");
+    this.onChanged(provider);
+    this.requestCheck();
     return this.list(provider);
   }
 
@@ -889,17 +1118,24 @@ export class ProviderAccountService {
   private state(provider: AccountRotationProvider, input: StateInput): ProviderAccountState {
     const settings = this.store.settings(provider);
     const signedInIdentity = input.signedIn?.kind === "signed_in" ? input.signedIn.identity : null;
-    const accounts = this.store.accounts(provider).map((account) =>
+    const listed = this.store.accounts(provider);
+    const inUseId = listed.find((account) => account.identity === signedInIdentity)?.id;
+    // 只在还在换上的号上时才算「等着换回」。
+    const returning = this.liveReturning(provider);
+    const waiting = returning !== null && returning.to === inUseId ? returning : null;
+    const accounts = listed.map((account) =>
       this.project({
         account,
         signedIn: account.identity === signedInIdentity,
         mayRead: input.blocked === null,
+        standing: standingOf({ accountId: account.id, returning: waiting }),
       }),
     );
     return {
       settings: {
         rotationEnabled: settings.rotationEnabled === true,
         riskNoticeSeen: settings.riskNoticeSeen === true,
+        keepSignedInTo: this.keptAccount(provider),
       },
       accounts,
       blocked: input.blocked,
@@ -908,7 +1144,7 @@ export class ProviderAccountService {
     };
   }
 
-  private project({ account, signedIn, mayRead }: ProjectInput): ProviderAccount {
+  private project({ account, signedIn, mayRead, standing }: ProjectInput): ProviderAccount {
     // 当前号走套餐用量来源；存着的号用它自己的 token，失效的不读。
     const readable = signedIn || (account.login !== undefined && !account.needsSignIn);
     return {
@@ -918,6 +1154,8 @@ export class ProviderAccountService {
       signedIn,
       usage: this.usageOf({ account, readsNow: readable && mayRead, signedIn }),
       ...(account.needsSignIn ? { needsSignIn: account.needsSignIn } : {}),
+      ...(account.limits ? { limits: account.limits } : {}),
+      ...(standing ? { standing } : {}),
     };
   }
 
@@ -930,18 +1168,22 @@ export class ProviderAccountService {
     const { account, readsNow, signedIn } = input;
     const known = this.usage.get(account.id);
     const stale = !known || this.now() - known.at >= USAGE_TTL_MS;
-    if (readsNow && stale) this.startReading({ account, signedIn });
+    if (readsNow && stale) void this.readUsage({ account, signedIn });
     if (known) return known.usage;
     if (account.usage) return { status: "read", ...account.usage };
     if (readsNow) return { status: "reading" };
     return { status: "failed", code: "not_read_yet", reason: "Usage hasn't been read yet" };
   }
 
-  private startReading(input: { account: StoredAccount; signedIn: boolean }): void {
+  /** 读一个号的额度、记下并广播；同一个号同时只读一次，后来的等前一次。 */
+  private readUsage(input: {
+    account: StoredAccount;
+    signedIn: boolean;
+  }): Promise<ProviderAccountUsage> {
     const { account, signedIn } = input;
-    if (this.reading.has(account.id)) return;
-    this.reading.add(account.id);
-    void (async () => {
+    const running = this.reading.get(account.id);
+    if (running) return running;
+    const run = (async () => {
       let usage: ProviderAccountUsage;
       try {
         if (signedIn || !account.login) {
@@ -953,6 +1195,7 @@ export class ProviderAccountService {
           this.store.recordUsage(account.id, {
             fetchedAt: usage.fetchedAt,
             windows: usage.windows,
+            ...(usage.held ? { held: true } : {}),
           });
         }
       } catch (error) {
@@ -969,7 +1212,10 @@ export class ProviderAccountService {
       }
       this.usage.set(account.id, { at: this.now(), usage });
       this.onChanged(account.provider);
+      return usage;
     })();
+    this.reading.set(account.id, run);
+    return run;
   }
 
   /** 存着的号的额度：要用时先续（快到期才续），用它自己的 token 读；被拒就强制续一次再读。 */
@@ -1087,4 +1333,14 @@ function switchEnd(account: StoredAccount): ProviderAccountSwitchEnd {
 function writeFailureCause(error: unknown): string {
   if (isErrnoException(error) && error.code) return error.code;
   return error instanceof Error ? error.message : String(error);
+}
+
+function standingOf(input: {
+  accountId: string;
+  returning: RotationReturning | null;
+}): ProviderAccount["standing"] {
+  const { accountId, returning } = input;
+  if (returning?.back === accountId) return "first_when_room";
+  if (returning?.to === accountId) return "temporarily_first";
+  return undefined;
 }

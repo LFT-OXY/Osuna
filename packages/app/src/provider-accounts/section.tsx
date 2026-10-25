@@ -16,7 +16,13 @@ import { arrangeIds, rowMoves, type RowPlace } from "@/api-endpoints/sortable-or
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import {
+  SelectField,
+  type SelectFieldDisplay,
+  type SelectFieldOption,
+} from "@/components/ui/select-field";
 import { Switch } from "@/components/ui/switch";
+import { useIsCompactFormFactor } from "@/constants/layout";
 import { settingsStyles } from "@/styles/settings";
 import { AccountRow, type AccountRowActivity } from "./account-row";
 import { SwitchLog } from "./switch-log";
@@ -24,12 +30,13 @@ import type { SignedInAccount } from "./use-account-sign-in";
 import type {
   AccountAction,
   AccountActionError,
+  ProviderAccountsData,
   ProviderAccountsLoad,
 } from "./use-provider-accounts";
 
 /*
  * Codex / Claude Code 提供方页的「账号」一节，从上到下：说明行（总开关关着、登录换不了、换号失败）、
- * 「多号自动轮换」开关、账号列表（行菜单与拖动排序）、「添加账号」、「最近换号」。纯 props，运行时接线在 view.tsx。
+ * 「多号自动轮换」开关、「固定登录到」、账号列表（行菜单与拖动排序）、「添加账号」、「最近换号」。纯 props，运行时接线在 view.tsx。
  */
 
 const KEY = "settings.providers.accounts";
@@ -54,6 +61,8 @@ export interface ProviderAccountsSectionProps {
   onUseAccount: (account: ProviderAccount) => void;
   onRemoveAccount: (account: ProviderAccount) => void;
   onSetOrder: (accountIds: string[]) => void;
+  onSetLimits: (account: ProviderAccount) => void;
+  onSetKeepSignedIn: (accountId: string | null) => void;
 }
 
 export function ProviderAccountsSection(props: ProviderAccountsSectionProps) {
@@ -97,6 +106,13 @@ export function ProviderAccountsSection(props: ProviderAccountsSectionProps) {
             testID="provider-accounts-rotate-switch"
           />
         </View>
+        <KeepSignedInRow
+          data={data}
+          canManage={canManage}
+          pendingAction={props.pendingAction}
+          actionError={props.actionError}
+          onChange={props.onSetKeepSignedIn}
+        />
       </View>
       <AccountList
         load={load}
@@ -112,9 +128,93 @@ export function ProviderAccountsSection(props: ProviderAccountsSectionProps) {
         onUseAccount={props.onUseAccount}
         onRemoveAccount={props.onRemoveAccount}
         onSetOrder={props.onSetOrder}
+        onSetLimits={props.onSetLimits}
       />
       {data ? <SwitchLog switches={data.switches} /> : null}
     </SettingsSection>
+  );
+}
+
+// 「不固定」在下拉里的 id：号的 id 不会是空串。
+const NOT_KEPT = "";
+
+/** 「固定登录到」：不固定，或某个号；固定后完全不自动换。还没有号时不出现。 */
+function KeepSignedInRow(props: {
+  data: ProviderAccountsData | null;
+  canManage: boolean;
+  pendingAction: AccountAction | null;
+  actionError: AccountActionError | null;
+  onChange: (accountId: string | null) => void;
+}) {
+  const { data, canManage, pendingAction, actionError, onChange } = props;
+  const accounts = data?.accounts ?? NO_ACCOUNTS;
+  const keptId = data?.settings.keepSignedInTo ?? null;
+  const disabled = !canManage || data?.blocked != null || pendingAction !== null;
+  const saving = pendingAction?.kind === "keep";
+  const error = actionError?.action.kind === "keep" ? actionError.message : null;
+  const { t } = useTranslation();
+  const isCompact = useIsCompactFormFactor();
+  const notKept = t(`${KEY}.keep.none`);
+  const emailOf = useCallback(
+    (account: ProviderAccount) => account.email ?? t(`${KEY}.unknownEmail`),
+    [t],
+  );
+  const options = useMemo<SelectFieldOption<string>[]>(
+    () => [
+      { id: NOT_KEPT, value: NOT_KEPT, label: notKept, testID: "provider-accounts-keep-none" },
+      ...accounts.map((account) => ({
+        id: account.id,
+        value: account.id,
+        label: emailOf(account),
+        testID: `provider-accounts-keep-${account.id}`,
+      })),
+    ],
+    [accounts, emailOf, notKept],
+  );
+  const kept = accounts.find((account) => account.id === keptId);
+  const selectedDisplay = useMemo<SelectFieldDisplay>(
+    () => ({ label: kept ? emailOf(kept) : notKept }),
+    [emailOf, kept, notKept],
+  );
+  const change = useCallback(
+    (value: string) => {
+      const next = value === NOT_KEPT ? null : value;
+      if (next !== keptId) onChange(next);
+    },
+    [keptId, onChange],
+  );
+  const title = t(`${KEY}.keep.title`);
+  if (accounts.length === 0) return null;
+  return (
+    <View style={[settingsStyles.row, settingsStyles.rowBorder, isCompact && styles.rowStacked]}>
+      <View style={settingsStyles.rowContent}>
+        <Text style={settingsStyles.rowTitle}>{title}</Text>
+        <Text style={settingsStyles.rowHint}>{t(`${KEY}.keep.hint`)}</Text>
+        {error ? (
+          <Text style={settingsStyles.rowError} testID="provider-accounts-keep-error">
+            {t(`${KEY}.keep.saveFailed`, { reason: error })}
+          </Text>
+        ) : null}
+      </View>
+      <View style={isCompact ? styles.selectStacked : styles.select}>
+        <SelectField
+          field={false}
+          label={title}
+          value={keptId ?? NOT_KEPT}
+          selectedDisplay={selectedDisplay}
+          options={options}
+          onChange={change}
+          placeholder={notKept}
+          emptyText={notKept}
+          title={title}
+          size={isCompact ? "md" : "sm"}
+          loading={saving}
+          disabled={disabled}
+          testID="provider-accounts-keep"
+          triggerTestID="provider-accounts-keep-trigger"
+        />
+      </View>
+    </View>
   );
 }
 
@@ -238,6 +338,7 @@ interface AccountListProps {
   onUseAccount: (account: ProviderAccount) => void;
   onRemoveAccount: (account: ProviderAccount) => void;
   onSetOrder: (accountIds: string[]) => void;
+  onSetLimits: (account: ProviderAccount) => void;
 }
 
 function AccountList(props: AccountListProps) {
@@ -268,6 +369,7 @@ function AccountList(props: AccountListProps) {
         error={rowError(actionError, row.endpoint.id)}
         onUse={props.onUseAccount}
         onRemove={props.onRemoveAccount}
+        onSetLimits={props.onSetLimits}
         onArrange={arrange}
         onSignInAgain={props.onSignInAgain}
       />
@@ -281,6 +383,7 @@ function AccountList(props: AccountListProps) {
       locked,
       pendingAction,
       props.onRemoveAccount,
+      props.onSetLimits,
       props.onSignInAgain,
       props.onUseAccount,
     ],
@@ -379,14 +482,30 @@ function activityOf(action: AccountAction | null, accountId: string): AccountRow
   return null;
 }
 
+/** 立即使用、移除失败写在那一行；设上限的失败留在对话框里。 */
 function rowError(error: AccountActionError | null, accountId: string): string | null {
-  if (!error || error.action.kind === "order" || error.action.accountId !== accountId) return null;
-  return error.message;
+  if (!error) return null;
+  const { action } = error;
+  if (action.kind !== "use" && action.kind !== "remove") return null;
+  return action.accountId === accountId ? error.message : null;
 }
 
 const styles = StyleSheet.create((theme) => ({
   notice: {
     marginBottom: theme.spacing[3],
+  },
+  select: {
+    width: 260,
+    flexShrink: 1,
+  },
+  // 窄窗口：下拉放到说明下面、占满整行，标题和说明不被挤断。
+  rowStacked: {
+    flexDirection: "column",
+    alignItems: "stretch",
+    gap: theme.spacing[2],
+  },
+  selectStacked: {
+    width: "100%",
   },
   list: {
     marginTop: theme.spacing[3],

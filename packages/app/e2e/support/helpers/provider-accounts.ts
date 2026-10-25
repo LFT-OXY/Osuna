@@ -20,6 +20,8 @@ export interface FakeWindow {
 interface AccountsRouteOptions {
   // 每个读到了的号都换成这组窗口；不给就照主机回的。
   windows?: FakeWindow[];
+  // 按邮箱给号各自的窗口，优先于 windows。
+  windowsByEmail?: Record<string, FakeWindow[]>;
   // 前几次「多号自动轮换」的保存直接回这个失败。
   failSetRotation?: { reason: string; times: number };
   // 前几次这一种请求（如 provider.account.remove.request）不送到 daemon，直接回这个失败。
@@ -30,6 +32,8 @@ interface AccountsRouteOptions {
   needsSignIn?: { reason: string; code?: string; email?: string };
   // 开始加号的回复里，这次登录改成已经失败（模拟 10 分钟超时）。
   signInFailsWith?: { code: string; message: string };
+  // 按邮箱给号标上自动换号后的位置（first_when_room、temporarily_first），模拟第一个号用完、暂时换到别的号。
+  standing?: Record<string, string>;
 }
 
 interface Envelope {
@@ -118,6 +122,8 @@ const ACCOUNT_STATE_REPLIES = new Set([
   "provider.account.use.response",
   "provider.account.remove.response",
   "provider.account.set_order.response",
+  "provider.account.set_limits.response",
+  "provider.account.set_keep_signed_in.response",
 ]);
 
 /** 这一节的回复按用例改写：额度换成假读数、号标成失效、加号的回复改成已失败。 */
@@ -130,13 +136,12 @@ function rewriteAccountsMessage(input: {
   const isAccountsReply = typeof type === "string" && ACCOUNT_STATE_REPLIES.has(type);
   if (isAccountsReply && Array.isArray(payload?.accounts)) {
     for (const account of payload.accounts as Array<Record<string, unknown>>) {
-      if (options.windows) {
-        account.usage = {
-          status: "read",
-          fetchedAt: new Date().toISOString(),
-          windows: options.windows,
-        };
+      const windows = options.windowsByEmail?.[String(account.email)] ?? options.windows;
+      if (windows) {
+        account.usage = { status: "read", fetchedAt: new Date().toISOString(), windows };
       }
+      const standing = options.standing?.[String(account.email)];
+      if (standing) account.standing = standing;
       const lapse = options.needsSignIn;
       if (lapse && (lapse.email === undefined || lapse.email === account.email)) {
         account.needsSignIn = { reason: lapse.reason, ...(lapse.code ? { code: lapse.code } : {}) };

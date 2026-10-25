@@ -13,7 +13,8 @@
 ## Codex 第一层：换登录
 
 - `KeepOnAnAccountWithRoom`（`codex_switch.go:336-373`）：启动 1 分钟后、之后每 5 分钟（`:46`），对 codex 与 claude 都跑。
-- 98% 换走（按顺序模式 100%）；第一个号所有窗口低于 90% 换回（`:51-79,194-198`）。到上限、`Held`（Codex 应用不让发：不允许且无 credits）、窗口重置时间已过但读数没更新，也算用完。
+- 98% 换走（按顺序模式 100%）；第一个号所有窗口低于 90% 换回（`:51-79,194-198`）。到上限、`Held`（Codex 应用不让发：不允许且无 credits）也算用完；重置时间已过的窗口算已经重新开始，不管读数（`usedPast` 跳过 `resetPassed` 的窗口）。只看不限模型、不另计的窗口（`!w.Aside && w.Model == ""`）。（2026-10-25 工单 05 读源码更正：原先这里写成「重置已过也算用完」，写反了。）
+- 换回只针对 magpie 自己换走的那个号（`login-returns.json` 的 `Back`/`To`）；用户中途自己换号就不再换回（`loginReturnOf`）。
 - 目标（`NextLogin`，`:145-213`）：按 `Order` 第一个有余量的号；必须开着、没失效、不在别的 CODEX_HOME、**有已知且无错的读数**、低于阈值与上限。
 - 排序模式：Smart（默认）、order、rotate、usage、pace、weight、free（`routing.go:23-35`）；换登录只用 Smart 的「用完」判定。
 - 固定：`KeepLogin`（固定第一个）、`KeepLoginAs`（固定选中的）；中转站仍在各号间分请求。

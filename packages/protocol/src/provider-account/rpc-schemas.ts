@@ -15,6 +15,18 @@ export function isAccountRotationProvider(value: string): value is AccountRotati
   return (ACCOUNT_ROTATION_PROVIDERS as readonly string[]).includes(value);
 }
 
+/** 用户给窗口设的上限的范围（百分比整数，照 magpie account_caps.go 的 MinCap、MaxCap）。 */
+export const ACCOUNT_LIMIT_MIN = 1;
+export const ACCOUNT_LIMIT_MAX = 99;
+
+/**
+ * 这个窗口算不算整个号的额度：ID 带「:」的是某个模型或功能自己的窗口（如 Code review），
+ * 换号不看它，也不能给它设上限（照 magpie 只看不限模型、不另计的窗口）。
+ */
+export function isWholeAccountWindow(window: { id: string }): boolean {
+  return !window.id.includes(":");
+}
+
 /** 一个窗口的用量，取自套餐用量来源的同一份读数（字段是 usage 报告窗口的子集）。 */
 export const ProviderAccountWindowSchema = z.object({
   id: z.string(),
@@ -35,6 +47,8 @@ export const ProviderAccountUsageSchema = z.discriminatedUnion("status", [
     status: z.literal("read"),
     fetchedAt: z.string(),
     windows: z.array(ProviderAccountWindowSchema),
+    // Codex 应用不让这个号发送：rate_limit.allowed 为假且没有 credits 可用（照 magpie 的 codexHeld）。
+    held: z.boolean().optional(),
   }),
   z.object({ status: z.literal("failed"), reason: z.string(), code: z.string().optional() }),
 ]);
@@ -59,6 +73,13 @@ export const ProviderAccountSchema = z.object({
   usage: ProviderAccountUsageSchema,
   // 没有就是登录正常。
   needsSignIn: ProviderAccountNeedsSignInSchema.optional(),
+  // 用户给各窗口设的上限：窗口 ID → 1–99 的百分比；没设的窗口按 98%。工单 05 起的 daemon 才发。
+  limits: z.record(z.string(), z.number()).optional(),
+  /**
+   * 自动换号后的位置，已知取值之一或别的字符串：first_when_room（被换走的号，有余量后换回它、回到第一）、
+   * temporarily_first（换上的号，排在前面的号没有余量时暂时当第一）。没有就是没在等换回。
+   */
+  standing: z.string().optional(),
 });
 export type ProviderAccount = z.infer<typeof ProviderAccountSchema>;
 
@@ -66,6 +87,8 @@ export type ProviderAccount = z.infer<typeof ProviderAccountSchema>;
 export const ProviderAccountSettingsSchema = z.object({
   rotationEnabled: z.boolean(),
   riskNoticeSeen: z.boolean(),
+  // 「固定登录到」的号；null 是「不固定」。固定后完全不自动换。工单 05 起的 daemon 才发。
+  keepSignedInTo: z.string().nullable().optional(),
 });
 export type ProviderAccountSettings = z.infer<typeof ProviderAccountSettingsSchema>;
 
@@ -104,16 +127,29 @@ export const ProviderAccountSwitchEndSchema = z.object({
 });
 export type ProviderAccountSwitchEnd = z.infer<typeof ProviderAccountSwitchEndSchema>;
 
+/** 换走时到了的那个窗口：用到多少；limitPct 有值时是到了用户设的上限。 */
+export const ProviderAccountSwitchWindowSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  usedPct: z.number(),
+  limitPct: z.number().optional(),
+});
+export type ProviderAccountSwitchWindow = z.infer<typeof ProviderAccountSwitchWindowSchema>;
+
 /**
  * 一次换号，最新的在前，每家留最近 50 条。from 没有：换号前 CLI 没登录。
  * reason 是已知取值之一或别的字符串（以后加的原因，客户端认不出时显示通用说法）：
- * use_now（用户按了「立即使用」）、lapsed（原来的号登录失效）。
+ * use_now（用户按了「立即使用」）、lapsed（原来的号登录失效）、
+ * used_up（原来的号某个窗口用到 98%，window 是哪个）、limit（到了用户设的上限，window 是哪个）、
+ * held（ChatGPT 不再让原来的号发送：额度用完且没有 credits）、room_again（排在前面的号有余量了，换回）、
+ * keep_signed_in（「固定登录到」这个号）。
  */
 export const ProviderAccountSwitchSchema = z.object({
   at: z.string(),
   from: ProviderAccountSwitchEndSchema.optional(),
   to: ProviderAccountSwitchEndSchema,
   reason: z.string(),
+  window: ProviderAccountSwitchWindowSchema.optional(),
 });
 export type ProviderAccountSwitch = z.infer<typeof ProviderAccountSwitchSchema>;
 
@@ -227,6 +263,47 @@ export const ProviderAccountSetOrderResponseSchema = z.object({
   payload: ProviderAccountStateSchema,
 });
 export type ProviderAccountSetOrderResponse = z.infer<typeof ProviderAccountSetOrderResponseSchema>;
+
+/**
+ * 「设上限」：limits 是这个号各窗口的上限（窗口 ID → 1–99 的整数），整份替换；空对象是都不设。
+ * 不在 1–99 之间时回 invalid_limit，什么都不改；号已经不在时回 not_found。
+ */
+export const ProviderAccountSetLimitsRequestSchema = z.object({
+  type: z.literal("provider.account.set_limits.request"),
+  requestId: z.string(),
+  provider: z.string(),
+  accountId: z.string(),
+  limits: z.record(z.string(), z.number()),
+});
+export type ProviderAccountSetLimitsRequest = z.infer<typeof ProviderAccountSetLimitsRequestSchema>;
+export const ProviderAccountSetLimitsResponseSchema = z.object({
+  type: z.literal("provider.account.set_limits.response"),
+  payload: ProviderAccountStateSchema,
+});
+export type ProviderAccountSetLimitsResponse = z.infer<
+  typeof ProviderAccountSetLimitsResponseSchema
+>;
+
+/**
+ * 「固定登录到」：accountId 是要固定的号，null 是「不固定」。固定后完全不自动换；CLI 登录的不是它时，
+ * 马上检查一次、换到它上面。号已经不在时回 not_found。
+ */
+export const ProviderAccountSetKeepSignedInRequestSchema = z.object({
+  type: z.literal("provider.account.set_keep_signed_in.request"),
+  requestId: z.string(),
+  provider: z.string(),
+  accountId: z.string().nullable(),
+});
+export type ProviderAccountSetKeepSignedInRequest = z.infer<
+  typeof ProviderAccountSetKeepSignedInRequestSchema
+>;
+export const ProviderAccountSetKeepSignedInResponseSchema = z.object({
+  type: z.literal("provider.account.set_keep_signed_in.response"),
+  payload: ProviderAccountStateSchema,
+});
+export type ProviderAccountSetKeepSignedInResponse = z.infer<
+  typeof ProviderAccountSetKeepSignedInResponseSchema
+>;
 
 /**
  * 某家的账号或设置变了（额度读完、开关被别的设备改了）；客户端重读列表。不带内容：带关联字段会被当成某个请求的回复。

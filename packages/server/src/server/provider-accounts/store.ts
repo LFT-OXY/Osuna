@@ -30,6 +30,7 @@ import {
 const StoredUsageSchema = z.object({
   fetchedAt: z.string(),
   windows: z.array(ProviderAccountWindowSchema),
+  held: z.boolean().optional(),
 });
 export type StoredUsage = z.infer<typeof StoredUsageSchema>;
 
@@ -48,6 +49,8 @@ const StoredAccountSchema = z.object({
   needsSignIn: ProviderAccountNeedsSignInSchema.optional(),
   // Osuna 最近一次续这个号（加号、续期、保活）的时间。
   renewedAt: z.string().optional(),
+  // 用户给各窗口设的上限：窗口 ID → 1–99。
+  limits: z.record(z.string(), z.number()).optional(),
 });
 export type StoredAccount = z.infer<typeof StoredAccountSchema>;
 
@@ -59,6 +62,10 @@ const StoredSettingsSchema = z.object({
   switches: z.array(ProviderAccountSwitchSchema).optional(),
   // 最近一次换号没换成；下一次换成后清掉。
   switchFailure: ProviderAccountSwitchFailureSchema.optional(),
+  // 「固定登录到」的号 ID。
+  keepSignedInTo: z.string().optional(),
+  // 自动换走后等着换回：back 是被换走的号，to 是现在换上的号（照 magpie 的 login-returns.json）。
+  returning: z.object({ back: z.string(), to: z.string() }).optional(),
 });
 export type StoredSettings = z.infer<typeof StoredSettingsSchema>;
 

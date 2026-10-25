@@ -3,7 +3,7 @@ import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { ArrowRightLeft, GripVertical, Star, Trash2 } from "lucide-react-native";
+import { ArrowRightLeft, Gauge, GripVertical, Star, Trash2 } from "lucide-react-native";
 import type { ProviderAccount } from "@getpaseo/protocol/provider-account/rpc-schemas";
 import { OrderMenuItems, sortableRowStyles } from "@/api-endpoints/order-menu-items";
 import type { SortableEndpointRowInfo } from "@/api-endpoints/sortable-endpoint-rows.types";
@@ -22,8 +22,8 @@ import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { UsageWindowBar } from "@/usage/window-bar";
 
 /*
- * 账号列表的一行：邮箱、套餐、状态标签、各窗口用量，行尾 ⋯ 菜单（立即使用、设为第一、上移、下移、移到最前、
- * 移到最后、移除）；网页与桌面端可拖动行首把手排序（与第三方接口列表同一套，sortable-endpoint-rows）。
+ * 账号列表的一行：邮箱、套餐、状态标签、各窗口用量（设了上限的窗口在条上标出上限），行尾 ⋯ 菜单（立即使用、
+ * 设为第一、上移、下移、移到最前、移到最后、设上限、移除）；网页与桌面端可拖动行首把手排序（与第三方接口列表同一套，sortable-endpoint-rows）。
  */
 
 const KEY = "settings.providers.accounts";
@@ -31,6 +31,7 @@ const KEY = "settings.providers.accounts";
 const ThemedGripVertical = withUnistyles(GripVertical);
 const ThemedArrowRightLeft = withUnistyles(ArrowRightLeft);
 const ThemedStar = withUnistyles(Star);
+const ThemedGauge = withUnistyles(Gauge);
 const ThemedTrash2 = withUnistyles(Trash2);
 const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 const dangerColorMapping = (theme: Theme) => ({ color: theme.colors.statusDanger });
@@ -52,6 +53,7 @@ export interface AccountRowProps {
   error: string | null;
   onUse: (account: ProviderAccount) => void;
   onRemove: (account: ProviderAccount) => void;
+  onSetLimits: (account: ProviderAccount) => void;
   onArrange: (account: ProviderAccount, place: RowPlace) => void;
   onSignInAgain: (account: ProviderAccount) => void;
 }
@@ -92,7 +94,7 @@ export function AccountRow(props: AccountRowProps) {
             {account.signedIn ? (
               <StatusBadge size="xs" variant="success" label={t(`${KEY}.badges.inUse`)} />
             ) : null}
-            {first ? <StatusBadge size="xs" label={t(`${KEY}.badges.first`)} /> : null}
+            {standingBadge(t, { account, first })}
             {account.needsSignIn ? (
               <StatusBadge size="xs" variant="error" label={t(`${KEY}.badges.needsSignIn`)} />
             ) : null}
@@ -161,6 +163,7 @@ function AccountRowDetails({
             <UsageWindowBar
               key={window.id}
               window={window}
+              limit={limitOf({ t, account, windowId: window.id })}
               displayAs="used"
               pinnable={false}
               pinned={false}
@@ -177,7 +180,7 @@ function AccountRowDetails({
 
 /** 行菜单；窄屏是底部弹层。桌面端右键行也打开它。 */
 function AccountRowMenu(props: AccountRowProps & { first: boolean }) {
-  const { account, row, locked, moves, first, onUse, onRemove, onArrange } = props;
+  const { account, row, locked, moves, first, onUse, onRemove, onSetLimits, onArrange } = props;
   const { t } = useTranslation();
   const name = account.email ?? t(`${KEY}.unknownEmail`);
   const label = t(`${KEY}.menu.label`, { email: name });
@@ -189,6 +192,10 @@ function AccountRowMenu(props: AccountRowProps & { first: boolean }) {
     () => <ThemedStar size={ICON_SIZE.md} uniProps={foregroundMutedColorMapping} />,
     [],
   );
+  const limitsLeading = useMemo(
+    () => <ThemedGauge size={ICON_SIZE.md} uniProps={foregroundMutedColorMapping} />,
+    [],
+  );
   const removeLeading = useMemo(
     () => <ThemedTrash2 size={ICON_SIZE.md} uniProps={dangerColorMapping} />,
     [],
@@ -196,6 +203,7 @@ function AccountRowMenu(props: AccountRowProps & { first: boolean }) {
   const handleUse = useCallback(() => onUse(account), [account, onUse]);
   const handleFirst = useCallback(() => onArrange(account, "top"), [account, onArrange]);
   const handleRemove = useCallback(() => onRemove(account), [account, onRemove]);
+  const handleLimits = useCallback(() => onSetLimits(account), [account, onSetLimits]);
   const handleArrange = useCallback(
     (place: RowPlace) => onArrange(account, place),
     [account, onArrange],
@@ -243,6 +251,14 @@ function AccountRowMenu(props: AccountRowProps & { first: boolean }) {
         />
         <DropdownMenuSeparator />
         <DropdownMenuItem
+          leading={limitsLeading}
+          disabled={locked}
+          onSelect={handleLimits}
+          testID="provider-account-set-limits"
+        >
+          {t(`${KEY}.menu.setLimits`)}
+        </DropdownMenuItem>
+        <DropdownMenuItem
           destructive
           leading={removeLeading}
           disabled={locked}
@@ -254,6 +270,35 @@ function AccountRowMenu(props: AccountRowProps & { first: boolean }) {
       </DropdownMenuContent>
     </DropdownMenu>
   );
+}
+
+/**
+ * 「第一」「暂时第一」「有余量后回到第一」：自动换走后，被换走的号写「有余量后回到第一」，换上的号写「暂时第一」，
+ * 都不再写「第一」。
+ */
+function standingBadge(
+  t: TFunction,
+  input: { account: ProviderAccount; first: boolean },
+): React.ReactNode {
+  const { account, first } = input;
+  if (account.standing === "first_when_room") {
+    return <StatusBadge size="xs" variant="warning" label={t(`${KEY}.badges.firstWhenRoom`)} />;
+  }
+  if (account.standing === "temporarily_first") {
+    return <StatusBadge size="xs" label={t(`${KEY}.badges.temporarilyFirst`)} />;
+  }
+  return first ? <StatusBadge size="xs" label={t(`${KEY}.badges.first`)} /> : null;
+}
+
+function limitOf(input: {
+  t: TFunction;
+  account: ProviderAccount;
+  windowId: string;
+}): { pct: number; label: string } | undefined {
+  const { t, account, windowId } = input;
+  const pct = account.limits?.[windowId];
+  if (pct === undefined) return undefined;
+  return { pct, label: t(`${KEY}.limits.onBar`, { pct }) };
 }
 
 const NO_MOVES: RowMoves = { top: false, up: false, down: false, bottom: false };

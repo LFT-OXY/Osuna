@@ -1,3 +1,4 @@
+// held 的用例照 magpie（MIT，THIRD_PARTY_NOTICES）internal/provider/subscription_usage.go 的 codexHeld。
 import { UsageSourceRegistry } from "../../../packages/server/src/server/plugins/usage-sources/index.js";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -140,6 +141,50 @@ test("coerces credit balance and marks a 96 percent window dangerous", async () 
   expect(report.balances).toEqual([
     expect.objectContaining({ remaining: 0, unit: "credits", tone: "danger" }),
   ]);
+});
+
+function heldReading(body: Record<string, unknown>) {
+  return fetchUsage(
+    authInput(fixtureHome),
+    async () => new Response(JSON.stringify(body), { status: 200 }),
+  );
+}
+
+test("an account not allowed to send with no credits is held, as the Codex app holds it", async () => {
+  const notAllowed = { primary_window: { used_percent: 100, limit_window_seconds: 18000 } };
+  expect(
+    await heldReading({ plan_type: "plus", rate_limit: { ...notAllowed, allowed: false } }),
+  ).toMatchObject({ status: "available", held: true });
+  // credits carry every turn on: not held, whatever the windows read
+  expect(
+    await heldReading({
+      plan_type: "pro",
+      rate_limit: { ...notAllowed, allowed: false },
+      credits: { has_credits: true, balance: "12" },
+    }),
+  ).not.toHaveProperty("held");
+  // a workspace still within its overage isn't held
+  expect(
+    await heldReading({
+      plan_type: "business",
+      rate_limit: { ...notAllowed, allowed: false },
+      credits: { has_credits: false, overage_limit_reached: false },
+    }),
+  ).not.toHaveProperty("held");
+  // ...unless a spend cap holds it
+  expect(
+    await heldReading({
+      plan_type: "business",
+      rate_limit: { ...notAllowed, allowed: false },
+      credits: { has_credits: false, overage_limit_reached: false },
+      spend_control: { reached: true },
+    }),
+  ).toMatchObject({ held: true });
+  // allowed, or not said: not held
+  expect(await heldReading({ rate_limit: { ...notAllowed, allowed: true } })).not.toHaveProperty(
+    "held",
+  );
+  expect(await heldReading({ rate_limit: notAllowed })).not.toHaveProperty("held");
 });
 
 test("summarizes the session and weekly windows by default, not code review", async () => {

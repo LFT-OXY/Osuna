@@ -25,7 +25,9 @@ type StateRequest = Extract<
       | "provider.account.set_rotation.request"
       | "provider.account.use.request"
       | "provider.account.remove.request"
-      | "provider.account.set_order.request";
+      | "provider.account.set_order.request"
+      | "provider.account.set_limits.request"
+      | "provider.account.set_keep_signed_in.request";
   }
 >;
 type SignInRequest = Extract<
@@ -46,6 +48,8 @@ const PROVIDER_ACCOUNT_REQUESTS = new Set<string>([
   "provider.account.use.request",
   "provider.account.remove.request",
   "provider.account.set_order.request",
+  "provider.account.set_limits.request",
+  "provider.account.set_keep_signed_in.request",
   "provider.account.sign_in.start.request",
   "provider.account.sign_in.get.request",
   "provider.account.sign_in.cancel.request",
@@ -125,6 +129,12 @@ export class ProviderAccountSession {
       case "provider.account.set_order.request":
         this.options.host.emit({ type: "provider.account.set_order.response", payload });
         return;
+      case "provider.account.set_limits.request":
+        this.options.host.emit({ type: "provider.account.set_limits.response", payload });
+        return;
+      case "provider.account.set_keep_signed_in.request":
+        this.options.host.emit({ type: "provider.account.set_keep_signed_in.response", payload });
+        return;
     }
   }
 
@@ -149,6 +159,14 @@ export class ProviderAccountSession {
         return service.removeAccount({ provider, accountId: request.accountId });
       case "provider.account.set_order.request":
         return service.setOrder({ provider, accountIds: request.accountIds });
+      case "provider.account.set_limits.request":
+        return service.setLimits({
+          provider,
+          accountId: request.accountId,
+          limits: request.limits,
+        });
+      case "provider.account.set_keep_signed_in.request":
+        return service.setKeepSignedIn({ provider, accountId: request.accountId });
     }
   }
 

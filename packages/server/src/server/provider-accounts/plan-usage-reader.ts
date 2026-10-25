@@ -62,6 +62,7 @@ export function accountUsageFromReport(
           usedPct: window.usedPct ?? null,
           resetsAt: window.resetsAt ?? null,
         })),
+        ...(report.held ? { held: true } : {}),
       };
     case "unavailable": {
       const { problem } = report;

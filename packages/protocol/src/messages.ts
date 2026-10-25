@@ -94,6 +94,10 @@ import {
   ProviderAccountListResponseSchema,
   ProviderAccountRemoveRequestSchema,
   ProviderAccountRemoveResponseSchema,
+  ProviderAccountSetKeepSignedInRequestSchema,
+  ProviderAccountSetKeepSignedInResponseSchema,
+  ProviderAccountSetLimitsRequestSchema,
+  ProviderAccountSetLimitsResponseSchema,
   ProviderAccountSetOrderRequestSchema,
   ProviderAccountSetOrderResponseSchema,
   ProviderAccountSetRotationRequestSchema,
@@ -3617,6 +3621,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ProviderAccountUseRequestSchema,
   ProviderAccountRemoveRequestSchema,
   ProviderAccountSetOrderRequestSchema,
+  ProviderAccountSetLimitsRequestSchema,
+  ProviderAccountSetKeepSignedInRequestSchema,
   BrowserHostRegisterRequestSchema,
   SubscriptionReleaseRequestSchema,
   SessionEventsSetSubscriptionRequestSchema,
@@ -4298,7 +4304,8 @@ export const ServerInfoStatusPayloadSchema = z
         checkoutDiffFilesOnly: z.boolean().optional(),
         // COMPAT(accountRotation): added in v0.17.0, remove gate after 2027-04-25.
         // 任务 10-16-multi-account-rotation：provider.account.list / set_rotation、加号的 provider.account.sign_in.*、
-        // 换号的 provider.account.use / remove / set_order 与 provider.account.changed 事件
+        // 换号的 provider.account.use / remove / set_order、自动换号的 set_limits / set_keep_signed_in
+        // 与 provider.account.changed 事件
         // （Codex、Claude Code 设置页的「账号」一节与「多号自动轮换」）。
         accountRotation: z.boolean().optional(),
       })
@@ -6924,6 +6931,9 @@ export const UsageReportSchema = z.discriminatedUnion("status", [
     details: z.array(ProviderUsageDetailSchema).optional(),
     // 账号还有几次重置（Codex 的 ChatGPT 账号），形状同接口读数的 resets；老 daemon 与没有重置的来源不发。
     resets: ApiEndpointBalanceResetsSchema.optional(),
+    // Codex 应用不让这个号发送（额度用完且没有 credits，照 magpie 的 codexHeld）；多号自动轮换据此换走。
+    // 老 daemon 与别的来源不发。
+    held: z.boolean().optional(),
   }),
   z.object({ status: z.literal("unavailable"), problem: UsageProblemSchema }),
   z.object({ status: z.literal("error"), error: z.string() }),
@@ -7498,6 +7508,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ProviderAccountUseResponseSchema,
   ProviderAccountRemoveResponseSchema,
   ProviderAccountSetOrderResponseSchema,
+  ProviderAccountSetLimitsResponseSchema,
+  ProviderAccountSetKeepSignedInResponseSchema,
   ProviderAccountChangedMessageSchema,
   BrowserHostRegisterResponseSchema,
   SubscriptionReleaseResponseSchema,

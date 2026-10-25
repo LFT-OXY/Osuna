@@ -25,11 +25,13 @@ export interface ProviderAccountsData {
   switchFailure: ProviderAccountSwitchFailure | null;
 }
 
-/** 正在进行的号操作：立即使用、移除某个号，或保存顺序。 */
+/** 正在进行的号操作：立即使用、移除、设上限某个号，保存顺序或「固定登录到」。 */
 export type AccountAction =
   | { kind: "use"; accountId: string }
   | { kind: "remove"; accountId: string }
-  | { kind: "order" };
+  | { kind: "limits"; accountId: string }
+  | { kind: "order" }
+  | { kind: "keep" };
 
 /** 号操作失败：留在原处，直到重试或做别的操作。 */
 export interface AccountActionError {
@@ -61,6 +63,9 @@ export interface UseProviderAccountsResult {
   switchTo: (account: ProviderAccount) => void;
   removeAccount: (account: ProviderAccount) => void;
   setOrder: (accountIds: string[]) => void;
+  // 保存成功时为真；失败的原因在 actionError 里。
+  setLimits: (account: ProviderAccount, limits: Record<string, number>) => Promise<boolean>;
+  setKeepSignedIn: (accountId: string | null) => void;
 }
 
 // 主机记进 switchFailure 的换号失败：在这一节顶上醒目地说，不在原处再说一遍。
@@ -167,33 +172,36 @@ export function useProviderAccounts(serverId: string, provider: string): UseProv
   const [pendingAction, setPendingAction] = useState<AccountAction | null>(null);
   const [actionError, setActionError] = useState<AccountActionError | null>(null);
   const run = useCallback(
-    (input: { action: AccountAction; send: () => Promise<StatePayload> }) => {
+    async (input: {
+      action: AccountAction;
+      send: () => Promise<StatePayload>;
+    }): Promise<boolean> => {
       const { action } = input;
       setActionError(null);
       setPendingAction(action);
-      void (async () => {
-        try {
-          const payload = await input.send();
-          queryClient.setQueryData(providerAccountsQueryKey(serverId, provider), dataOf(payload));
-          if (payload.error && !shownInSection({ action, error: payload.error })) {
-            setActionError({ action, message: payload.error.message });
-          }
-        } catch (cause) {
-          setActionError({ action, message: extractFailureReason(cause) || toErrorMessage(cause) });
-          // 没拿到主机的状态：重读一次，先画上的新顺序回到主机上的。
-          void queryClient.invalidateQueries({
-            queryKey: providerAccountsQueryKey(serverId, provider),
-          });
-        } finally {
-          setPendingAction(null);
+      try {
+        const payload = await input.send();
+        queryClient.setQueryData(providerAccountsQueryKey(serverId, provider), dataOf(payload));
+        if (payload.error && !shownInSection({ action, error: payload.error })) {
+          setActionError({ action, message: payload.error.message });
         }
-      })();
+        return payload.error === null;
+      } catch (cause) {
+        setActionError({ action, message: extractFailureReason(cause) || toErrorMessage(cause) });
+        // 没拿到主机的状态：重读一次，先画上的新顺序回到主机上的。
+        void queryClient.invalidateQueries({
+          queryKey: providerAccountsQueryKey(serverId, provider),
+        });
+        return false;
+      } finally {
+        setPendingAction(null);
+      }
     },
     [provider, queryClient, serverId],
   );
   const switchTo = useCallback(
     (account: ProviderAccount) =>
-      run({
+      void run({
         action: { kind: "use", accountId: account.id },
         send: () => connected(client).providerAccountUse({ provider, accountId: account.id }),
       }),
@@ -201,7 +209,7 @@ export function useProviderAccounts(serverId: string, provider: string): UseProv
   );
   const removeAccount = useCallback(
     (account: ProviderAccount) =>
-      run({
+      void run({
         action: { kind: "remove", accountId: account.id },
         send: () => connected(client).providerAccountRemove({ provider, accountId: account.id }),
       }),
@@ -214,12 +222,29 @@ export function useProviderAccounts(serverId: string, provider: string): UseProv
         providerAccountsQueryKey(serverId, provider),
         (current) => (current ? reorder(current, accountIds) : current),
       );
-      run({
+      void run({
         action: { kind: "order" },
         send: () => connected(client).providerAccountSetOrder({ provider, accountIds }),
       });
     },
     [client, provider, queryClient, run, serverId],
+  );
+  const setLimits = useCallback(
+    (account: ProviderAccount, limits: Record<string, number>) =>
+      run({
+        action: { kind: "limits", accountId: account.id },
+        send: () =>
+          connected(client).providerAccountSetLimits({ provider, accountId: account.id, limits }),
+      }),
+    [client, provider, run],
+  );
+  const setKeepSignedIn = useCallback(
+    (accountId: string | null) =>
+      void run({
+        action: { kind: "keep" },
+        send: () => connected(client).providerAccountSetKeepSignedIn({ provider, accountId }),
+      }),
+    [client, provider, run],
   );
 
   let load: ProviderAccountsLoad = { kind: "loading" };
@@ -241,6 +266,8 @@ export function useProviderAccounts(serverId: string, provider: string): UseProv
     switchTo,
     removeAccount,
     setOrder,
+    setLimits,
+    setKeepSignedIn,
   };
 }
 

@@ -1553,6 +1553,24 @@ refreshFailed in account.go, and renewalDue and RenewLogins in keepalive.go:
   packages/server/src/server/provider-accounts/codex-sign-in.ts
   packages/server/src/server/provider-accounts/service.ts
 
+Switching Codex to an account with room (checked a minute after start and
+every five minutes, the account in use moved off at 98% of a window or at the
+user's limit on it, a window whose reset has passed counted as started again,
+only the account's own windows counted, the first account in order with a
+known, error-free reading and room taken, the account moved off switched back
+to once all its windows are under 90%, an account kept signed in to never moved
+off, limits of 1 to 99 percent per window) follows NextLogin, usedPast,
+resetPassed, SwitchWhenSpent, loginReturn and KeepOnAnAccountWithRoom in
+magpie's internal/provider/codex_switch.go and MinCap, MaxCap and CapHeld in
+account_caps.go; an account the Codex app won't send for (not allowed, no
+credits, not a workspace still within its overage) follows codexHeld,
+codexWorkspacePlans and codexReservePlans in subscription_usage.go:
+
+  packages/server/src/server/provider-accounts/rotation-rules.ts
+  packages/server/src/server/provider-accounts/service.ts
+  plugins/codex-usage-source/server/usage.ts
+  plugins/codex-usage-source/server/usage.test.ts
+
 MIT License
 
 Copyright (c) 2026 yetone

@@ -13,7 +13,16 @@ import { formatMessageTimestamp } from "@/utils/time";
 
 const KEY = "settings.providers.accounts.switches";
 const COLLAPSED_COUNT = 5;
-const KNOWN_REASONS = new Set(["use_now", "lapsed"]);
+const KNOWN_REASONS = new Set([
+  "use_now",
+  "lapsed",
+  "used_up",
+  "limit",
+  "held",
+  "room_again",
+  "keep_signed_in",
+  "not_listed",
+]);
 
 export function SwitchLog({ switches }: { switches: ProviderAccountSwitch[] }) {
   const { t } = useTranslation();
@@ -73,7 +82,19 @@ function switchText(t: TFunction, entry: ProviderAccountSwitch): string {
 /** 已知原因用翻译；新 daemon 加的原因认不出时用通用说法。 */
 function reasonText(t: TFunction, entry: ProviderAccountSwitch): string {
   if (!KNOWN_REASONS.has(entry.reason)) return t(`${KEY}.reasons.other`);
-  return t(`${KEY}.reasons.${entry.reason}`, { from: emailOf(t, entry.from) });
+  // used_up、limit 要写明哪个窗口到了多少；老记录没有 window 时用通用说法。
+  const { window } = entry;
+  if ((entry.reason === "used_up" || entry.reason === "limit") && !window) {
+    return t(`${KEY}.reasons.other`);
+  }
+  const usedPct = window ? Math.round(window.usedPct) : 0;
+  return t(`${KEY}.reasons.${entry.reason}`, {
+    from: emailOf(t, entry.from),
+    to: emailOf(t, entry.to),
+    window: window?.label ?? "",
+    pct: usedPct,
+    limit: window?.limitPct ?? 0,
+  });
 }
 
 const styles = StyleSheet.create((theme) => ({

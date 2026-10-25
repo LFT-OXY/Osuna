@@ -139,7 +139,11 @@ describe.skipIf(process.platform === "win32")("provider accounts section", () =>
       acknowledgeRiskNotice: true,
     });
     expect(turnedOn.error).toBeNull();
-    expect(turnedOn.settings).toEqual({ rotationEnabled: true, riskNoticeSeen: true });
+    expect(turnedOn.settings).toEqual({
+      rotationEnabled: true,
+      riskNoticeSeen: true,
+      keepSignedInTo: null,
+    });
     expect(turnedOn.accounts).toEqual([
       {
         id: expect.any(String),
@@ -190,12 +194,20 @@ describe.skipIf(process.platform === "win32")("provider accounts section", () =>
     // 关掉再打开、换了连接也不再问。
     const again = await client.providerAccountSetRotation({ provider: "codex", enabled: true });
     expect(again.error).toBeNull();
-    expect(again.settings).toEqual({ rotationEnabled: true, riskNoticeSeen: true });
+    expect(again.settings).toEqual({
+      rotationEnabled: true,
+      riskNoticeSeen: true,
+      keepSignedInTo: null,
+    });
 
     // Claude Code 那家还没看过。
     const claude = await client.providerAccountSetRotation({ provider: "claude", enabled: true });
     expect(claude.error?.code).toBe("risk_notice_required");
-    expect(claude.settings).toEqual({ rotationEnabled: false, riskNoticeSeen: false });
+    expect(claude.settings).toEqual({
+      rotationEnabled: false,
+      riskNoticeSeen: false,
+      keepSignedInTo: null,
+    });
   });
 
   test("reads a Codex login kept in the keyring", async () => {

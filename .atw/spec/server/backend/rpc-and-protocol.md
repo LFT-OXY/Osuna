@@ -2409,3 +2409,58 @@ try { await writeCodexCliLogin({ location, where: cli.where, expected: cli.text,
 catch (error) { takenBack?.undo(); throw this.switchFailed({ target, code: "write_failed", ... }); }
 this.store.updateAccount(target.id, { login: undefined });
 ```
+
+## Scenario: Codex automatic rotation, limits and Keep signed in to (multi-account-rotation ticket 05, `accountRotation`)
+
+### 1. Scope / Trigger
+- The check now switches the CLI on its own: new RPCs, new optional state fields, a new optional field on the plan usage report, new store fields, and a rule module that ticket 08 (Claude Code) reuses unchanged.
+
+### 2. Signatures
+- Protocol (`provider-account/rpc-schemas.ts`), both `daemon.manage`, both answer the `list` state payload:
+  - `provider.account.set_limits.request {provider, accountId, limits: Record<windowId, number>}` — whole replacement; `{}` clears.
+  - `provider.account.set_keep_signed_in.request {provider, accountId: string | null}` — `null` = don't keep.
+- Optional additions: `ProviderAccount.limits?`, `ProviderAccount.standing?: "first_when_room" | "temporarily_first" | string`, `settings.keepSignedInTo?: string | null`, `ProviderAccountSwitch.window?: {id, label, usedPct, limitPct?}`, `ProviderAccountUsage(read).held?`, `UsageReport(available).held?` (`messages.ts`). New switch reasons: `used_up`, `limit`, `held`, `room_again`, `keep_signed_in`, `not_listed`.
+- Shared helpers: `ACCOUNT_LIMIT_MIN = 1`, `ACCOUNT_LIMIT_MAX = 99`, `isWholeAccountWindow(window)` (protocol; app and daemon both use them). Rules: `nextMove`, `pickTarget`, `outOfRoom`, `returningAfter`, `SwitchReason` in `server/provider-accounts/rotation-rules.ts` (pure, no I/O). Plugin: `codexHeld(usage)` in `plugins/codex-usage-source/server/usage.ts`.
+- Daemon client: `providerAccountSetLimits`, `providerAccountSetKeepSignedIn`.
+
+### 3. Contracts
+- **No room** (share 98): a whole-account window (id without `:`) at ≥ 98% or ≥ its limit, or `held`. A window whose `resetsAt` has passed counts as started again whatever it reads (magpie `usedPast`/`resetPassed`). `usedPct: null` never counts.
+- **Target**: first in order that is not in use, not `needsSignIn`, has a saved `login`, a `status: "read"` reading this check, and room. None → stay. The account in use with no known reading → stay.
+- **Back** (share 90): only while `settings.returning.to` is the account in use; the frontmost account ahead of it with room at 90 → `room_again`. `returning` is written by `returningAfter` in the same locked step as the switch record: `used_up | limit | held | lapsed` keep the earliest `back`; `room_again` clears it once at or ahead of `back`; `use_now | keep_signed_in | not_listed` clear it. `standing` is projected only while `returning.to` is the account in use.
+- **Keep signed in to**: when set (and the account still listed and switchable), the only move is onto it; nothing else, `moveOffLapsed` included. Setting it clears `returning` and requests a check at once.
+- **Not listed**: CLI signed in to an account not in the list → move to `pickTarget`, reason `not_listed`.
+- **Cadence**: `start()` → first after `checks.firstDelayMs` (60 s), then every `intervalMs` (5 min); `requestCheck()` after Use now and after a *Sign in again* (not a plain add). Checks never overlap; a request during one runs one more after it. Usage older than 5 min is re-read and awaited before deciding.
+- **Stale decision guard**: `switchTo({ onlyFrom })` re-reads the CLI login inside `renew.lock`; if it no longer is `onlyFrom` (the user switched while usage was being read) the move is dropped silently.
+- **held** (plugin): `rate_limit.allowed === false` and no `credits.has_credits`/`unlimited`, unless a workspace plan (magpie's list, minus `team` / `self_serve_business_prolite`) with `overage_limit_reached === false`, no `spend_control.reached`, and `rate_limit_reached_type` absent or `rate_limit_reached`.
+- Store: account `limits?`; settings `keepSignedInTo?`, `returning?: {back, to}`. Removing the kept account clears `keepSignedInTo`; a `returning` naming a removed account is ignored.
+
+### 4. Validation & Error Matrix
+| Condition | Result |
+|---|---|
+| a limit not an integer in 1–99 | `error.code = invalid_limit`, nothing saved |
+| set_limits / set_keep_signed_in on an unknown or other provider's account | `not_found` |
+| Read CLI sign-ins off | checks read nothing and switch nothing |
+| rotation off for the provider | no automatic switch (keep-alive still runs) |
+| switch fails during a check | `switchFailure` recorded, retried next check |
+
+### 5. Good/Base/Bad Cases
+- Good: ONE at 98% → TWO (`used_up`, window recorded), ONE `first_when_room`, TWO `temporarily_first`; ONE at 89% next check → back (`room_again`), standings gone.
+- Base: Use now to a lower account with the first at 10% → stays there (no `returning`).
+- Bad: deciding from a reading cached from before a reset as "used up"; switching on a decision made before the user's Use now landed.
+
+### 6. Tests Required
+- `daemon-e2e/provider-account-rotation.e2e.test.ts` (fake usage reader keyed by account, `now` offset; each check round advances the clock 6 min so the 5-min usage cache expires): 98% / limit / held switch; limit validation; 90% back (91% stays); no room stays; unread / error / lapsed never targets; reset passed and `code_review:*` windows don't count; Keep signed in to never moves off, unpin moves; pinning another switches at once; Use now followed by a check; hand-picked account not switched back; removed in-use → `not_listed`; lapsed → re-sign-in → `room_again`; gate off reads nothing.
+- `plugins/codex-usage-source/server/usage.test.ts`: `held` true / false cases.
+- `app/e2e/browser/settings-provider-account-rotation.spec.ts`: Set limits success, invalid, failure kept in dialog, marker on the bar; Keep signed in to success and failure; standing badges; 390 dialog.
+
+### 7. Wrong vs Correct
+#### Wrong
+```ts
+const move = nextMove(...);            // decided from usage read over the network
+await this.switchTo({ target, reason }); // may undo a Use now that landed meanwhile
+```
+#### Correct
+```ts
+await this.switchTo({ target, reason: move.reason, onlyFrom: login.identity });
+// switchLocked: if (input.onlyFrom !== undefined && signedInNow !== input.onlyFrom) return null;
+```

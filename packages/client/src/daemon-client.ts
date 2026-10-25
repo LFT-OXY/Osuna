@@ -6853,6 +6853,28 @@ export class DaemonClient {
     });
   }
 
+  /** 「设上限」：这个号各窗口的上限（窗口 ID → 1–99），整份替换。只有声明了 accountRotation 的 daemon 认。 */
+  async providerAccountSetLimits(
+    options: { provider: string; accountId: string; limits: Record<string, number> },
+    requestId?: string,
+  ): Promise<ProviderAccountListPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.account.set_limits.request", ...options },
+    });
+  }
+
+  /** 「固定登录到」这个号；null 是不固定。只有声明了 accountRotation 的 daemon 认。 */
+  async providerAccountSetKeepSignedIn(
+    options: { provider: string; accountId: string | null },
+    requestId?: string,
+  ): Promise<ProviderAccountListPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.account.set_keep_signed_in.request", ...options },
+    });
+  }
+
   /** 开始加号；带 accountId 是给这个号重新登录。只有声明了 accountRotation 的 daemon 认。 */
   async providerAccountSignInStart(
     options: { provider: string; accountId?: string },

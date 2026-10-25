@@ -1,3 +1,5 @@
+// codexHeld 与工作区套餐表移植自 magpie（https://github.com/yetone/magpie，d5805372）：internal/provider/subscription_usage.go 的 codexHeld、codexWorkspacePlans、codexReservePlans。
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import { consumeSoonestReset, readResets } from "./resets.js";
 import { discoverOmp, piAuthPath, readHarness, readJson, type StoreLookup } from "./stores.js";
 import { homedir } from "node:os";
@@ -36,10 +38,11 @@ const rateLimitSchema = z.object({
   primary_window: windowSchema.nullish(),
   secondary_window: windowSchema.nullish(),
 });
+const mainRateLimitSchema = rateLimitSchema.extend({ allowed: z.boolean().nullish() });
 const responseSchema = z.object({
   plan_type: z.string().optional(),
   email: z.string().optional(),
-  rate_limit: rateLimitSchema.nullish(),
+  rate_limit: mainRateLimitSchema.nullish(),
   additional_rate_limits: z
     .array(
       z.object({
@@ -50,7 +53,16 @@ const responseSchema = z.object({
     )
     .nullish(),
   code_review_rate_limit: rateLimitSchema.nullish(),
-  credits: z.object({ balance: number.optional() }).nullish(),
+  credits: z
+    .object({
+      balance: number.optional(),
+      has_credits: z.boolean().nullish(),
+      unlimited: z.boolean().nullish(),
+      overage_limit_reached: z.boolean().nullish(),
+    })
+    .nullish(),
+  spend_control: z.object({ reached: z.boolean().nullish() }).nullish(),
+  rate_limit_reached_type: z.object({ type: z.string().nullish() }).nullish(),
   rate_limit_reset_credits: z.object({ available_count: number.optional() }).nullish(),
 });
 
@@ -283,7 +295,51 @@ export async function fetchUsage(
           ],
     details: [],
     ...(resets ? { resets } : {}),
+    ...(codexHeld(usage) ? { held: true } : {}),
   };
+}
+
+// ChatGPT 工作区的套餐与其中受「预留」实验管的两种（照 magpie subscription_usage.go 的 codexWorkspacePlans）。
+const WORKSPACE_PLANS = new Set([
+  "free_workspace",
+  "team",
+  "self_serve_business_prolite",
+  "self_serve_business_usage_based",
+  "business",
+  "ent26",
+  "enterprise_cbp_automation",
+  "enterprise_cbp_trial",
+  "enterprise_cbp_usage_based",
+  "enterprise_cbp_view_only",
+  "enterprise",
+  "hc",
+  "finserv",
+  "law",
+  "sci",
+  "education",
+  "edu",
+  "edu_plus",
+  "edu_pro",
+  "quorum",
+  "k12",
+]);
+const RESERVE_PLANS = new Set(["team", "self_serve_business_prolite"]);
+
+/**
+ * Codex 应用此时不让这个号发送（照 magpie 的 codexHeld）：后端说不允许（rate_limit.allowed 为假），
+ * 又没有 credits 可用，也不是还在超额额度内的工作区号。窗口的百分比说明不了：有 credits 的号用到 100% 照样能发。
+ */
+function codexHeld(usage: z.infer<typeof responseSchema>): boolean {
+  if (usage.rate_limit?.allowed !== false) return false;
+  const credits = usage.credits;
+  if (credits?.has_credits || credits?.unlimited) return false;
+  const spent = usage.spend_control?.reached === true;
+  const reachedType = usage.rate_limit_reached_type?.type;
+  const unusual = typeof reachedType === "string" && reachedType !== "rate_limit_reached";
+  const plan = (usage.plan_type ?? "").toLowerCase();
+  const workspace = WORKSPACE_PLANS.has(plan) && !RESERVE_PLANS.has(plan);
+  if (workspace && credits?.overage_limit_reached === false && !spent && !unusual) return false;
+  return true;
 }
 
 /** JWT claims are decoded locally; no token or email becomes an account key. */
