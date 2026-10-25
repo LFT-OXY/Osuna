@@ -4597,6 +4597,11 @@ export const en = {
             other: "Switched by Osuna",
           },
         },
+        switchOnly: {
+          title: "Only switch the sign-in",
+          hint: "Off: Codex's requests go through Osuna, and one the account in use can't answer goes to the next account before any reply. On: Codex goes straight to OpenAI and only the sign-in is switched.",
+          saveFailed: "Couldn't save Only switch the sign-in: {{reason}}",
+        },
         keep: {
           title: "Keep signed in to",
           hint: "While an account is chosen, Osuna never switches automatically, even when it has no room.",
@@ -5039,6 +5044,7 @@ export const en = {
       refresh: "Refresh",
       allSources: "All",
       official: "Official",
+      officialAccount: "Official · {{email}}",
       deletedEndpoint: "(deleted)",
       deletedEndpointName: "{{name}} (deleted)",
       breakdown: {
@@ -5257,6 +5263,7 @@ export const en = {
         failed: "Failed",
         failedWith: "Failed ({{reason}})",
         switched: "Switched {{count}}×",
+        switchedAccounts: "Switched {{count}}×",
       },
       failures: {
         credit: "out of credit",

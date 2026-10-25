@@ -27,7 +27,8 @@ type StateRequest = Extract<
       | "provider.account.remove.request"
       | "provider.account.set_order.request"
       | "provider.account.set_limits.request"
-      | "provider.account.set_keep_signed_in.request";
+      | "provider.account.set_keep_signed_in.request"
+      | "provider.account.set_switch_only.request";
   }
 >;
 type SignInRequest = Extract<
@@ -50,6 +51,7 @@ const PROVIDER_ACCOUNT_REQUESTS = new Set<string>([
   "provider.account.set_order.request",
   "provider.account.set_limits.request",
   "provider.account.set_keep_signed_in.request",
+  "provider.account.set_switch_only.request",
   "provider.account.sign_in.start.request",
   "provider.account.sign_in.get.request",
   "provider.account.sign_in.cancel.request",
@@ -135,6 +137,9 @@ export class ProviderAccountSession {
       case "provider.account.set_keep_signed_in.request":
         this.options.host.emit({ type: "provider.account.set_keep_signed_in.response", payload });
         return;
+      case "provider.account.set_switch_only.request":
+        this.options.host.emit({ type: "provider.account.set_switch_only.response", payload });
+        return;
     }
   }
 
@@ -167,6 +172,8 @@ export class ProviderAccountSession {
         });
       case "provider.account.set_keep_signed_in.request":
         return service.setKeepSignedIn({ provider, accountId: request.accountId });
+      case "provider.account.set_switch_only.request":
+        return service.setSwitchOnly({ provider, enabled: request.enabled });
     }
   }
 

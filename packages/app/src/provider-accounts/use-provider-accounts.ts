@@ -25,13 +25,14 @@ export interface ProviderAccountsData {
   switchFailure: ProviderAccountSwitchFailure | null;
 }
 
-/** 正在进行的号操作：立即使用、移除、设上限某个号，保存顺序或「固定登录到」。 */
+/** 正在进行的号操作：立即使用、移除、设上限某个号，保存顺序、「固定登录到」或 Codex 的「只换登录」。 */
 export type AccountAction =
   | { kind: "use"; accountId: string }
   | { kind: "remove"; accountId: string }
   | { kind: "limits"; accountId: string }
   | { kind: "order" }
-  | { kind: "keep" };
+  | { kind: "keep" }
+  | { kind: "switchOnly"; enabled: boolean };
 
 /** 号操作失败：留在原处，直到重试或做别的操作。 */
 export interface AccountActionError {
@@ -66,6 +67,7 @@ export interface UseProviderAccountsResult {
   // 保存成功时为真；失败的原因在 actionError 里。
   setLimits: (account: ProviderAccount, limits: Record<string, number>) => Promise<boolean>;
   setKeepSignedIn: (accountId: string | null) => void;
+  setSwitchOnly: (enabled: boolean) => void;
 }
 
 // 主机记进 switchFailure 的换号失败：在这一节顶上醒目地说，不在原处再说一遍。
@@ -247,6 +249,15 @@ export function useProviderAccounts(serverId: string, provider: string): UseProv
     [client, provider, run],
   );
 
+  const setSwitchOnly = useCallback(
+    (enabled: boolean) =>
+      void run({
+        action: { kind: "switchOnly", enabled },
+        send: () => connected(client).providerAccountSetSwitchOnly({ provider, enabled }),
+      }),
+    [client, provider, run],
+  );
+
   let load: ProviderAccountsLoad = { kind: "loading" };
   if (query.data) load = { kind: "ready", data: query.data };
   else if (query.isError) load = { kind: "error", message: toErrorMessage(query.error) };
@@ -268,6 +279,7 @@ export function useProviderAccounts(serverId: string, provider: string): UseProv
     setOrder,
     setLimits,
     setKeepSignedIn,
+    setSwitchOnly,
   };
 }
 

@@ -2464,3 +2464,53 @@ await this.switchTo({ target, reason }); // may undo a Use now that landed meanw
 await this.switchTo({ target, reason: move.reason, onlyFrom: login.identity });
 // switchLocked: if (input.onlyFrom !== undefined && signedInNow !== input.onlyFrom) return null;
 ```
+
+## Scenario: Codex second layer — moving ChatGPT requests between accounts through the gateway (multi-account-rotation ticket 06, `accountRotation`)
+
+### 1. Scope / Trigger
+- The gateway now picks which ChatGPT account signs a Codex request, Osuna writes Codex's `openai_base_url` without **Use API endpoints**, a new RPC and new optional fields on three wire schemas and the ledger.
+
+### 2. Signatures
+- Protocol, `daemon.manage`, answers the `list` state payload: `provider.account.set_switch_only.request {provider, enabled}` (Codex only; other providers → `unsupported_provider`). Optional additions: `settings.switchOnly?` (sent for Codex), `ProviderAccountUsage(read).onCredits?`, `UsageReport(available).onCredits?`, `UsageRequestRow.accountEmail?`, `UsageRequestAttempt.accountEmail?`.
+- Gateway (`api-endpoints/gateway/chatgpt-accounts.ts`): `interface ChatGptAccounts { forRequest(): Promise<ChatGptAccount[] | null> }` (null = layer off → relay as before); `ChatGptAccount {id, email?, identity, hasRoom, onCredits, signIn(): Promise<{accessToken, accountId?} | null>}`; `relayOnAccounts(AccountRelayInput)`. `createApiEndpointGateway({ chatGptAccounts? })`.
+- Accounts service: `chatGptAccounts` (the source above), `gatewayWanted(): boolean`, `setSwitchOnly({provider, enabled})`. API endpoint service: option `accountsGateway?: () => boolean`, `syncAccountsGateway(): Promise<void>`; takeover file `takeover-codex.json` gains `accountsGateway?: {original, written, fileCreated?}` (only while `takeover` is null). Pure helpers `applyCodexAccountsGateway` / `restoreCodexAccountsGateway` in `codex-config-patch.ts`.
+- Ledger row and attempt (`usage/ledger.ts`): `accountId?`, `accountEmail?`; `LedgerCall.officialAttempt({…, account?})`, `answeredByOfficial(reply, account?)`.
+
+### 3. Contracts
+- **Layer on** (`gatewayWanted`): rotation on, `switchOnly` off, at least two listed Codex accounts without `needsSignIn`. `forRequest` also needs the Read CLI sign-ins gate open; gate off → null (relay as Codex signed it) but `openai_base_url` is left as written.
+- **Which requests**: POST `/responses` and `/responses/compact` with a bare model, not signed in with an API key. Compaction moves between accounts too but is not ledgered (same as the plain relay).
+- **Seats**: the request's own account (matched by `ChatGPT-Account-Id`, may be unlisted) first, sent exactly as Codex sent it; then the listed accounts in user order; accounts without room (98% / limit / held; a credits holder counts only its user limits) moved last, not dropped. Then `ConversationSticks.order` (separate instance from the endpoints'), keyed `account:<id>`, resting = no room.
+- **Headers to another account**: replace `authorization` and `chatgpt-account-id`; drop `x-oai-attestation`, `x-openai-codex-luna-reserve`, `x-codex-turn-state` (magpie `codexHeader`). Every seat drops `accept-encoding` so errors and openings can be read (magpie leaves it to the transport). Body bytes unchanged unless rewritten below (then `content-encoding` dropped).
+- **Per seat**: 429 classed `quota` on a credits holder → asked once more; 400/404 naming an item or `invalid_encrypted_content`/`could not be verified` on `/responses` → that item (or all `reasoning` items) removed and the same seat asked again, ≤3 times (magpie `withoutUnreadable`). Move to the next seat only when `retryable(status, text) && !readsTooLong`. Hold until first content via `openUpstream` (`reads: "openai_responses"` for turns, `null` for compaction).
+- **All fail**: the last upstream HTTP error goes back raw (status, headers, body, `content-length` recomputed); an in-stream error or a gateway-made failure goes out via `sendAgentError`.
+- **Config ownership of `openai_base_url`**: endpoints takeover present → the takeover owns it, sync does nothing. Takeover null → `syncAccountsGateway` writes it (records the original, first-write backup) or puts it back (only if it still holds what was written). Endpoints switch turning on restores the accounts value first inside the same write so the takeover records the user's original; turning off (and its preview) goes through `codexSwitchOffPlan`, handing the key to the accounts record when the layer is wanted. Daemon start (`attachGateway`) follows the current port. CC Switch mirror tables are not pointed at the gateway by the accounts layer alone (not done).
+
+### 4. Validation & Error Matrix
+| Condition | Result |
+|---|---|
+| set_switch_only for claude | `unsupported_provider` |
+| seat's `signIn()` null (lapsed, removed, gate closed, CLI moved to another account) | seat skipped |
+| `context_length_exceeded` / too long | no move, error raw to Codex |
+| Codex leaves before opening | ledger cancelled, nothing else asked |
+| config.toml unparsable on sync | warn log, nothing written |
+
+### 5. Good/Base/Bad Cases
+- Good: ONE 429 `usage_limit_reached` → TWO answers; ledger row `accountEmail: two`, tries one(failed)/two(answered); next turn with ≥1024 cached tokens stays on TWO.
+- Base: one account left / rotation off / switch-only → `openai_base_url` back to the user's own bytes (comment kept), turns relayed untouched.
+- Bad: moving after content started; sending ONE's attestation with TWO's token; dropping the endpoints restore when the accounts write happens to change nothing.
+
+### 6. Tests Required
+- `daemon-e2e/provider-account-gateway.e2e.test.ts` (fake ChatGPT backend keyed by `ChatGPT-Account-Id`, `/v1` as endpoint): 429 → next account with header assertions; cut after first words; too long; credits re-ask; all fail raw 429 with `retry-after`; foreign reasoning stripped; stickiness within turn / cache / no cache / other thread; ledger account; `openai_base_url` written, switch-only and one-account restore, gate off, shared with Use API endpoints.
+- `codex-config-patch.test.ts`: comment kept, original kept across ports, external change left, created file deleted, unparsable refused.
+- `plugins/codex-usage-source/server/usage.test.ts`: `onCredits`. App: `usage-stats/requests.test.ts` (Official · email, switched accounts), browser `settings-provider-account-rotation.spec.ts` (switch-only success/failure), `usage-page-requests.spec.ts` (Official · email).
+
+### 7. Wrong vs Correct
+#### Wrong
+```ts
+const kept = accountsGatewayPlan({ text: textAfter(plan.change, text), … });
+return { change: kept.change, … }; // "keep" here throws away the endpoints restore
+```
+#### Correct
+```ts
+const change = kept.change.kind === "keep" ? plan.change : kept.change;
+```

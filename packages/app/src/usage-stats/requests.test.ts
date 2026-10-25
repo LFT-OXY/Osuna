@@ -178,10 +178,31 @@ describe("usageRequestStatus", () => {
           ],
         }),
       ),
-    ).toEqual({ kind: "switched", count: 2 });
+    ).toEqual({ kind: "switched", count: 2, accounts: false });
     expect(
       usageRequestStatus(row("o", "t", { attempts: [attempt("ep_a", "answered", null)] })),
     ).toEqual({ kind: "ok" });
+  });
+
+  it("is switched between accounts when every try was Official, on a Codex account", () => {
+    const official = (result: "answered" | "failed", email: string) => ({
+      ...attempt("x", result, result === "failed" ? "quota" : null),
+      endpointId: null,
+      endpointName: null,
+      accountEmail: email,
+    });
+    expect(
+      usageRequestStatus(
+        row("a", "t", {
+          endpointId: null,
+          accountEmail: "two@example.com",
+          attempts: [
+            official("failed", "one@example.com"),
+            official("answered", "two@example.com"),
+          ],
+        }),
+      ),
+    ).toEqual({ kind: "switched", count: 1, accounts: true });
   });
 });
 
@@ -222,5 +243,17 @@ describe("usageRequestEndpointLabel", () => {
     expect(usageRequestEndpointLabel({ name: "Relay D", deleted: true }, t)).toBe(
       "Relay D（已删除）",
     );
+  });
+
+  it("names the Codex account that answered Official: Official · its email", () => {
+    const named = (key: string, options?: Record<string, unknown>) =>
+      key === "usage.overview.officialAccount" ? `官方 · ${String(options?.email)}` : key;
+    expect(
+      usageRequestEndpointLabel({ name: null, deleted: false, account: "two@example.com" }, named),
+    ).toBe("官方 · two@example.com");
+    // 有接口名时照接口名，号只属于官方。
+    expect(
+      usageRequestEndpointLabel({ name: "Relay A", deleted: false, account: "x@y.z" }, named),
+    ).toBe("Relay A");
   });
 });

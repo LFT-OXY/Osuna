@@ -84,6 +84,8 @@ export type UsageReport =
       resets?: UsageResets;
       /** The vendor won't let the account send now (Codex: not allowed and no credits to go on). */
       held?: boolean;
+      /** The account goes on past a used-up window on its credits (Codex: has credits, or unlimited). */
+      onCredits?: boolean;
     }
   | { status: "unavailable"; problem: UsageProblem }
   | { status: "error"; error: string };

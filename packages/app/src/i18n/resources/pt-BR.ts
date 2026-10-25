@@ -4539,6 +4539,11 @@ export const ptBR: TranslationResources = {
             other: "Trocada pelo Osuna",
           },
         },
+        switchOnly: {
+          title: "Só trocar o login",
+          hint: "Desligado: as requisições do Codex passam pelo Osuna, e a que a conta em uso não consegue atender vai para a próxima conta antes de qualquer resposta. Ligado: o Codex vai direto à OpenAI e só o login é trocado.",
+          saveFailed: "Não foi possível salvar Só trocar o login: {{reason}}",
+        },
         keep: {
           title: "Manter login em",
           hint: "Enquanto uma conta estiver escolhida, o Osuna nunca troca sozinho, mesmo sem folga.",
@@ -4982,6 +4987,7 @@ export const ptBR: TranslationResources = {
       refresh: "Atualizar",
       allSources: "Tudo",
       official: "Oficial",
+      officialAccount: "Oficial · {{email}}",
       deletedEndpoint: "(excluído)",
       deletedEndpointName: "{{name}} (excluído)",
       breakdown: {
@@ -5200,6 +5206,7 @@ export const ptBR: TranslationResources = {
         failed: "Falhou",
         failedWith: "Falhou ({{reason}})",
         switched: "Trocou {{count}}×",
+        switchedAccounts: "Trocou {{count}}×",
       },
       failures: {
         credit: "sem créditos",

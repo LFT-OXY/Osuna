@@ -1,3 +1,7 @@
+// 续期、保活、换号与第二层的选号移植自 magpie（https://github.com/yetone/magpie，d5805372）：internal/provider/account.go、
+// keepalive.go、logins.go 的 switchSavedLogin、codex_switch.go，internal/provider/routing.go 的 OnCredits
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+
 import { homedir } from "node:os";
 import path from "node:path";
 import type pino from "pino";
@@ -18,6 +22,11 @@ import {
   ACCOUNT_LIMIT_MIN,
   isAccountRotationProvider,
 } from "@getpaseo/protocol/provider-account/rpc-schemas";
+import type {
+  ChatGptAccount,
+  ChatGptAccounts,
+  ChatGptSignIn,
+} from "../api-endpoints/gateway/chatgpt-accounts.js";
 import type { SavedAccountLogins } from "../plugins/usage-sources/index.js";
 import type { CliLoginReading } from "./cli-login.js";
 import { readClaudeLogin } from "./claude-login.js";
@@ -50,7 +59,9 @@ import { withFileLock } from "./file-lock.js";
 import { createSystemKeychain, type CliKeychain } from "./keychain.js";
 import { createPlanUsageAccountReader, type PlanUsageReports } from "./plan-usage-reader.js";
 import {
+  SPENT_PCT,
   nextMove,
+  outOfRoom,
   pickTarget,
   returningAfter,
   type RotationAccount,
@@ -143,6 +154,11 @@ export interface SetKeepSignedInInput {
   provider: AccountRotationProvider;
   // null 是「不固定」。
   accountId: string | null;
+}
+
+export interface SetSwitchOnlyInput {
+  provider: AccountRotationProvider;
+  enabled: boolean;
 }
 
 export interface SetRotationInput {
@@ -976,6 +992,76 @@ export class ProviderAccountService {
     },
   };
 
+  /** 给中转站：Codex 第二层这次请求能换的号（没失效的，按用户排的顺序）；第二层没开为 null。 */
+  readonly chatGptAccounts: ChatGptAccounts = {
+    forRequest: async () => {
+      if (!this.cliSignIns.allowed() || !this.gatewayWanted()) return null;
+      return this.store
+        .accounts("codex")
+        .filter((account) => !account.needsSignIn)
+        .map((account) => this.gatewayAccount(account));
+    },
+  };
+
+  private gatewayAccount(account: StoredAccount): ChatGptAccount {
+    const usage = this.lastUsage(account);
+    const shown: ChatGptAccount = {
+      id: account.id,
+      identity: account.identity,
+      hasRoom: hasGatewayRoom({ usage, limits: account.limits ?? {}, now: this.now() }),
+      onCredits: usage?.onCredits === true,
+      signIn: () => this.gatewaySignIn(account.id),
+    };
+    if (account.email) shown.email = account.email;
+    return shown;
+  }
+
+  /**
+   * Codex 要经过中转站换号（第二层）：开着轮换、没开「只换登录」、列表里有两个以上没失效的号。
+   * 不问「读取 CLI 登录凭证」：关掉总开关不改已写的 openai_base_url，中转站那边另外退回原样转发。
+   */
+  gatewayWanted(): boolean {
+    const settings = this.store.settings("codex");
+    if (!settings.rotationEnabled || settings.switchOnly) return false;
+    return this.store.accounts("codex").filter((account) => !account.needsSignIn).length >= 2;
+  }
+
+  /** 最近一次读到的额度（这次进程读到的，否则存着的那份）；没读到为 null。 */
+  private lastUsage(
+    account: StoredAccount,
+  ): Extract<ProviderAccountUsage, { status: "read" }> | null {
+    const known = this.usage.get(account.id)?.usage;
+    if (known?.status === "read") return known;
+    if (known === undefined && account.usage) return { status: "read", ...account.usage };
+    return null;
+  }
+
+  /**
+   * 第二层用这个号发请求时的登录：存着的号用它自己的（快到期先续）；CLI 拿着的号读 CLI 现在的登录
+   * （快到期先由 Osuna 续并写回 CLI）。号失效、已被移除、CLI 已换成别的号或闸门关了为 null。
+   */
+  private async gatewaySignIn(accountId: string): Promise<ChatGptSignIn | null> {
+    if (!this.cliSignIns.allowed()) return null;
+    const seen = this.store.account(accountId);
+    if (!seen || seen.needsSignIn) return null;
+    let login: Record<string, unknown> | undefined;
+    if (seen.login) {
+      const account = await this.renewCodex({ accountId, force: false });
+      login = account && !account.needsSignIn ? account.login : undefined;
+    } else {
+      await this.renewSignedIn({ force: false });
+      const cli = await readCodexCliLogin(this.codexLogin);
+      const held = cli.kind === "signed_in" && cli.profile.identity === seen.identity;
+      login = held ? cli.login : undefined;
+    }
+    const tokens = login ? codexLoginTokens(login) : null;
+    if (!tokens?.accessToken) return null;
+    return {
+      accessToken: tokens.accessToken,
+      ...(tokens.accountId ? { accountId: tokens.accountId } : {}),
+    };
+  }
+
   private isCodexHome(env: Record<string, string>): boolean {
     const agentHome = env.CODEX_HOME || (env.HOME ? path.join(env.HOME, ".codex") : null);
     return (
@@ -1030,6 +1116,21 @@ export class ProviderAccountService {
     const kept = Object.keys(limits).length > 0 ? limits : undefined;
     this.store.updateAccount(accountId, { limits: kept });
     this.logger.info({ provider, windows: Object.keys(limits).length }, "Account limits saved");
+    this.onChanged(provider);
+    return this.list(provider);
+  }
+
+  /** Codex 的「只换登录」：打开后不经过中转站换号（Codex 配置里的 openai_base_url 随之还原）。 */
+  async setSwitchOnly(input: SetSwitchOnlyInput): Promise<ProviderAccountState> {
+    const { provider, enabled } = input;
+    if (provider !== "codex") {
+      throw new ProviderAccountRequestError(
+        "unsupported_provider",
+        "Only Codex's requests can go through Osuna to switch accounts",
+      );
+    }
+    this.store.updateSettings(provider, { switchOnly: enabled ? true : undefined });
+    this.logger.info({ provider, switchOnly: enabled }, "Only switch the sign-in saved");
     this.onChanged(provider);
     return this.list(provider);
   }
@@ -1136,6 +1237,7 @@ export class ProviderAccountService {
         rotationEnabled: settings.rotationEnabled === true,
         riskNoticeSeen: settings.riskNoticeSeen === true,
         keepSignedInTo: this.keptAccount(provider),
+        ...(provider === "codex" ? { switchOnly: settings.switchOnly === true } : {}),
       },
       accounts,
       blocked: input.blocked,
@@ -1196,6 +1298,7 @@ export class ProviderAccountService {
             fetchedAt: usage.fetchedAt,
             windows: usage.windows,
             ...(usage.held ? { held: true } : {}),
+            ...(usage.onCredits ? { onCredits: true } : {}),
           });
         }
       } catch (error) {
@@ -1343,4 +1446,18 @@ function standingOf(input: {
   if (returning?.back === accountId) return "first_when_room";
   if (returning?.to === accountId) return "temporarily_first";
   return undefined;
+}
+
+/**
+ * 第二层排先后用的「有余量」：没读过算有；有 credits 的号窗口用满照样能答（magpie 的 OnCredits），只看用户的上限。
+ */
+function hasGatewayRoom(input: {
+  usage: Extract<ProviderAccountUsage, { status: "read" }> | null;
+  limits: Record<string, number>;
+  now: number;
+}): boolean {
+  const { usage, limits, now } = input;
+  if (!usage) return true;
+  const share = usage.onCredits ? Number.POSITIVE_INFINITY : SPENT_PCT;
+  return outOfRoom({ usage, limits, share, now }) === null;
 }

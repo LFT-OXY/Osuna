@@ -29,7 +29,7 @@ import {
 } from "./host-endpoints.js";
 import { writePrivateFileAtomicSync } from "../private-files.js";
 import { ClaudeSettingsTakeoverSchema } from "./claude-settings-patch.js";
-import { CodexConfigTakeoverSchema } from "./codex-config-patch.js";
+import { CodexAccountsGatewaySchema, CodexConfigTakeoverSchema } from "./codex-config-patch.js";
 import { PiModelsTakeoverSchema, PiSettingsTakeoverSchema } from "./pi-config-patch.js";
 import type { PiLikeAgent, PiLikeProvider } from "./pi-like-config.js";
 import { isOmpProfileKey, ompProfileNameOf, type OmpProfileKey } from "./omp-profiles.js";
@@ -349,6 +349,8 @@ const CodexTakeoverFileSchema = z.object({
   // 「保留当前设置」时 Osuna 的服务商表已被外部改过：这张表归用户，启动时不再改写，直到再打开开关（ADR 0012）。
   tableKept: z.boolean().optional(),
   reconnect: DefaultModelReconnectSchema.optional(),
+  // 「使用第三方接口」关着时多号自动轮换的第二层单独写的 openai_base_url（takeover 为 null 时才有）。
+  accountsGateway: CodexAccountsGatewaySchema.optional(),
 });
 export type CodexTakeoverFile = z.infer<typeof CodexTakeoverFileSchema>;
 

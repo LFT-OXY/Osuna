@@ -1571,6 +1571,32 @@ codexWorkspacePlans and codexReservePlans in subscription_usage.go:
   plugins/codex-usage-source/server/usage.ts
   plugins/codex-usage-source/server/usage.test.ts
 
+Codex's ChatGPT requests moving between its accounts through the gateway (a
+model without an endpoint prefix sent first as Codex signed it and then to the
+other accounts in order, an account without room tried last, only the sign-in
+and ChatGPT-Account-Id replaced and the headers that hold for Codex's own
+account alone left out, the reply asked of the transport uncompressed, a
+failure moved on from by the fallback list but not a conversation too long,
+moved on from only before any of the reply reached Codex, an account holding
+credits asked once more on its 429, reasoning or an item another account
+sealed taken out and the account asked again, the conversation held to the
+account that answered within a turn and across turns while its cache is
+warm, openai_base_url written once two accounts are on unless only the sign-in
+is switched) follows codexAccounts, codexHeader, relayOnCredits, creditsAsked,
+withoutUnreadable and unreadableItem in magpie's
+internal/gateway/codex_backend.go, retryable and holdWriter in fallback.go,
+foreignReasoning, withoutReasoning and the auto affinity in affinity.go, the
+resting accounts last in internal/provider/routing.go, SwitchOnly there, and
+the gateway base URL in internal/agent/codex.go; credits a Codex account goes
+on past a window with follow OnCredits in routing.go; the scenarios its tests
+check follow codex_accounts_test.go, codex_credits_test.go,
+strict_affinity_test.go and fallback_test.go:
+
+  packages/server/src/server/api-endpoints/gateway/chatgpt-accounts.ts
+  packages/server/src/server/daemon-e2e/provider-account-gateway.e2e.test.ts
+  packages/server/src/server/provider-accounts/service.ts
+  plugins/codex-usage-source/server/usage.ts
+
 MIT License
 
 Copyright (c) 2026 yetone

@@ -140,6 +140,63 @@ async function holdRequestsList(page: Page): Promise<() => void> {
   return release;
 }
 
+/**
+ * 请求列表的回复里，最新一行改成经过多号自动轮换第二层的 Codex 请求：one 用完、two 答了（daemon 端到端测试已证明账本这样记）。
+ */
+async function nameAccountsOnNewestRow(page: Page): Promise<void> {
+  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((message) => server.send(message));
+    server.onMessage((message) => {
+      if (typeof message !== "string" || !message.includes('"usage.requests.list.response"')) {
+        ws.send(message);
+        return;
+      }
+      const envelope = JSON.parse(message) as {
+        message: { payload: { requests: Array<Record<string, unknown>> } };
+      };
+      const [newest] = envelope.message.payload.requests;
+      if (newest) {
+        const at = String(newest.at);
+        const attempt = { endpointId: null, endpointName: null, model: "gpt-5.5", startedAt: at };
+        Object.assign(newest, {
+          cli: "codex",
+          model: "gpt-5.5",
+          through: "gateway",
+          endpointId: null,
+          endpointName: null,
+          accountEmail: "two@example.com",
+          status: "ok",
+          error: null,
+          attempts: [
+            {
+              ...attempt,
+              durationMs: 180,
+              result: "failed",
+              failure: "quota",
+              reason: "The usage limit has been reached",
+              cooldownUntil: null,
+              reasked: false,
+              accountEmail: "one@example.com",
+            },
+            {
+              ...attempt,
+              durationMs: 2400,
+              result: "answered",
+              failure: null,
+              reason: null,
+              cooldownUntil: null,
+              reasked: false,
+              accountEmail: "two@example.com",
+            },
+          ],
+        });
+      }
+      ws.send(JSON.stringify(envelope));
+    });
+  });
+}
+
 /** 把前 `times` 次导出请求就地回成 daemon 的 rpc_error，之后的照常交给 daemon；默认拦主 daemon。 */
 async function failRequestsExport(
   page: Page,
@@ -434,6 +491,21 @@ test.describe("Usage page Requests tab", () => {
     } finally {
       await secondary.close().catch(() => undefined);
     }
+  });
+
+  test("a request the gateway moved between Codex accounts reads Official · the email of the one that answered, and each try its account", async ({
+    page,
+  }) => {
+    writePagingSession();
+    await nameAccountsOnNewestRow(page);
+    await openRequestsTab(page);
+
+    const newest = page.getByTestId(/^usage-request-row-/).first();
+    await expect(newest).toContainText("Official · two@example.com", { timeout: 30_000 });
+    await newest.click();
+    const attempts = page.getByTestId(/^usage-request-attempts-/);
+    await expect(attempts).toContainText("Official · one@example.com");
+    await expect(attempts).toContainText("Official · two@example.com");
   });
 
   test("shows a skeleton while the first page loads", async ({ page }) => {

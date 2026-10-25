@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { getStaticTOMLValue, parseTOML } from "toml-eslint-parser";
 import { ProviderOverridesSchema } from "../agent/provider-launch-config.js";
 import {
+  applyCodexAccountsGateway,
   applyCodexApiEndpoint,
   CODEX_API_ENDPOINT_PROVIDER_ID,
   inspectCodexConfig,
@@ -16,6 +17,7 @@ import {
   readCodexRespectsSystemProxy,
   readCodexReasoningEffort,
   refreshCodexProviderTable,
+  restoreCodexAccountsGateway,
   restoreCodexOfficial,
   type CodexConfigTakeover,
   type CodexGatewayWiring,
@@ -671,6 +673,61 @@ web_search = true
     const { takeover } = apply(USER_CONFIG);
 
     expect(restoreCodexOfficial({ text: "model = ", takeover }).kind).toBe("unparsable");
+  });
+});
+
+describe("openai_base_url written for account rotation alone", () => {
+  const URL = "http://127.0.0.1:6767/api-endpoint-gateway/backend-api/codex";
+  const OWN =
+    "# mine\nmodel = \"gpt-5.5\"\nopenai_base_url = 'https://relay.example/v1' # my relay\n";
+
+  it("replaces only that key, keeping its line and comment, and puts the user's spelling back", () => {
+    const written = applyCodexAccountsGateway({ text: OWN, url: URL, record: null });
+    if (written.kind !== "patched") throw new Error(written.message);
+    expect(written.text).toBe(`# mine\nmodel = "gpt-5.5"\nopenai_base_url = "${URL}" # my relay\n`);
+
+    const restored = restoreCodexAccountsGateway({ text: written.text, record: written.record });
+    expect(restored).toEqual({ kind: "patched", text: OWN });
+  });
+
+  it("keeps the first original across a new port", () => {
+    const first = applyCodexAccountsGateway({ text: OWN, url: URL, record: null });
+    if (first.kind !== "patched") throw new Error(first.message);
+    const moved = applyCodexAccountsGateway({
+      text: first.text,
+      url: URL.replace("6767", "6800"),
+      record: first.record,
+    });
+    if (moved.kind !== "patched") throw new Error(moved.message);
+    expect(restoreCodexAccountsGateway({ text: moved.text, record: moved.record })).toEqual({
+      kind: "patched",
+      text: OWN,
+    });
+  });
+
+  it("a value changed outside Osuna is left as it is", () => {
+    const written = applyCodexAccountsGateway({ text: OWN, url: URL, record: null });
+    if (written.kind !== "patched") throw new Error(written.message);
+    const changed = written.text.replace(URL, "https://elsewhere.example/v1");
+    expect(restoreCodexAccountsGateway({ text: changed, record: written.record })).toEqual({
+      kind: "patched",
+      text: changed,
+    });
+  });
+
+  it("a file Osuna created for the key alone is deleted when the key goes", () => {
+    const written = applyCodexAccountsGateway({ text: null, url: URL, record: null });
+    if (written.kind !== "patched") throw new Error(written.message);
+    expect(written.record.fileCreated).toBe(true);
+    expect(restoreCodexAccountsGateway({ text: written.text, record: written.record })).toEqual({
+      kind: "delete",
+    });
+  });
+
+  it("an unparsable file is refused", () => {
+    expect(applyCodexAccountsGateway({ text: "model = [", url: URL, record: null }).kind).toBe(
+      "unparsable",
+    );
   });
 });
 

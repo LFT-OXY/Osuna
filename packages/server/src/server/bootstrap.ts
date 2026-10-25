@@ -852,6 +852,8 @@ export async function createPaseoDaemon(
       noteCliVersion: (headers) => apiEndpointService.noteCliVersion(headers),
       // usageService 在下面创建；它在读完盘上的记录之前收到的账先排着。
       ledger: { record: (row) => usageService.recordGatewayCall(row) },
+      // providerAccountService 在下面创建；只在 daemon 启动后收到请求时才问。
+      chatGptAccounts: { forRequest: () => providerAccountService.chatGptAccounts.forRequest() },
       daemonVersion,
       overrides: config.apiEndpoints,
     }),
@@ -1058,7 +1060,7 @@ export async function createPaseoDaemon(
     isDirectory: async (target) => (await stat(target).catch(() => null))?.isDirectory() ?? false,
     logger,
   });
-  // Codex、Claude Code 设置页的「账号」一节；变化经 provider.account.changed 告诉客户端重读。
+  // 提供方设置页的「账号」一节；变化经 provider.account.changed 告诉客户端重读。
   const broadcastProviderAccountsChanged = () => {
     wsServer?.broadcast(wrapSessionMessage({ type: "provider.account.changed" }));
   };
@@ -1067,7 +1069,11 @@ export async function createPaseoDaemon(
     logger,
     cliSignIns,
     planUsage: pluginRuntime,
-    onChanged: broadcastProviderAccountsChanged,
+    onChanged: () => {
+      broadcastProviderAccountsChanged();
+      // 号或设置变了：第二层要不要经过中转站可能跟着变（apiEndpointService 在下面创建）。
+      void apiEndpointService.syncAccountsGateway();
+    },
     overrides: config.providerAccounts,
   });
   pluginRuntime.useSavedAccounts(providerAccountService.savedAccountLogins);
@@ -1082,6 +1088,7 @@ export async function createPaseoDaemon(
     retiredModels: apiEndpointRetiredModels,
     sightings: apiEndpointSightings,
     cliSignIns,
+    accountsGateway: () => providerAccountService.gatewayWanted(),
     daemonVersion,
     // 估算成本读时现算：倍率一改，用量页、会话列表与每轮花费都要重读（同改价格表）。
     onPriceMultipliersChanged: () => {

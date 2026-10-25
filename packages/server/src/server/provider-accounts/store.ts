@@ -31,6 +31,7 @@ const StoredUsageSchema = z.object({
   fetchedAt: z.string(),
   windows: z.array(ProviderAccountWindowSchema),
   held: z.boolean().optional(),
+  onCredits: z.boolean().optional(),
 });
 export type StoredUsage = z.infer<typeof StoredUsageSchema>;
 
@@ -64,6 +65,8 @@ const StoredSettingsSchema = z.object({
   switchFailure: ProviderAccountSwitchFailureSchema.optional(),
   // 「固定登录到」的号 ID。
   keepSignedInTo: z.string().optional(),
+  // Codex 的「只换登录」：不经过中转站换号，只保留第一层。
+  switchOnly: z.boolean().optional(),
   // 自动换走后等着换回：back 是被换走的号，to 是现在换上的号（照 magpie 的 login-returns.json）。
   returning: z.object({ back: z.string(), to: z.string() }).optional(),
 });

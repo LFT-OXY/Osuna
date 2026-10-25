@@ -143,6 +143,7 @@ describe.skipIf(process.platform === "win32")("provider accounts section", () =>
       rotationEnabled: true,
       riskNoticeSeen: true,
       keepSignedInTo: null,
+      switchOnly: false,
     });
     expect(turnedOn.accounts).toEqual([
       {
@@ -198,6 +199,7 @@ describe.skipIf(process.platform === "win32")("provider accounts section", () =>
       rotationEnabled: true,
       riskNoticeSeen: true,
       keepSignedInTo: null,
+      switchOnly: false,
     });
 
     // Claude Code 那家还没看过。

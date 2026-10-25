@@ -124,6 +124,7 @@ const ACCOUNT_STATE_REPLIES = new Set([
   "provider.account.set_order.response",
   "provider.account.set_limits.response",
   "provider.account.set_keep_signed_in.response",
+  "provider.account.set_switch_only.response",
 ]);
 
 /** 这一节的回复按用例改写：额度换成假读数、号标成失效、加号的回复改成已失败。 */

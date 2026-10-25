@@ -4431,6 +4431,11 @@ export const zhCN: TranslationResources = {
             other: "Osuna 换的号",
           },
         },
+        switchOnly: {
+          title: "只换登录",
+          hint: "关着时 Codex 的请求经过 Osuna，当前号接不了的请求在回复之前交给下一个号；打开后 Codex 直连 OpenAI，只换登录。",
+          saveFailed: "没能保存「只换登录」：{{reason}}",
+        },
         keep: {
           title: "固定登录到",
           hint: "选了某个号后，Osuna 完全不自动换号，用完也不换。",
@@ -4866,6 +4871,7 @@ export const zhCN: TranslationResources = {
       refresh: "刷新",
       allSources: "全部",
       official: "官方",
+      officialAccount: "官方 · {{email}}",
       deletedEndpoint: "（已删除）",
       deletedEndpointName: "{{name}}（已删除）",
       breakdown: {
@@ -5084,6 +5090,7 @@ export const zhCN: TranslationResources = {
         failed: "失败",
         failedWith: "失败（{{reason}}）",
         switched: "换过 {{count}} 家",
+        switchedAccounts: "换过 {{count}} 个号",
       },
       failures: {
         credit: "余额不足",

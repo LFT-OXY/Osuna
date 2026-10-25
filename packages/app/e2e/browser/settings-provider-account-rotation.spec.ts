@@ -223,6 +223,58 @@ test.describe("Codex automatic account rotation", () => {
     expect(await cliAccountId()).toBe("acct-cli");
   });
 
+  test("Only switch the sign-in is a switch that saves on the host and takes Osuna out of Codex's requests", async ({
+    page,
+  }) => {
+    await installProviderAccountsRoute(page, { windows: WINDOWS });
+    await openCodexPage(page);
+    const control = accountsSection(page).getByTestId("provider-accounts-switch-only-switch");
+    const rotateHint = accountsSection(page).getByTestId("provider-accounts-rotate-hint");
+    await expect(control).toHaveAttribute("role", "switch");
+    await expect(control).toHaveAttribute("aria-checked", "false");
+    await expect(
+      accountsSection(page).getByTestId("provider-accounts-switch-only-hint"),
+    ).toHaveText(/Codex's requests go through Osuna/);
+    await expect(rotateHint).toContainText("go through Osuna");
+
+    await control.click();
+    await expect(control).toHaveAttribute("aria-checked", "true");
+    await expect.poll(async () => (await daemonState()).settings.switchOnly).toBe(true);
+    await expect(rotateHint).not.toContainText("go through Osuna");
+
+    await control.click();
+    await expect(control).toHaveAttribute("aria-checked", "false");
+    await expect.poll(async () => (await daemonState()).settings.switchOnly).toBe(false);
+  });
+
+  test("an Only switch the sign-in that can't be saved says why and stays as the host has it", async ({
+    page,
+  }) => {
+    await installProviderAccountsRoute(page, {
+      windows: WINDOWS,
+      failRequest: {
+        type: "provider.account.set_switch_only.request",
+        reason: "disk is full",
+        times: 1,
+      },
+    });
+    await openCodexPage(page);
+    const control = accountsSection(page).getByTestId("provider-accounts-switch-only-switch");
+    await control.click();
+    await expect(
+      accountsSection(page).getByTestId("provider-accounts-switch-only-error"),
+    ).toHaveText("Couldn't save Only switch the sign-in: disk is full");
+    await expect(control).toHaveAttribute("aria-checked", "false");
+    expect((await daemonState()).settings.switchOnly).toBe(false);
+
+    // 重试成功后失败的说法清掉。
+    await control.click();
+    await expect(control).toHaveAttribute("aria-checked", "true");
+    await expect(
+      accountsSection(page).getByTestId("provider-accounts-switch-only-error"),
+    ).toHaveCount(0);
+  });
+
   test("after the first account runs out, the rows say who is first for now", async ({ page }) => {
     await installProviderAccountsRoute(page, {
       windows: WINDOWS,

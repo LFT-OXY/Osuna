@@ -4541,6 +4541,11 @@ export const ru: TranslationResources = {
             other: "Переключено Osuna",
           },
         },
+        switchOnly: {
+          title: "Только менять вход",
+          hint: "Выключено: запросы Codex идут через Osuna, и запрос, на который текущий аккаунт не может ответить, до начала ответа передаётся следующему аккаунту. Включено: Codex обращается к OpenAI напрямую, меняется только вход.",
+          saveFailed: "Не удалось сохранить «Только менять вход»: {{reason}}",
+        },
         keep: {
           title: "Оставаться в аккаунте",
           hint: "Пока выбран аккаунт, Osuna никогда не переключает сам, даже когда запас исчерпан.",
@@ -4986,6 +4991,7 @@ export const ru: TranslationResources = {
       refresh: "Обновить",
       allSources: "Все",
       official: "Официальный",
+      officialAccount: "Официальный · {{email}}",
       deletedEndpoint: "(удалён)",
       deletedEndpointName: "{{name}} (удалён)",
       breakdown: {
@@ -5204,6 +5210,7 @@ export const ru: TranslationResources = {
         failed: "Ошибка",
         failedWith: "Ошибка ({{reason}})",
         switched: "Смена ×{{count}}",
+        switchedAccounts: "Смена ×{{count}}",
       },
       failures: {
         credit: "нет средств",

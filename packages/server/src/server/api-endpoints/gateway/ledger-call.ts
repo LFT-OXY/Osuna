@@ -26,11 +26,18 @@ export interface LedgerAttemptEnd {
 /** 把回复交给 Agent 的那家：接口的这个模型，或 ChatGPT 自带模型（官方，null）。 */
 type Answerer = { endpointId: string; endpointName: string; upstreamModel: string } | null;
 
+/** 官方那次用的 Codex 的 ChatGPT 号（第二层）；Codex 原样的登录、不在列表里的号没有。 */
+export interface LedgerAccount {
+  id: string;
+  email?: string;
+}
+
 /** 一次尝试问的是谁：接口的这个模型，或官方（ChatGPT 后端，没有接口）。 */
 interface AttemptTarget {
   endpointId: string | null;
   endpointName: string | null;
   model: string;
+  account?: LedgerAccount;
 }
 
 /**
@@ -39,7 +46,7 @@ interface AttemptTarget {
  */
 type LedgerOutcome =
   | { kind: "open" }
-  | { kind: "answered"; by: Answerer; reply: DeliveredReply }
+  | { kind: "answered"; by: Answerer; reply: DeliveredReply; account?: LedgerAccount }
   | { kind: "failed"; told: string }
   | { kind: "cancelled" };
 
@@ -81,10 +88,21 @@ export class LedgerCall {
     this.push({ ...input, target: targetOf(candidate) });
   }
 
-  /** 问 ChatGPT 后端（官方）的那一次（magpie codex_backend.go 的 Tries[0]）。 */
-  officialAttempt(input: { model: string; startedAt: number; end: LedgerAttemptEnd }): void {
-    const target = { endpointId: null, endpointName: null, model: input.model };
-    this.push({ ...input, target, reasked: false });
+  /** 问 ChatGPT 后端（官方）的那一次（magpie codex_backend.go 的 Tries[0]）；第二层另记问的是哪个号。 */
+  officialAttempt(input: {
+    model: string;
+    startedAt: number;
+    end: LedgerAttemptEnd;
+    account?: LedgerAccount;
+  }): void {
+    const { account, ...rest } = input;
+    const target = {
+      endpointId: null,
+      endpointName: null,
+      model: input.model,
+      ...(account ? { account } : {}),
+    };
+    this.push({ ...rest, target, reasked: false });
   }
 
   /**
@@ -133,9 +151,9 @@ export class LedgerCall {
     this.outcome = { kind: "answered", by, reply };
   }
 
-  /** ChatGPT 自带模型把回复交给了 Agent：接口记为官方。 */
-  answeredByOfficial(reply: DeliveredReply): void {
-    this.outcome = { kind: "answered", by: null, reply };
+  /** ChatGPT 自带模型把回复交给了 Agent：接口记为官方；第二层另记答话的号。 */
+  answeredByOfficial(reply: DeliveredReply, account?: LedgerAccount): void {
+    this.outcome = { kind: "answered", by: null, reply, ...(account ? { account } : {}) };
   }
 
   /** 请求结束：记一行。交了回复的记用量；没交的记失败或取消、0 token。 */
@@ -145,6 +163,7 @@ export class LedgerCall {
       at === null ? null : Math.max(0, at - input.since);
     const by = outcome.kind === "answered" ? outcome.by : null;
     const reply = outcome.kind === "answered" ? outcome.reply : NO_REPLY;
+    const account = outcome.kind === "answered" ? outcome.account : undefined;
     input.ledger.record({
       kind: "gateway",
       at: new Date(input.since).toISOString(),
@@ -170,6 +189,7 @@ export class LedgerCall {
       stop: reply.stop,
       ...statusOf(outcome),
       attempts: this.attempts,
+      ...accountFields(account),
     });
   }
 
@@ -180,8 +200,9 @@ export class LedgerCall {
     end: LedgerAttemptEnd;
   }): void {
     const { end } = input;
+    const { account, ...target } = input.target;
     this.attempts.push({
-      ...input.target,
+      ...target,
       startedAt: new Date(input.startedAt).toISOString(),
       durationMs: Math.max(0, Date.now() - input.startedAt),
       result: end.result,
@@ -189,8 +210,17 @@ export class LedgerCall {
       reason: cut(end.reason),
       cooldownUntil: end.cooldownUntil === null ? null : new Date(end.cooldownUntil).toISOString(),
       reasked: input.reasked,
+      ...accountFields(account),
     });
   }
+}
+
+function accountFields(account: LedgerAccount | undefined): {
+  accountId?: string;
+  accountEmail?: string;
+} {
+  if (!account) return {};
+  return { accountId: account.id, ...(account.email ? { accountEmail: account.email } : {}) };
 }
 
 function targetOf(candidate: GatewayCandidate): AttemptTarget {

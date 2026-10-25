@@ -6875,6 +6875,17 @@ export class DaemonClient {
     });
   }
 
+  /** Codex 的「只换登录」：打开时不经过中转站换号。只有声明了 accountRotation 的 daemon 认。 */
+  async providerAccountSetSwitchOnly(
+    options: { provider: string; enabled: boolean },
+    requestId?: string,
+  ): Promise<ProviderAccountListPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.account.set_switch_only.request", ...options },
+    });
+  }
+
   /** 开始加号；带 accountId 是给这个号重新登录。只有声明了 accountRotation 的 daemon 认。 */
   async providerAccountSignInStart(
     options: { provider: string; accountId?: string },

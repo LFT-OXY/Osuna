@@ -4568,6 +4568,11 @@ export const es: TranslationResources = {
             other: "Cambiada por Osuna",
           },
         },
+        switchOnly: {
+          title: "Solo cambiar el inicio de sesión",
+          hint: "Desactivado: las solicitudes de Codex pasan por Osuna, y la que la cuenta en uso no puede atender pasa a la siguiente cuenta antes de cualquier respuesta. Activado: Codex va directo a OpenAI y solo se cambia el inicio de sesión.",
+          saveFailed: "No se pudo guardar Solo cambiar el inicio de sesión: {{reason}}",
+        },
         keep: {
           title: "Mantener sesión en",
           hint: "Mientras haya una cuenta elegida, Osuna nunca cambia solo, ni siquiera cuando se queda sin margen.",
@@ -5012,6 +5017,7 @@ export const es: TranslationResources = {
       refresh: "Actualizar",
       allSources: "Todas",
       official: "Oficial",
+      officialAccount: "Oficial · {{email}}",
       deletedEndpoint: "(eliminado)",
       deletedEndpointName: "{{name}} (eliminado)",
       breakdown: {
@@ -5231,6 +5237,7 @@ export const es: TranslationResources = {
         failed: "Fallida",
         failedWith: "Fallida ({{reason}})",
         switched: "Cambió {{count}}×",
+        switchedAccounts: "Cambió {{count}}×",
       },
       failures: {
         credit: "sin saldo",

@@ -4588,6 +4588,11 @@ export const fr: TranslationResources = {
             other: "Changé par Osuna",
           },
         },
+        switchOnly: {
+          title: "Changer seulement la connexion",
+          hint: "Désactivé : les requêtes de Codex passent par Osuna, et celle que le compte utilisé ne peut pas traiter passe au compte suivant avant toute réponse. Activé : Codex va directement chez OpenAI et seule la connexion change.",
+          saveFailed: "Impossible d'enregistrer Changer seulement la connexion : {{reason}}",
+        },
         keep: {
           title: "Rester connecté à",
           hint: "Tant qu'un compte est choisi, Osuna ne change jamais tout seul, même sans marge.",
@@ -5036,6 +5041,7 @@ export const fr: TranslationResources = {
       refresh: "Actualiser",
       allSources: "Tout",
       official: "Officiel",
+      officialAccount: "Officiel · {{email}}",
       deletedEndpoint: "(supprimé)",
       deletedEndpointName: "{{name}} (supprimé)",
       breakdown: {
@@ -5256,6 +5262,7 @@ export const fr: TranslationResources = {
         failed: "Échouée",
         failedWith: "Échouée ({{reason}})",
         switched: "Basculée {{count}}×",
+        switchedAccounts: "Basculée {{count}}×",
       },
       failures: {
         credit: "crédit épuisé",

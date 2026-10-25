@@ -49,6 +49,8 @@ export const ProviderAccountUsageSchema = z.discriminatedUnion("status", [
     windows: z.array(ProviderAccountWindowSchema),
     // Codex 应用不让这个号发送：rate_limit.allowed 为假且没有 credits 可用（照 magpie 的 codexHeld）。
     held: z.boolean().optional(),
+    // 这个号有 credits：窗口用完后 ChatGPT 改花 credits（照 magpie 的 OnCredits）。工单 06 起的 daemon 才发。
+    onCredits: z.boolean().optional(),
   }),
   z.object({ status: z.literal("failed"), reason: z.string(), code: z.string().optional() }),
 ]);
@@ -89,6 +91,8 @@ export const ProviderAccountSettingsSchema = z.object({
   riskNoticeSeen: z.boolean(),
   // 「固定登录到」的号；null 是「不固定」。固定后完全不自动换。工单 05 起的 daemon 才发。
   keepSignedInTo: z.string().nullable().optional(),
+  // Codex 的「只换登录」：不经过中转站换号，Codex 直连 OpenAI，只保留换登录。工单 06 起的 daemon 才发。
+  switchOnly: z.boolean().optional(),
 });
 export type ProviderAccountSettings = z.infer<typeof ProviderAccountSettingsSchema>;
 
@@ -303,6 +307,28 @@ export const ProviderAccountSetKeepSignedInResponseSchema = z.object({
 });
 export type ProviderAccountSetKeepSignedInResponse = z.infer<
   typeof ProviderAccountSetKeepSignedInResponseSchema
+>;
+
+/**
+ * Codex 的「只换登录」：打开时 Codex 的请求不经过中转站换号（不写 openai_base_url），只保留换登录；
+ * 关掉时（轮换开着、有两个以上的号）Codex 的 ChatGPT 请求经过中转站，当前号接不了的交给下一个号。
+ * 只有 Codex 有；别家回 unsupported_provider。
+ */
+export const ProviderAccountSetSwitchOnlyRequestSchema = z.object({
+  type: z.literal("provider.account.set_switch_only.request"),
+  requestId: z.string(),
+  provider: z.string(),
+  enabled: z.boolean(),
+});
+export type ProviderAccountSetSwitchOnlyRequest = z.infer<
+  typeof ProviderAccountSetSwitchOnlyRequestSchema
+>;
+export const ProviderAccountSetSwitchOnlyResponseSchema = z.object({
+  type: z.literal("provider.account.set_switch_only.response"),
+  payload: ProviderAccountStateSchema,
+});
+export type ProviderAccountSetSwitchOnlyResponse = z.infer<
+  typeof ProviderAccountSetSwitchOnlyResponseSchema
 >;
 
 /**

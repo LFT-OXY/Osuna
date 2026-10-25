@@ -4449,6 +4449,11 @@ export const ar: TranslationResources = {
             other: "بدّله Osuna",
           },
         },
+        switchOnly: {
+          title: "تبديل تسجيل الدخول فقط",
+          hint: "عند الإيقاف تمرّ طلبات Codex عبر Osuna، والطلب الذي لا يستطيع الحساب الحالي الرد عليه يُنقل إلى الحساب التالي قبل أي رد. عند التشغيل يتصل Codex بـ OpenAI مباشرة ولا يُبدَّل إلا تسجيل الدخول.",
+          saveFailed: "تعذّر حفظ تبديل تسجيل الدخول فقط: {{reason}}",
+        },
         keep: {
           title: "البقاء مسجّلًا في",
           hint: "ما دام حساب محدّدًا، لا يبدّل Osuna تلقائيًا أبدًا، حتى عند نفاد الهامش.",
@@ -4890,6 +4895,7 @@ export const ar: TranslationResources = {
       refresh: "تحديث",
       allSources: "الكل",
       official: "الرسمي",
+      officialAccount: "الرسمي · {{email}}",
       deletedEndpoint: "(محذوف)",
       deletedEndpointName: "{{name}} (محذوف)",
       breakdown: {
@@ -5108,6 +5114,7 @@ export const ar: TranslationResources = {
         failed: "فشل",
         failedWith: "فشل ({{reason}})",
         switched: "تبديل {{count}}×",
+        switchedAccounts: "تبديل {{count}}×",
       },
       failures: {
         credit: "الرصيد نفد",

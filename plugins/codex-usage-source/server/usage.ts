@@ -296,6 +296,7 @@ export async function fetchUsage(
     details: [],
     ...(resets ? { resets } : {}),
     ...(codexHeld(usage) ? { held: true } : {}),
+    ...(onCredits(usage) ? { onCredits: true } : {}),
   };
 }
 
@@ -340,6 +341,11 @@ function codexHeld(usage: z.infer<typeof responseSchema>): boolean {
   const workspace = WORKSPACE_PLANS.has(plan) && !RESERVE_PLANS.has(plan);
   if (workspace && credits?.overage_limit_reached === false && !spent && !unusual) return false;
   return true;
+}
+
+/** 窗口用完后 ChatGPT 改花这个号的 credits（照 magpie 的 OnCredits）：中转站对它的 429 先再问一次。 */
+function onCredits(usage: z.infer<typeof responseSchema>): boolean {
+  return usage.credits?.has_credits === true || usage.credits?.unlimited === true;
 }
 
 /** JWT claims are decoded locally; no token or email becomes an account key. */

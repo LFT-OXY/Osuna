@@ -96,6 +96,8 @@ import {
   ProviderAccountRemoveResponseSchema,
   ProviderAccountSetKeepSignedInRequestSchema,
   ProviderAccountSetKeepSignedInResponseSchema,
+  ProviderAccountSetSwitchOnlyRequestSchema,
+  ProviderAccountSetSwitchOnlyResponseSchema,
   ProviderAccountSetLimitsRequestSchema,
   ProviderAccountSetLimitsResponseSchema,
   ProviderAccountSetOrderRequestSchema,
@@ -3623,6 +3625,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ProviderAccountSetOrderRequestSchema,
   ProviderAccountSetLimitsRequestSchema,
   ProviderAccountSetKeepSignedInRequestSchema,
+  ProviderAccountSetSwitchOnlyRequestSchema,
   BrowserHostRegisterRequestSchema,
   SubscriptionReleaseRequestSchema,
   SessionEventsSetSubscriptionRequestSchema,
@@ -4304,8 +4307,8 @@ export const ServerInfoStatusPayloadSchema = z
         checkoutDiffFilesOnly: z.boolean().optional(),
         // COMPAT(accountRotation): added in v0.17.0, remove gate after 2027-04-25.
         // 任务 10-16-multi-account-rotation：provider.account.list / set_rotation、加号的 provider.account.sign_in.*、
-        // 换号的 provider.account.use / remove / set_order、自动换号的 set_limits / set_keep_signed_in
-        // 与 provider.account.changed 事件
+        // 换号的 provider.account.use / remove / set_order、自动换号的 set_limits / set_keep_signed_in、
+        // Codex 第二层的 set_switch_only 与 provider.account.changed 事件
         // （Codex、Claude Code 设置页的「账号」一节与「多号自动轮换」）。
         accountRotation: z.boolean().optional(),
       })
@@ -6934,6 +6937,9 @@ export const UsageReportSchema = z.discriminatedUnion("status", [
     // Codex 应用不让这个号发送（额度用完且没有 credits，照 magpie 的 codexHeld）；多号自动轮换据此换走。
     // 老 daemon 与别的来源不发。
     held: z.boolean().optional(),
+    // 这个号窗口用完后改花 credits（Codex 的 has_credits 或 unlimited）；多号自动轮换的第二层据此再问一次。
+    // 老 daemon 与别的来源不发。
+    onCredits: z.boolean().optional(),
   }),
   z.object({ status: z.literal("unavailable"), problem: UsageProblemSchema }),
   z.object({ status: z.literal("error"), error: z.string() }),
@@ -7510,6 +7516,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ProviderAccountSetOrderResponseSchema,
   ProviderAccountSetLimitsResponseSchema,
   ProviderAccountSetKeepSignedInResponseSchema,
+  ProviderAccountSetSwitchOnlyResponseSchema,
   ProviderAccountChangedMessageSchema,
   BrowserHostRegisterResponseSchema,
   SubscriptionReleaseResponseSchema,

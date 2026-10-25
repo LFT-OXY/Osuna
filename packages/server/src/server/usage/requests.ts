@@ -114,6 +114,7 @@ function listedRowOf(call: UsageListedCall, index: number, input: UsageRequestsS
     row.model,
     ledger?.upstreamModel,
     row.endpointName,
+    row.accountEmail,
     ...row.attempts.map((attempt) => attempt.endpointName),
     row.sessionId,
     project?.displayName,
@@ -174,10 +175,18 @@ function gatewayRow({
     status: ledger.status,
     error: ledger.error ?? null,
     attempts: attemptsOf(ledger, input.endpointIdentities),
+    ...answeringAccountOf(ledger),
     replyId: ledger.replyId,
     sessionId: cli?.sessionId ?? ledger.sessionId,
     project,
   };
+}
+
+/** The Codex account that answered as Official, when the gateway moved the request between accounts. */
+function answeringAccountOf(ledger: GatewayLedgerRow): Pick<UsageRequestRow, "accountEmail"> {
+  const answeredAsOfficial = ledger.status === "ok" && ledger.endpointId === null;
+  if (!answeredAsOfficial || !ledger.accountEmail) return {};
+  return { accountEmail: ledger.accountEmail };
 }
 
 /**
@@ -212,9 +221,12 @@ function attemptsOf(
   const attempts: UsageRequestRow["attempts"] = [];
   for (const attempt of ledger.attempts) {
     const current = attempt.endpointId === null ? null : identities.get(attempt.endpointId);
-    attempts.push(
-      Object.assign({}, attempt, { endpointName: current?.name ?? attempt.endpointName }),
-    );
+    // 列表只写号的邮箱：号的 ID 是 Osuna 内部的。
+    const shown = Object.assign({}, attempt, {
+      endpointName: current?.name ?? attempt.endpointName,
+    });
+    delete shown.accountId;
+    attempts.push(shown);
   }
   return attempts;
 }

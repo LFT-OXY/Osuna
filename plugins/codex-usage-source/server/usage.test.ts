@@ -187,6 +187,19 @@ test("an account not allowed to send with no credits is held, as the Codex app h
   expect(await heldReading({ rate_limit: notAllowed })).not.toHaveProperty("held");
 });
 
+test("an account holding credits says so, so the gateway asks it again on its 429 (magpie OnCredits)", async () => {
+  const used = { primary_window: { used_percent: 100, limit_window_seconds: 18000 } };
+  expect(
+    await heldReading({ plan_type: "pro", rate_limit: used, credits: { has_credits: true } }),
+  ).toMatchObject({ status: "available", onCredits: true });
+  expect(
+    await heldReading({ plan_type: "pro", rate_limit: used, credits: { unlimited: true } }),
+  ).toMatchObject({ onCredits: true });
+  expect(
+    await heldReading({ plan_type: "plus", rate_limit: used, credits: { has_credits: false } }),
+  ).not.toHaveProperty("onCredits");
+});
+
 test("summarizes the session and weekly windows by default, not code review", async () => {
   const report = await fetchUsage(
     authInput(fixtureHome),

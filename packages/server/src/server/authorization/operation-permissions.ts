@@ -187,6 +187,7 @@ const INBOUND_PERMISSION = {
   "provider.account.set_order.request": "daemon.manage",
   "provider.account.set_limits.request": "daemon.manage",
   "provider.account.set_keep_signed_in.request": "daemon.manage",
+  "provider.account.set_switch_only.request": "daemon.manage",
   "provider.api_endpoint.read_balance.request": "daemon.read",
   "provider.api_endpoint.set_balance_auto_refresh.request": "daemon.manage",
   // 用表单里的 key 当场查，和测试连接同一级。
@@ -487,6 +488,7 @@ const OUTBOUND_PERMISSION = {
   "provider.account.set_order.response": "daemon.manage",
   "provider.account.set_limits.response": "daemon.manage",
   "provider.account.set_keep_signed_in.response": "daemon.manage",
+  "provider.account.set_switch_only.response": "daemon.manage",
   "provider.api_endpoint.read_balance.response": "daemon.read",
   "provider.api_endpoint.set_balance_auto_refresh.response": "daemon.manage",
   "provider.api_endpoint.check_balance.response": "daemon.manage",

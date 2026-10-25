@@ -63,6 +63,7 @@ export interface ProviderAccountsSectionProps {
   onSetOrder: (accountIds: string[]) => void;
   onSetLimits: (account: ProviderAccount) => void;
   onSetKeepSignedIn: (accountId: string | null) => void;
+  onSetSwitchOnly: (enabled: boolean) => void;
 }
 
 export function ProviderAccountsSection(props: ProviderAccountsSectionProps) {
@@ -90,7 +91,7 @@ export function ProviderAccountsSection(props: ProviderAccountsSectionProps) {
           <View style={settingsStyles.rowContent}>
             <Text style={settingsStyles.rowTitle}>{t(`${KEY}.rotate.title`)}</Text>
             <Text style={settingsStyles.rowHint} testID="provider-accounts-rotate-hint">
-              {rotateHint(t, provider)}
+              {rotateHint({ t, provider, switchOnly: data?.settings.switchOnly === true })}
             </Text>
             {rotationError ? (
               <Text style={settingsStyles.rowError} testID="provider-accounts-rotate-error">
@@ -106,6 +107,15 @@ export function ProviderAccountsSection(props: ProviderAccountsSectionProps) {
             testID="provider-accounts-rotate-switch"
           />
         </View>
+        {provider === "codex" ? (
+          <SwitchOnlyRow
+            data={data}
+            canManage={canManage}
+            pendingAction={props.pendingAction}
+            actionError={props.actionError}
+            onChange={props.onSetSwitchOnly}
+          />
+        ) : null}
         <KeepSignedInRow
           data={data}
           canManage={canManage}
@@ -132,6 +142,47 @@ export function ProviderAccountsSection(props: ProviderAccountsSectionProps) {
       />
       {data ? <SwitchLog switches={data.switches} /> : null}
     </SettingsSection>
+  );
+}
+
+/**
+ * Codex 的「只换登录」：关着时 Codex 的请求经过 Osuna，当前号接不了的交给下一个号；打开后直连 OpenAI，
+ * 只换登录。保存中显示要改成的值，失败的原因留在原处。
+ */
+function SwitchOnlyRow(props: {
+  data: ProviderAccountsData | null;
+  canManage: boolean;
+  pendingAction: AccountAction | null;
+  actionError: AccountActionError | null;
+  onChange: (enabled: boolean) => void;
+}) {
+  const { data, canManage, pendingAction, actionError, onChange } = props;
+  const { t } = useTranslation();
+  const pending = pendingAction?.kind === "switchOnly" ? pendingAction.enabled : null;
+  const value = pending ?? data?.settings.switchOnly === true;
+  const disabled = data === null || !canManage || data.blocked !== null || pendingAction !== null;
+  const error = actionError?.action.kind === "switchOnly" ? actionError.message : null;
+  return (
+    <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
+      <View style={settingsStyles.rowContent}>
+        <Text style={settingsStyles.rowTitle}>{t(`${KEY}.switchOnly.title`)}</Text>
+        <Text style={settingsStyles.rowHint} testID="provider-accounts-switch-only-hint">
+          {t(`${KEY}.switchOnly.hint`)}
+        </Text>
+        {error ? (
+          <Text style={settingsStyles.rowError} testID="provider-accounts-switch-only-error">
+            {t(`${KEY}.switchOnly.saveFailed`, { reason: error })}
+          </Text>
+        ) : null}
+      </View>
+      <Switch
+        value={value}
+        onValueChange={onChange}
+        disabled={disabled}
+        accessibilityLabel={t(`${KEY}.switchOnly.title`)}
+        testID="provider-accounts-switch-only-switch"
+      />
+    </View>
   );
 }
 
@@ -299,10 +350,15 @@ function SwitchFailureNotice({
   );
 }
 
-/** 开关下的说明行；Codex 多一句请求经过 Osuna。 */
-function rotateHint(t: TFunction, provider: AccountRotationProvider): string {
+/** 开关下的说明行；Codex 没开「只换登录」时多一句请求经过 Osuna。 */
+function rotateHint(input: {
+  t: TFunction;
+  provider: AccountRotationProvider;
+  switchOnly: boolean;
+}): string {
+  const { t } = input;
   const hint = t(`${KEY}.rotate.hint`);
-  if (provider !== "codex") return hint;
+  if (input.provider !== "codex" || input.switchOnly) return hint;
   return `${hint} ${t(`${KEY}.rotate.codexHint`)}`;
 }
 

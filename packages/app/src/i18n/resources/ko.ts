@@ -4494,6 +4494,11 @@ export const ko: TranslationResources = {
             other: "Osuna가 전환함",
           },
         },
+        switchOnly: {
+          title: "로그인만 바꾸기",
+          hint: "끄면 Codex 요청이 Osuna를 거치고, 사용 중인 계정이 받지 못한 요청은 응답 전에 다음 계정으로 넘깁니다. 켜면 Codex가 OpenAI에 바로 연결하고 로그인만 바꿉니다.",
+          saveFailed: "로그인만 바꾸기를 저장하지 못했습니다: {{reason}}",
+        },
         keep: {
           title: "로그인 고정",
           hint: "계정을 선택해 두면 Osuna는 다 써도 자동으로 바꾸지 않습니다.",
@@ -4933,6 +4938,7 @@ export const ko: TranslationResources = {
       refresh: "새로 고침",
       allSources: "전체",
       official: "공식",
+      officialAccount: "공식 · {{email}}",
       deletedEndpoint: "(삭제됨)",
       deletedEndpointName: "{{name}} (삭제됨)",
       breakdown: {
@@ -5152,6 +5158,7 @@ export const ko: TranslationResources = {
         failed: "실패",
         failedWith: "실패 ({{reason}})",
         switched: "{{count}}회 전환",
+        switchedAccounts: "{{count}}회 전환",
       },
       failures: {
         credit: "잔액 부족",

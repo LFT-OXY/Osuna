@@ -4529,6 +4529,11 @@ export const ja: TranslationResources = {
             other: "Osuna が切り替えました",
           },
         },
+        switchOnly: {
+          title: "サインインだけ切り替える",
+          hint: "オフのとき Codex のリクエストは Osuna を経由し、使用中のアカウントで受けられないリクエストは返答が始まる前に次のアカウントへ回します。オンにすると Codex は OpenAI に直接つなぎ、サインインだけを切り替えます。",
+          saveFailed: "「サインインだけ切り替える」を保存できませんでした: {{reason}}",
+        },
         keep: {
           title: "サインインを固定",
           hint: "アカウントを選んでいる間、Osuna は自動で切り替えません。使い切っても切り替えません。",
@@ -4974,6 +4979,7 @@ export const ja: TranslationResources = {
       refresh: "更新",
       allSources: "すべて",
       official: "公式",
+      officialAccount: "公式 · {{email}}",
       deletedEndpoint: "（削除済み）",
       deletedEndpointName: "{{name}}（削除済み）",
       breakdown: {
@@ -5192,6 +5198,7 @@ export const ja: TranslationResources = {
         failed: "失敗",
         failedWith: "失敗（{{reason}}）",
         switched: "{{count}} 回切り替え",
+        switchedAccounts: "{{count}} 回切り替え",
       },
       failures: {
         credit: "残高不足",

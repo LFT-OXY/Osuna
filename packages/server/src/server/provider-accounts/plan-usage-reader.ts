@@ -63,6 +63,7 @@ export function accountUsageFromReport(
           resetsAt: window.resetsAt ?? null,
         })),
         ...(report.held ? { held: true } : {}),
+        ...(report.onCredits ? { onCredits: true } : {}),
       };
     case "unavailable": {
       const { problem } = report;

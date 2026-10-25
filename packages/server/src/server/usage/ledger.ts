@@ -20,6 +20,9 @@ export const GATEWAY_LEDGER_ATTEMPT_SCHEMA = z.object({
   reason: z.string().nullable(),
   cooldownUntil: z.string().nullable(),
   reasked: z.boolean(),
+  // Official 的这次问的是 Codex 的哪个 ChatGPT 号（多号自动轮换的第二层）；工单 06 之前写的行没有。
+  accountId: z.string().optional(),
+  accountEmail: z.string().optional(),
 });
 export type GatewayLedgerAttempt = z.infer<typeof GATEWAY_LEDGER_ATTEMPT_SCHEMA>;
 
@@ -61,6 +64,9 @@ export const GATEWAY_LEDGER_ROW_SCHEMA = z.object({
   // 失败与取消时交给 Agent 的说法（key 已打码、截短到 200 字）；成功为 null。工单 01 写的行没有它。
   error: z.string().nullable().optional(),
   attempts: z.array(GATEWAY_LEDGER_ATTEMPT_SCHEMA),
+  // Official 答的是 Codex 的哪个 ChatGPT 号（多号自动轮换的第二层）；工单 06 之前写的行与不经第二层的没有。
+  accountId: z.string().optional(),
+  accountEmail: z.string().optional(),
 });
 export type GatewayLedgerRow = z.infer<typeof GATEWAY_LEDGER_ROW_SCHEMA>;
 

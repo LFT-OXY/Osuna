@@ -120,6 +120,7 @@ export function ProviderAccountsView(props: {
         onSetOrder={accounts.setOrder}
         onSetLimits={openLimits}
         onSetKeepSignedIn={accounts.setKeepSignedIn}
+        onSetSwitchOnly={accounts.setSwitchOnly}
       />
       {limitsAccount ? (
         <ProviderAccountLimitsSheet
