@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 可复用的封号风险提示组件：输入标题、正文、条款链接（文字与地址）；警示色常驻块，不要求用户做选择。
 - [ ] 提示内容由 app 按提供方 ID 决定，只给 `antigravity` 配一条；不加插件清单字段或协议字段；连旧 daemon 也显示。
