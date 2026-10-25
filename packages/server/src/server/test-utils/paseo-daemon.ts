@@ -17,6 +17,7 @@ import type { AgentProfile } from "@getpaseo/protocol/messages";
 import { AGENT_PROVIDER_DEFINITIONS } from "@getpaseo/protocol/provider-manifest";
 import { FakeHostProcesses } from "./fake-host-processes.js";
 import { BALANCE_VENDOR_URLS } from "../api-endpoints/balance.js";
+import { loadConfig } from "../config.js";
 
 interface TestPaseoDaemonOptions {
   daemonVersion?: string;
@@ -55,7 +56,11 @@ interface TestPaseoDaemonOptions {
   agentProfiles?: AgentProfile[];
   autoArchiveAfterMerge?: boolean;
   pluginsEnabled?: PaseoDaemonConfig["pluginsEnabled"];
-  readCliSignInsForcedOff?: PaseoDaemonConfig["readCliSignInsForcedOff"];
+  /**
+   * 照真实启动解析「读取 CLI 登录凭证」：读这个 home 的 config.json 加这份环境变量（如 PASEO_NO_CLI_SIGN_INS）。
+   * 不传时开关为开、没有环境变量。
+   */
+  cliSignInsLaunchEnv?: NodeJS.ProcessEnv;
   builtinPlugins?: BuiltinPluginLoader;
   plugins?: PaseoDaemonConfig["plugins"];
   usage?: PaseoDaemonConfig["usage"];
@@ -226,7 +231,7 @@ async function prepareTestDaemonConfig(
     agentProfiles: options.agentProfiles,
     autoArchiveAfterMerge: options.autoArchiveAfterMerge,
     pluginsEnabled: options.pluginsEnabled,
-    readCliSignInsForcedOff: options.readCliSignInsForcedOff,
+    ...resolveCliSignInsAtLaunch(paseoHome, options.cliSignInsLaunchEnv),
     plugins: options.plugins,
     // Default to no log roots so a test daemon never scans the developer's
     // real Claude/Codex/Pi/OMP transcripts.
@@ -352,4 +357,16 @@ function isLoopbackUrl(baseUrl: string): boolean {
   if (!URL.canParse(baseUrl)) return false;
   const host = new URL(baseUrl).hostname;
   return host === "127.0.0.1" || host === "localhost" || host === "[::1]";
+}
+
+function resolveCliSignInsAtLaunch(
+  paseoHome: string,
+  env: NodeJS.ProcessEnv | undefined,
+): Pick<PaseoDaemonConfig, "readCliSignIns" | "readCliSignInsForcedOff"> {
+  if (!env) return {};
+  const launched = loadConfig(paseoHome, { env });
+  return {
+    readCliSignIns: launched.readCliSignIns,
+    readCliSignInsForcedOff: launched.readCliSignInsForcedOff,
+  };
 }

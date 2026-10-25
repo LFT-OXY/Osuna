@@ -54,6 +54,7 @@ describe("server config", () => {
         forcedOff: true,
       });
       expect(config.readCliSignIns).toBe(true);
+      expect(config.configReload?.overrideControlledPaths).toEqual(["readCliSignIns"]);
     }
     for (const value of ["", "  ", "0", "false", " FALSE "]) {
       const config = loadConfig(paseoHome, { env: { PASEO_NO_CLI_SIGN_INS: value } });
@@ -66,6 +67,7 @@ describe("server config", () => {
     const restarted = loadConfig(paseoHome, { env: {} });
     expect(restarted.readCliSignInsForcedOff).toBe(false);
     expect(restarted.readCliSignIns).toBe(true);
+    expect(restarted.configReload?.overrideControlledPaths).toEqual([]);
     expect(loadPersistedConfig(paseoHome).readCliSignIns).toBe(true);
   });
 

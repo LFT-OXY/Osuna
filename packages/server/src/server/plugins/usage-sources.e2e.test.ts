@@ -434,51 +434,76 @@ test("with Read CLI sign-ins off no usage source runs, both lists are empty and 
   }
 }, 60_000);
 
-test("PASEO_NO_CLI_SIGN_INS holds Read CLI sign-ins off for the run: marked in the config, no source runs, the switch can't change and the stored value stays", async () => {
+test("PASEO_NO_CLI_SIGN_INS holds Read CLI sign-ins off for the run: marked in the config, no source runs, the switch can't change; restarted without it the stored value applies", async () => {
   const { readFile } = await import("node:fs/promises");
   const root = await mkdtemp(path.join(os.tmpdir(), "usage-cli-sign-ins-env-"));
   const calls = path.join(root, "calls.log");
   await writeFile(calls, "");
   const builtins = path.join(root, "builtin");
   await writeRecordingSource(path.join(builtins, "recording-builtin"), "recording-builtin", calls);
-  const daemon = await createTestPaseoDaemon({
-    daemonVersion: "0.9.2",
-    pluginsEnabled: true,
-    builtinPlugins: new BuiltinPluginLoader(builtins, ["recording-builtin"]),
-    readCliSignInsForcedOff: true,
-  });
-  const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.9.2" });
-  const configFile = path.join(daemon.paseoHome, "config.json");
+  const paseoHomeRoot = path.join(root, "home");
+  const configFile = path.join(paseoHomeRoot, ".paseo", "config.json");
+  await mkdir(path.dirname(configFile), { recursive: true });
+  await writeFile(configFile, JSON.stringify({ readCliSignIns: true }));
   const readStored = async () =>
     (JSON.parse(await readFile(configFile, "utf8")) as { readCliSignIns?: boolean }).readCliSignIns;
-  try {
+  const start = (env: NodeJS.ProcessEnv) =>
+    createTestPaseoDaemon({
+      daemonVersion: "0.9.2",
+      pluginsEnabled: true,
+      builtinPlugins: new BuiltinPluginLoader(builtins, ["recording-builtin"]),
+      paseoHomeRoot,
+      cleanup: false,
+      cliSignInsLaunchEnv: env,
+    });
+  const connect = async (port: number) => {
+    const client = new DaemonClient({ url: `ws://127.0.0.1:${port}/ws`, appVersion: "0.9.2" });
     await client.connect();
-    const { config } = await client.getDaemonConfig();
-    expect(config.readCliSignInsForcedOff).toBe(true);
-    expect(config.readCliSignIns).toBe(true);
-    expect(await client.listUsageReports({ forceRefresh: true })).toEqual({
-      requestId: expect.any(String),
-      reports: [],
-      cliSignInsOff: true,
-    });
-    expect((await client.listProviderUsage()).providers).toEqual([]);
+    return client;
+  };
+  const refused =
+    "Read CLI sign-ins is held off by PASEO_NO_CLI_SIGN_INS, so it can't be changed here";
+  try {
+    const forced = await start({ PASEO_NO_CLI_SIGN_INS: "1" });
+    const client = await connect(forced.port);
+    try {
+      expect((await client.getDaemonConfig()).config).toMatchObject({
+        readCliSignIns: true,
+        readCliSignInsForcedOff: true,
+      });
+      expect(await client.listUsageReports({ forceRefresh: true })).toEqual({
+        requestId: expect.any(String),
+        reports: [],
+        cliSignInsOff: true,
+      });
+      expect((await client.listProviderUsage()).providers).toEqual([]);
+      await expect(client.patchDaemonConfig({ readCliSignIns: false })).rejects.toThrow(refused);
+      await expect(client.patchDaemonConfig({ readCliSignIns: true })).rejects.toThrow(refused);
+      expect(await readStored()).toBe(true);
+      expect(await recordedCalls(calls)).toEqual([]);
+    } finally {
+      await client.close();
+      await forced.close();
+    }
 
-    const storedBefore = await readStored().catch(() => undefined);
-    await expect(client.patchDaemonConfig({ readCliSignIns: false })).rejects.toThrow(
-      "Read CLI sign-ins is held off by PASEO_NO_CLI_SIGN_INS, so it can't be changed here",
-    );
-    await expect(client.patchDaemonConfig({ readCliSignIns: true })).rejects.toThrow(
-      "Read CLI sign-ins is held off by PASEO_NO_CLI_SIGN_INS, so it can't be changed here",
-    );
-    expect(await readStored().catch(() => undefined)).toBe(storedBefore);
-    expect((await client.getDaemonConfig()).config).toMatchObject({
-      readCliSignIns: true,
-      readCliSignInsForcedOff: true,
-    });
-    expect(await recordedCalls(calls)).toEqual([]);
+    // 去掉环境变量重启：生效值等于存的值（开），来源照常运行。
+    const restarted = await start({});
+    const again = await connect(restarted.port);
+    try {
+      const { config } = await again.getDaemonConfig();
+      expect(config.readCliSignIns).toBe(true);
+      expect(config).not.toHaveProperty("readCliSignInsForcedOff");
+      const back = await again.listUsageReports();
+      expect(back.reports.map((entry) => entry.id)).toEqual(["recording-builtin:one"]);
+      expect((await recordedCalls(calls)).sort()).toEqual([
+        "recording-builtin discover",
+        "recording-builtin fetch",
+      ]);
+    } finally {
+      await again.close();
+      await restarted.close();
+    }
   } finally {
-    await client.close();
-    await daemon.close();
     await rm(root, { recursive: true, force: true });
   }
 }, 60_000);

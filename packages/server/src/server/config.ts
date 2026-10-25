@@ -713,6 +713,7 @@ function resolveOverrideControlledPaths(
       ...resolveLogOverrideControlledPaths(env),
       ...resolveSpeechOverrideControlledPaths(env, speechProviders),
       ...resolveUsageOverrideControlledPaths(env),
+      ...(isNoCliSignInsSet(env.PASEO_NO_CLI_SIGN_INS) ? ["readCliSignIns"] : []),
     ]),
   ).sort();
 }
