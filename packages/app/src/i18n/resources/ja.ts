@@ -4438,6 +4438,13 @@ export const ja: TranslationResources = {
       },
       addErrorTitle: "プロバイダーを追加できません",
       startErrorTitle: "{{name}} を起動できません",
+      banRisk: {
+        title: "{{name}} のアカウントが停止される可能性があります",
+        antigravity: {
+          body: "Google の Antigravity FAQ には、Antigravity CLI（agy）をサードパーティのアプリに組み込んで使うことは一般向けプランのサポート対象外だと書かれています。また、サードパーティのソフトウェアから Antigravity にアクセスすることは利用規約違反であり、アカウントの停止または解約につながる可能性があるとも書かれています。Osuna は agy を通じて Antigravity を動かしています。2026 年 2 月の一連の停止では Gemini CLI と Gemini Code Assist も使えなくなりました。失っても困らないアカウントを使ってください。",
+          termsLink: "Antigravity FAQ",
+        },
+      },
       actions: {
         menu: "{{name}} actions",
         remove: "Remove provider",

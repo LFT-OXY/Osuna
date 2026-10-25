@@ -4507,6 +4507,13 @@ export const en = {
       },
       addErrorTitle: "Unable to add provider",
       startErrorTitle: "{{name}} can't start",
+      banRisk: {
+        title: "{{name}} account may be suspended",
+        antigravity: {
+          body: "Google's Antigravity FAQ says that wrapping the Antigravity CLI (agy) inside third-party applications is not supported under consumer plans. It also says that using third-party software to access Antigravity violates its Terms of Service and can get the account suspended or terminated. Osuna drives Antigravity through agy. The February 2026 wave of bans also blocked Gemini CLI and Gemini Code Assist. Use an account you can afford to lose.",
+          termsLink: "Antigravity FAQ",
+        },
+      },
       actions: {
         menu: "{{name}} actions",
         remove: "Remove provider",

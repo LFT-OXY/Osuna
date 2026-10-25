@@ -4454,6 +4454,13 @@ export const ru: TranslationResources = {
       },
       addErrorTitle: "Не удалось добавить провайдера",
       startErrorTitle: "Не удаётся запустить {{name}}",
+      banRisk: {
+        title: "Аккаунт {{name}} могут заблокировать",
+        antigravity: {
+          body: "В FAQ Antigravity от Google сказано, что встраивание Antigravity CLI (agy) в сторонние приложения не поддерживается в потребительских тарифах. Там же сказано, что доступ к Antigravity через стороннее ПО нарушает Условия использования и может привести к приостановке или закрытию аккаунта. Osuna управляет Antigravity через agy. Волна блокировок в феврале 2026 года заодно отключила Gemini CLI и Gemini Code Assist. Используйте аккаунт, который не жалко потерять.",
+          termsLink: "FAQ Antigravity",
+        },
+      },
       actions: {
         menu: "Действия с {{name}}",
         remove: "Удалить провайдера",

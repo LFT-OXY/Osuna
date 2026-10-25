@@ -4404,6 +4404,13 @@ export const ko: TranslationResources = {
       },
       addErrorTitle: "프로바이더를 추가할 수 없습니다",
       startErrorTitle: "{{name}}을(를) 시작할 수 없습니다",
+      banRisk: {
+        title: "{{name}} 계정이 정지될 수 있습니다",
+        antigravity: {
+          body: "Google의 Antigravity FAQ에는 Antigravity CLI(agy)를 서드파티 앱에 넣어 사용하는 것은 소비자 요금제에서 지원되지 않는다고 적혀 있습니다. 또한 서드파티 소프트웨어로 Antigravity에 접근하는 것은 서비스 약관 위반이며 계정 정지 또는 해지로 이어질 수 있다고 적혀 있습니다. Osuna는 agy를 통해 Antigravity를 구동합니다. 2026년 2월의 정지 조치 때는 Gemini CLI와 Gemini Code Assist도 함께 차단되었습니다. 잃어도 괜찮은 계정을 사용하세요.",
+          termsLink: "Antigravity FAQ",
+        },
+      },
       actions: {
         menu: "{{name}} 작업",
         remove: "프로바이더 제거",

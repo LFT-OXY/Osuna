@@ -276,3 +276,79 @@ test.describe("Settings providers list and detail on a phone", () => {
     });
   });
 });
+
+const ANTIGRAVITY_FAQ_URL = "https://antigravity.google/docs/faq/";
+
+// 封号风险提示是标题下的第一块：在页头之下，在详情里任何别的内容之上。
+async function expectBanRiskNoticeFirst(page: Page): Promise<void> {
+  const notice = page.getByTestId("provider-ban-risk-notice").filter({ visible: true });
+  await expect(notice).toBeVisible();
+  const header = page.getByTestId("provider-detail-header-antigravity").filter({ visible: true });
+  const noticeBox = await notice.boundingBox();
+  const headerBox = await header.boundingBox();
+  if (!noticeBox || !headerBox) throw new Error("Expected the header and notice to be laid out.");
+  expect(noticeBox.y).toBeGreaterThanOrEqual(headerBox.y + headerBox.height);
+  const below = page
+    .locator(
+      '[data-testid="provider-start-error"], [data-testid="provider-install-guide"], [data-testid="provider-models-section"], [data-testid="provider-disabled-card"], [data-testid="provider-diagnostic-section"]',
+    )
+    .filter({ visible: true });
+  const belowBoxes = await below.evaluateAll((elements) =>
+    elements.map((element) => element.getBoundingClientRect().top),
+  );
+  expect(belowBoxes.length).toBeGreaterThan(0);
+  for (const top of belowBoxes) {
+    expect(top).toBeGreaterThanOrEqual(noticeBox.y + noticeBox.height);
+  }
+}
+
+async function expectAntigravityBanRiskNotice(page: Page): Promise<void> {
+  const notice = page.getByTestId("provider-ban-risk-notice").filter({ visible: true });
+  await expect(
+    notice.getByText("Antigravity account may be suspended", { exact: true }),
+  ).toBeVisible();
+  await expect(notice).toContainText(
+    "Google's Antigravity FAQ says that wrapping the Antigravity CLI (agy) inside third-party applications is not supported under consumer plans. It also says that using third-party software to access Antigravity violates its Terms of Service and can get the account suspended or terminated. Osuna drives Antigravity through agy. The February 2026 wave of bans also blocked Gemini CLI and Gemini Code Assist. Use an account you can afford to lose.",
+  );
+  await expect(notice.getByRole("button", { name: /dismiss|close/i })).toHaveCount(0);
+
+  await page
+    .context()
+    .route(`${ANTIGRAVITY_FAQ_URL}**`, (route) =>
+      route.fulfill({ status: 200, contentType: "text/html", body: "<title>FAQ</title>" }),
+    );
+  const popupPromise = page.waitForEvent("popup");
+  await notice.getByRole("link", { name: "Antigravity FAQ", exact: true }).click();
+  const popup = await popupPromise;
+  await expect.poll(() => popup.url()).toBe(ANTIGRAVITY_FAQ_URL);
+  await popup.close();
+}
+
+test.describe("Antigravity ban risk notice", () => {
+  test("sits first on the Antigravity page on a wide window and nowhere else", async ({ page }) => {
+    const serverId = getServerId();
+    await gotoAppShell(page);
+    await page.goto(buildProviderSettingsRoute(serverId, "antigravity"));
+    await expectProviderDetail(page, serverId, "antigravity");
+    await expectBanRiskNoticeFirst(page);
+    await expectAntigravityBanRiskNotice(page);
+
+    await page.goto(buildProviderSettingsRoute(serverId, "mock"));
+    await expectProviderDetail(page, serverId, "mock");
+    await expect(page.getByTestId("provider-models-section")).toBeVisible();
+    await expect(page.getByTestId("provider-ban-risk-notice")).toHaveCount(0);
+  });
+
+  test.describe("on a phone", () => {
+    test.use({ viewport: PHONE_VIEWPORT });
+
+    test("sits first on the Antigravity page", async ({ page }) => {
+      const serverId = getServerId();
+      await gotoAppShell(page);
+      await page.goto(buildProviderSettingsRoute(serverId, "antigravity"));
+      await expectProviderDetail(page, serverId, "antigravity");
+      await expectBanRiskNoticeFirst(page);
+      await expectAntigravityBanRiskNotice(page);
+    });
+  });
+});

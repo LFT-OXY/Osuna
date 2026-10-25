@@ -4349,6 +4349,13 @@ export const zhCN: TranslationResources = {
       },
       addErrorTitle: "无法添加提供方",
       startErrorTitle: "{{name}} 无法启动",
+      banRisk: {
+        title: "{{name}} 账号可能被封禁",
+        antigravity: {
+          body: "Google 的 Antigravity 常见问题写明：把 Antigravity CLI（agy）包进第三方应用使用，不在消费者套餐的支持范围内；用第三方软件访问 Antigravity 违反其服务条款，可能导致账号被暂停或终止。Osuna 正是通过 agy 驱动 Antigravity 的。2026 年 2 月那一轮封号还连带封了 Gemini CLI 和 Gemini Code Assist。请用丢了也不心疼的账号。",
+          termsLink: "Antigravity 常见问题",
+        },
+      },
       actions: {
         menu: "{{name}} 操作",
         remove: "移除提供方",

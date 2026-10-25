@@ -6,6 +6,7 @@ import { FileText, RotateCw } from "lucide-react-native";
 import type { AgentModelDefinition, ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
 import type { ProviderProfileModel } from "@getpaseo/protocol/provider-config";
 import { selectInheritedApiEndpoint, showsApiEndpointSettings } from "@/api-endpoints";
+import { BanRiskNotice } from "@/components/ban-risk-notice";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Text as UiText } from "@/components/ui/text";
@@ -19,9 +20,9 @@ import { ProviderDiagnosticSection } from "./diagnostic-section";
 import { ProviderModelsSection } from "./models";
 
 /*
- * 提供方详情的内容区，区块顺序固定：删除失败 → 开关失败 → 错误卡 → 继承接口提示 → 版本 → 安装与升级 → 第三方接口 → Models → 诊断。
+ * 提供方详情的内容区，区块顺序固定：封号风险提示 → 删除失败 → 开关失败 → 错误卡 → 继承接口提示 → 版本 → 安装与升级 → 第三方接口 → Models → 诊断。
  * 版本只在已安装时出现；安装与升级装没装都在同一处，一键升级失败时用户靠它手动升级。
- * 已停用时只有两个失败提示和一张停用说明卡：daemon 不探测已停用的提供方，快照里的状态说明不了装没装。
+ * 已停用时只有封号风险提示、两个失败提示和一张停用说明卡：daemon 不探测已停用的提供方，快照里的状态说明不了装没装。
  * 外框（弹窗或页面）由调用方决定。
  * 这里只收 props，方便 jsdom 测试；运行时接线在 view.tsx。
  * 版本、安装与升级、第三方接口的运行时视图由调用方经 render 插槽注入；后两者在单测运行器里无法加载。
@@ -69,6 +70,31 @@ export interface ProviderDetailSurfaceProps {
   renderInstallGuide: (guide: ProviderInstallGuide, cliLabel: string) => ReactNode;
   renderApiEndpoints: (providerLabel: string) => ReactNode;
   renderVersion: (slot: ProviderVersionSlotContext) => ReactNode;
+}
+
+const ANTIGRAVITY_FAQ_URL = "https://antigravity.google/docs/faq/";
+
+// 封号风险提示由 app 按提供方 ID 决定，不靠 daemon 下发，连旧 daemon 也显示；目前只有 Antigravity 有。
+function ProviderBanRiskNotice({
+  provider,
+  providerLabel,
+}: {
+  provider: string;
+  providerLabel: string;
+}) {
+  const { t } = useTranslation();
+  if (provider !== "antigravity") return null;
+  return (
+    <View style={settingsStyles.section}>
+      <BanRiskNotice
+        title={t("settings.providers.banRisk.title", { name: providerLabel })}
+        body={t("settings.providers.banRisk.antigravity.body")}
+        termsLabel={t("settings.providers.banRisk.antigravity.termsLink")}
+        termsUrl={ANTIGRAVITY_FAQ_URL}
+        testID="provider-ban-risk-notice"
+      />
+    </View>
+  );
 }
 
 function ProviderDisabledCard({ providerLabel }: { providerLabel: string }) {
@@ -228,8 +254,9 @@ export function ProviderDetailSurface({
     apiEndpointsContent = renderApiEndpoints(providerLabel);
   }
 
-  const failureAlerts = (
+  const leadingAlerts = (
     <>
+      <ProviderBanRiskNotice provider={provider} providerLabel={providerLabel} />
       {removalError ? (
         <View style={settingsStyles.section}>
           <Alert
@@ -271,7 +298,7 @@ export function ProviderDetailSurface({
   if (isDisabled) {
     return (
       <>
-        {failureAlerts}
+        {leadingAlerts}
         <ProviderDisabledCard providerLabel={providerLabel} />
       </>
     );
@@ -279,7 +306,7 @@ export function ProviderDetailSurface({
 
   return (
     <>
-      {failureAlerts}
+      {leadingAlerts}
       {providerErrorMessage ? (
         <ProviderStartErrorAlert
           providerLabel={providerLabel}

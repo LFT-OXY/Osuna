@@ -4361,6 +4361,13 @@ export const ar: TranslationResources = {
       },
       addErrorTitle: "Unable to add provider",
       startErrorTitle: "تعذّر تشغيل {{name}}",
+      banRisk: {
+        title: "قد يُعلَّق حساب {{name}}",
+        antigravity: {
+          body: "تذكر الأسئلة الشائعة لـ Antigravity من Google أن تضمين Antigravity CLI (agy) داخل تطبيقات خارجية غير مدعوم في الخطط الاستهلاكية. وتذكر أيضًا أن الوصول إلى Antigravity عبر برامج خارجية يخالف شروط الخدمة وقد يؤدي إلى تعليق الحساب أو إنهائه. يشغّل Osuna منصة Antigravity عبر agy. وقد حظرت موجة التعليق في فبراير 2026 أيضًا Gemini CLI وGemini Code Assist. استخدم حسابًا يمكنك تحمّل خسارته.",
+          termsLink: "الأسئلة الشائعة لـ Antigravity",
+        },
+      },
       actions: {
         menu: "{{name}} actions",
         remove: "Remove provider",

@@ -4449,6 +4449,13 @@ export const ptBR: TranslationResources = {
       },
       addErrorTitle: "Não foi possível adicionar provedor",
       startErrorTitle: "{{name}} não consegue iniciar",
+      banRisk: {
+        title: "A conta do {{name}} pode ser suspensa",
+        antigravity: {
+          body: "As perguntas frequentes do Antigravity do Google dizem que usar a CLI do Antigravity (agy) dentro de aplicativos de terceiros não é suportado nos planos para consumidores. Também dizem que acessar o Antigravity por software de terceiros viola os Termos de Serviço e pode levar à suspensão ou ao encerramento da conta. O Osuna controla o Antigravity por meio do agy. A onda de suspensões de fevereiro de 2026 também bloqueou o Gemini CLI e o Gemini Code Assist. Use uma conta que você possa perder.",
+          termsLink: "Perguntas frequentes do Antigravity",
+        },
+      },
       actions: {
         menu: "{{name}} actions",
         remove: "Remove provider",
