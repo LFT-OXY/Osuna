@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
@@ -32,9 +33,7 @@ export function HostPrivacySection({ serverId }: { serverId: string }) {
           await patchConfig({ readCliSignIns: next });
         } catch (cause) {
           console.error("[HostPage] Failed to change Read CLI sign-ins", cause);
-          const reason = extractFailureReason(cause);
-          const message = t("settings.host.privacy.readCliSignIns.saveFailed");
-          setError(reason ? `${message} ${reason}` : message);
+          setError(describeSaveFailure(t, extractFailureReason(cause)));
         } finally {
           setPending(null);
         }
@@ -44,6 +43,12 @@ export function HostPrivacySection({ serverId }: { serverId: string }) {
   );
 
   if (!supported) return null;
+
+  const saving = pending !== null;
+  const loaded = config !== null;
+  const savedValue = config?.readCliSignIns !== false;
+  const shownValue = pending ?? savedValue;
+  const locked = !loaded || saving || !canManage;
 
   return (
     <SettingsSection title={t("settings.host.privacy.title")} testID="host-privacy-section">
@@ -63,9 +68,9 @@ export function HostPrivacySection({ serverId }: { serverId: string }) {
             ) : null}
           </View>
           <Switch
-            value={pending ?? config?.readCliSignIns !== false}
+            value={shownValue}
             onValueChange={handleValueChange}
-            disabled={!config || pending !== null || !canManage}
+            disabled={locked}
             accessibilityLabel={t("settings.host.privacy.readCliSignIns.title")}
             testID="host-privacy-read-cli-sign-ins-switch"
           />
@@ -73,4 +78,9 @@ export function HostPrivacySection({ serverId }: { serverId: string }) {
       </View>
     </SettingsSection>
   );
+}
+
+function describeSaveFailure(t: TFunction, reason: string): string {
+  if (!reason) return t("settings.host.privacy.readCliSignIns.saveFailed");
+  return t("settings.host.privacy.readCliSignIns.saveFailedReason", { reason });
 }

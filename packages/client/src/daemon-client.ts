@@ -5789,9 +5789,9 @@ export class DaemonClient {
             : null,
       });
       if (response.error !== null) throw new Error(response.error);
-      return response.cliSignInsOff
-        ? { requestId, reports, cliSignInsOff: true }
-        : { requestId, reports };
+      const listed: UsageListReportsPayload = { requestId, reports };
+      if (response.cliSignInsOff === true) listed.cliSignInsOff = true;
+      return listed;
     } finally {
       active = false;
       unsubscribe();

@@ -20,6 +20,10 @@ async function openHostOverview(page: import("@playwright/test").Page) {
   await openSettingsHostSection(page, getServerId(), "host");
 }
 
+async function topOf(locator: import("@playwright/test").Locator): Promise<number> {
+  return locator.evaluate((node) => node.getBoundingClientRect().top);
+}
+
 function privacySection(page: import("@playwright/test").Page) {
   return page.getByTestId("host-privacy-section").filter({ visible: true });
 }
@@ -40,12 +44,11 @@ test.describe("Host settings Privacy section", () => {
     await expect(section).toContainText("Privacy");
     await expect(section).toContainText("Read CLI sign-ins");
     await expect(section).toContainText(HINT);
-    const appearance = await page.getByTestId("host-appearance-preview").boundingBox();
-    const privacy = await section.boundingBox();
-    const restart = await page.getByTestId("host-page-restart-card").boundingBox();
-    expect(appearance && privacy && restart).toBeTruthy();
-    expect(appearance!.y).toBeLessThan(privacy!.y);
-    expect(privacy!.y).toBeLessThan(restart!.y);
+    const appearanceTop = await topOf(page.getByTestId("host-appearance-preview"));
+    const privacyTop = await topOf(section);
+    const restartTop = await topOf(page.getByTestId("host-page-restart-card"));
+    expect(appearanceTop).toBeLessThan(privacyTop);
+    expect(privacyTop).toBeLessThan(restartTop);
     await expectReadCliSignIns(page, { checked: true, disabled: false });
 
     await readCliSignInsSwitch(page).click();
@@ -70,7 +73,7 @@ test.describe("Host settings Privacy section", () => {
     const error = page
       .getByTestId("host-privacy-read-cli-sign-ins-error")
       .filter({ visible: true });
-    await expect(error).toHaveText("Couldn't change Read CLI sign-ins. daemon is busy");
+    await expect(error).toHaveText("Couldn't change Read CLI sign-ins: daemon is busy");
     await expectReadCliSignIns(page, { checked: true, disabled: false });
     expect(await readCliSignInsOnDaemon()).toBe(true);
 

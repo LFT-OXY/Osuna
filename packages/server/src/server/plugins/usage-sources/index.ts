@@ -2,6 +2,7 @@
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import { createHash } from "node:crypto";
 import type { AgentUsageSession } from "../../agent/agent-sdk-types.js";
+import { CliSignInsOffError } from "../../cli-sign-ins.js";
 import type { UsageScope } from "@getpaseo/plugin/server/usage";
 import { z } from "zod";
 import type { Logger } from "pino";
@@ -53,6 +54,17 @@ export interface CliSignInGate {
   allowed(): boolean;
 }
 
+export interface UsageSourceRegistryOptions {
+  now?: () => number;
+  /** How long a fetched report is served from the cache. */
+  ttlMs?: number;
+  logger?: Pick<Logger, "warn">;
+  agents?: AgentUsageLookup;
+  /** How long one login's fetch may take before it reports a timeout. */
+  deadlineMs?: number;
+  cliSignIns?: CliSignInGate;
+}
+
 /** What using a reset did, and the account read afresh after it. */
 export interface UsageResetResult {
   outcome: UsageResetOutcome;
@@ -79,14 +91,21 @@ export class UsageSourceRegistry {
   // forget() 加一；之前开始的读取回来时代数已变，结果丢掉、不进缓存。
   private generation = 0;
 
-  constructor(
-    private readonly now: () => number = Date.now,
-    private readonly ttlMs = 300_000,
-    private readonly logger: Pick<Logger, "warn"> = { warn: console.warn },
-    private readonly agents: AgentUsageLookup = { hasAgent: () => false, usageSession: () => null },
-    private readonly deadlineMs = 20_000,
-    private readonly cliSignIns: CliSignInGate = { allowed: () => true },
-  ) {}
+  private readonly now: () => number;
+  private readonly ttlMs: number;
+  private readonly logger: Pick<Logger, "warn">;
+  private readonly agents: AgentUsageLookup;
+  private readonly deadlineMs: number;
+  private readonly cliSignIns: CliSignInGate;
+
+  constructor(options: UsageSourceRegistryOptions = {}) {
+    this.now = options.now ?? Date.now;
+    this.ttlMs = options.ttlMs ?? 300_000;
+    this.logger = options.logger ?? { warn: console.warn };
+    this.agents = options.agents ?? { hasAgent: () => false, usageSession: () => null };
+    this.deadlineMs = options.deadlineMs ?? 20_000;
+    this.cliSignIns = options.cliSignIns ?? { allowed: () => true };
+  }
 
   /** Drops every account, report and login answer read so far; called when CLI sign-ins go off. */
   forget(): void {
@@ -124,8 +143,7 @@ export class UsageSourceRegistry {
    * afresh past the cache. Can't be undone: callers ask the user first.
    */
   async consumeReset(reportId: string): Promise<UsageResetResult> {
-    if (!this.cliSignIns.allowed())
-      throw new Error("Read CLI sign-ins is off, so a reset can't be used");
+    if (!this.cliSignIns.allowed()) throw new CliSignInsOffError("usage_reset", reportId);
     const known = this.known.get(reportId);
     if (!known) throw new Error(`Unknown usage report: ${reportId}`);
     const { consumeReset } = known.source;

@@ -16,3 +16,18 @@ export class CliSignInAccess {
     return this.configStore.onFieldChange("readCliSignIns", () => listener(this.allowed()));
   }
 }
+
+/** An operation that needs a CLI's own login was refused because Read CLI sign-ins is off. */
+export class CliSignInsOffError extends Error {
+  /** What the client shows; the message is for the log. */
+  readonly userMessage: string;
+
+  constructor(
+    readonly operation: "usage_reset",
+    readonly reportId: string,
+  ) {
+    super(`Refused ${operation} for ${reportId}: Read CLI sign-ins is off`);
+    this.name = "CliSignInsOffError";
+    this.userMessage = "Read CLI sign-ins is off, so a reset can't be used";
+  }
+}

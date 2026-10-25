@@ -135,3 +135,34 @@ test("answers a used reset with its outcome and the account read afresh, or the 
     },
   ]);
 });
+
+test("with CLI sign-ins off the list is not asked and the response says why it is empty", async () => {
+  const emitted: SessionOutboundMessage[] = [];
+  let listed = 0;
+  const usage = new UsageSession({
+    emit: (message) => emitted.push(message),
+    runtime: {
+      async listUsageReports() {
+        listed++;
+        return [];
+      },
+      readsCliSignIns: () => false,
+      async listLegacyUsage() {
+        return { fetchedAt: "2026-01-01T00:00:00.000Z", providers: [] };
+      },
+      async consumeUsageReset(): Promise<never> {
+        throw new Error("not used");
+      },
+    },
+    logger: pino({ level: "silent" }),
+  });
+
+  await usage.handleListReports({ type: "usage.list_reports.request", requestId: "off" });
+  expect(listed).toBe(0);
+  expect(emitted).toEqual([
+    {
+      type: "usage.list_reports.response",
+      payload: { requestId: "off", error: null, cliSignInsOff: true },
+    },
+  ]);
+});

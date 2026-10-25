@@ -4015,6 +4015,7 @@ export const ko: TranslationResources = {
           title: "CLI 로그인 정보 읽기",
           hint: "Osuna가 각 CLI가 저장한 로그인 정보(로그인 파일, 키체인)를 읽어 요금제 사용량을 표시합니다. 끄면 Osuna는 이를 읽지 않으며 요금제 사용량이 표시되지 않습니다. CLI는 계속 자체 로그인을 사용하고 API 엔드포인트에는 영향이 없습니다. 플러그인 중 요금제 사용량 외의 코드는 이 스위치가 막지 않습니다.",
           saveFailed: "'CLI 로그인 정보 읽기'를 변경하지 못했습니다.",
+          saveFailedReason: "'CLI 로그인 정보 읽기'를 변경하지 못했습니다: {{reason}}",
         },
       },
       notFound: "호스트를 찾을 수 없습니다",

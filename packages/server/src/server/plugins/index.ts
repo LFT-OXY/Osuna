@@ -19,7 +19,7 @@ import { parsePluginSourceReference } from "@getpaseo/protocol/plugin-source-ref
 import { assertPluginCompatibility } from "@getpaseo/protocol/plugin-requirements";
 import { BUILTIN_PROVIDER_IDS } from "@getpaseo/protocol/provider-manifest";
 import type { DaemonConfigStore } from "../daemon-config-store.js";
-import { CliSignInAccess } from "../cli-sign-ins.js";
+import type { CliSignInAccess } from "../cli-sign-ins.js";
 import { type ManagedPluginCandidate, ManagedPluginSources } from "./managed-source.js";
 import { readPluginManifest } from "./manifest.js";
 import { expandTilde } from "../../utils/path.js";
@@ -68,7 +68,8 @@ interface PluginServiceDependencies {
   runtime?: PluginRuntimePort;
   managedSources?: ManagedPluginSources;
   builtinPlugins?: BuiltinPluginLoader;
-  cliSignIns?: CliSignInAccess;
+  /** The daemon's one answer to Read CLI sign-ins; the usage source registry is gated on it. */
+  cliSignIns: CliSignInAccess;
 }
 
 function resolvePluginStatus(input: {
@@ -103,18 +104,15 @@ export class PluginService {
     logger: pino.Logger,
     private readonly configStore: DaemonConfigStore,
     private readonly daemonVersion: string,
-    private readonly dependencies: PluginServiceDependencies = {},
+    private readonly dependencies: PluginServiceDependencies,
   ) {
     this.logger = logger.child({ module: "plugin-service" });
-    this.cliSignIns = dependencies.cliSignIns ?? new CliSignInAccess(configStore);
-    this.usageSources = new UsageSourceRegistry(
-      Date.now,
-      300_000,
-      this.logger,
-      dependencies.usageAgents,
-      undefined,
-      this.cliSignIns,
-    );
+    this.cliSignIns = dependencies.cliSignIns;
+    this.usageSources = new UsageSourceRegistry({
+      logger: this.logger,
+      agents: dependencies.usageAgents,
+      cliSignIns: this.cliSignIns,
+    });
     this.cliSignIns.onChange((allowed) => {
       if (!allowed) this.usageSources.forget();
     });
