@@ -4,6 +4,7 @@ import {
   buildOpenProjectRoute,
   buildProjectSettingsRoute,
   buildProjectsSettingsRoute,
+  buildSettingsHostPrivacyRoute,
   buildSettingsHostSectionRoute,
   buildSettingsRoute,
   type HostSectionSlug,
@@ -25,6 +26,11 @@ export function openHostOverview(serverId: string): void {
 
 export function openHostSettingsSection(serverId: string, section: HostSectionSlug): void {
   router.push(buildSettingsHostSectionRoute(serverId, section));
+}
+
+/** 主机设置页，并把「隐私」一节滚进视野。 */
+export function openHostPrivacySettings(serverId: string): void {
+  router.push(buildSettingsHostPrivacyRoute(serverId));
 }
 
 export function openProjectSettings(serverId: string, projectId: string): void {

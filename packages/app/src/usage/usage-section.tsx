@@ -9,7 +9,7 @@ import { usageCopy } from "./copy";
 import type { UsageDisplay } from "./display";
 import { UsageControls } from "./controls";
 import { UsageList } from "./list";
-import { OpenPrivacySettingsButton } from "./open-privacy-settings-button";
+import { CliSignInsOffNotice } from "./cli-sign-ins-off-notice";
 import type { UsageView } from "./types";
 
 export function UsageSection({
@@ -73,14 +73,7 @@ export function UsageBody({
   }
 
   if (view.kind === "cliSignInsOff") {
-    return (
-      <View style={[settingsStyles.card, styles.emptyCard, styles.offCard]}>
-        <Text style={[styles.emptyText, styles.offText]} testID="usage-cli-sign-ins-off">
-          {usageCopy.cliSignInsOff}
-        </Text>
-        <OpenPrivacySettingsButton serverId={serverId} onLeave={onLeave} />
-      </View>
-    );
+    return <CliSignInsOffNotice serverId={serverId} onLeave={onLeave} />;
   }
 
   if (view.reports.length === 0) {
@@ -102,13 +95,6 @@ const styles = StyleSheet.create((theme) => ({
   emptyCard: {
     padding: theme.spacing[4],
     alignItems: "center",
-  },
-  offCard: {
-    gap: theme.spacing[3],
-  },
-  // 窄屏折成两行时仍和下面的按钮一样居中。
-  offText: {
-    textAlign: "center",
   },
   emptyText: {
     color: theme.colors.foregroundMuted,

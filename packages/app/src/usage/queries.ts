@@ -16,6 +16,7 @@ import {
   useHostRuntimeIsConnected,
   useHosts,
 } from "@/runtime/host-runtime";
+import { selectHostFeature } from "@/runtime/host-features";
 import { useSessionStore, type SessionState } from "@/stores/session-store";
 import { usageCopy } from "./copy";
 import {
@@ -105,8 +106,10 @@ async function listReports(
     serverId,
     forceRefresh,
   });
+  // COMPAT(readCliSignIns): added in v0.17.0, remove gate after 2027-04-25.
+  const knowsSwitch = selectHostFeature(useSessionStore.getState(), serverId, "readCliSignIns");
   // 先于报告写入，空列表落下时说明已经在了，不会先闪一下「没有套餐用量」。
-  queryClient.setQueryData(cliSignInsOffQueryKey(serverId), cliSignInsOff);
+  queryClient.setQueryData(cliSignInsOffQueryKey(serverId), knowsSwitch && cliSignInsOff);
   return reports;
 }
 
@@ -152,14 +155,15 @@ async function refreshReports(queryClient: QueryClient, serverId: string): Promi
   });
 }
 
-function toQueryState(
+function toQueryState(input: {
   query: {
     data: UsageReportEntry[] | undefined;
     error: unknown;
     isFetching: boolean;
-  },
-  cliSignInsOff = false,
-): UsageQueryState {
+  };
+  cliSignInsOff?: boolean;
+}): UsageQueryState {
+  const { query, cliSignInsOff = false } = input;
   return { data: query.data, error: query.error, isFetching: query.isFetching, cliSignInsOff };
 }
 
@@ -184,7 +188,7 @@ export function useHostUsage(serverId: string): { view: UsageView; refresh: () =
     hostLabel,
     isConnected,
     supportsUsage: isSupported,
-    query: toQueryState(query, cliSignInsOff),
+    query: toQueryState({ query, cliSignInsOff }),
   });
   return { view, refresh };
 }
@@ -232,7 +236,7 @@ export function useAgentUsage(serverId: string, agentId: string): AgentUsageView
     retry: false,
     staleTimeMs: REPORTS_STALE_TIME_MS,
   });
-  return resolveAgentUsageView({ canReport, query: toQueryState(query) });
+  return resolveAgentUsageView({ canReport, query: toQueryState({ query }) });
 }
 
 /** Whether a host is connected and reports usage, read without fetching anything. */

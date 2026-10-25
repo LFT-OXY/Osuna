@@ -19,6 +19,7 @@ import {
   closeUsage,
   expectNoUsageItem,
   expectPinnedUsage,
+  openCompactSidebar,
   openUsageFromIcon,
   openUsageFromItem,
   togglePin,
@@ -145,7 +146,9 @@ test.describe("Plan usage while Read CLI sign-ins is off", () => {
   }
 
   async function expectOnPrivacySection(page: import("@playwright/test").Page) {
-    await expect(page).toHaveURL(new RegExp(`/settings/hosts/${getServerId()}/host$`));
+    await expect(page).toHaveURL(
+      new RegExp(`/settings/hosts/${getServerId()}/host\\?focus=privacy$`),
+    );
     await expect(privacySection(page)).toBeInViewport();
   }
 
@@ -186,6 +189,18 @@ test.describe("Plan usage while Read CLI sign-ins is off", () => {
       await page.goBack();
       await expectPinnedUsage(page, ["31% 5h", "7% 5h", "12% wk"]);
     });
+  });
+
+  test("on a phone-width window, Open settings scrolls Privacy into view", async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.setViewportSize({ width: 390, height: 844 });
+    const reports = await installSwitchAwareReports(page);
+    reports.off = true;
+    await gotoAppShell(page);
+    await openCompactSidebar(page);
+    await openUsageFromIcon(page);
+    await usageModal(page).getByRole("button", { name: "Open settings", exact: true }).click();
+    await expectOnPrivacySection(page);
   });
 
   test("the Usage page's plan usage says why it's empty and Open settings lands on Privacy", async ({

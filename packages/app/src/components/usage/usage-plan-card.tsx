@@ -14,7 +14,7 @@ import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { usePlanUsageHosts } from "@/plan-usage/use-hosts";
 import { UsageCard as PlanUsageReportCard } from "@/usage/card";
 import { usageCopy } from "@/usage/copy";
-import { OpenPrivacySettingsButton } from "@/usage/open-privacy-settings-button";
+import { CliSignInsOffNotice } from "@/usage/cli-sign-ins-off-notice";
 import { useUsageDisplay } from "@/usage/display";
 import { useUsageInSidebar } from "@/usage/in-sidebar";
 import type { UsageReportEntry, UsageView } from "@/usage/types";
@@ -104,14 +104,7 @@ function PlanUsageBody({
   }
 
   if (view.kind === "cliSignInsOff") {
-    return (
-      <View style={styles.offNotice}>
-        <Text style={styles.message} testID="usage-cli-sign-ins-off">
-          {usageCopy.cliSignInsOff}
-        </Text>
-        <OpenPrivacySettingsButton serverId={serverId} />
-      </View>
-    );
+    return <CliSignInsOffNotice serverId={serverId} />;
   }
 
   if (view.reports.length === 0) {
@@ -206,11 +199,6 @@ const styles = StyleSheet.create((theme) => {
     host: {
       fontSize: 11,
       color: palette.inkFaint,
-    },
-    // 说明与按钮靠左排成一列，按钮不撑满卡片宽度。
-    offNotice: {
-      alignItems: "flex-start",
-      gap: theme.spacing[1],
     },
     message: {
       fontSize: 13,

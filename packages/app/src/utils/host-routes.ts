@@ -587,6 +587,13 @@ export function buildSettingsHostSectionRoute(serverId: string, section: HostSec
   return `/settings/hosts/${encodeSegment(normalized)}/${section}` as const;
 }
 
+/** 主机设置的 `focus` 参数取这个值时，「隐私」一节打开后滚进视野。 */
+export const HOST_PRIVACY_FOCUS = "privacy";
+
+export function buildSettingsHostPrivacyRoute(serverId: string) {
+  return `${buildSettingsHostSectionRoute(serverId, "host")}?focus=${HOST_PRIVACY_FOCUS}` as const;
+}
+
 export function buildProjectsSettingsRoute(serverId: string) {
   const normalized = trimNonEmpty(serverId);
   if (!normalized) {
