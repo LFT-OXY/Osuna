@@ -3,7 +3,7 @@
   "name": "credential-switch-risk-notes",
   "title": "登录凭证开关与风险提示",
   "description": "加「不读登录凭证」总开关，关后不读任何 CLI 登录；Antigravity 提供方页加封号风险提示",
-  "status": "implement",
+  "status": "accept",
   "dev_type": null,
   "scope": null,
   "package": "server",
