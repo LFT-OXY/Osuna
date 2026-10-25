@@ -3,6 +3,7 @@ import type {
   UsageResetResult,
 } from "../../plugins/usage-sources/index.js";
 import type pino from "pino";
+import { CliSignInsOffError } from "../../cli-sign-ins.js";
 import type { ProviderUsage, UsageReportEntry } from "@getpaseo/protocol/messages";
 import type { SessionInboundMessage, SessionOutboundMessage } from "../../messages.js";
 
@@ -11,6 +12,7 @@ export interface UsageSessionOptions {
   runtime?: {
     listUsageReports(options: ListUsageReportsOptions): Promise<UsageReportEntry[]>;
     listLegacyUsage(): Promise<{ fetchedAt: string; providers: ProviderUsage[] }>;
+    readsCliSignIns(): boolean;
     consumeUsageReset(reportId: string): Promise<UsageResetResult>;
   };
   logger: pino.Logger;
@@ -24,6 +26,12 @@ export class UsageSession {
   ): Promise<void> {
     try {
       if (!this.options.runtime) throw new Error("Plugin runtime is unavailable");
+      // 闸门只读一次：关着就不列，回应带 cliSignInsOff，列表与标记不会互相矛盾。
+      if (!this.options.runtime.readsCliSignIns()) {
+        const off = { requestId: msg.requestId, error: null, cliSignInsOff: true };
+        this.options.emit({ type: "usage.list_reports.response", payload: off });
+        return;
+      }
       await this.options.runtime.listUsageReports({
         forceRefresh: msg.forceRefresh,
         reportIds: msg.reportIds,
@@ -61,14 +69,10 @@ export class UsageSession {
       });
     } catch (error) {
       this.options.logger.warn({ err: error, reportId: msg.reportId }, "Usage reset failed");
+      const reason = resetFailureText(error);
       this.options.emit({
         type: "usage.reset.consume.response",
-        payload: {
-          requestId: msg.requestId,
-          outcome: null,
-          report: null,
-          error: error instanceof Error ? error.message : String(error),
-        },
+        payload: { requestId: msg.requestId, outcome: null, report: null, error: reason },
       });
     }
   }
@@ -102,4 +106,11 @@ export class UsageSession {
       });
     }
   }
+}
+
+/** The reason a refused or failed reset shows the user. */
+function resetFailureText(error: unknown): string {
+  if (error instanceof CliSignInsOffError) return error.userMessage;
+  if (error instanceof Error) return error.message;
+  return String(error);
 }

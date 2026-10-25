@@ -497,6 +497,8 @@ Register a usage source from `index.server.ts` with `server.registerUsageSource(
 
 An available report can carry `resets` (the account's resets left, the same shape as an API endpoint balance reading's); older apps drop the field. A source that implements `consumeReset` gets a "Use a reset" button on its cards: its reports carry `consumesResets`, the app sends `usage.reset.consume` (gated on `server_info.features.planUsageResets`) after the user confirms, and the daemon calls the source through the login the card shows, then drops that account's cache and reads it again. The daemon calls discovery for `usage.list_reports`; the client gates this RPC on `server_info.features.usageSources`. The old `provider.usage.list` RPC maps discovered reports for older clients.
 
+The host's **Read CLI sign-ins** switch gates usage sources at the daemon's registry, so it holds for built-in and installed sources alike without their cooperation. It cannot reach anything else a plugin runs: a plugin that reads credentials outside its usage source is not stopped by it, and the switch's own copy says so.
+
 ## Contribute sidebar items
 
 Sidebar header and footer items are plugin components, not descriptors. The

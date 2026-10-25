@@ -4,6 +4,7 @@ import {
   type PersistedConfig,
 } from "./persisted-config.js";
 import { ProviderOverrideSchema } from "./agent/provider-launch-config.js";
+import { CliSignInsForcedOffError } from "./cli-sign-ins.js";
 import {
   MutableDaemonConfigSchema,
   MutableDaemonConfigPatchSchema,
@@ -32,6 +33,7 @@ interface SupportedMutableConfigPatch {
   pluginsEnabled?: boolean;
   plugins?: MutableDaemonConfig["plugins"];
   usage?: MutableDaemonConfigPatch["usage"];
+  readCliSignIns?: boolean;
 }
 
 interface LoggerLike {
@@ -190,6 +192,7 @@ const RELOADABLE_PATHS = [
   "agents.metadataGeneration",
   "agents.skills.selection",
   "pluginsEnabled",
+  "readCliSignIns",
   "features.usage.pricing.autoUpdate",
   "features.usage.pricing.overrides",
 ] as const;
@@ -215,6 +218,7 @@ const PERSISTED_TO_MUTABLE_PATH = new Map<string, string>([
   ["agents.metadataGeneration", "metadataGeneration"],
   ["agents.skills.selection", "skills.selection"],
   ["pluginsEnabled", "pluginsEnabled"],
+  ["readCliSignIns", "readCliSignIns"],
   ["features.usage.pricing.autoUpdate", "usage.pricing.autoUpdate"],
   ["features.usage.pricing.overrides", "usage.pricing.overrides"],
 ]);
@@ -279,9 +283,17 @@ function pickSupportedPatchFields(patch: MutableDaemonConfigPatch): SupportedMut
       : {}),
     ...(patch.terminalProfiles !== undefined ? { terminalProfiles: patch.terminalProfiles } : {}),
     ...(patch.agentProfiles !== undefined ? { agentProfiles: patch.agentProfiles } : {}),
+    ...(patch.usage?.pricing !== undefined ? { usage: { pricing: patch.usage.pricing } } : {}),
+    ...pickHostSwitchPatchFields(patch),
+  };
+}
+
+/** 存在配置顶层的主机级开关与插件来源。 */
+function pickHostSwitchPatchFields(patch: MutableDaemonConfigPatch): SupportedMutableConfigPatch {
+  return {
     ...(patch.pluginsEnabled !== undefined ? { pluginsEnabled: patch.pluginsEnabled } : {}),
     ...(patch.plugins !== undefined ? { plugins: patch.plugins } : {}),
-    ...(patch.usage?.pricing !== undefined ? { usage: { pricing: patch.usage.pricing } } : {}),
+    ...(patch.readCliSignIns !== undefined ? { readCliSignIns: patch.readCliSignIns } : {}),
   };
 }
 
@@ -366,6 +378,9 @@ export class DaemonConfigStore {
       throw new Error(
         "Relay is controlled by a daemon launch override. Remove PASEO_RELAY_ENABLED or the relay CLI flag before changing it here.",
       );
+    }
+    if (parsedPatch.readCliSignIns !== undefined && this.current.readCliSignInsForcedOff) {
+      throw new CliSignInsForcedOffError(parsedPatch.readCliSignIns);
     }
     const { removeProviders = [], ...configPatch } = parsedPatch;
     const removedProviders = Array.from(new Set(removeProviders));
@@ -603,6 +618,7 @@ function mergeMutablePatchIntoPersistedConfig(params: {
     ...persisted,
     ...(patch.pluginsEnabled !== undefined ? { pluginsEnabled: patch.pluginsEnabled } : {}),
     ...(patch.plugins !== undefined ? { plugins: patch.plugins } : {}),
+    ...(patch.readCliSignIns !== undefined ? { readCliSignIns: patch.readCliSignIns } : {}),
     ...(daemon ? { daemon } : { daemon: undefined }),
     ...(agents ? { agents } : { agents: undefined }),
     ...(features ? { features } : {}),

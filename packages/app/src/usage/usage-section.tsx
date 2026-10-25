@@ -9,6 +9,7 @@ import { usageCopy } from "./copy";
 import type { UsageDisplay } from "./display";
 import { UsageControls } from "./controls";
 import { UsageList } from "./list";
+import { CliSignInsOffNotice } from "./cli-sign-ins-off-notice";
 import type { UsageView } from "./types";
 
 export function UsageSection({
@@ -44,11 +45,14 @@ export function UsageBody({
   view,
   display,
   onRefresh,
+  onLeave,
 }: {
   serverId: string;
   view: UsageView;
   display: UsageDisplay;
   onRefresh: () => void;
+  /** Osuna：要跳去别的页面时先调用，弹窗借它先关掉。 */
+  onLeave?: () => void;
 }) {
   if (view.kind === "unavailable") {
     return <UsageMessage text={view.message} />;
@@ -66,6 +70,10 @@ export function UsageBody({
         </Button>
       </Alert>
     );
+  }
+
+  if (view.kind === "cliSignInsOff") {
+    return <CliSignInsOffNotice serverId={serverId} onLeave={onLeave} />;
   }
 
   if (view.reports.length === 0) {

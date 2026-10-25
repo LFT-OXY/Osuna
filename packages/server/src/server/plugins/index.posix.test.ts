@@ -17,6 +17,7 @@ import { pathToFileURL } from "node:url";
 import pino from "pino";
 import { afterEach, describe, expect, it } from "vitest";
 import { DaemonConfigStore } from "../daemon-config-store.js";
+import { CliSignInAccess } from "../cli-sign-ins.js";
 import { PluginService } from "./index.js";
 import { BuiltinPluginLoader } from "./builtin/index.js";
 import { ManagedPluginSources } from "./managed-source.js";
@@ -63,10 +64,14 @@ function createStore(
 function createService(
   home: string,
   plugins: Record<string, { source: "directory"; path: string; enabled?: boolean }> = {},
-  dependencies: ConstructorParameters<typeof PluginService>[3] = {},
+  dependencies: Omit<ConstructorParameters<typeof PluginService>[3], "cliSignIns"> = {},
 ): PluginService {
+  const store = createStore(home, plugins);
   return bindTestSessionHost(
-    new PluginService(pino({ level: "silent" }), createStore(home, plugins), "0.4.0", dependencies),
+    new PluginService(pino({ level: "silent" }), store, "0.4.0", {
+      ...dependencies,
+      cliSignIns: new CliSignInAccess(store),
+    }),
   );
 }
 
@@ -222,7 +227,10 @@ describe("PluginService", () => {
         runtime === "builtin" ? ["provider-status"] : [],
       );
       const service = bindTestSessionHost(
-        new PluginService(pino({ level: "silent" }), store, "0.4.0", { builtinPlugins }),
+        new PluginService(pino({ level: "silent" }), store, "0.4.0", {
+          builtinPlugins,
+          cliSignIns: new CliSignInAccess(store),
+        }),
       );
       await service.start();
       try {
@@ -390,7 +398,9 @@ describe("PluginService", () => {
     );
     const store = createStore(home);
     const service = bindTestSessionHost(
-      new PluginService(pino({ level: "silent" }), store, "0.4.0"),
+      new PluginService(pino({ level: "silent" }), store, "0.4.0", {
+        cliSignIns: new CliSignInAccess(store),
+      }),
     );
     await service.start();
 
@@ -529,6 +539,7 @@ describe("PluginService", () => {
     store.patch({ pluginsEnabled: false });
     const service = bindTestSessionHost(
       new PluginService(pino({ level: "silent" }), store, "0.4.0", {
+        cliSignIns: new CliSignInAccess(store),
         managedSources: new ManagedPluginSources(home, { defaultUrl: url }),
       }),
     );
@@ -652,6 +663,7 @@ export default function contribute(server: PluginServerContext) {
       const open = () =>
         bindTestSessionHost(
           new PluginService(pino({ level: "silent" }), store, "0.8.0", {
+            cliSignIns: new CliSignInAccess(store),
             managedSources: new ManagedPluginSources(home),
             settingsDirectory,
           }),
@@ -755,6 +767,7 @@ export default function contribute(server: PluginServerContext) {
     const store = createStore(home);
     const service = bindTestSessionHost(
       new PluginService(pino({ level: "silent" }), store, "0.4.0", {
+        cliSignIns: new CliSignInAccess(store),
         managedSources: new ManagedPluginSources(home),
       }),
     );
@@ -933,6 +946,7 @@ export default function contribute(server: PluginServerContext) {
       "failed-update": { source: "directory", path: initial.directory, enabled: true },
     });
     const service = new PluginService(pino({ level: "silent" }), store, "0.4.0", {
+      cliSignIns: new CliSignInAccess(store),
       runtime,
       managedSources,
     });
@@ -1044,7 +1058,9 @@ export default function contribute(plugin: unknown) {
     );
     const store = createStore(home);
     const service = bindTestSessionHost(
-      new PluginService(pino({ level: "silent" }), store, "0.4.0"),
+      new PluginService(pino({ level: "silent" }), store, "0.4.0", {
+        cliSignIns: new CliSignInAccess(store),
+      }),
     );
     await service.start();
     await service.installDirectory({ path: directory });
@@ -1073,7 +1089,9 @@ export default function contribute(plugin: unknown) {
     );
     const store = createStore(home);
     const service = bindTestSessionHost(
-      new PluginService(pino({ level: "silent" }), store, "0.4.0"),
+      new PluginService(pino({ level: "silent" }), store, "0.4.0", {
+        cliSignIns: new CliSignInAccess(store),
+      }),
     );
     await service.start();
     await service.installDirectory({ path: first });
@@ -1103,6 +1121,7 @@ export default function contribute(plugin: unknown) {
     store.patch({ pluginsEnabled: false });
     const paused = createPausedRuntime();
     const service = new PluginService(pino({ level: "silent" }), store, "0.4.0", {
+      cliSignIns: new CliSignInAccess(store),
       runtime: paused.runtime,
     });
     await service.start();
@@ -1127,6 +1146,7 @@ export default function contribute(plugin: unknown) {
     });
     const paused = createPausedRuntime();
     const service = new PluginService(pino({ level: "silent" }), store, "0.4.0", {
+      cliSignIns: new CliSignInAccess(store),
       runtime: paused.runtime,
     });
     await service.start();
@@ -1152,6 +1172,7 @@ export default function contribute(plugin: unknown) {
     });
     const paused = createPluginSelectivePausedRuntime("occupier");
     const service = new PluginService(pino({ level: "silent" }), store, "0.4.0", {
+      cliSignIns: new CliSignInAccess(store),
       runtime: paused.runtime,
     });
     await service.start();
@@ -1354,6 +1375,7 @@ export default function contribute() {
     const open = () =>
       bindTestSessionHost(
         new PluginService(pino({ level: "silent" }), store, "0.8.0", {
+          cliSignIns: new CliSignInAccess(store),
           managedSources: new ManagedPluginSources(home),
         }),
       );

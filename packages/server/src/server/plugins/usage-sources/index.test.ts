@@ -57,7 +57,7 @@ test("a report's resets reach the client as the source gave them", async () => {
 test("coalesces per account, caches errors, and refreshes only requested IDs", async () => {
   let now = 0;
   const counts = new Map<string, number>();
-  const registry = new UsageSourceRegistry(() => now);
+  const registry = new UsageSourceRegistry({ now: () => now });
   registry.register(
     source({
       id: "source",
@@ -92,7 +92,7 @@ test("coalesces per account, caches errors, and refreshes only requested IDs", a
 
 test("legacy listing uses oldest fetchedAt", async () => {
   let now = 1000;
-  const registry = new UsageSourceRegistry(() => now);
+  const registry = new UsageSourceRegistry({ now: () => now });
   registry.register(
     source({
       id: "source",
@@ -132,7 +132,7 @@ test("concurrent requests for the same ID share one vendor fetch", async () => {
 
 test("rediscovery removes an old account from targeted refreshes", async () => {
   let now = 0;
-  const registry = new UsageSourceRegistry(() => now, 100);
+  const registry = new UsageSourceRegistry({ now: () => now, ttlMs: 100 });
   let account = "old";
   registry.register(source({ id: "source", discover: async () => [{ key: account, input: {} }] }));
   await registry.listReports();
@@ -146,9 +146,11 @@ test("rediscovery removes an old account from targeted refreshes", async () => {
 
 test("discovery failures log once while other sources still report", async () => {
   const warnings: unknown[][] = [];
-  const registry = new UsageSourceRegistry(Date.now, 300_000, {
-    warn: (...args: unknown[]) => {
-      warnings.push(args);
+  const registry = new UsageSourceRegistry({
+    logger: {
+      warn: (...args: unknown[]) => {
+        warnings.push(args);
+      },
     },
   });
   const err = new Error("subprocess stopped");
@@ -170,9 +172,11 @@ test("discovery failures log once while other sources still report", async () =>
 
 test("a failed fetch is logged as well as reported", async () => {
   const warnings: unknown[][] = [];
-  const registry = new UsageSourceRegistry(Date.now, 300_000, {
-    warn: (...args: unknown[]) => {
-      warnings.push(args);
+  const registry = new UsageSourceRegistry({
+    logger: {
+      warn: (...args: unknown[]) => {
+        warnings.push(args);
+      },
     },
   });
   const err = new Error("Rate limited by Claude. Try again in 38m.");
@@ -191,7 +195,7 @@ test("a failed fetch is logged as well as reported", async () => {
 });
 
 test("legacy listing distinguishes labeled accounts and preserves unlabeled names", async () => {
-  const registry = new UsageSourceRegistry(() => 1000);
+  const registry = new UsageSourceRegistry({ now: () => 1000 });
   registry.register(
     source({
       id: "claude",
@@ -332,9 +336,11 @@ test("session discovery reuses accounts, separates launches, and retains live ag
   const existing = new Set(["one", "two", "closed"]);
   const discoveries: string[] = [];
   let fetches = 0;
-  const registry = new UsageSourceRegistry(Date.now, 300_000, undefined, {
-    hasAgent: (id) => existing.has(id),
-    usageSession: (id) => sessions.get(id) ?? null,
+  const registry = new UsageSourceRegistry({
+    agents: {
+      hasAgent: (id) => existing.has(id),
+      usageSession: (id) => sessions.get(id) ?? null,
+    },
   });
   registry.register({
     id: "claude",
@@ -371,7 +377,7 @@ test("session discovery reuses accounts, separates launches, and retains live ag
 });
 
 test("reports arrive independently and a hung fetch settles as an error before completion", async () => {
-  const registry = new UsageSourceRegistry(Date.now, 300_000, undefined, undefined, 25);
+  const registry = new UsageSourceRegistry({ deadlineMs: 25 });
   let finishSlow!: (value: unknown) => void;
   const slow = new Promise<unknown>((resolve) => {
     finishSlow = resolve;
@@ -419,9 +425,11 @@ test("#6155: agent reports use only their session login despite host and sibling
     ["codex-agent", { provider: "codex", env: {}, sessionKey: "codex-launch" }],
     ["opencode-agent", { provider: "opencode", env: {}, sessionKey: "opencode-launch" }],
   ]);
-  const registry = new UsageSourceRegistry(Date.now, 300_000, undefined, {
-    hasAgent: (id) => sessions.has(id),
-    usageSession: (id) => sessions.get(id) ?? null,
+  const registry = new UsageSourceRegistry({
+    agents: {
+      hasAgent: (id) => sessions.has(id),
+      usageSession: (id) => sessions.get(id) ?? null,
+    },
   });
   const codexError = { status: "error", error: "Codex usage API returned 500" };
   const expired = {
@@ -475,9 +483,11 @@ test("a working agent login never uses another harness's failure or host fallbac
     ["working", { provider: "codex", env: {}, sessionKey: "one" }],
     ["broken", { provider: "opencode", env: {}, sessionKey: "two" }],
   ]);
-  const registry = new UsageSourceRegistry(Date.now, 300_000, undefined, {
-    hasAgent: (id) => sessions.has(id),
-    usageSession: (id) => sessions.get(id) ?? null,
+  const registry = new UsageSourceRegistry({
+    agents: {
+      hasAgent: (id) => sessions.has(id),
+      usageSession: (id) => sessions.get(id) ?? null,
+    },
   });
   const available = {
     status: "available",
@@ -513,9 +523,11 @@ test("concurrent host and agent requests never share a different login's pending
   const slow = new Promise<unknown>((resolve) => {
     finish = resolve;
   });
-  const registry = new UsageSourceRegistry(Date.now, 300_000, undefined, {
-    hasAgent: () => true,
-    usageSession: () => ({ provider: "codex", env: {}, sessionKey: "launch" }),
+  const registry = new UsageSourceRegistry({
+    agents: {
+      hasAgent: () => true,
+      usageSession: () => ({ provider: "codex", env: {}, sessionKey: "launch" }),
+    },
   });
   registry.register({
     id: "codex",
@@ -532,9 +544,11 @@ test("concurrent host and agent requests never share a different login's pending
 });
 
 test("duplicate logins across scopes appear only once in the host's errors", async () => {
-  const registry = new UsageSourceRegistry(Date.now, 300_000, undefined, {
-    hasAgent: () => true,
-    usageSession: () => ({ provider: "codex", env: {}, sessionKey: "launch" }),
+  const registry = new UsageSourceRegistry({
+    agents: {
+      hasAgent: () => true,
+      usageSession: () => ({ provider: "codex", env: {}, sessionKey: "launch" }),
+    },
   });
   registry.register({
     id: "codex",
@@ -558,7 +572,7 @@ test("duplicate logins across scopes appear only once in the host's errors", asy
 });
 
 test("a hung login records its own timeout and still tries the next login", async () => {
-  const registry = new UsageSourceRegistry(Date.now, 300_000, undefined, undefined, 25);
+  const registry = new UsageSourceRegistry({ deadlineMs: 25 });
   registry.register({
     id: "codex",
     label: "Codex",
@@ -576,7 +590,7 @@ test("a hung login records its own timeout and still tries the next login", asyn
 });
 
 test("using a reset goes through the login the card shows, then reads the account past the cache", async () => {
-  const registry = new UsageSourceRegistry(() => 0);
+  const registry = new UsageSourceRegistry({ now: () => 0 });
   let windowsUsed = 80;
   const fetched: string[] = [];
   const consumed: unknown[] = [];
@@ -649,7 +663,7 @@ test("a source that can't use resets says so and its reports don't offer it", as
 });
 
 test("a failed reset leaves the cached reading alone", async () => {
-  const registry = new UsageSourceRegistry(() => 0);
+  const registry = new UsageSourceRegistry({ now: () => 0 });
   let fetches = 0;
   registry.register({
     ...source({
@@ -668,4 +682,51 @@ test("a failed reset leaves the cached reading alone", async () => {
   await expect(registry.consumeReset("codex:work")).rejects.toThrow("so none was used");
   await registry.listReports({ reportIds: ["codex:work"] });
   expect(fetches).toBe(1);
+});
+
+test("with CLI sign-ins off no source is asked, and a read in flight when they go off is dropped", async () => {
+  let allowed = true;
+  const calls: string[] = [];
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const registry = new UsageSourceRegistry({ cliSignIns: { allowed: () => allowed } });
+  registry.register({
+    ...source({
+      id: "codex",
+      discover: async () => {
+        calls.push("discover");
+        return [{ key: "work", input: {} }];
+      },
+      fetch: async () => {
+        calls.push("fetch");
+        await held;
+        return { status: "available", windows: [] };
+      },
+    }),
+    consumeReset: async () => {
+      calls.push("consumeReset");
+      return { code: "reset", windows: 1 };
+    },
+  });
+  const inFlight = registry.listReports();
+  await expect.poll(() => calls).toEqual(["discover", "fetch"]);
+  allowed = false;
+  registry.forget();
+  release();
+  expect(await inFlight).toEqual([]);
+  expect(await registry.listReports()).toEqual([]);
+  expect(await registry.listReports({ reportIds: ["codex:work"] })).toEqual([]);
+  expect((await registry.listLegacyUsage()).providers).toEqual([]);
+  await expect(registry.consumeReset("codex:work")).rejects.toMatchObject({
+    name: "CliSignInsOffError",
+    operation: "usage_reset",
+    reportId: "codex:work",
+    userMessage: "Read CLI sign-ins is off, so a reset can't be used",
+  });
+  expect(calls).toEqual(["discover", "fetch"]);
+  allowed = true;
+  expect((await registry.listReports()).map((entry) => entry.id)).toEqual(["codex:work"]);
+  expect(calls).toEqual(["discover", "fetch", "discover", "fetch"]);
 });

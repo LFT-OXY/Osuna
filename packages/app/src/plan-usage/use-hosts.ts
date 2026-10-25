@@ -2,12 +2,14 @@ import { useCallback, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useFetchQueries } from "@/data/query";
 import {
+  cliSignInsOffQueryInput,
   listHostUsageReports,
   refreshHostUsageReports,
   usageReportsQueryKey,
   USAGE_REPORTS_STALE_TIME_MS,
   useUsageHosts,
 } from "@/usage/queries";
+import type { UsageQueryState } from "@/usage/model";
 import type { UsageReportEntry } from "@/usage/types";
 import type { UsageHostInput } from "@/usage-stats/aggregated-usage";
 import { resolvePlanUsageHosts, type PlanUsageHosts } from "./hosts";
@@ -46,7 +48,18 @@ export function usePlanUsageHosts(hosts: readonly UsageHostInput[]): PlanUsageHo
       };
     }),
   );
-  const resolved = resolvePlanUsageHosts({ hosts, usageHosts, queries });
+  const offAnswers = useFetchQueries<boolean>(
+    hosts.map(({ serverId }) => cliSignInsOffQueryInput(serverId)),
+  );
+  const queryStates = queries.map(
+    (query, index): UsageQueryState => ({
+      data: query.data,
+      error: query.error,
+      isFetching: query.isFetching,
+      cliSignInsOff: offAnswers[index]?.data === true,
+    }),
+  );
+  const resolved = resolvePlanUsageHosts({ hosts, usageHosts, queries: queryStates });
 
   const refresh = useCallback(() => {
     for (const host of hosts) {

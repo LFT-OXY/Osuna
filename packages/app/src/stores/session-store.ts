@@ -287,6 +287,7 @@ export interface DaemonServerInfo {
   hostPlatform?: ServerInfoStatusPayload["hostPlatform"];
   capabilities?: ServerCapabilities;
   features?: ServerInfoStatusPayload["features"];
+  permissions?: ServerInfoStatusPayload["permissions"];
 }
 
 export function toDaemonServerInfo(serverInfo: ServerInfoStatusPayload): DaemonServerInfo {
@@ -300,6 +301,7 @@ export function toDaemonServerInfo(serverInfo: ServerInfoStatusPayload): DaemonS
     ...(serverInfo.hostPlatform !== undefined ? { hostPlatform: serverInfo.hostPlatform } : {}),
     ...(serverInfo.capabilities ? { capabilities: serverInfo.capabilities } : {}),
     ...(serverInfo.features ? { features: serverInfo.features } : {}),
+    ...(serverInfo.permissions ? { permissions: serverInfo.permissions } : {}),
   };
 }
 
@@ -691,6 +693,7 @@ function isSessionServerInfoUnchanged(input: {
   nextHostPlatform: string | undefined;
   nextCapabilities: ServerCapabilities | undefined;
   nextFeatures: ServerInfoStatusPayload["features"] | undefined;
+  nextPermissions: ServerInfoStatusPayload["permissions"] | undefined;
   nextServerId: string;
 }): boolean {
   const {
@@ -711,8 +714,16 @@ function isSessionServerInfoUnchanged(input: {
     currentServerInfo?.desktopManaged === nextDesktopManaged &&
     currentServerInfo?.hostPlatform === nextHostPlatform &&
     areServerCapabilitiesEqual(currentServerInfo?.capabilities, nextCapabilities) &&
-    areServerInfoFeaturesEqual(currentServerInfo?.features, nextFeatures)
+    areServerInfoFeaturesEqual(currentServerInfo?.features, nextFeatures) &&
+    areServerInfoPermissionsEqual(currentServerInfo, input.nextPermissions)
   );
+}
+
+function areServerInfoPermissionsEqual(
+  current: SessionState["serverInfo"] | undefined,
+  next: ServerInfoStatusPayload["permissions"] | undefined,
+): boolean {
+  return current?.permissions?.join(",") === next?.join(",");
 }
 
 export const useSessionStore = create<SessionStore>()(
@@ -850,6 +861,7 @@ export const useSessionStore = create<SessionStore>()(
           const nextHostPlatform = info.hostPlatform;
           const nextCapabilities = info.capabilities;
           const nextFeatures = info.features;
+          const nextPermissions = info.permissions;
 
           if (
             isSessionServerInfoUnchanged({
@@ -860,6 +872,7 @@ export const useSessionStore = create<SessionStore>()(
               nextHostPlatform,
               nextCapabilities,
               nextFeatures,
+              nextPermissions,
               nextServerId: info.serverId,
             })
           ) {
@@ -882,6 +895,7 @@ export const useSessionStore = create<SessionStore>()(
                   ...(nextHostPlatform !== undefined ? { hostPlatform: nextHostPlatform } : {}),
                   ...(nextCapabilities ? { capabilities: nextCapabilities } : {}),
                   ...(nextFeatures ? { features: nextFeatures } : {}),
+                  ...(nextPermissions ? { permissions: nextPermissions } : {}),
                 },
               },
             },

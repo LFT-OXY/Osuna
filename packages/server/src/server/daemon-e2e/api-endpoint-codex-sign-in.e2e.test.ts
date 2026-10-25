@@ -59,6 +59,8 @@ describe.skipIf(process.platform === "win32")("Codex wiring follows how Codex is
     daemon = await createTestPaseoDaemon({
       paseoHomeRoot: root,
       cleanup: false,
+      // 重启后照 config.json 里存的「读取 CLI 登录凭证」启动。
+      cliSignInsLaunchEnv: {},
       apiEndpoints: {
         env: { CODEX_HOME: codexHome },
         homeDir: root,
@@ -254,6 +256,38 @@ ${await table()}`;
 
     await setCodex(false);
     expect(await config()).toBe(await keptConfig());
+  });
+
+  test("while Read CLI sign-ins is off Codex isn't asked and keeps its wiring; on again it is asked and rewired", async () => {
+    await createEndpoint();
+    await setCodex(true);
+    expect(await config()).toBe(await chatgptConfig());
+
+    await client.patchDaemonConfig({ readCliSignIns: false });
+    signInChecks = 0;
+    signIn = "api_key";
+    // 关开关本身不改 config.toml；关着时读状态、再打开、重启都不问，按上次判断出的、再按接管记录现在的接法。
+    expect(await config()).toBe(await chatgptConfig());
+    await client.apiEndpointList("codex");
+    await setCodex(true);
+    await restart();
+    await client.apiEndpointList("codex");
+    expect(signInChecks).toBe(0);
+    expect(await config()).toBe(await chatgptConfig());
+
+    await client.patchDaemonConfig({ readCliSignIns: true });
+    await client.apiEndpointList("codex");
+    expect(signInChecks).toBeGreaterThan(0);
+    expect(await config()).toBe(await providerConfig());
+  });
+
+  test("turned on while Read CLI sign-ins is off, Codex is wired as if its sign-in can't be told", async () => {
+    await client.patchDaemonConfig({ readCliSignIns: false });
+    await createEndpoint();
+    await setCodex(true);
+
+    expect(signInChecks).toBe(0);
+    expect(await config()).toBe(await providerConfig());
   });
 
   test("a daemon start rewires Codex for a sign-in that changed while it was down", async () => {

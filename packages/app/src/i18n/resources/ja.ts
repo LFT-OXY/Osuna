@@ -2543,6 +2543,8 @@ export const ja: TranslationResources = {
         info: "Osuna はこのホスト上の CC Switch、Claude Code、Codex、Alma、OpenCode の設定を読むだけで、何も変更しません。キーはホストに残り、選んだ項目だけが追加されます。",
         reading: "ほかのアプリを読み込み中…",
         scanFailed: "ほかのアプリを読み込めませんでした: {{message}}",
+        openCodeNotRead:
+          "「CLI のサインイン情報を読む」がオフのため、OpenCode は読み込んでいません",
         retry: "再試行",
         selectAll: "すべて",
         selectAllLabel: "{{app}} の項目をすべて選択",
@@ -2598,6 +2600,8 @@ export const ja: TranslationResources = {
         errors: {
           gone: "スキャン結果が古くなっていたため、Osuna がもう一度スキャンしました。選択を確認してから再度インポートしてください。",
           failed: "Osuna が保存できませんでした（{{reason}}）",
+          cliSignInsOff:
+            "「CLI のサインイン情報を読む」がオフのため、OpenCode の項目はインポートしていません",
           cannotReplace:
             "{{name}} は既存のエンドポイントと名前が重なっていません。両方残すを選んでください。",
         },
@@ -4038,6 +4042,25 @@ export const ja: TranslationResources = {
           workspaceName: "my-workspace",
         },
       },
+      privacy: {
+        title: "プライバシー",
+        readCliSignIns: {
+          title: "CLI のサインイン情報を読む",
+          hint: "各 CLI が保存しているログイン情報（ログインファイル、キーチェーン）を Osuna が読み、プランの使用量を表示します。オフにすると Osuna はこれらを読まず、プランの使用量は表示されません。CLI は引き続き自身のログインを使い、API エンドポイントには影響しません。プラグインのうちプランの使用量以外のコードは、このスイッチの対象外です。",
+          saveFailed: "「CLI のサインイン情報を読む」を変更できませんでした。",
+          saveFailedReason: "「CLI のサインイン情報を読む」を変更できませんでした：{{reason}}",
+          forcedOffHint: "環境変数 PASEO_NO_CLI_SIGN_INS によってオフになっています",
+          turnOff: {
+            title: "「CLI のサインイン情報を読む」をオフにしますか？",
+            planUsageStops:
+              "{{accounts}} のプラン使用量は、再びオンにするまで表示されなくなります。",
+            allPlanUsageStops: "再びオンにするまで、プラン使用量は一切表示されません。",
+            apiEndpointsKeepWorking: "API エンドポイントは引き続き動作します。",
+            confirm: "オフにする",
+            listSeparator: "、",
+          },
+        },
+      },
       notFound: "ホストが見つかりません",
       badges: {
         relay: "リレー",
@@ -4415,6 +4438,13 @@ export const ja: TranslationResources = {
       },
       addErrorTitle: "プロバイダーを追加できません",
       startErrorTitle: "{{name}} を起動できません",
+      banRisk: {
+        title: "{{name}} のアカウントが停止される可能性があります",
+        antigravity: {
+          body: "Google の Antigravity FAQ には、Antigravity CLI（agy）をサードパーティのアプリに組み込んで使うことは一般向けプランのサポート対象外だと書かれています。また、サードパーティのソフトウェアから Antigravity にアクセスすることは利用規約違反であり、アカウントの停止または解約につながる可能性があるとも書かれています。Osuna は agy を通じて Antigravity を動かしています。2026 年 2 月の一連の停止では Gemini CLI と Gemini Code Assist も使えなくなりました。失っても困らないアカウントを使ってください。",
+          termsLink: "Antigravity FAQ",
+        },
+      },
       actions: {
         menu: "{{name}} actions",
         remove: "Remove provider",
@@ -4868,6 +4898,7 @@ export const ja: TranslationResources = {
       cell: "{{day}} · {{tokens}} トークン",
     },
     planUsage: {
+      accountName: "{{source}}（{{account}}）",
       apiEndpointsOnNote: "API エンドポイントを使用中です。この枠は実際の消費量を表しません。",
       title: "プラン使用量",
       options: "プラン使用量のオプション",
@@ -4893,6 +4924,8 @@ export const ja: TranslationResources = {
       refreshing: "更新中...",
       loading: "プラン使用量を読み込み中...",
       empty: "プラン使用量のデータがありません",
+      cliSignInsOff: "「CLI のサインイン情報を読む」がオフのため、プラン使用量は表示されません",
+      openPrivacySettings: "設定を開く",
       errorTitle: "プラン使用量を読み込めません",
       hostUnavailable: "このホストに接続するとプラン使用量を表示できます",
       clientUnavailable: "ホスト接続の準備ができていません",

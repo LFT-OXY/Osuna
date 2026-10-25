@@ -14,6 +14,7 @@ Throw classes that carry the fields a caller will read. The daemon has dozens; t
 | `CursorError` | `server/pagination/cursor.ts` | invalid pagination cursor |
 | `WorkspaceAutomationBlockedError` | `server/workspace-automation-gate.ts` | the gate that refused an automated action |
 | `MissingCheckoutTargetError`, `UnsupportedForgeCheckoutTargetError` | `server/resolve-worktree-creation-intent.ts` | which part of a checkout intent was unusable |
+| `CliSignInsOffError` | `server/cli-sign-ins.ts` | `operation`, `reportId`, and a separate `userMessage` the wire `error` carries; `message` is the log line |
 
 Shape to copy from `worktree-errors.ts`:
 
@@ -48,7 +49,7 @@ Domain errors become wire errors at the handler boundary through a `toXWireError
 - **Fail explicitly.** If the caller asked for provider X and X is unavailable, throw; do not substitute Y.
 - **Fail closed on capabilities.** Advertising a feature in `server_info.features` means the runtime can do it now. If it cannot, refuse server-side and send the reason separately for UI.
 - **Log with the `err` key**, `logger.error({ err: error }, "message")`, so pino serializes the stack. See [Logging](./logging.md).
-- **User-facing copy and log strings are different strings.** The wire `message` is what the app shows; log lines carry context objects.
+- **User-facing copy and log strings are different strings.** The wire `message` is what the app shows; log lines carry context objects. When a refusal's log line needs ids the user shouldn't read, give the class a `userMessage` and pick it in the handler by `instanceof` (`resetFailureText` in `server/session/usage/usage-session.ts`).
 - **Upstream failure messages never carry the request URL.** The app shows them under a field or row that already shows the address, and the full URL is noise at 390 wide. Write the reason, then the path past the base: `HTTP 401: Invalid API key · /v1/models`, not `GET https://relay.example/api/v1/models: HTTP 401: Invalid API key`. Network failures carry only the network reason (`fetch failed: connect ECONNREFUSED …`), identical lines are collapsed, and timeouts say `No response within 30s`. `describeAttempt` in `server/api-endpoints/upstream-models.ts` is the model-list implementation; `api-endpoint-models.e2e.test.ts` ("a failed fetch says why without the request address") and the browser test of the same name assert it. Test-connection and detect results still carry a `POST <url>` prefix, which the app strips with `conciseUpstreamMessage` (`packages/app/src/api-endpoints/internal/connection-form-model.ts`).
 - **Process exits are deliberate.** Supervisor and worker lifecycle reasons are enumerated in `server/lifecycle-reasons.ts`; do not `process.exit` from a feature module.
 

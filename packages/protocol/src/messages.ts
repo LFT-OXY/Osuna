@@ -356,6 +356,10 @@ export const MutableDaemonConfigSchema = z
     pluginsEnabled: z.boolean().optional(),
     plugins: z.record(PluginIdSchema, PluginSourceSchema).optional(),
     usage: MutableUsageConfigSchema.optional(),
+    // 读取 CLI 登录凭证（主机设置「隐私」）；缺省为开。老 daemon 不发。
+    readCliSignIns: z.boolean().optional(),
+    // 只读：daemon 启动时设了 PASEO_NO_CLI_SIGN_INS，这次运行里开关被压成关、改不了；readCliSignIns 仍是存的值。
+    readCliSignInsForcedOff: z.boolean().optional(),
   })
   .passthrough();
 
@@ -377,6 +381,7 @@ export const MutableDaemonConfigPatchSchema = z
     pluginsEnabled: z.boolean().optional(),
     plugins: z.record(PluginIdSchema, PluginSourceSchema).optional(),
     usage: MutableUsageConfigPatchSchema.optional(),
+    readCliSignIns: z.boolean().optional(),
   })
   .partial()
   .passthrough();
@@ -4227,6 +4232,10 @@ export const ServerInfoStatusPayloadSchema = z
         // COMPAT(planUsageResets): added in v0.17.0, remove gate after 2027-04-22.
         // 任务 10-16-endpoint-balance：usage.reset.consume（套餐用量卡片上「用掉一次重置」），报告带 consumesResets。
         planUsageResets: z.boolean().optional(),
+        // COMPAT(readCliSignIns): added in v0.17.0, remove gate after 2027-04-25.
+        // 任务 10-16-credential-switch-risk-notes：daemon 配置的 readCliSignIns（主机设置「隐私」的「读取 CLI 登录凭证」），
+        // 关着时套餐用量来源都不运行，usage.list_reports.response 带 cliSignInsOff。
+        readCliSignIns: z.boolean().optional(),
         // COMPAT(gatewayLedger): added in v0.17.0, remove gate after 2027-04-23.
         // 任务 10-16-gateway-ledger-usage：中转站记账并与 CLI 会话记录合并；usage.report.get 的 filters.endpoints
         // 与报告的 endpoints（按接口分，含「官方」）；usage.requests.list（请求列表）与 usage.requests.export（导出 CSV）；
@@ -6932,7 +6941,12 @@ export const UsageListReportsUpdateMessageSchema = z.object({
 });
 export const UsageListReportsResponseMessageSchema = z.object({
   type: z.literal("usage.list_reports.response"),
-  payload: z.object({ requestId: z.string(), error: z.string().nullable() }),
+  payload: z.object({
+    requestId: z.string(),
+    error: z.string().nullable(),
+    // 列表是空的，因为「读取 CLI 登录凭证」关着；开着时不发。
+    cliSignInsOff: z.boolean().optional(),
+  }),
 });
 
 const AgentSlashCommandSchema = z.object({

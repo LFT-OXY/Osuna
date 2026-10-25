@@ -2547,6 +2547,7 @@ export const zhCN: TranslationResources = {
         info: "Osuna 只读这台主机上 CC Switch、Claude Code、Codex、Alma 和 OpenCode 的设置，不改动它们。key 留在主机上，只添加你选中的条目。",
         reading: "正在读取别的软件…",
         scanFailed: "读取别的软件失败：{{message}}",
+        openCodeNotRead: "已关闭读取 CLI 登录凭证，OpenCode 没读",
         retry: "重试",
         selectAll: "全选",
         selectAllLabel: "选中 {{app}} 里的全部条目",
@@ -2600,6 +2601,7 @@ export const zhCN: TranslationResources = {
         errors: {
           gone: "扫描结果已经过时，Osuna 重新扫描了一遍。请检查选择后再导入。",
           failed: "Osuna 没能保存它（{{reason}}）",
+          cliSignInsOff: "已关闭读取 CLI 登录凭证，OpenCode 的条目没导入",
           cannotReplace: "「{{name}}」没有和你已有的接口重名，请改为两家都留。",
         },
       },
@@ -3968,6 +3970,24 @@ export const zhCN: TranslationResources = {
           workspaceName: "my-workspace",
         },
       },
+      privacy: {
+        title: "隐私",
+        readCliSignIns: {
+          title: "读取 CLI 登录凭证",
+          hint: "让 Osuna 读取各 CLI 自己保存的登录（登录文件、钥匙串），用来显示套餐用量。关掉后 Osuna 不读这些，套餐用量不显示；CLI 自己照常用自己的登录，第三方接口不受影响。插件里除了套餐用量以外的代码，这个开关管不到。",
+          saveFailed: "没能更改「读取 CLI 登录凭证」。",
+          saveFailedReason: "没能更改「读取 CLI 登录凭证」：{{reason}}",
+          forcedOffHint: "已由环境变量 PASEO_NO_CLI_SIGN_INS 关闭",
+          turnOff: {
+            title: "关闭读取 CLI 登录凭证？",
+            planUsageStops: "{{accounts}} 的套餐用量会停止显示，直到重新打开。",
+            allPlanUsageStops: "所有套餐用量都不会显示，直到重新打开。",
+            apiEndpointsKeepWorking: "第三方接口照常工作。",
+            confirm: "关闭",
+            listSeparator: "、",
+          },
+        },
+      },
       notFound: "主机未找到",
       badges: {
         relay: "中继",
@@ -4329,6 +4349,13 @@ export const zhCN: TranslationResources = {
       },
       addErrorTitle: "无法添加提供方",
       startErrorTitle: "{{name}} 无法启动",
+      banRisk: {
+        title: "{{name}} 账号可能被封禁",
+        antigravity: {
+          body: "Google 的 Antigravity 常见问题写明：把 Antigravity CLI（agy）包进第三方应用使用，不在消费者套餐的支持范围内；用第三方软件访问 Antigravity 违反其服务条款，可能导致账号被暂停或终止。Osuna 正是通过 agy 驱动 Antigravity 的。2026 年 2 月那一轮封号还连带封了 Gemini CLI 和 Gemini Code Assist。请用丢了也不心疼的账号。",
+          termsLink: "Antigravity 常见问题",
+        },
+      },
       actions: {
         menu: "{{name}} 操作",
         remove: "移除提供方",
@@ -4777,6 +4804,7 @@ export const zhCN: TranslationResources = {
       cell: "{{day}} · {{tokens}} token",
     },
     planUsage: {
+      accountName: "{{source}}（{{account}}）",
       apiEndpointsOnNote: "已启用第三方接口，此额度不代表实际消耗。",
       title: "套餐用量",
       options: "套餐用量选项",
@@ -4802,6 +4830,8 @@ export const zhCN: TranslationResources = {
       refreshing: "刷新中…",
       loading: "正在加载套餐用量…",
       empty: "暂无套餐用量数据",
+      cliSignInsOff: "已关闭读取 CLI 登录凭证，套餐用量不显示",
+      openPrivacySettings: "打开设置",
       errorTitle: "无法加载套餐用量",
       hostUnavailable: "连接到这台主机后可查看套餐用量",
       clientUnavailable: "主机连接尚未就绪",

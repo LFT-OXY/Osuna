@@ -3,6 +3,7 @@ import { i18n } from "@/i18n/i18next";
 import {
   displayPercent,
   formatUsageFreshness,
+  planUsageAccountNames,
   resolveAgentUsageView,
   replaceReport,
   resolveUsageRefresh,
@@ -77,6 +78,32 @@ describe("resolveUsageView", () => {
         query: { data: undefined, error: new Error("boom"), isFetching: false },
       }),
     ).toEqual({ kind: "error", message: "boom" });
+  });
+
+  it("says Read CLI sign-ins is off when the host answered an empty list for that reason", () => {
+    const base = { hostLabel: "Laptop", isConnected: true, supportsUsage: true };
+    expect(
+      resolveUsageView({
+        ...base,
+        query: { data: [], error: null, isFetching: false, cliSignInsOff: true },
+      }),
+    ).toEqual({ kind: "cliSignInsOff" });
+    // 没有这个字段（旧 daemon）时照旧是空列表。
+    expect(
+      resolveUsageView({ ...base, query: { data: [], error: null, isFetching: false } }),
+    ).toEqual({ kind: "ready", reports: [], isRefreshing: false });
+  });
+
+  it("keeps showing reports that stream in while the off answer is still the last one", () => {
+    const reports = [entry({})];
+    expect(
+      resolveUsageView({
+        hostLabel: "Laptop",
+        isConnected: true,
+        supportsUsage: true,
+        query: { data: reports, error: null, isFetching: true, cliSignInsOff: true },
+      }),
+    ).toEqual({ kind: "ready", reports, isRefreshing: true });
   });
 });
 
@@ -320,5 +347,62 @@ describe("resolveAgentUsageView", () => {
         query: { data: [report], error: new Error("Unknown agent"), isFetching: false },
       }),
     ).toEqual({ kind: "error", message: "Unable to load plan usage: Unknown agent" });
+  });
+});
+
+describe("planUsageAccountNames", () => {
+  function account(input: { id: string; sourceLabel: string; label?: string }): UsageReportEntry {
+    return {
+      ...entry({ sourceId: input.id }),
+      id: input.id,
+      sourceLabel: input.sourceLabel,
+      account: input.label ? { label: input.label } : {},
+    };
+  }
+
+  it("names each account by its source and account, in report order", () => {
+    expect(
+      planUsageAccountNames([
+        account({ id: "codex:work", sourceLabel: "Codex", label: "c@d.com" }),
+        account({ id: "claude:default", sourceLabel: "Claude", label: "a@b.com" }),
+      ]),
+    ).toEqual(["Codex (c@d.com)", "Claude (a@b.com)"]);
+  });
+
+  it("names an account without a label by its source alone", () => {
+    expect(
+      planUsageAccountNames([
+        account({ id: "zai:default", sourceLabel: "Z.AI" }),
+        account({ id: "claude:default", sourceLabel: "Claude", label: "a@b.com" }),
+      ]),
+    ).toEqual(["Z.AI", "Claude (a@b.com)"]);
+  });
+
+  it("names an account once when two reports show it", () => {
+    expect(
+      planUsageAccountNames([
+        account({ id: "claude:default", sourceLabel: "Claude", label: "a@b.com" }),
+        account({ id: "zai:default", sourceLabel: "Z.AI" }),
+        account({ id: "claude:keychain", sourceLabel: "Claude", label: "a@b.com" }),
+        account({ id: "zai:env", sourceLabel: "Z.AI" }),
+      ]),
+    ).toEqual(["Claude (a@b.com)", "Z.AI"]);
+  });
+
+  it("names no one without reports", () => {
+    expect(planUsageAccountNames([])).toEqual([]);
+  });
+
+  it("writes the account in the app's language", async () => {
+    await i18n.changeLanguage("zh-CN");
+    try {
+      expect(
+        planUsageAccountNames([
+          account({ id: "claude:default", sourceLabel: "Claude", label: "a@b.com" }),
+        ]),
+      ).toEqual(["Claude（a@b.com）"]);
+    } finally {
+      await i18n.changeLanguage("en");
+    }
   });
 });

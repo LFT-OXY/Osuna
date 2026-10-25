@@ -6,6 +6,7 @@ import pino from "pino";
 import { afterEach, expect, it } from "vitest";
 import { DaemonConfigStore } from "../daemon-config-store.js";
 import { runGitCommand } from "../../utils/run-git-command.js";
+import { CliSignInAccess } from "../cli-sign-ins.js";
 import { PluginService } from "./index.js";
 import { ManagedPluginSources } from "./managed-source.js";
 
@@ -46,6 +47,7 @@ async function host(version = "0.8.0", pluginPath?: string) {
       : {},
   });
   const service = new PluginService(pino({ level: "silent" }), store, version, {
+    cliSignIns: new CliSignInAccess(store),
     managedSources: new ManagedPluginSources(home),
   });
   services.push(service);

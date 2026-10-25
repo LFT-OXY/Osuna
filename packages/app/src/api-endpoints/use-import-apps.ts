@@ -10,6 +10,8 @@ import type {
 import { DaemonConnectionError, DaemonRpcError } from "@getpaseo/client/internal/daemon-client";
 import { useToast } from "@/contexts/toast-context";
 import { useFetchQuery } from "@/data/query";
+import { selectHostFeature } from "@/runtime/host-features";
+import { useSessionStore } from "@/stores/session-store";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { toErrorMessage } from "@/utils/error-messages";
 import { importDiscoveryQueryKey } from "./use-import-discovery";
@@ -18,7 +20,13 @@ export type ImportScanState =
   | { status: "loading" }
   | { status: "error"; message: string }
   // updatedAt：这份扫描结果的时刻，变了就重新定默认选择。
-  | { status: "ready"; sources: ApiEndpointImportSource[]; updatedAt: number };
+  // openCodeSkipped：「读取 CLI 登录凭证」关着，主机没读 OpenCode。
+  | {
+      status: "ready";
+      sources: ApiEndpointImportSource[];
+      openCodeSkipped: boolean;
+      updatedAt: number;
+    };
 
 // failedFingerprint：出错的那一条（窗口在它下面说原因）；整个请求失败时为 null。
 export type ImportResult =
@@ -53,7 +61,10 @@ export function useImportApps({ serverId }: { serverId: string }): {
       if (!client) throw new Error(t("workspace.terminal.hostDisconnected"));
       const response = await client.apiEndpointImportScan({ includeOpenCode: true });
       if (response.error) throw new Error(importErrorText(t, response.error));
-      return response.sources;
+      // COMPAT(readCliSignIns): added in v0.17.0, remove gate after 2027-04-25.
+      const knowsSwitch = selectHostFeature(useSessionStore.getState(), serverId, "readCliSignIns");
+      const openCodeSkipped = knowsSwitch && response.cliSignInsOff === true;
+      return { sources: response.sources, openCodeSkipped };
     },
   });
   const retryScan = useCallback(() => void query.refetch(), [query]);
@@ -103,7 +114,7 @@ export function useImportApps({ serverId }: { serverId: string }): {
     [client, query, queryClient, serverId, t, toast],
   );
   let scan: ImportScanState = { status: "loading" };
-  if (query.data) scan = { status: "ready", sources: query.data, updatedAt: query.dataUpdatedAt };
+  if (query.data) scan = { status: "ready", ...query.data, updatedAt: query.dataUpdatedAt };
   else if (query.error) scan = { status: "error", message: query.error.message };
   return { scan, retryScan, importPicked };
 }
@@ -117,6 +128,8 @@ function importErrorText(t: TFunction, error: ApiEndpointError): string {
       return t("settings.apiEndpoints.import.errors.failed", {
         reason: error.params?.reason ?? "",
       });
+    case "import_cli_sign_ins_off":
+      return t("settings.apiEndpoints.import.errors.cliSignInsOff");
     case "import_cannot_replace":
       return t("settings.apiEndpoints.import.errors.cannotReplace", {
         name: error.params?.name ?? "",

@@ -1823,6 +1823,8 @@ export const ApiEndpointImportScanResponseSchema = z.object({
     requestId: z.string(),
     sources: z.array(ApiEndpointImportSourceSchema),
     error: ApiEndpointErrorSchema.nullable(),
+    // 要了 OpenCode，但「读取 CLI 登录凭证」关着，没读它；开着或没要时不发。
+    cliSignInsOff: z.boolean().optional(),
   }),
 });
 export type ApiEndpointImportScanResponse = z.infer<typeof ApiEndpointImportScanResponseSchema>;

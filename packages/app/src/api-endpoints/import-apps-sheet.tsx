@@ -169,17 +169,28 @@ export function ImportAppsSheet({
         </View>
       ) : null}
       {sources ? (
-        <View style={styles.body}>
-          {sources.map((source) => (
-            <ImportSourceSection
-              key={source.id}
-              source={source}
-              picks={picks}
-              failure={failure}
-              onPicks={setPicks}
-              onPick={updatePick}
-            />
-          ))}
+        <View style={styles.listed}>
+          {scan.status === "ready" && scan.openCodeSkipped ? (
+            <Text
+              variant="caption"
+              color="foregroundMuted"
+              testID="api-endpoint-import-opencode-not-read"
+            >
+              {t("settings.apiEndpoints.import.openCodeNotRead")}
+            </Text>
+          ) : null}
+          <View style={styles.body}>
+            {sources.map((source) => (
+              <ImportSourceSection
+                key={source.id}
+                source={source}
+                picks={picks}
+                failure={failure}
+                onPicks={setPicks}
+                onPick={updatePick}
+              />
+            ))}
+          </View>
         </View>
       ) : null}
     </AdaptiveModalSheet>
@@ -528,6 +539,10 @@ const TRAILING_SEPARATOR = "\u00A0·";
 const SNAP_POINTS = ["90%"];
 
 const styles = StyleSheet.create((theme) => ({
+  // 关着时的说明管整份来源列表：离列表近，比各来源之间的间距小。
+  listed: {
+    gap: theme.spacing[4],
+  },
   body: {
     gap: theme.spacing[6],
   },

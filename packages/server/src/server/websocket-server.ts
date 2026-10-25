@@ -1886,6 +1886,8 @@ export class VoiceAssistantWebSocketServer {
         ...(this.apiEndpointService ? { apiEndpointBalance: true } : {}),
         // COMPAT(planUsageResets): added in v0.17.0, remove gate after 2027-04-22.
         ...(this.pluginRuntime ? { planUsageResets: true } : {}),
+        // COMPAT(readCliSignIns): added in v0.17.0, remove gate after 2027-04-25.
+        readCliSignIns: true,
         // COMPAT(gatewayLedger): added in v0.17.0, remove gate after 2027-04-23.
         ...(this.usageService && this.apiEndpointService ? { gatewayLedger: true } : {}),
         // COMPAT(apiEndpointPi): added in v0.17.0, remove gate after 2027-04-24.

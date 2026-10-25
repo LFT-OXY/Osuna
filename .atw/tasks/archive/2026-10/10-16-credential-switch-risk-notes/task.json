@@ -3,7 +3,7 @@
   "name": "credential-switch-risk-notes",
   "title": "登录凭证开关与风险提示",
   "description": "加「不读登录凭证」总开关，关后不读任何 CLI 登录；Antigravity 提供方页加封号风险提示",
-  "status": "discover",
+  "status": "completed",
   "dev_type": null,
   "scope": null,
   "package": "server",
@@ -11,8 +11,8 @@
   "creator": "oxy",
   "assignee": "oxy",
   "createdAt": "2026-10-16",
-  "completedAt": null,
-  "branch": null,
+  "completedAt": "2026-10-25",
+  "branch": "complete-magpie-osuna-gaps-subtask-8-login-credential-switch",
   "base_branch": "main",
   "worktree_path": null,
   "commit": null,
@@ -22,5 +22,7 @@
   "parent": "10-16-magpie-osuna-gaps",
   "relatedFiles": [],
   "notes": "",
-  "meta": {}
+  "meta": {
+    "implementation_base_sha": "822d32be928ca028057dcdb1654a9339fc59fd65"
+  }
 }

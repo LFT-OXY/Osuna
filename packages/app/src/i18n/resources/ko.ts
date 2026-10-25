@@ -2534,6 +2534,7 @@ export const ko: TranslationResources = {
         info: "Osuna는 이 호스트에 있는 CC Switch, Claude Code, Codex, Alma, OpenCode의 설정을 읽기만 하고 아무것도 바꾸지 않습니다. 키는 호스트에 남고, 선택한 항목만 추가됩니다.",
         reading: "다른 앱을 읽는 중…",
         scanFailed: "다른 앱을 읽지 못했습니다: {{message}}",
+        openCodeNotRead: "'CLI 로그인 정보 읽기'가 꺼져 있어 OpenCode는 읽지 않았습니다",
         retry: "다시 시도",
         selectAll: "전체",
         selectAllLabel: "{{app}}의 모든 항목 선택",
@@ -2589,6 +2590,7 @@ export const ko: TranslationResources = {
         errors: {
           gone: "검색 결과가 오래되어 Osuna가 다시 검색했습니다. 선택을 확인하고 다시 가져오세요.",
           failed: "Osuna가 저장하지 못했습니다({{reason}})",
+          cliSignInsOff: "'CLI 로그인 정보 읽기'가 꺼져 있어 OpenCode 항목은 가져오지 않았습니다",
           cannotReplace:
             "{{name}}은(는) 기존 엔드포인트와 이름이 겹치지 않습니다. 둘 다 유지를 선택하세요.",
         },
@@ -4009,6 +4011,24 @@ export const ko: TranslationResources = {
           workspaceName: "내-워크스페이스",
         },
       },
+      privacy: {
+        title: "개인정보",
+        readCliSignIns: {
+          title: "CLI 로그인 정보 읽기",
+          hint: "Osuna가 각 CLI가 저장한 로그인 정보(로그인 파일, 키체인)를 읽어 요금제 사용량을 표시합니다. 끄면 Osuna는 이를 읽지 않으며 요금제 사용량이 표시되지 않습니다. CLI는 계속 자체 로그인을 사용하고 API 엔드포인트에는 영향이 없습니다. 플러그인 중 요금제 사용량 외의 코드는 이 스위치가 막지 않습니다.",
+          saveFailed: "'CLI 로그인 정보 읽기'를 변경하지 못했습니다.",
+          saveFailedReason: "'CLI 로그인 정보 읽기'를 변경하지 못했습니다: {{reason}}",
+          forcedOffHint: "환경 변수 PASEO_NO_CLI_SIGN_INS로 꺼져 있습니다",
+          turnOff: {
+            title: "'CLI 로그인 정보 읽기'를 끌까요?",
+            planUsageStops: "다시 켤 때까지 {{accounts}}의 요금제 사용량이 표시되지 않습니다.",
+            allPlanUsageStops: "다시 켤 때까지 요금제 사용량이 전혀 표시되지 않습니다.",
+            apiEndpointsKeepWorking: "API 엔드포인트는 계속 작동합니다.",
+            confirm: "끄기",
+            listSeparator: ", ",
+          },
+        },
+      },
       notFound: "호스트를 찾을 수 없습니다",
       badges: {
         relay: "릴레이",
@@ -4384,6 +4404,13 @@ export const ko: TranslationResources = {
       },
       addErrorTitle: "프로바이더를 추가할 수 없습니다",
       startErrorTitle: "{{name}}을(를) 시작할 수 없습니다",
+      banRisk: {
+        title: "{{name}} 계정이 정지될 수 있습니다",
+        antigravity: {
+          body: "Google의 Antigravity FAQ에는 Antigravity CLI(agy)를 서드파티 앱에 넣어 사용하는 것은 소비자 요금제에서 지원되지 않는다고 적혀 있습니다. 또한 서드파티 소프트웨어로 Antigravity에 접근하는 것은 서비스 약관 위반이며 계정 정지 또는 해지로 이어질 수 있다고 적혀 있습니다. Osuna는 agy를 통해 Antigravity를 구동합니다. 2026년 2월의 정지 조치 때는 Gemini CLI와 Gemini Code Assist도 함께 차단되었습니다. 잃어도 괜찮은 계정을 사용하세요.",
+          termsLink: "Antigravity FAQ",
+        },
+      },
       actions: {
         menu: "{{name}} 작업",
         remove: "프로바이더 제거",
@@ -4835,6 +4862,7 @@ export const ko: TranslationResources = {
       cell: "{{day}} · {{tokens}} 토큰",
     },
     planUsage: {
+      accountName: "{{source}} ({{account}})",
       apiEndpointsOnNote:
         "API 엔드포인트를 사용 중입니다. 이 한도는 실제 사용량을 나타내지 않습니다.",
       title: "플랜 사용량",
@@ -4861,6 +4889,8 @@ export const ko: TranslationResources = {
       refreshing: "새로고침 중...",
       loading: "플랜 사용량 불러오는 중...",
       empty: "플랜 사용량 데이터 없음",
+      cliSignInsOff: "'CLI 로그인 정보 읽기'가 꺼져 있어 플랜 사용량이 표시되지 않습니다",
+      openPrivacySettings: "설정 열기",
       errorTitle: "플랜 사용량을 불러올 수 없습니다",
       hostUnavailable: "이 호스트에 연결하면 플랜 사용량을 볼 수 있습니다",
       clientUnavailable: "호스트 연결이 준비되지 않았습니다",

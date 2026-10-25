@@ -2584,6 +2584,7 @@ export const en = {
         info: "Osuna reads the settings of CC Switch, Claude Code, Codex, Alma and OpenCode on this host and changes nothing in them. Keys stay on the host; only the entries you pick are added.",
         reading: "Reading other apps…",
         scanFailed: "Couldn't read other apps: {{message}}",
+        openCodeNotRead: "“Read CLI sign-ins” is off, so OpenCode wasn't read",
         retry: "Try again",
         selectAll: "All",
         selectAllLabel: "Pick every entry from {{app}}",
@@ -2639,6 +2640,8 @@ export const en = {
         errors: {
           gone: "The scan was out of date, so Osuna scanned again. Check the picks and import again.",
           failed: "Osuna couldn't save it ({{reason}})",
+          cliSignInsOff:
+            "“Read CLI sign-ins” is off, so the entries from OpenCode weren't imported",
           cannotReplace:
             "{{name}} doesn't share a name with an endpoint you have; keep both instead.",
         },
@@ -4111,6 +4114,25 @@ export const en = {
           workspaceName: "my-workspace",
         },
       },
+      privacy: {
+        title: "Privacy",
+        readCliSignIns: {
+          title: "Read CLI sign-ins",
+          hint: "Lets Osuna read the logins each CLI keeps for itself (login files, the Keychain) to show plan usage. Off, Osuna doesn't read them and plan usage doesn't show; the CLIs keep using their own logins, and API endpoints aren't affected. Code in plugins other than plan usage isn't covered by this switch.",
+          saveFailed: "Couldn't change Read CLI sign-ins.",
+          saveFailedReason: "Couldn't change Read CLI sign-ins: {{reason}}",
+          forcedOffHint: "Turned off by the PASEO_NO_CLI_SIGN_INS environment variable",
+          turnOff: {
+            title: "Turn off Read CLI sign-ins?",
+            planUsageStops:
+              "Plan usage for {{accounts}} will stop showing until you turn this back on.",
+            allPlanUsageStops: "No plan usage will show until you turn this back on.",
+            apiEndpointsKeepWorking: "API endpoints keep working.",
+            confirm: "Turn off",
+            listSeparator: ", ",
+          },
+        },
+      },
       notFound: "Host not found",
       badges: {
         relay: "Relay",
@@ -4485,6 +4507,13 @@ export const en = {
       },
       addErrorTitle: "Unable to add provider",
       startErrorTitle: "{{name}} can't start",
+      banRisk: {
+        title: "{{name}} account may be suspended",
+        antigravity: {
+          body: "Google's Antigravity FAQ says that wrapping the Antigravity CLI (agy) inside third-party applications is not supported under consumer plans. It also says that using third-party software to access Antigravity violates its Terms of Service and can get the account suspended or terminated. Osuna drives Antigravity through agy. The February 2026 wave of bans also blocked Gemini CLI and Gemini Code Assist. Use an account you can afford to lose.",
+          termsLink: "Antigravity FAQ",
+        },
+      },
       actions: {
         menu: "{{name}} actions",
         remove: "Remove provider",
@@ -4938,6 +4967,7 @@ export const en = {
       cell: "{{day}} · {{tokens}} tokens",
     },
     planUsage: {
+      accountName: "{{source}} ({{account}})",
       apiEndpointsOnNote: "Using API endpoints. This quota doesn't reflect actual usage.",
       title: "Plan usage",
       options: "Plan usage options",
@@ -4963,6 +4993,8 @@ export const en = {
       refreshing: "Refreshing...",
       loading: "Loading plan usage...",
       empty: "No plan usage data",
+      cliSignInsOff: "“Read CLI sign-ins” is off, so plan usage doesn't show",
+      openPrivacySettings: "Open settings",
       errorTitle: "Unable to load plan usage",
       hostUnavailable: "Connect to this host to see plan usage",
       clientUnavailable: "Host connection is not ready",

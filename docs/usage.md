@@ -7,7 +7,10 @@ merged so a call counts once ([The gateway ledger](#the-gateway-ledger)).
 Nothing is sent anywhere; the one exception is the price table, below.
 
 Subscription limits are a different thing, **Plan usage**. Its data comes from
-[usage sources](plugins.md#usage-sources). Read
+[usage sources](plugins.md#usage-sources), which read the logins the CLIs keep and
+take them to each vendor. The host's **Read CLI sign-ins** switch governs those
+requests: off, no usage source runs and none of them is sent. `PASEO_NO_CLI_SIGN_INS`
+at launch holds it off for that run. Read
 [ADR 0006](adr/0006-usage-in-code-is-upstream-plan-usage.md) before you look for
 either one's code.
 
@@ -339,7 +342,8 @@ something you asked for, such as the CLI update check or an endpoint's tests;
 follow from a page you have open, such as the vendor status pages read while the
 API endpoints or usage page is open, or an endpoint's balance; or follow from a choice or switch you turned on: the
 CNY currency, the API endpoint checks and the gateway's calls to endpoints, all below. Traffic the CLIs send
-through the gateway is theirs, not the daemon's.
+through the gateway is theirs, not the daemon's. Plan usage reads, which carry a
+CLI's own login, are sent only while **Read CLI sign-ins** is on.
 
 | File                                           | Fetched when                                      | Used for                                                                                                                                                                                                                                                                                                                        |
 | ---------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

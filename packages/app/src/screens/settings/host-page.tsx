@@ -53,6 +53,7 @@ import {
 import { ProvidersPage } from "@/screens/settings/providers-page";
 import { PriceTableSection } from "@/price-table/price-table-section";
 import { HostAppearanceSection } from "@/screens/settings/host-appearance-section";
+import { HostPrivacySection } from "@/screens/settings/host-privacy-section";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { useSessionStore } from "@/stores/session-store";
 import { settingsStyles } from "@/styles/settings";
@@ -399,6 +400,8 @@ export function HostSettingsPage({
       <HostConnectionError serverId={serverId} />
 
       <HostAppearanceSection host={host} />
+
+      <HostPrivacySection serverId={serverId} />
 
       {isLocalDaemon ? <LocalDaemonSection /> : null}
 

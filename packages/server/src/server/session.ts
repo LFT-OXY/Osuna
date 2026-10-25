@@ -87,7 +87,8 @@ import {
   createWorkspaceScriptsService,
   type WorkspaceScriptsService,
 } from "./session/workspace-scripts/workspace-scripts-service.js";
-import type { DaemonConfigStore } from "./daemon-config-store.js";
+import type { DaemonConfigStore, MutableDaemonConfig } from "./daemon-config-store.js";
+import { CliSignInsForcedOffError } from "./cli-sign-ins.js";
 import { loadPersistedConfig } from "./persisted-config.js";
 import { releaseWorkspaceServicePortPlan } from "./workspace-service-port-registry.js";
 import { getErrorMessage, getErrorMessageOr } from "@getpaseo/protocol/error-utils";
@@ -550,6 +551,7 @@ export interface SessionOptions {
       reportIds?: string[];
     }): Promise<UsageReportEntry[]>;
     listLegacyUsage(): Promise<{ fetchedAt: string; providers: ProviderUsage[] }>;
+    readsCliSignIns(): boolean;
     consumeUsageReset(
       reportId: string,
     ): Promise<import("./plugins/usage-sources/index.js").UsageResetResult>;
@@ -2870,13 +2872,7 @@ export class Session {
         this.daemonSession.handleUpdateRequest(msg);
         return undefined;
       case "set_daemon_config_request":
-        this.emit({
-          type: "set_daemon_config_response",
-          payload: {
-            requestId: msg.requestId,
-            config: this.daemonConfigStore.patch(msg.config),
-          },
-        });
+        this.handleSetDaemonConfigRequest(msg);
         return undefined;
       case "read_project_config_request":
         return this.projectConfigSession.handleReadProjectConfigRequest(msg);
@@ -2885,6 +2881,32 @@ export class Session {
       default:
         return undefined;
     }
+  }
+
+  private handleSetDaemonConfigRequest(
+    msg: Extract<SessionInboundMessage, { type: "set_daemon_config_request" }>,
+  ): void {
+    let config: MutableDaemonConfig;
+    try {
+      config = this.daemonConfigStore.patch(msg.config);
+    } catch (error) {
+      if (!(error instanceof CliSignInsForcedOffError)) throw error;
+      this.sessionLogger.warn({ err: error }, "Refused daemon config change");
+      this.emit({
+        type: "rpc_error",
+        payload: {
+          requestId: msg.requestId,
+          requestType: msg.type,
+          error: error.userMessage,
+          code: "cli_sign_ins_forced_off",
+        },
+      });
+      return;
+    }
+    this.emit({
+      type: "set_daemon_config_response",
+      payload: { requestId: msg.requestId, config },
+    });
   }
 
   // eslint-disable-next-line complexity

@@ -14,6 +14,7 @@ import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { usePlanUsageHosts } from "@/plan-usage/use-hosts";
 import { UsageCard as PlanUsageReportCard } from "@/usage/card";
 import { usageCopy } from "@/usage/copy";
+import { CliSignInsOffNotice } from "@/usage/cli-sign-ins-off-notice";
 import { useUsageDisplay } from "@/usage/display";
 import { useUsageInSidebar } from "@/usage/in-sidebar";
 import type { UsageReportEntry, UsageView } from "@/usage/types";
@@ -100,6 +101,10 @@ function PlanUsageBody({
         </Button>
       </Alert>
     );
+  }
+
+  if (view.kind === "cliSignInsOff") {
+    return <CliSignInsOffNotice serverId={serverId} />;
   }
 
   if (view.reports.length === 0) {

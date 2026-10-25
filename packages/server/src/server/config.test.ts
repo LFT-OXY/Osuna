@@ -42,6 +42,35 @@ describe("server config", () => {
     expect(unset.usage?.pricing?.autoUpdate).toBe(true);
   });
 
+  test("PASEO_NO_CLI_SIGN_INS holds Read CLI sign-ins off for one run and leaves the stored value", async () => {
+    const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-config-no-cli-sign-ins-"));
+    roots.push(paseoHome);
+    await writeFile(path.join(paseoHome, "config.json"), JSON.stringify({ readCliSignIns: true }));
+
+    for (const value of ["1", "true", "yes", "off", " anything "]) {
+      const config = loadConfig(paseoHome, { env: { PASEO_NO_CLI_SIGN_INS: value } });
+      expect({ value, forcedOff: config.readCliSignInsForcedOff }).toEqual({
+        value,
+        forcedOff: true,
+      });
+      expect(config.readCliSignIns).toBe(true);
+      expect(config.configReload?.overrideControlledPaths).toEqual(["readCliSignIns"]);
+    }
+    for (const value of ["", "  ", "0", "false", " FALSE "]) {
+      const config = loadConfig(paseoHome, { env: { PASEO_NO_CLI_SIGN_INS: value } });
+      expect({ value, forcedOff: config.readCliSignInsForcedOff }).toEqual({
+        value,
+        forcedOff: false,
+      });
+    }
+    // 去掉环境变量重启：生效值回到存的值。
+    const restarted = loadConfig(paseoHome, { env: {} });
+    expect(restarted.readCliSignInsForcedOff).toBe(false);
+    expect(restarted.readCliSignIns).toBe(true);
+    expect(restarted.configReload?.overrideControlledPaths).toEqual([]);
+    expect(loadPersistedConfig(paseoHome).readCliSignIns).toBe(true);
+  });
+
   test("loads the provider catalog refresh timeout", async () => {
     const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-config-provider-timeout-"));
     roots.push(paseoHome);

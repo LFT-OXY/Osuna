@@ -2573,6 +2573,8 @@ export const es: TranslationResources = {
         info: "Osuna lee la configuración de CC Switch, Claude Code, Codex, Alma y OpenCode en este host y no cambia nada en ellas. Las claves se quedan en el host; solo se añaden las entradas que elijas.",
         reading: "Leyendo otras apps…",
         scanFailed: "No se pudieron leer otras apps: {{message}}",
+        openCodeNotRead:
+          "«Leer inicios de sesión de las CLI» está desactivado, así que OpenCode no se leyó",
         retry: "Reintentar",
         selectAll: "Todo",
         selectAllLabel: "Elegir todas las entradas de {{app}}",
@@ -2628,6 +2630,8 @@ export const es: TranslationResources = {
         errors: {
           gone: "El escaneo estaba desactualizado y Osuna volvió a escanear. Revisa la selección e importa de nuevo.",
           failed: "Osuna no pudo guardarlo ({{reason}})",
+          cliSignInsOff:
+            "«Leer inicios de sesión de las CLI» está desactivado, así que las entradas de OpenCode no se importaron",
           cannotReplace:
             "{{name}} no comparte nombre con ningún endpoint tuyo; conserva ambos en su lugar.",
         },
@@ -4071,6 +4075,25 @@ export const es: TranslationResources = {
           workspaceName: "my-workspace",
         },
       },
+      privacy: {
+        title: "Privacidad",
+        readCliSignIns: {
+          title: "Leer inicios de sesión de las CLI",
+          hint: "Permite que Osuna lea los inicios de sesión que cada CLI guarda (archivos de inicio de sesión, el llavero) para mostrar el uso del plan. Desactivado, Osuna no los lee y el uso del plan no se muestra; las CLI siguen usando sus propios inicios de sesión y los endpoints de API no se ven afectados. Este interruptor no cubre el código de los plugins que no sea el uso del plan.",
+          saveFailed: "No se pudo cambiar Leer inicios de sesión de las CLI.",
+          saveFailedReason: "No se pudo cambiar Leer inicios de sesión de las CLI: {{reason}}",
+          forcedOffHint: "Desactivado por la variable de entorno PASEO_NO_CLI_SIGN_INS",
+          turnOff: {
+            title: "¿Desactivar Leer inicios de sesión de las CLI?",
+            planUsageStops:
+              "El uso del plan de {{accounts}} dejará de mostrarse hasta que lo vuelvas a activar.",
+            allPlanUsageStops: "No se mostrará ningún uso del plan hasta que lo vuelvas a activar.",
+            apiEndpointsKeepWorking: "Los endpoints de API siguen funcionando.",
+            confirm: "Desactivar",
+            listSeparator: ", ",
+          },
+        },
+      },
       notFound: "Hostno encontrado",
       badges: {
         relay: "Relé",
@@ -4454,6 +4477,13 @@ export const es: TranslationResources = {
       },
       addErrorTitle: "Unable to add provider",
       startErrorTitle: "{{name}} no puede iniciarse",
+      banRisk: {
+        title: "La cuenta de {{name}} puede ser suspendida",
+        antigravity: {
+          body: "Las preguntas frecuentes de Antigravity de Google indican que integrar la CLI de Antigravity (agy) en aplicaciones de terceros no está admitido en los planes de consumo. También indican que usar software de terceros para acceder a Antigravity infringe sus Condiciones del Servicio y puede llevar a la suspensión o cancelación de la cuenta. Osuna controla Antigravity a través de agy. La ola de suspensiones de febrero de 2026 también bloqueó Gemini CLI y Gemini Code Assist. Usa una cuenta que puedas permitirte perder.",
+          termsLink: "Preguntas frecuentes de Antigravity",
+        },
+      },
       actions: {
         menu: "{{name}} actions",
         remove: "Remove provider",
@@ -4908,6 +4938,7 @@ export const es: TranslationResources = {
       cell: "{{day}} · {{tokens}} tokens",
     },
     planUsage: {
+      accountName: "{{source}} ({{account}})",
       apiEndpointsOnNote: "Usando endpoints de API. Esta cuota no refleja el consumo real.",
       title: "Uso del plan",
       options: "Opciones de uso del plan",
@@ -4933,6 +4964,9 @@ export const es: TranslationResources = {
       refreshing: "Actualizando...",
       loading: "Cargando el uso del plan...",
       empty: "Sin datos de uso del plan",
+      cliSignInsOff:
+        "«Leer inicios de sesión de las CLI» está desactivado, así que el uso del plan no se muestra",
+      openPrivacySettings: "Abrir ajustes",
       errorTitle: "No se pudo cargar el uso del plan",
       hostUnavailable: "Conéctate a este host para ver el uso del plan",
       clientUnavailable: "La conexión con el host no está lista",

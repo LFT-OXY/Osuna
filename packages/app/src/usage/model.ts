@@ -30,6 +30,18 @@ export function usageWindowRowLabel(input: {
   return `${input.pinLabel}, ${summary}`;
 }
 
+/**
+ * The accounts these reports show plan usage for, by name, in report order and each once: the
+ * source and the account ("Claude (a@b.com)"), or the source alone when it names no account.
+ */
+export function planUsageAccountNames(reports: readonly UsageReportEntry[]): string[] {
+  const names = reports.map((entry) => {
+    const account = entry.account.label;
+    return account ? usageCopy.accountName(entry.sourceLabel, account) : entry.sourceLabel;
+  });
+  return [...new Set(names)];
+}
+
 /** When a report was fetched, from its compact relative time: "Updated 3m ago". */
 export function formatUsageFreshness(compactTimeAgo: string): string {
   return usageCopy.updated(usageCopy.ago(compactTimeAgo));
@@ -98,6 +110,8 @@ export interface UsageQueryState {
   data: UsageReportEntry[] | undefined;
   error: unknown;
   isFetching: boolean;
+  /** Osuna：最近一次列表的回答说主机关了「读取 CLI 登录凭证」；旧 daemon 不带。 */
+  cliSignInsOff?: boolean;
 }
 
 export function resolveUsageView(input: {
@@ -112,6 +126,9 @@ export function resolveUsageView(input: {
     return { kind: "unavailable", message: usageCopy.hostUpgradeRequired(hostLabel) };
   }
   if (query?.data) {
+    // 开回来后报告边到边显示，不等列表的回答把标记换掉。
+    const answeredOff = query.cliSignInsOff === true && query.data.length === 0;
+    if (answeredOff) return { kind: "cliSignInsOff" };
     return { kind: "ready", reports: query.data, isRefreshing: query.isFetching };
   }
   if (query?.error) {

@@ -2521,6 +2521,7 @@ export const ar: TranslationResources = {
         info: "يقرأ Osuna إعدادات CC Switch وClaude Code وCodex وAlma وOpenCode على هذا المضيف دون أن يغيّر فيها شيئًا. تبقى المفاتيح على المضيف، ولا يُضاف إلا ما تختاره.",
         reading: "جارٍ قراءة التطبيقات الأخرى…",
         scanFailed: "تعذّرت قراءة التطبيقات الأخرى: {{message}}",
+        openCodeNotRead: "«قراءة تسجيلات دخول CLI» متوقفة، لذلك لم تُقرأ OpenCode",
         retry: "إعادة المحاولة",
         selectAll: "الكل",
         selectAllLabel: "اختيار كل عناصر {{app}}",
@@ -2574,6 +2575,7 @@ export const ar: TranslationResources = {
         errors: {
           gone: "كانت نتائج الفحص قديمة، فأعاد Osuna الفحص. راجع اختياراتك ثم استورد من جديد.",
           failed: "تعذّر على Osuna حفظه ({{reason}})",
+          cliSignInsOff: "«قراءة تسجيلات دخول CLI» متوقفة، لذلك لم تُستورد إدخالات OpenCode",
           cannotReplace: "لا يطابق اسم {{name}} أي نقطة نهاية لديك؛ أبقِ الاثنين بدلًا من ذلك.",
         },
       },
@@ -3970,6 +3972,24 @@ export const ar: TranslationResources = {
           workspaceName: "my-workspace",
         },
       },
+      privacy: {
+        title: "الخصوصية",
+        readCliSignIns: {
+          title: "قراءة تسجيلات دخول CLI",
+          hint: "يسمح لـ Osuna بقراءة تسجيلات الدخول التي يحفظها كل CLI لنفسه (ملفات تسجيل الدخول، سلسلة المفاتيح) لعرض استخدام الخطة. عند إيقافه لا يقرأها Osuna ولا يظهر استخدام الخطة؛ وتواصل أدوات CLI استخدام تسجيلات دخولها، ولا تتأثر نقاط نهاية API. لا يشمل هذا المفتاح شيفرة الإضافات خارج استخدام الخطة.",
+          saveFailed: "تعذّر تغيير قراءة تسجيلات دخول CLI.",
+          saveFailedReason: "تعذّر تغيير قراءة تسجيلات دخول CLI: {{reason}}",
+          forcedOffHint: "أوقفه متغير البيئة PASEO_NO_CLI_SIGN_INS",
+          turnOff: {
+            title: "إيقاف قراءة تسجيلات دخول CLI؟",
+            planUsageStops: "سيتوقف عرض استخدام الخطة لـ {{accounts}} حتى تعيد تشغيله.",
+            allPlanUsageStops: "لن يظهر أي استخدام للخطة حتى تعيد تشغيله.",
+            apiEndpointsKeepWorking: "تواصل نقاط نهاية API العمل.",
+            confirm: "إيقاف",
+            listSeparator: "، ",
+          },
+        },
+      },
       notFound: "لم يتم العثور على Host",
       badges: {
         relay: "تتابع",
@@ -4341,6 +4361,13 @@ export const ar: TranslationResources = {
       },
       addErrorTitle: "Unable to add provider",
       startErrorTitle: "تعذّر تشغيل {{name}}",
+      banRisk: {
+        title: "قد يُعلَّق حساب {{name}}",
+        antigravity: {
+          body: "تذكر الأسئلة الشائعة لـ Antigravity من Google أن تضمين Antigravity CLI (agy) داخل تطبيقات خارجية غير مدعوم في الخطط الاستهلاكية. وتذكر أيضًا أن الوصول إلى Antigravity عبر برامج خارجية يخالف شروط الخدمة وقد يؤدي إلى تعليق الحساب أو إنهائه. يشغّل Osuna منصة Antigravity عبر agy. وقد حظرت موجة التعليق في فبراير 2026 أيضًا Gemini CLI وGemini Code Assist. استخدم حسابًا يمكنك تحمّل خسارته.",
+          termsLink: "الأسئلة الشائعة لـ Antigravity",
+        },
+      },
       actions: {
         menu: "{{name}} actions",
         remove: "Remove provider",
@@ -4793,6 +4820,7 @@ export const ar: TranslationResources = {
       cell: "{{day}} · {{tokens}} رمز",
     },
     planUsage: {
+      accountName: "{{source}} ({{account}})",
       apiEndpointsOnNote: "تستخدم نقاط نهاية API. هذه الحصة لا تعكس الاستهلاك الفعلي.",
       title: "استهلاك الخطة",
       options: "خيارات استهلاك الخطة",
@@ -4818,6 +4846,8 @@ export const ar: TranslationResources = {
       refreshing: "جارٍ التحديث...",
       loading: "جارٍ تحميل استهلاك الخطة...",
       empty: "لا توجد بيانات عن استهلاك الخطة",
+      cliSignInsOff: "«قراءة تسجيلات دخول CLI» متوقفة، لذلك لا يظهر استهلاك الخطة",
+      openPrivacySettings: "فتح الإعدادات",
       errorTitle: "تعذّر تحميل استهلاك الخطة",
       hostUnavailable: "اتصل بهذا المضيف لعرض استهلاك الخطة",
       clientUnavailable: "اتصال المضيف غير جاهز",

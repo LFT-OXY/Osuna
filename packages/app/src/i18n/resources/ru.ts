@@ -2555,6 +2555,7 @@ export const ru: TranslationResources = {
         info: "Osuna читает настройки CC Switch, Claude Code, Codex, Alma и OpenCode на этом хосте и ничего в них не меняет. Ключи остаются на хосте; добавляются только выбранные записи.",
         reading: "Чтение других приложений…",
         scanFailed: "Не удалось прочитать другие приложения: {{message}}",
+        openCodeNotRead: "«Читать входы CLI» выключено, поэтому OpenCode не прочитан",
         retry: "Повторить",
         selectAll: "Все",
         selectAllLabel: "Выбрать все записи из {{app}}",
@@ -2611,6 +2612,8 @@ export const ru: TranslationResources = {
         errors: {
           gone: "Результаты сканирования устарели, Osuna просканировал заново. Проверьте выбор и импортируйте снова.",
           failed: "Osuna не смог сохранить его ({{reason}})",
+          cliSignInsOff:
+            "«Читать входы CLI» выключено, поэтому записи из OpenCode не импортированы",
           cannotReplace:
             "Имя {{name}} не совпадает ни с одним вашим эндпоинтом; выберите «Оставить оба».",
         },
@@ -4050,6 +4053,26 @@ export const ru: TranslationResources = {
           workspaceName: "my-workspace",
         },
       },
+      privacy: {
+        title: "Конфиденциальность",
+        readCliSignIns: {
+          title: "Читать входы CLI",
+          hint: "Разрешает Osuna читать данные входа, которые хранит каждый CLI (файлы входа, Связка ключей), чтобы показывать использование тарифа. Если выключено, Osuna их не читает и использование тарифа не показывается; CLI по-прежнему используют свои входы, а API-эндпоинты не затрагиваются. Код плагинов, кроме использования тарифа, этот переключатель не охватывает.",
+          saveFailed: "Не удалось изменить «Читать входы CLI».",
+          saveFailedReason: "Не удалось изменить «Читать входы CLI»: {{reason}}",
+          forcedOffHint: "Отключено переменной окружения PASEO_NO_CLI_SIGN_INS",
+          turnOff: {
+            title: "Выключить «Читать входы CLI»?",
+            planUsageStops:
+              "Использование тарифа для {{accounts}} перестанет показываться, пока вы снова не включите.",
+            allPlanUsageStops:
+              "Использование тарифа не будет показываться, пока вы снова не включите.",
+            apiEndpointsKeepWorking: "API-эндпоинты продолжают работать.",
+            confirm: "Выключить",
+            listSeparator: ", ",
+          },
+        },
+      },
       notFound: "Хост не найден",
       badges: {
         relay: "Ретранслятор",
@@ -4431,6 +4454,13 @@ export const ru: TranslationResources = {
       },
       addErrorTitle: "Не удалось добавить провайдера",
       startErrorTitle: "Не удаётся запустить {{name}}",
+      banRisk: {
+        title: "Аккаунт {{name}} могут заблокировать",
+        antigravity: {
+          body: "В FAQ Antigravity от Google сказано, что встраивание Antigravity CLI (agy) в сторонние приложения не поддерживается в потребительских тарифах. Там же сказано, что доступ к Antigravity через стороннее ПО нарушает Условия использования и может привести к приостановке или закрытию аккаунта. Osuna управляет Antigravity через agy. Волна блокировок в феврале 2026 года заодно отключила Gemini CLI и Gemini Code Assist. Используйте аккаунт, который не жалко потерять.",
+          termsLink: "FAQ Antigravity",
+        },
+      },
       actions: {
         menu: "Действия с {{name}}",
         remove: "Удалить провайдера",
@@ -4886,6 +4916,7 @@ export const ru: TranslationResources = {
       cell: "{{day}} · {{tokens}} токенов",
     },
     planUsage: {
+      accountName: "{{source}} ({{account}})",
       apiEndpointsOnNote: "Используются API-эндпоинты. Этот лимит не отражает реальный расход.",
       title: "Расход по тарифу",
       options: "Параметры расхода по тарифу",
@@ -4911,6 +4942,8 @@ export const ru: TranslationResources = {
       refreshing: "Обновление...",
       loading: "Загрузка расхода по тарифу...",
       empty: "Нет данных о расходе по тарифу",
+      cliSignInsOff: "«Читать входы CLI» выключено, поэтому расход по тарифу не показывается",
+      openPrivacySettings: "Открыть настройки",
       errorTitle: "Не удалось загрузить расход по тарифу",
       hostUnavailable: "Подключитесь к этому хосту, чтобы увидеть расход по тарифу",
       clientUnavailable: "Соединение с хостом не готово",

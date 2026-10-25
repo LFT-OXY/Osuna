@@ -19,6 +19,7 @@ import { parsePluginSourceReference } from "@getpaseo/protocol/plugin-source-ref
 import { assertPluginCompatibility } from "@getpaseo/protocol/plugin-requirements";
 import { BUILTIN_PROVIDER_IDS } from "@getpaseo/protocol/provider-manifest";
 import type { DaemonConfigStore } from "../daemon-config-store.js";
+import type { CliSignInAccess } from "../cli-sign-ins.js";
 import { type ManagedPluginCandidate, ManagedPluginSources } from "./managed-source.js";
 import { readPluginManifest } from "./manifest.js";
 import { expandTilde } from "../../utils/path.js";
@@ -67,6 +68,8 @@ interface PluginServiceDependencies {
   runtime?: PluginRuntimePort;
   managedSources?: ManagedPluginSources;
   builtinPlugins?: BuiltinPluginLoader;
+  /** The daemon's one answer to Read CLI sign-ins; the usage source registry is gated on it. */
+  cliSignIns: CliSignInAccess;
 }
 
 function resolvePluginStatus(input: {
@@ -88,6 +91,7 @@ export class PluginService {
   private readonly listeners = new Set<(pluginId: string) => void>();
   private readonly providers = new Map<string, ProviderRegistration>();
   private readonly usageSources: UsageSourceRegistry;
+  private readonly cliSignIns: CliSignInAccess;
   private readonly usageSourceIdsByPlugin = new Map<string, string[]>();
   private readonly providerIdsByPlugin = new Map<string, readonly string[]>();
   private readonly providerListeners = new Set<() => void>();
@@ -100,15 +104,18 @@ export class PluginService {
     logger: pino.Logger,
     private readonly configStore: DaemonConfigStore,
     private readonly daemonVersion: string,
-    private readonly dependencies: PluginServiceDependencies = {},
+    private readonly dependencies: PluginServiceDependencies,
   ) {
     this.logger = logger.child({ module: "plugin-service" });
-    this.usageSources = new UsageSourceRegistry(
-      Date.now,
-      300_000,
-      this.logger,
-      dependencies.usageAgents,
-    );
+    this.cliSignIns = dependencies.cliSignIns;
+    this.usageSources = new UsageSourceRegistry({
+      logger: this.logger,
+      agents: dependencies.usageAgents,
+      cliSignIns: this.cliSignIns,
+    });
+    this.cliSignIns.onChange((allowed) => {
+      if (!allowed) this.usageSources.forget();
+    });
     this.runtime =
       dependencies.runtime ??
       new PluginRuntime(logger, daemonVersion, {
@@ -171,6 +178,10 @@ export class PluginService {
 
   listLegacyUsage() {
     return this.usageSources.listLegacyUsage();
+  }
+
+  readsCliSignIns(): boolean {
+    return this.cliSignIns.allowed();
   }
 
   subscribeProviderRegistrations(listener: () => void): () => void {

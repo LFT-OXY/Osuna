@@ -732,10 +732,10 @@ export class ApiEndpointSession {
   ): void {
     let payload: Omit<ApiEndpointImportScanResponse["payload"], "requestId">;
     try {
-      const sources = this.service.scanImports({
+      const { sources, cliSignInsOff } = this.service.scanImports({
         includeOpenCode: request.includeOpenCode === true,
       });
-      payload = { sources, error: null };
+      payload = { sources, error: null, ...(cliSignInsOff ? { cliSignInsOff: true } : {}) };
     } catch (caught) {
       payload = { sources: [], error: this.toWireError(caught, request) };
     }

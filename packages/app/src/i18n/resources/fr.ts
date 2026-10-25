@@ -2573,6 +2573,7 @@ export const fr: TranslationResources = {
         info: "Osuna lit les réglages de CC Switch, Claude Code, Codex, Alma et OpenCode sur cet hôte sans rien y modifier. Les clés restent sur l'hôte ; seules les entrées choisies sont ajoutées.",
         reading: "Lecture des autres apps…",
         scanFailed: "Impossible de lire les autres apps : {{message}}",
+        openCodeNotRead: "« Lire les connexions des CLI » est désactivé : OpenCode n'a pas été lu",
         retry: "Réessayer",
         selectAll: "Tout",
         selectAllLabel: "Choisir toutes les entrées de {{app}}",
@@ -2629,6 +2630,8 @@ export const fr: TranslationResources = {
         errors: {
           gone: "L'analyse n'était plus à jour, Osuna a analysé à nouveau. Vérifiez la sélection puis importez à nouveau.",
           failed: "Osuna n'a pas pu l'enregistrer ({{reason}})",
+          cliSignInsOff:
+            "« Lire les connexions des CLI » est désactivé : les entrées d'OpenCode n'ont pas été importées",
           cannotReplace:
             "{{name}} ne porte le nom d'aucun de vos endpoints ; gardez les deux à la place.",
         },
@@ -4089,6 +4092,26 @@ export const fr: TranslationResources = {
           workspaceName: "my-workspace",
         },
       },
+      privacy: {
+        title: "Confidentialité",
+        readCliSignIns: {
+          title: "Lire les connexions des CLI",
+          hint: "Permet à Osuna de lire les connexions que chaque CLI conserve (fichiers de connexion, trousseau) pour afficher l'utilisation du forfait. Désactivé, Osuna ne les lit pas et l'utilisation du forfait ne s'affiche pas ; les CLI continuent d'utiliser leurs propres connexions et les endpoints d'API ne sont pas concernés. Le code des plugins autre que l'utilisation du forfait n'est pas couvert par cet interrupteur.",
+          saveFailed: "Impossible de modifier Lire les connexions des CLI.",
+          saveFailedReason: "Impossible de modifier Lire les connexions des CLI : {{reason}}",
+          forcedOffHint: "Désactivé par la variable d’environnement PASEO_NO_CLI_SIGN_INS",
+          turnOff: {
+            title: "Désactiver Lire les connexions des CLI ?",
+            planUsageStops:
+              "L'utilisation du forfait de {{accounts}} ne s'affichera plus tant que vous ne l'aurez pas réactivé.",
+            allPlanUsageStops:
+              "Aucune utilisation du forfait ne s'affichera tant que vous ne l'aurez pas réactivé.",
+            apiEndpointsKeepWorking: "Les endpoints d'API continuent de fonctionner.",
+            confirm: "Désactiver",
+            listSeparator: ", ",
+          },
+        },
+      },
       notFound: "Hôte introuvable",
       badges: {
         relay: "Relais",
@@ -4474,6 +4497,13 @@ export const fr: TranslationResources = {
       },
       addErrorTitle: "Impossible d’ajouter le fournisseur",
       startErrorTitle: "Impossible de démarrer {{name}}",
+      banRisk: {
+        title: "Le compte {{name}} peut être suspendu",
+        antigravity: {
+          body: "La FAQ Antigravity de Google indique qu'intégrer la CLI Antigravity (agy) dans des applications tierces n'est pas pris en charge avec les forfaits grand public. Elle indique aussi qu'accéder à Antigravity via un logiciel tiers enfreint ses Conditions d'utilisation et peut entraîner la suspension ou la résiliation du compte. Osuna pilote Antigravity via agy. La vague de suspensions de février 2026 a aussi bloqué Gemini CLI et Gemini Code Assist. Utilisez un compte que vous pouvez vous permettre de perdre.",
+          termsLink: "FAQ Antigravity",
+        },
+      },
       actions: {
         menu: "Actions de {{name}}",
         remove: "Supprimer le fournisseur",
@@ -4931,6 +4961,7 @@ export const fr: TranslationResources = {
       cell: "{{day}} · {{tokens}} jetons",
     },
     planUsage: {
+      accountName: "{{source}} ({{account}})",
       apiEndpointsOnNote:
         "Endpoints d'API utilisés. Ce quota ne reflète pas la consommation réelle.",
       title: "Consommation du forfait",
@@ -4957,6 +4988,9 @@ export const fr: TranslationResources = {
       refreshing: "Actualisation...",
       loading: "Chargement de la consommation du forfait...",
       empty: "Aucune donnée de consommation du forfait",
+      cliSignInsOff:
+        "« Lire les connexions des CLI » est désactivé : la consommation du forfait ne s'affiche pas",
+      openPrivacySettings: "Ouvrir les réglages",
       errorTitle: "Impossible de charger la consommation du forfait",
       hostUnavailable: "Connectez-vous à cet hôte pour voir la consommation du forfait",
       clientUnavailable: "La connexion à l'hôte n'est pas prête",

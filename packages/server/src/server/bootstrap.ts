@@ -167,6 +167,7 @@ import { ApiEndpointStore } from "./api-endpoints/store.js";
 import type { ProviderVersionsConfig } from "./agent/provider-version-check.js";
 import { resolveUsagePricingSettings, type UsageConfig } from "./usage/config.js";
 import { DaemonConfigStore, type MutableDaemonConfig } from "./daemon-config-store.js";
+import { CliSignInAccess } from "./cli-sign-ins.js";
 import { createOrchestrationSkills } from "./orchestration-skills/index.js";
 import { resolveConfigFromPersisted, type CliConfigOverrides } from "./config.js";
 import { resolvePaseoToolPolicy } from "./agent/paseo-tool-policy.js";
@@ -469,6 +470,9 @@ export interface PaseoDaemonConfig {
   skillSelection?: AgentSkillSelection;
   pluginsEnabled?: boolean;
   plugins?: Record<string, PluginSource>;
+  readCliSignIns?: boolean;
+  // PASEO_NO_CLI_SIGN_INS：这次运行里把「读取 CLI 登录凭证」压成关，不改存的值。
+  readCliSignInsForcedOff?: boolean;
   pluginRegistries?: PluginRegistries;
   pluginRegistryUrl?: string;
   staticDir: string;
@@ -603,6 +607,15 @@ function resolveMutableUsageSection(config: PaseoDaemonConfig): MutableDaemonCon
   return { pricing: { autoUpdate, overrides: [...overrides] } };
 }
 
+function resolveMutableCliSignIns(
+  config: PaseoDaemonConfig,
+): Pick<MutableDaemonConfig, "readCliSignIns" | "readCliSignInsForcedOff"> {
+  return {
+    readCliSignIns: config.readCliSignIns !== false,
+    ...(config.readCliSignInsForcedOff ? { readCliSignInsForcedOff: true } : {}),
+  };
+}
+
 function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDaemonConfig {
   const providers = config.providerOverrides ?? {};
 
@@ -630,6 +643,7 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
     appendSystemPrompt: config.appendSystemPrompt ?? "",
     pluginsEnabled: config.pluginsEnabled ?? false,
     plugins: config.plugins ?? {},
+    ...resolveMutableCliSignIns(config),
     skills: { selection: config.skillSelection },
     usage: resolveMutableUsageSection(config),
   };
@@ -691,7 +705,9 @@ export async function createPaseoDaemon(
   });
   const browserToolsPolicy = new DaemonConfigBrowserToolsPolicy(daemonConfigStore);
   const browserToolsBroker = new BrowserToolsBroker({});
+  const cliSignIns = new CliSignInAccess(daemonConfigStore);
   const pluginRuntime: PluginService = new PluginService(logger, daemonConfigStore, daemonVersion, {
+    cliSignIns,
     usageAgents: {
       hasAgent: (id) => agentManager.getAgent(id) !== null,
       usageSession: (id) => agentManager.usageSession(id),
@@ -1044,6 +1060,7 @@ export async function createPaseoDaemon(
     cooldowns: apiEndpointCooldowns,
     retiredModels: apiEndpointRetiredModels,
     sightings: apiEndpointSightings,
+    cliSignIns,
     daemonVersion,
     // 估算成本读时现算：倍率一改，用量页、会话列表与每轮花费都要重读（同改价格表）。
     onPriceMultipliersChanged: () => {

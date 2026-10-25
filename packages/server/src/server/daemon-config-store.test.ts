@@ -705,6 +705,33 @@ describe("DaemonConfigStore", () => {
     expect(persisted.daemon?.browserTools).toEqual({ enabled: true });
   });
 
+  test("patch persists Read CLI sign-ins into config.json and tells its watchers", () => {
+    const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
+    tempDirs.push(paseoHome);
+    const store = new DaemonConfigStore(
+      paseoHome,
+      {
+        mcp: { injectIntoAgents: false },
+        browserTools: { enabled: false },
+        providers: {},
+        metadataGeneration: { providers: [] },
+        autoArchiveAfterMerge: false,
+        appendSystemPrompt: "",
+        readCliSignIns: true,
+      },
+      undefined,
+    );
+    const changes: unknown[] = [];
+    store.onFieldChange("readCliSignIns", (value) => changes.push(value));
+
+    store.patch({ readCliSignIns: false });
+    expect(store.get().readCliSignIns).toBe(false);
+    expect(loadPersistedConfig(paseoHome).readCliSignIns).toBe(false);
+    store.patch({ readCliSignIns: true });
+    expect(loadPersistedConfig(paseoHome).readCliSignIns).toBe(true);
+    expect(changes).toEqual([false, true]);
+  });
+
   test("patch persists provider additional models into config.json", () => {
     const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
     tempDirs.push(paseoHome);

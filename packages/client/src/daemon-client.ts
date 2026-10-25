@@ -584,6 +584,8 @@ type UsageResetConsumePayload = Extract<
 interface UsageListReportsPayload {
   requestId: string;
   reports: UsageReportEntry[];
+  /** 列表是空的，因为主机关了「读取 CLI 登录凭证」。 */
+  cliSignInsOff?: boolean;
 }
 type DaemonStatusPayload = DaemonGetStatusResponse["payload"];
 type DaemonPairingOfferPayload = DaemonGetPairingOfferResponse["payload"];
@@ -5787,7 +5789,9 @@ export class DaemonClient {
             : null,
       });
       if (response.error !== null) throw new Error(response.error);
-      return { requestId, reports };
+      const listed: UsageListReportsPayload = { requestId, reports };
+      if (response.cliSignInsOff === true) listed.cliSignInsOff = true;
+      return listed;
     } finally {
       active = false;
       unsubscribe();

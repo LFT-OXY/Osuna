@@ -389,6 +389,44 @@ describe("import from other apps", () => {
     expect(JSON.stringify(scan)).not.toContain("127.0.0.1");
   });
 
+  test("while Read CLI sign-ins is off, OpenCode's auth.json isn't read and the scan says so; the other apps import as usual", async () => {
+    const { client } = await start({ endpoints: [], keys: {} });
+    const openCode = itemsOf(
+      await client.apiEndpointImportScan({ includeOpenCode: true }),
+      "opencode",
+    ).find((item) => item.skip === null);
+    if (!openCode) throw new Error("Expected OpenCode's DeepSeek key");
+
+    await client.patchDaemonConfig({ readCliSignIns: false });
+    const off = await client.apiEndpointImportScan({ includeOpenCode: true });
+    expect(off.error).toBeNull();
+    expect(off.cliSignInsOff).toBe(true);
+    expect(off.sources.map((source) => [source.id, source.found, source.error])).toEqual([
+      ["alma", true, null],
+      ["cc-switch", true, null],
+      ["claude-code", true, null],
+      ["codex", true, null],
+    ]);
+    // 开着时扫到、关了之后才导入：OpenCode 那条跳过并说明原因，排在它后面的照常导入。
+    const ccRelay = itemsOf(off, "cc-switch")[0];
+    if (!ccRelay) throw new Error("Expected CC Relay");
+    const mixed = await client.apiEndpointImport([
+      { fingerprint: openCode.fingerprint, action: "add" },
+      { fingerprint: ccRelay.fingerprint, action: "add" },
+    ]);
+    expect(mixed.imported.map((entry) => entry.name)).toEqual(["CC Relay"]);
+    expect(mixed.failed).toBeNull();
+    expect(mixed.error).toEqual({
+      code: "import_cli_sign_ins_off",
+      message: "Read CLI sign-ins is off, so the entries from OpenCode weren't imported",
+    });
+
+    await client.patchDaemonConfig({ readCliSignIns: true });
+    const on = await client.apiEndpointImportScan({ includeOpenCode: true });
+    expect(on.cliSignInsOff).toBeUndefined();
+    expect(itemsOf(on, "opencode").map((item) => item.fingerprint)).toContain(openCode.fingerprint);
+  });
+
   test("add, replace and rename: a replaced endpoint keeps its id and its place in the order", async () => {
     const { client } = await start({
       endpoints: [
