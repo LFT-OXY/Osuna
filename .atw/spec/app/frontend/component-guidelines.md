@@ -46,6 +46,8 @@ Every user action that can fail renders pending, success, and failure in the sam
 
 An inline editor that expands in place (the Models section's add row, `provider-detail/models.tsx`) follows the same bar: the submit button reads "Adding..." and is disabled while the write runs, success folds the row away, failure stays under the input with the reason while the typed text is kept. Pass the write in as `(value) => Promise<void>` and let the row own its `idle | adding | failed` state; the jsdom test drives all three through a deferred promise.
 
+> **Warning**: `AdaptiveModalSheet` has no fit-to-content height on phones: it pins `enableDynamicSizing` to false, so a fixed `snapPoints` like `["40%"]` leaves a short confirmation with a gap of empty sheet above its footer at 390. `screens/settings/cli-sign-ins-turn-off-sheet.tsx` `fitContentSnapPoints` measures the body with `onLayout` and adds a measured chrome height (192px: handle, header, padding, footer) plus the bottom safe area, capped at 90%; it falls back to 40% until measured. The chrome constant was measured at 390×844 only. When a second sheet needs this, move it into `AdaptiveModalSheet` instead of copying the constant.
+
 > **Warning**: Escape never reaches a text field inside a desktop `AdaptiveModalSheet`. `lib/overlay-root.ts` listens for `keydown` on `window` in the capture phase and the top modal's handler closes it with `stopImmediatePropagation`, so the field's `onKeyPress` does not fire. An "Esc collapses this row" rule holds on a settings page and on mobile (no overlay scope is registered there), not inside a desktop modal. Don't add a global listener to fight it (`docs/floating-panels.md`); give the row a visible Cancel.
 
 ## Hover
