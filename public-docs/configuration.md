@@ -245,7 +245,7 @@ Set the persisted value in `config.json`:
 - `PASEO_HOSTNAMES`, override/extend `daemon.hostnames`
 - `PASEO_ALLOWED_HOSTS`, deprecated alias for `PASEO_HOSTNAMES`
 - `PASEO_WEB_UI_ENABLED`, enable or disable the daemon-served web UI
-- `PASEO_NO_CLI_SIGN_INS`, hold **Read CLI sign-ins** off for this daemon launch (any value but empty, `0`, or `false`); it can't turn the switch on and doesn't change the saved setting
+- `PASEO_NO_CLI_SIGN_INS`, hold **Read CLI sign-ins** off for this daemon launch (any value but empty, `0`, or `false`); it can't turn the switch on and doesn't change the saved setting. Managed `paseo daemon start` and the desktop app don't pass it through; there, use the Read CLI sign-ins switch in host settings
 - `PASEO_WEB_UI_DIST_DIR`, override the daemon web UI build directory
 - `PASEO_TRUSTED_PROXIES`, configure trusted reverse proxy ranges for `X-Forwarded-*` headers
 - `PASEO_LOG_CONSOLE_LEVEL`, override `log.console.level`
