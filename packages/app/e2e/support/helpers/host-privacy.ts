@@ -63,3 +63,15 @@ export async function expectReadCliSignIns(
   if (state.disabled) await expect(control).toHaveAttribute("aria-disabled", "true");
   else await expect(control).not.toHaveAttribute("aria-disabled", "true");
 }
+
+/** 关「读取 CLI 登录凭证」前的确认框。 */
+export function turnOffSheet(page: Page) {
+  return page.getByTestId("host-privacy-turn-off-sheet").filter({ visible: true });
+}
+
+/** 关开关：点开关，在确认框里按「关闭」。 */
+export async function turnOffReadCliSignIns(page: Page): Promise<void> {
+  await readCliSignInsSwitch(page).click();
+  await turnOffSheet(page).getByRole("button", { name: "Turn off", exact: true }).click();
+  await expect(turnOffSheet(page)).toHaveCount(0);
+}

@@ -4118,6 +4118,15 @@ export const en = {
           hint: "Lets Osuna read the logins each CLI keeps for itself (login files, the Keychain) to show plan usage. Off, Osuna doesn't read them and plan usage doesn't show; the CLIs keep using their own logins, and API endpoints aren't affected. Code in plugins other than plan usage isn't covered by this switch.",
           saveFailed: "Couldn't change Read CLI sign-ins.",
           saveFailedReason: "Couldn't change Read CLI sign-ins: {{reason}}",
+          turnOff: {
+            title: "Turn off Read CLI sign-ins?",
+            planUsageStops:
+              "Plan usage for {{accounts}} will stop showing until you turn this back on.",
+            allPlanUsageStops: "No plan usage will show until you turn this back on.",
+            apiEndpointsKeepWorking: "API endpoints keep working.",
+            confirm: "Turn off",
+            listSeparator: ", ",
+          },
         },
       },
       notFound: "Host not found",
@@ -4947,6 +4956,7 @@ export const en = {
       cell: "{{day}} · {{tokens}} tokens",
     },
     planUsage: {
+      accountName: "{{source}} ({{account}})",
       apiEndpointsOnNote: "Using API endpoints. This quota doesn't reflect actual usage.",
       title: "Plan usage",
       options: "Plan usage options",

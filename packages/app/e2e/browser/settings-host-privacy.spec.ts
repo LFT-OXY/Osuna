@@ -6,6 +6,8 @@ import {
   readCliSignInsSwitch,
   rewriteServerInfo,
   setReadCliSignInsOnDaemon,
+  turnOffReadCliSignIns,
+  turnOffSheet,
 } from "../support/helpers/host-privacy";
 import { getServerId } from "../support/helpers/server-id";
 import { openSettingsHostSection } from "../support/helpers/settings";
@@ -28,6 +30,9 @@ import {
 
 // 用量页会扫会话记录：指向夹具，不读本机真实的 CLI 目录。
 test.use({ e2eDaemonEnvironment: createUsageFixtureRoots("paseo-host-privacy-").environment });
+
+const NO_ACCOUNTS_STOP =
+  "No plan usage will show until you turn this back on.API endpoints keep working.";
 
 const HINT =
   "Lets Osuna read the logins each CLI keeps for itself (login files, the Keychain) to show plan usage. Off, Osuna doesn't read them and plan usage doesn't show; the CLIs keep using their own logins, and API endpoints aren't affected. Code in plugins other than plan usage isn't covered by this switch.";
@@ -57,6 +62,8 @@ test.describe("Host settings Privacy section", () => {
   test("sits after Appearance and its switch turns Read CLI sign-ins off and on", async ({
     page,
   }) => {
+    // 主机一个套餐用量账号都没有。
+    await installUsageReportsFixture(page, { lists: [[]] });
     await openHostOverview(page);
     const section = privacySection(page);
     await expect(section).toContainText("Privacy");
@@ -70,6 +77,12 @@ test.describe("Host settings Privacy section", () => {
     await expectReadCliSignIns(page, { checked: true, disabled: false });
 
     await readCliSignInsSwitch(page).click();
+    const sheet = turnOffSheet(page);
+    await expect(sheet).toContainText("Turn off Read CLI sign-ins?");
+    await expect(sheet.getByTestId("host-privacy-turn-off-message")).toHaveText(NO_ACCOUNTS_STOP);
+    await expect(sheet.getByRole("button", { name: "Cancel", exact: true })).toBeVisible();
+    await sheet.getByRole("button", { name: "Turn off", exact: true }).click();
+    await expect(sheet).toHaveCount(0);
     await expectReadCliSignIns(page, { checked: false, disabled: false });
     await expect.poll(readCliSignInsOnDaemon).toBe(false);
 
@@ -79,7 +92,31 @@ test.describe("Host settings Privacy section", () => {
 
     await readCliSignInsSwitch(page).click();
     await expectReadCliSignIns(page, { checked: true, disabled: false });
+    await expect(page.getByTestId("host-privacy-turn-off-sheet")).toHaveCount(0);
     await expect.poll(readCliSignInsOnDaemon).toBe(true);
+  });
+
+  test("the confirmation names each account whose plan usage stops, and Cancel keeps it on", async ({
+    page,
+  }) => {
+    await seedSidebarFooterPreferences(page, [{ key: "usage", visible: true }]);
+    await installUsageReportsFixture(page, { lists: [() => claudeAndCodexReports()] });
+    await gotoAppShell(page);
+    // 先看过套餐用量，客户端手里就有这两个账号的报告。
+    await openUsageFromItem(page);
+    await closeUsage(page);
+    await openSettings(page);
+    await openSettingsHostSection(page, getServerId(), "host");
+
+    await readCliSignInsSwitch(page).click();
+    const sheet = turnOffSheet(page);
+    await expect(sheet.getByTestId("host-privacy-turn-off-message")).toHaveText(
+      "Plan usage for Claude (dev@example.com), Codex (dev@example.com) will stop showing until you turn this back on.API endpoints keep working.",
+    );
+    await sheet.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(sheet).toHaveCount(0);
+    await expectReadCliSignIns(page, { checked: true, disabled: false });
+    expect(await readCliSignInsOnDaemon()).toBe(true);
   });
 
   test("a refused change puts the switch back and keeps the reason under the row until a retry", async ({
@@ -87,7 +124,7 @@ test.describe("Host settings Privacy section", () => {
   }) => {
     await installDaemonConfigFailureFixture(page, "daemon is busy", { times: 1 });
     await openHostOverview(page);
-    await readCliSignInsSwitch(page).click();
+    await turnOffReadCliSignIns(page);
     const error = page
       .getByTestId("host-privacy-read-cli-sign-ins-error")
       .filter({ visible: true });
@@ -95,7 +132,7 @@ test.describe("Host settings Privacy section", () => {
     await expectReadCliSignIns(page, { checked: true, disabled: false });
     expect(await readCliSignInsOnDaemon()).toBe(true);
 
-    await readCliSignInsSwitch(page).click();
+    await turnOffReadCliSignIns(page);
     await expectReadCliSignIns(page, { checked: false, disabled: false });
     await expect(error).toHaveCount(0);
     await expect.poll(readCliSignInsOnDaemon).toBe(false);

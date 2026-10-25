@@ -3975,6 +3975,14 @@ export const zhCN: TranslationResources = {
           hint: "让 Osuna 读取各 CLI 自己保存的登录（登录文件、钥匙串），用来显示套餐用量。关掉后 Osuna 不读这些，套餐用量不显示；CLI 自己照常用自己的登录，第三方接口不受影响。插件里除了套餐用量以外的代码，这个开关管不到。",
           saveFailed: "没能更改「读取 CLI 登录凭证」。",
           saveFailedReason: "没能更改「读取 CLI 登录凭证」：{{reason}}",
+          turnOff: {
+            title: "关闭读取 CLI 登录凭证？",
+            planUsageStops: "{{accounts}} 的套餐用量会停止显示，直到重新打开。",
+            allPlanUsageStops: "所有套餐用量都不会显示，直到重新打开。",
+            apiEndpointsKeepWorking: "第三方接口照常工作。",
+            confirm: "关闭",
+            listSeparator: "、",
+          },
         },
       },
       notFound: "主机未找到",
@@ -4786,6 +4794,7 @@ export const zhCN: TranslationResources = {
       cell: "{{day}} · {{tokens}} token",
     },
     planUsage: {
+      accountName: "{{source}}（{{account}}）",
       apiEndpointsOnNote: "已启用第三方接口，此额度不代表实际消耗。",
       title: "套餐用量",
       options: "套餐用量选项",

@@ -4045,6 +4045,15 @@ export const ja: TranslationResources = {
           hint: "各 CLI が保存しているログイン情報（ログインファイル、キーチェーン）を Osuna が読み、プランの使用量を表示します。オフにすると Osuna はこれらを読まず、プランの使用量は表示されません。CLI は引き続き自身のログインを使い、API エンドポイントには影響しません。プラグインのうちプランの使用量以外のコードは、このスイッチの対象外です。",
           saveFailed: "「CLI のサインイン情報を読む」を変更できませんでした。",
           saveFailedReason: "「CLI のサインイン情報を読む」を変更できませんでした：{{reason}}",
+          turnOff: {
+            title: "「CLI のサインイン情報を読む」をオフにしますか？",
+            planUsageStops:
+              "{{accounts}} のプラン使用量は、再びオンにするまで表示されなくなります。",
+            allPlanUsageStops: "再びオンにするまで、プラン使用量は一切表示されません。",
+            apiEndpointsKeepWorking: "API エンドポイントは引き続き動作します。",
+            confirm: "オフにする",
+            listSeparator: "、",
+          },
         },
       },
       notFound: "ホストが見つかりません",
@@ -4877,6 +4886,7 @@ export const ja: TranslationResources = {
       cell: "{{day}} · {{tokens}} トークン",
     },
     planUsage: {
+      accountName: "{{source}}（{{account}}）",
       apiEndpointsOnNote: "API エンドポイントを使用中です。この枠は実際の消費量を表しません。",
       title: "プラン使用量",
       options: "プラン使用量のオプション",

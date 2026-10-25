@@ -4054,6 +4054,15 @@ export const ptBR: TranslationResources = {
           hint: "Permite que o Osuna leia os logins que cada CLI guarda (arquivos de login, o Keychain) para mostrar o uso do plano. Desligado, o Osuna não os lê e o uso do plano não aparece; as CLIs continuam usando seus próprios logins e os endpoints de API não são afetados. O código de plugins fora do uso do plano não é coberto por esta chave.",
           saveFailed: "Não foi possível alterar Ler logins das CLIs.",
           saveFailedReason: "Não foi possível alterar Ler logins das CLIs: {{reason}}",
+          turnOff: {
+            title: "Desligar Ler logins das CLIs?",
+            planUsageStops:
+              "O uso do plano de {{accounts}} vai deixar de aparecer até você ligar de novo.",
+            allPlanUsageStops: "Nenhum uso do plano vai aparecer até você ligar de novo.",
+            apiEndpointsKeepWorking: "Os endpoints de API continuam funcionando.",
+            confirm: "Desligar",
+            listSeparator: ", ",
+          },
         },
       },
       notFound: "Host não encontrado",
@@ -4889,6 +4898,7 @@ export const ptBR: TranslationResources = {
       cell: "{{day}} · {{tokens}} tokens",
     },
     planUsage: {
+      accountName: "{{source}} ({{account}})",
       apiEndpointsOnNote: "Usando endpoints de API. Esta cota não reflete o consumo real.",
       title: "Uso do plano",
       options: "Opções de uso do plano",

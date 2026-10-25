@@ -44,6 +44,9 @@ export const usageCopy = {
   get title(): string {
     return i18n.t(key("title"));
   },
+  /** 一个账号的名字：来源名加账号名，「Claude (a@b.com)」。 */
+  accountName: (source: string, account: string): string =>
+    i18n.t(key("accountName"), { source, account }),
   get planUsage(): string {
     return i18n.t(key("title"));
   },

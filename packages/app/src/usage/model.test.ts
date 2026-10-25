@@ -3,6 +3,7 @@ import { i18n } from "@/i18n/i18next";
 import {
   displayPercent,
   formatUsageFreshness,
+  planUsageAccountNames,
   resolveAgentUsageView,
   replaceReport,
   resolveUsageRefresh,
@@ -346,5 +347,62 @@ describe("resolveAgentUsageView", () => {
         query: { data: [report], error: new Error("Unknown agent"), isFetching: false },
       }),
     ).toEqual({ kind: "error", message: "Unable to load plan usage: Unknown agent" });
+  });
+});
+
+describe("planUsageAccountNames", () => {
+  function account(input: { id: string; sourceLabel: string; label?: string }): UsageReportEntry {
+    return {
+      ...entry({ sourceId: input.id }),
+      id: input.id,
+      sourceLabel: input.sourceLabel,
+      account: input.label ? { label: input.label } : {},
+    };
+  }
+
+  it("names each account by its source and account, in report order", () => {
+    expect(
+      planUsageAccountNames([
+        account({ id: "codex:work", sourceLabel: "Codex", label: "c@d.com" }),
+        account({ id: "claude:default", sourceLabel: "Claude", label: "a@b.com" }),
+      ]),
+    ).toEqual(["Codex (c@d.com)", "Claude (a@b.com)"]);
+  });
+
+  it("names an account without a label by its source alone", () => {
+    expect(
+      planUsageAccountNames([
+        account({ id: "zai:default", sourceLabel: "Z.AI" }),
+        account({ id: "claude:default", sourceLabel: "Claude", label: "a@b.com" }),
+      ]),
+    ).toEqual(["Z.AI", "Claude (a@b.com)"]);
+  });
+
+  it("names an account once when two reports show it", () => {
+    expect(
+      planUsageAccountNames([
+        account({ id: "claude:default", sourceLabel: "Claude", label: "a@b.com" }),
+        account({ id: "zai:default", sourceLabel: "Z.AI" }),
+        account({ id: "claude:keychain", sourceLabel: "Claude", label: "a@b.com" }),
+        account({ id: "zai:env", sourceLabel: "Z.AI" }),
+      ]),
+    ).toEqual(["Claude (a@b.com)", "Z.AI"]);
+  });
+
+  it("names no one without reports", () => {
+    expect(planUsageAccountNames([])).toEqual([]);
+  });
+
+  it("writes the account in the app's language", async () => {
+    await i18n.changeLanguage("zh-CN");
+    try {
+      expect(
+        planUsageAccountNames([
+          account({ id: "claude:default", sourceLabel: "Claude", label: "a@b.com" }),
+        ]),
+      ).toEqual(["Claude（a@b.com）"]);
+    } finally {
+      await i18n.changeLanguage("en");
+    }
   });
 });

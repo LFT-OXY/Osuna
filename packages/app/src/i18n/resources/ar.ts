@@ -3977,6 +3977,14 @@ export const ar: TranslationResources = {
           hint: "يسمح لـ Osuna بقراءة تسجيلات الدخول التي يحفظها كل CLI لنفسه (ملفات تسجيل الدخول، سلسلة المفاتيح) لعرض استخدام الخطة. عند إيقافه لا يقرأها Osuna ولا يظهر استخدام الخطة؛ وتواصل أدوات CLI استخدام تسجيلات دخولها، ولا تتأثر نقاط نهاية API. لا يشمل هذا المفتاح شيفرة الإضافات خارج استخدام الخطة.",
           saveFailed: "تعذّر تغيير قراءة تسجيلات دخول CLI.",
           saveFailedReason: "تعذّر تغيير قراءة تسجيلات دخول CLI: {{reason}}",
+          turnOff: {
+            title: "إيقاف قراءة تسجيلات دخول CLI؟",
+            planUsageStops: "سيتوقف عرض استخدام الخطة لـ {{accounts}} حتى تعيد تشغيله.",
+            allPlanUsageStops: "لن يظهر أي استخدام للخطة حتى تعيد تشغيله.",
+            apiEndpointsKeepWorking: "تواصل نقاط نهاية API العمل.",
+            confirm: "إيقاف",
+            listSeparator: "، ",
+          },
         },
       },
       notFound: "لم يتم العثور على Host",
@@ -4802,6 +4810,7 @@ export const ar: TranslationResources = {
       cell: "{{day}} · {{tokens}} رمز",
     },
     planUsage: {
+      accountName: "{{source}} ({{account}})",
       apiEndpointsOnNote: "تستخدم نقاط نهاية API. هذه الحصة لا تعكس الاستهلاك الفعلي.",
       title: "استهلاك الخطة",
       options: "خيارات استهلاك الخطة",

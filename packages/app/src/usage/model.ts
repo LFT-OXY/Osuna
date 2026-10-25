@@ -30,6 +30,18 @@ export function usageWindowRowLabel(input: {
   return `${input.pinLabel}, ${summary}`;
 }
 
+/**
+ * The accounts these reports show plan usage for, by name, in report order and each once: the
+ * source and the account ("Claude (a@b.com)"), or the source alone when it names no account.
+ */
+export function planUsageAccountNames(reports: readonly UsageReportEntry[]): string[] {
+  const names = reports.map((entry) => {
+    const account = entry.account.label;
+    return account ? usageCopy.accountName(entry.sourceLabel, account) : entry.sourceLabel;
+  });
+  return [...new Set(names)];
+}
+
 /** When a report was fetched, from its compact relative time: "Updated 3m ago". */
 export function formatUsageFreshness(compactTimeAgo: string): string {
   return usageCopy.updated(usageCopy.ago(compactTimeAgo));
