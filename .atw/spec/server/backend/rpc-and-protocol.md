@@ -2210,6 +2210,8 @@ body: JSON.stringify({ credit_id: soonest.id, redeem_request_id: randomUUID() })
 - `usage.list_reports.response`: off → `{ requestId, error: null, cliSignInsOff: true }`, no reports streamed. `provider.usage.list`: off → empty, no new field. `usage.reset.consume`: off → `error` = `CliSignInsOffError.userMessage`.
 - The app hides the Privacy section when the feature flag is absent (COMPAT-tagged), no fallback.
 
+- Env force-off (ticket 04): `PASEO_NO_CLI_SIGN_INS` counts as set unless empty, `0` or `false` (case and surrounding whitespace ignored, magpie `MAGPIE_NO_ACCOUNTS`). It is folded into `CliSignInAccess.allowed()`, can only force off, never writes `config.json`. Config reads carry optional read-only `readCliSignInsForcedOff: true` while `readCliSignIns` stays the stored value; `readCliSignIns` is listed in `resolveOverrideControlledPaths`. A patch of `readCliSignIns` while forced off throws `CliSignInsForcedOffError` → `rpc_error` code `cli_sign_ins_forced_off`. The variable is in `DAEMON_SETTING_ENV_KEYS`, so managed starts (`paseo daemon start`, desktop) strip it like `PASEO_RELAY_ENABLED`; only foreground `daemon run` and Docker honour it (user decision, documented in `public-docs/configuration.md`).
+
 ### 4. Validation & Error Matrix
 | Condition | Result |
 | --- | --- |
@@ -2218,6 +2220,7 @@ body: JSON.stringify({ credit_id: soonest.id, redeem_request_id: randomUUID() })
 | read in flight when turned off | its result is dropped on return (`generation` changed), not cached |
 | switch back on | next list discovers and fetches again, no restart |
 | API endpoint balance | unaffected |
+| `PASEO_NO_CLI_SIGN_INS` set | effective off; read has `readCliSignInsForcedOff`; patching the switch refused; stored value untouched; restart without it → stored value |
 
 ### 5. Good/Base/Bad Cases
 - Good: off → both list RPCs empty, reset refused with the reason, balance still reads. Base: field absent in config → on. Bad: a second `new CliSignInAccess(configStore)` built as a fallback somewhere — two answers that can disagree once the env override (ticket 04) lands.

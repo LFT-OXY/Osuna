@@ -4,7 +4,7 @@
 
 **Blocked by:** 01
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 值不是空、`0`、`false`（大小写与首尾空白不计）就算设了（照 magpie `MAGPIE_NO_ACCOUNTS`）；合进 01 的那一处「能不能读」判断，所有闸门随之生效。
 - [ ] daemon 配置的读结果带可选的只读标记，说明是被环境变量关的；这时改开关的请求被拒，错误明确。
