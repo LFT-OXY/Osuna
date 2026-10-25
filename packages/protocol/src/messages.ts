@@ -358,6 +358,8 @@ export const MutableDaemonConfigSchema = z
     usage: MutableUsageConfigSchema.optional(),
     // 读取 CLI 登录凭证（主机设置「隐私」）；缺省为开。老 daemon 不发。
     readCliSignIns: z.boolean().optional(),
+    // 只读：daemon 启动时设了 PASEO_NO_CLI_SIGN_INS，这次运行里开关被压成关、改不了；readCliSignIns 仍是存的值。
+    readCliSignInsForcedOff: z.boolean().optional(),
   })
   .passthrough();
 

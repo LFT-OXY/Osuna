@@ -4096,6 +4096,7 @@ export const fr: TranslationResources = {
           hint: "Permet à Osuna de lire les connexions que chaque CLI conserve (fichiers de connexion, trousseau) pour afficher l'utilisation du forfait. Désactivé, Osuna ne les lit pas et l'utilisation du forfait ne s'affiche pas ; les CLI continuent d'utiliser leurs propres connexions et les endpoints d'API ne sont pas concernés. Le code des plugins autre que l'utilisation du forfait n'est pas couvert par cet interrupteur.",
           saveFailed: "Impossible de modifier Lire les connexions des CLI.",
           saveFailedReason: "Impossible de modifier Lire les connexions des CLI : {{reason}}",
+          forcedOffHint: "Désactivé par la variable d’environnement PASEO_NO_CLI_SIGN_INS",
           turnOff: {
             title: "Désactiver Lire les connexions des CLI ?",
             planUsageStops:

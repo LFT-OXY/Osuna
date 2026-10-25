@@ -4078,6 +4078,7 @@ export const es: TranslationResources = {
           hint: "Permite que Osuna lea los inicios de sesión que cada CLI guarda (archivos de inicio de sesión, el llavero) para mostrar el uso del plan. Desactivado, Osuna no los lee y el uso del plan no se muestra; las CLI siguen usando sus propios inicios de sesión y los endpoints de API no se ven afectados. Este interruptor no cubre el código de los plugins que no sea el uso del plan.",
           saveFailed: "No se pudo cambiar Leer inicios de sesión de las CLI.",
           saveFailedReason: "No se pudo cambiar Leer inicios de sesión de las CLI: {{reason}}",
+          forcedOffHint: "Desactivado por la variable de entorno PASEO_NO_CLI_SIGN_INS",
           turnOff: {
             title: "¿Desactivar Leer inicios de sesión de las CLI?",
             planUsageStops:

@@ -471,6 +471,8 @@ export interface PaseoDaemonConfig {
   pluginsEnabled?: boolean;
   plugins?: Record<string, PluginSource>;
   readCliSignIns?: boolean;
+  // PASEO_NO_CLI_SIGN_INS：这次运行里把「读取 CLI 登录凭证」压成关，不改存的值。
+  readCliSignInsForcedOff?: boolean;
   pluginRegistries?: PluginRegistries;
   pluginRegistryUrl?: string;
   staticDir: string;
@@ -605,6 +607,15 @@ function resolveMutableUsageSection(config: PaseoDaemonConfig): MutableDaemonCon
   return { pricing: { autoUpdate, overrides: [...overrides] } };
 }
 
+function resolveMutableCliSignIns(
+  config: PaseoDaemonConfig,
+): Pick<MutableDaemonConfig, "readCliSignIns" | "readCliSignInsForcedOff"> {
+  return {
+    readCliSignIns: config.readCliSignIns !== false,
+    ...(config.readCliSignInsForcedOff ? { readCliSignInsForcedOff: true } : {}),
+  };
+}
+
 function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDaemonConfig {
   const providers = config.providerOverrides ?? {};
 
@@ -632,7 +643,7 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
     appendSystemPrompt: config.appendSystemPrompt ?? "",
     pluginsEnabled: config.pluginsEnabled ?? false,
     plugins: config.plugins ?? {},
-    readCliSignIns: config.readCliSignIns !== false,
+    ...resolveMutableCliSignIns(config),
     skills: { selection: config.skillSelection },
     usage: resolveMutableUsageSection(config),
   };

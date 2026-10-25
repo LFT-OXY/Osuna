@@ -4,6 +4,7 @@ import {
   type PersistedConfig,
 } from "./persisted-config.js";
 import { ProviderOverrideSchema } from "./agent/provider-launch-config.js";
+import { CliSignInsForcedOffError } from "./cli-sign-ins.js";
 import {
   MutableDaemonConfigSchema,
   MutableDaemonConfigPatchSchema,
@@ -377,6 +378,9 @@ export class DaemonConfigStore {
       throw new Error(
         "Relay is controlled by a daemon launch override. Remove PASEO_RELAY_ENABLED or the relay CLI flag before changing it here.",
       );
+    }
+    if (parsedPatch.readCliSignIns !== undefined && this.current.readCliSignInsForcedOff) {
+      throw new CliSignInsForcedOffError(parsedPatch.readCliSignIns);
     }
     const { removeProviders = [], ...configPatch } = parsedPatch;
     const removedProviders = Array.from(new Set(removeProviders));

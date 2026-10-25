@@ -87,9 +87,11 @@ export function HostPrivacySection({ serverId }: { serverId: string }) {
   if (!supported) return null;
 
   const saving = pending !== null;
-  const savedValue = config?.readCliSignIns !== false;
+  // 环境变量压着时显示生效值（关），存的值不动。
+  const forcedOff = config?.readCliSignInsForcedOff === true;
+  const savedValue = !forcedOff && config?.readCliSignIns !== false;
   const shownValue = pending ?? savedValue;
-  const locked = !loaded || saving || !canManage;
+  const locked = !loaded || saving || !canManage || forcedOff;
 
   return (
     <View ref={sectionRef}>
@@ -100,8 +102,10 @@ export function HostPrivacySection({ serverId }: { serverId: string }) {
               <Text style={settingsStyles.rowTitle}>
                 {t("settings.host.privacy.readCliSignIns.title")}
               </Text>
-              <Text style={settingsStyles.rowHint}>
-                {t("settings.host.privacy.readCliSignIns.hint")}
+              <Text style={settingsStyles.rowHint} testID="host-privacy-read-cli-sign-ins-hint">
+                {forcedOff
+                  ? t("settings.host.privacy.readCliSignIns.forcedOffHint")
+                  : t("settings.host.privacy.readCliSignIns.hint")}
               </Text>
               {error ? (
                 <Text style={settingsStyles.rowError} testID="host-privacy-read-cli-sign-ins-error">

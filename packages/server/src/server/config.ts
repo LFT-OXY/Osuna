@@ -92,6 +92,12 @@ function parseBooleanEnv(value: string | undefined): boolean | undefined {
   return undefined;
 }
 
+/** 照 magpie 的 MAGPIE_NO_ACCOUNTS：值不是空、0、false 就算设了。 */
+function isNoCliSignInsSet(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase() ?? "";
+  return normalized !== "" && normalized !== "0" && normalized !== "false";
+}
+
 function normalizeLogEnv(value: string | undefined): string | undefined {
   if (value === undefined) {
     return undefined;
@@ -642,6 +648,7 @@ export function resolveConfigFromPersisted(
     skillSelection: persisted.agents?.skills?.selection,
     pluginsEnabled: persisted.pluginsEnabled ?? false,
     readCliSignIns: persisted.readCliSignIns ?? true,
+    readCliSignInsForcedOff: isNoCliSignInsSet(env.PASEO_NO_CLI_SIGN_INS),
     plugins: persisted.plugins,
     usage: { pricing: resolveUsagePricingConfig(env, persisted) },
     pluginRegistries: persisted.pluginRegistries,

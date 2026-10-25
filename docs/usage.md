@@ -9,7 +9,8 @@ Nothing is sent anywhere; the one exception is the price table, below.
 Subscription limits are a different thing, **Plan usage**. Its data comes from
 [usage sources](plugins.md#usage-sources), which read the logins the CLIs keep and
 take them to each vendor. The host's **Read CLI sign-ins** switch governs those
-requests: off, no usage source runs and none of them is sent. Read
+requests: off, no usage source runs and none of them is sent. `PASEO_NO_CLI_SIGN_INS`
+at launch holds it off for that run. Read
 [ADR 0006](adr/0006-usage-in-code-is-upstream-plan-usage.md) before you look for
 either one's code.
 

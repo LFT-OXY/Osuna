@@ -4118,6 +4118,7 @@ export const en = {
           hint: "Lets Osuna read the logins each CLI keeps for itself (login files, the Keychain) to show plan usage. Off, Osuna doesn't read them and plan usage doesn't show; the CLIs keep using their own logins, and API endpoints aren't affected. Code in plugins other than plan usage isn't covered by this switch.",
           saveFailed: "Couldn't change Read CLI sign-ins.",
           saveFailedReason: "Couldn't change Read CLI sign-ins: {{reason}}",
+          forcedOffHint: "Turned off by the PASEO_NO_CLI_SIGN_INS environment variable",
           turnOff: {
             title: "Turn off Read CLI sign-ins?",
             planUsageStops:

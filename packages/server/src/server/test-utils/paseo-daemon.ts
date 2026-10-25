@@ -55,6 +55,7 @@ interface TestPaseoDaemonOptions {
   agentProfiles?: AgentProfile[];
   autoArchiveAfterMerge?: boolean;
   pluginsEnabled?: PaseoDaemonConfig["pluginsEnabled"];
+  readCliSignInsForcedOff?: PaseoDaemonConfig["readCliSignInsForcedOff"];
   builtinPlugins?: BuiltinPluginLoader;
   plugins?: PaseoDaemonConfig["plugins"];
   usage?: PaseoDaemonConfig["usage"];
@@ -225,6 +226,7 @@ async function prepareTestDaemonConfig(
     agentProfiles: options.agentProfiles,
     autoArchiveAfterMerge: options.autoArchiveAfterMerge,
     pluginsEnabled: options.pluginsEnabled,
+    readCliSignInsForcedOff: options.readCliSignInsForcedOff,
     plugins: options.plugins,
     // Default to no log roots so a test daemon never scans the developer's
     // real Claude/Codex/Pi/OMP transcripts.

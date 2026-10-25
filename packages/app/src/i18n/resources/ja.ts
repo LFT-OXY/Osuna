@@ -4045,6 +4045,7 @@ export const ja: TranslationResources = {
           hint: "各 CLI が保存しているログイン情報（ログインファイル、キーチェーン）を Osuna が読み、プランの使用量を表示します。オフにすると Osuna はこれらを読まず、プランの使用量は表示されません。CLI は引き続き自身のログインを使い、API エンドポイントには影響しません。プラグインのうちプランの使用量以外のコードは、このスイッチの対象外です。",
           saveFailed: "「CLI のサインイン情報を読む」を変更できませんでした。",
           saveFailedReason: "「CLI のサインイン情報を読む」を変更できませんでした：{{reason}}",
+          forcedOffHint: "環境変数 PASEO_NO_CLI_SIGN_INS によってオフになっています",
           turnOff: {
             title: "「CLI のサインイン情報を読む」をオフにしますか？",
             planUsageStops:

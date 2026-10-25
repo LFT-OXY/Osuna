@@ -8,7 +8,8 @@ export class CliSignInAccess {
   constructor(private readonly configStore: Pick<DaemonConfigStore, "get" | "onFieldChange">) {}
 
   allowed(): boolean {
-    return this.configStore.get().readCliSignIns !== false;
+    const config = this.configStore.get();
+    return config.readCliSignInsForcedOff !== true && config.readCliSignIns !== false;
   }
 
   /** Called with the new answer each time it changes; returns the unsubscribe. */
@@ -29,5 +30,18 @@ export class CliSignInsOffError extends Error {
     super(`Refused ${operation} for ${reportId}: Read CLI sign-ins is off`);
     this.name = "CliSignInsOffError";
     this.userMessage = "Read CLI sign-ins is off, so a reset can't be used";
+  }
+}
+
+/** A change to Read CLI sign-ins was refused because PASEO_NO_CLI_SIGN_INS holds it off for this run. */
+export class CliSignInsForcedOffError extends Error {
+  /** What the client shows; the message is for the log. */
+  readonly userMessage: string;
+
+  constructor(readonly requested: boolean) {
+    super(`Refused to set readCliSignIns=${requested}: PASEO_NO_CLI_SIGN_INS is set`);
+    this.name = "CliSignInsForcedOffError";
+    this.userMessage =
+      "Read CLI sign-ins is held off by PASEO_NO_CLI_SIGN_INS, so it can't be changed here";
   }
 }

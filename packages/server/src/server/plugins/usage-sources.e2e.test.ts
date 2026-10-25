@@ -433,3 +433,57 @@ test("with Read CLI sign-ins off no usage source runs, both lists are empty and 
     await rm(root, { recursive: true, force: true });
   }
 }, 60_000);
+
+test("PASEO_NO_CLI_SIGN_INS holds Read CLI sign-ins off for the run: marked in the config, no source runs, the switch can't change and the stored value stays", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const root = await mkdtemp(path.join(os.tmpdir(), "usage-cli-sign-ins-env-"));
+  const calls = path.join(root, "calls.log");
+  await writeFile(calls, "");
+  const builtins = path.join(root, "builtin");
+  await writeRecordingSource(path.join(builtins, "recording-builtin"), "recording-builtin", calls);
+  const daemon = await createTestPaseoDaemon({
+    daemonVersion: "0.9.2",
+    pluginsEnabled: true,
+    builtinPlugins: new BuiltinPluginLoader(builtins, ["recording-builtin"]),
+    readCliSignInsForcedOff: true,
+  });
+  const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.9.2" });
+  const configFile = path.join(daemon.paseoHome, "config.json");
+  const readStored = async () =>
+    (JSON.parse(await readFile(configFile, "utf8")) as { readCliSignIns?: boolean }).readCliSignIns;
+  try {
+    await client.connect();
+    const { config } = await client.getDaemonConfig();
+    expect(config.readCliSignInsForcedOff).toBe(true);
+    expect(config.readCliSignIns).toBe(true);
+    expect(await client.listUsageReports({ forceRefresh: true })).toEqual({
+      requestId: expect.any(String),
+      reports: [],
+      cliSignInsOff: true,
+    });
+    expect((await client.listProviderUsage()).providers).toEqual([]);
+
+    const storedBefore = await readStored().catch(() => undefined);
+    await expect(client.patchDaemonConfig({ readCliSignIns: false })).rejects.toThrow(
+      "Read CLI sign-ins is held off by PASEO_NO_CLI_SIGN_INS, so it can't be changed here",
+    );
+    await expect(client.patchDaemonConfig({ readCliSignIns: true })).rejects.toThrow(
+      "Read CLI sign-ins is held off by PASEO_NO_CLI_SIGN_INS, so it can't be changed here",
+    );
+    expect(await readStored().catch(() => undefined)).toBe(storedBefore);
+    expect((await client.getDaemonConfig()).config).toMatchObject({
+      readCliSignIns: true,
+      readCliSignInsForcedOff: true,
+    });
+    expect(await recordedCalls(calls)).toEqual([]);
+  } finally {
+    await client.close();
+    await daemon.close();
+    await rm(root, { recursive: true, force: true });
+  }
+}, 60_000);
+
+async function recordedCalls(calls: string): Promise<string[]> {
+  const { readFile } = await import("node:fs/promises");
+  return (await readFile(calls, "utf8")).trim().split("\n").filter(Boolean);
+}
