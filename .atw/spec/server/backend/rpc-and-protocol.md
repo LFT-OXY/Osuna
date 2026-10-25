@@ -2198,7 +2198,7 @@ body: JSON.stringify({ credit_id: soonest.id, redeem_request_id: randomUUID() })
 ## Scenario: a host switch that stops every CLI-login read (credential-switch ticket 01, `readCliSignIns`)
 
 ### 1. Scope / Trigger
-- A host-level `config.json` switch decides whether the daemon may read the logins CLIs keep for themselves. Every read path (plan usage sources now; Codex sign-in detection, import, env override in later tickets) must ask one place.
+- A host-level `config.json` switch decides whether the daemon may read the logins CLIs keep for themselves. Every read path asks one place: plan usage sources, Codex sign-in detection (`ApiEndpointService`, `cliSignIns` required), the OpenCode `auth.json` read in import, and the env override.
 
 ### 2. Signatures
 - `CliSignInAccess` (`packages/server/src/server/cli-sign-ins.ts`): `allowed(): boolean`, `onChange(listener: (allowed: boolean) => void)`. Built once in bootstrap and injected; `PluginServiceDependencies.cliSignIns` is required.
@@ -2210,6 +2210,8 @@ body: JSON.stringify({ credit_id: soonest.id, redeem_request_id: randomUUID() })
 - `usage.list_reports.response`: off → `{ requestId, error: null, cliSignInsOff: true }`, no reports streamed. `provider.usage.list`: off → empty, no new field. `usage.reset.consume`: off → `error` = `CliSignInsOffError.userMessage`.
 - The app hides the Privacy section when the feature flag is absent (COMPAT-tagged), no fallback.
 
+- Codex sign-in (ticket 05): while off, `checkCodexSignIn` returns before the injected reader and drops an answer that lands after the switch went off; `codexUsesChatGpt` falls back to the last detected result, else the takeover record's current wiring (ADR 0010 "can't tell → keep"). Nothing subscribes to the switch, so turning it off never rewrites `config.toml`; the next status read after turning it on asks again.
+- Import (ticket 05): `settledImports` is the one place that decides whether OpenCode is read. The scan response carries optional `cliSignInsOff: true` when OpenCode was asked for but skipped; the app believes it only behind `features.readCliSignIns` (`COMPAT(readCliSignIns)` in `api-endpoints/use-import-apps.ts`). OpenCode entries scanned while on and imported while off are skipped by remembered fingerprint, the rest import, and the response error is `import_cli_sign_ins_off` (`code` is `z.string()`, so old apps parse it). After a daemon restart the fingerprints are gone and such an entry reports `import_gone`.
 - Env force-off (ticket 04): `PASEO_NO_CLI_SIGN_INS` counts as set unless empty, `0` or `false` (case and surrounding whitespace ignored, magpie `MAGPIE_NO_ACCOUNTS`). It is folded into `CliSignInAccess.allowed()`, can only force off, never writes `config.json`. Config reads carry optional read-only `readCliSignInsForcedOff: true` while `readCliSignIns` stays the stored value; `readCliSignIns` is listed in `resolveOverrideControlledPaths`. A patch of `readCliSignIns` while forced off throws `CliSignInsForcedOffError` → `rpc_error` code `cli_sign_ins_forced_off`. The variable is in `DAEMON_SETTING_ENV_KEYS`, so managed starts (`paseo daemon start`, desktop) strip it like `PASEO_RELAY_ENABLED`; only foreground `daemon run` and Docker honour it (user decision, documented in `public-docs/configuration.md`).
 
 ### 4. Validation & Error Matrix
@@ -2220,6 +2222,8 @@ body: JSON.stringify({ credit_id: soonest.id, redeem_request_id: randomUUID() })
 | read in flight when turned off | its result is dropped on return (`generation` changed), not cached |
 | switch back on | next list discovers and fetches again, no restart |
 | API endpoint balance | unaffected |
+| off, Codex status / open / restart | sign-in reader not called; `config.toml` unchanged by the switch |
+| off, import with OpenCode picked | OpenCode skipped, CC Switch etc. imported, error `import_cli_sign_ins_off` |
 | `PASEO_NO_CLI_SIGN_INS` set | effective off; read has `readCliSignInsForcedOff`; patching the switch refused; stored value untouched; restart without it → stored value |
 
 ### 5. Good/Base/Bad Cases

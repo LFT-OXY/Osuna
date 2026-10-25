@@ -4,7 +4,7 @@
 
 **Blocked by:** 01
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] Codex 登录方式的读取经 01 的闸门；关着时读取器不被调用，走现有「判断不出就保持」路径；ADR 0010 的接法规则不变。
 - [ ] 导入扫描关着时走现有「不含 OpenCode」路径；扫描结果带可选的「OpenCode 没读」标记，导入窗口据此显示那句说明。
