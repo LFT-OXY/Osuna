@@ -311,7 +311,7 @@ async function prepareTestDaemonConfig(
         ...options.apiEndpoints?.importSourcePaths,
       },
     },
-    // 多号自动轮换读 CLI 登录：测试 daemon 默认指向临时目录与空的假钥匙串，额度一律读不到，
+    // 多号自动轮换读 CLI 登录：测试 daemon 默认指向临时目录与空的假钥匙串，额度一律读不到，加号连不上，
     // 绝不碰真实的 ~/.codex、~/.claude 与钥匙串。关心它的用例自己传。
     providerAccounts: {
       env: {
@@ -320,6 +320,14 @@ async function prepareTestDaemonConfig(
       },
       homeDir: paseoHomeRoot,
       keychain: new FakeCliKeychain(),
+      // 加号与续期绝不连 OpenAI，也不占本机的 1455：关心它的用例指向自己的假登录服务。
+      codexSignIn: {
+        endpoints: {
+          authorizeUrl: "http://127.0.0.1:9/oauth/authorize",
+          tokenUrl: "http://127.0.0.1:9/oauth/token",
+        },
+        callbackPort: 0,
+      },
       usage: {
         read: async () => ({
           status: "failed",

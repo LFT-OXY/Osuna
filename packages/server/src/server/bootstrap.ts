@@ -2010,6 +2010,8 @@ export async function createPaseoDaemon(
             );
             pluginRuntime.bindPaseoSessionHost(wsServer);
             await pluginRuntime.start();
+            // 存着的号保活与读额度的定时检查（启动 1 分钟后第一次）。
+            providerAccountService.start();
             providerSnapshotManager.settlePluginProviders();
             wsServer.beginAcceptingConnections();
             relayRuntime = createRelayRuntime({
@@ -2100,6 +2102,7 @@ export async function createPaseoDaemon(
     await usageService.dispose().catch(() => undefined);
     apiEndpointService.dispose();
     apiEndpointRetiredModels.dispose();
+    providerAccountService.stop();
     await relayRuntime?.stop().catch(() => undefined);
     if (wsServer) {
       await wsServer.close();

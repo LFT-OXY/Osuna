@@ -172,6 +172,10 @@ export class PluginService {
     return this.usageSources.listReports(options);
   }
 
+  fetchUsageInput(sourceId: string, input: unknown) {
+    return this.usageSources.fetchInput(sourceId, input);
+  }
+
   consumeUsageReset(reportId: string) {
     return this.usageSources.consumeReset(reportId);
   }

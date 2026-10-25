@@ -4472,14 +4472,58 @@ export const ja: TranslationResources = {
         empty:
           "まだアカウントがありません。{{name}} がサブスクリプションにログインすると、そのアカウントが最初のアカウントになります。",
         single: "切り替えるにはもう 1 つアカウントを追加してください。",
+        add: "アカウントを追加",
+        alreadyAdded: "{{email}} はすでに一覧にあるため、サインインを更新しました。",
+        needsSignInHint:
+          "サインインが拒否または取り消されました。もう一度サインインするまで切り替え先になりません。",
+        signInAgain: "もう一度サインイン",
         unknownEmail: "不明なアカウント",
-        badges: { inUse: "使用中", first: "優先" },
+        badges: { inUse: "使用中", first: "優先", needsSignIn: "要サインイン" },
         usage: {
           reading: "使用量を読み取り中…",
           failed: "使用量を読み取れません：{{reason}}",
           reasons: {
             not_found: "プランの使用量からこのログインが見えません",
             not_read_yet: "まだ読み取っていません",
+            rejected: "サインインが拒否されました",
+          },
+        },
+        signIn: {
+          addTitle: "{{name}} アカウントを追加",
+          addFailedTitle: "このアカウントを追加できませんでした",
+          reSignInFailedTitle: "もう一度サインインできませんでした",
+          reSignInTitle: "{{email}} にもう一度サインイン",
+          starting: "サインインを準備しています…",
+          startFailed: "サインインを開始できませんでした：{{reason}}",
+          waitingTitle: "ブラウザでサインインを完了してください",
+          waitingHint:
+            "追加する ChatGPT アカウントでサインインしてください。完了するとこの画面は自動で閉じます。",
+          openPage: "サインインページを開く",
+          copyLink: "リンクをコピー",
+          linkLabel: "サインインのリンク",
+          pasteLabel: "ブラウザが最後に表示したアドレス",
+          pasteHint:
+            "別のデバイスでサインインすると、ブラウザは最後に読み込めないページで止まります。アドレスバーのアドレス全体をコピーしてここに貼り付けてください。",
+          pasteHintBlocked:
+            "ホストのポート 1455 が使用中のため、ブラウザが Osuna に戻れません。ブラウザが最後に表示したアドレス全体をコピーしてここに貼り付けてください。",
+          pasteSubmit: "完了",
+          retry: "再試行",
+          canceled: "サインインはキャンセルされました。",
+          failed: "サインインが完了しませんでした：{{reason}}",
+          pasteErrors: {
+            paste_invalid: "http:// で始まるアドレス全体を貼り付けてください",
+            paste_mismatch:
+              "このアドレスは今回のサインインのものではありません。今回のサインインのブラウザタブのアドレスを貼り付けてください。",
+            not_waiting: "このサインインは終了しています。もう一度お試しください。",
+          },
+          failures: {
+            timed_out: "10 分以内にサインインが完了しませんでした。",
+            refused: "サインインページが拒否しました：{{reason}}",
+            exchange_failed: "ChatGPT がサインインを完了しませんでした（{{reason}}）。",
+            no_account: "ChatGPT がどのアカウントでサインインしたかを返しませんでした。",
+            different_account: "別のアカウントです。このアカウントでサインインしてください。",
+            cli_sign_ins_off:
+              "「CLI のサインイン情報を読む」がオフのため、アカウントを追加できません。",
           },
         },
         riskNotice: {

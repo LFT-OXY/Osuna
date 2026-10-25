@@ -4482,14 +4482,58 @@ export const ptBR: TranslationResources = {
         empty:
           "Ainda não há contas. Quando o {{name}} entrar em uma assinatura, essa conta vira a primeira.",
         single: "Adicione outra conta para começar o rodízio.",
+        add: "Adicionar conta",
+        alreadyAdded: "{{email}} já estava na lista, então o login dela foi atualizado.",
+        needsSignInHint:
+          "O login foi recusado ou revogado, então o rodízio não passa para ela até você entrar de novo.",
+        signInAgain: "Entrar de novo",
         unknownEmail: "Conta desconhecida",
-        badges: { inUse: "Em uso", first: "Primeira" },
+        badges: { inUse: "Em uso", first: "Primeira", needsSignIn: "Precisa entrar" },
         usage: {
           reading: "Lendo o uso…",
           failed: "Não foi possível ler o uso: {{reason}}",
           reasons: {
             not_found: "o uso do plano não vê este login",
             not_read_yet: "ainda não lido",
+            rejected: "o login foi recusado",
+          },
+        },
+        signIn: {
+          addTitle: "Adicionar uma conta do {{name}}",
+          addFailedTitle: "Não foi possível adicionar esta conta",
+          reSignInFailedTitle: "Não foi possível entrar de novo",
+          reSignInTitle: "Entrar de novo em {{email}}",
+          starting: "Preparando o login…",
+          startFailed: "Não foi possível começar o login: {{reason}}",
+          waitingTitle: "Termine o login no navegador",
+          waitingHint:
+            "Entre com a conta do ChatGPT que você quer adicionar. Isto fecha sozinho quando você terminar.",
+          openPage: "Abrir página de login",
+          copyLink: "Copiar link",
+          linkLabel: "Link de login",
+          pasteLabel: "Endereço em que o navegador parou",
+          pasteHint:
+            "Entrando em outro dispositivo? O navegador para numa página que não carrega. Copie o endereço inteiro da barra de endereços e cole aqui.",
+          pasteHintBlocked:
+            "A porta 1455 do host está ocupada, então o navegador não consegue voltar ao Osuna. Copie o endereço inteiro em que o navegador parar e cole aqui.",
+          pasteSubmit: "Concluir",
+          retry: "Tentar de novo",
+          canceled: "O login foi cancelado.",
+          failed: "O login não terminou: {{reason}}",
+          pasteErrors: {
+            paste_invalid: "Cole o endereço inteiro, começando com http://",
+            paste_mismatch:
+              "Esse endereço não é deste login. Cole o da aba do navegador deste login.",
+            not_waiting: "Este login terminou. Tente de novo.",
+          },
+          failures: {
+            timed_out: "O login não terminou em 10 minutos.",
+            refused: "A página de login recusou: {{reason}}",
+            exchange_failed: "O ChatGPT não concluiu o login ({{reason}}).",
+            no_account: "O ChatGPT não informou qual conta entrou.",
+            different_account: "É outra conta. Entre com esta conta para corrigi-la.",
+            cli_sign_ins_off:
+              "“Ler logins das CLIs” está desativado, então não dá para adicionar contas.",
           },
         },
         riskNotice: {

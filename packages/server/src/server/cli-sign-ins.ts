@@ -24,12 +24,15 @@ export class CliSignInsOffError extends Error {
   readonly userMessage: string;
 
   constructor(
-    readonly operation: "usage_reset",
+    readonly operation: "usage_reset" | "usage_fetch",
     readonly reportId: string,
   ) {
     super(`Refused ${operation} for ${reportId}: Read CLI sign-ins is off`);
     this.name = "CliSignInsOffError";
-    this.userMessage = "Read CLI sign-ins is off, so a reset can't be used";
+    this.userMessage =
+      operation === "usage_reset"
+        ? "Read CLI sign-ins is off, so a reset can't be used"
+        : "Read CLI sign-ins is off, so usage isn't read";
   }
 }
 

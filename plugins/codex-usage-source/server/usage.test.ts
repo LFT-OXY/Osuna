@@ -72,6 +72,31 @@ test("explicit route reads Codex auth and preserves the usage request", async ()
   }
 });
 
+test("a saved account's own token reads usage with the same request as the CLI login", async () => {
+  const seen: { url: string; headers: Headers }[] = [];
+  const record = (url: unknown, init?: RequestInit) => {
+    seen.push({ url: String(url), headers: new Headers(init?.headers) });
+    return response(init?.headers ?? {}, "account-saved");
+  };
+  await writeAuth("fixture-cli", "account-saved");
+  await fetchUsage(authInput(fixtureHome), record);
+  const report = await fetchUsage(
+    { route: { store: "token", accessToken: "fixture-saved", accountId: "account-saved" } },
+    record,
+  );
+  expect(report).toMatchObject({
+    status: "available",
+    windows: [{ id: "five_hour", usedPct: 30 }],
+  });
+  const [cli, saved] = seen;
+  expect(saved?.url).toBe(cli?.url);
+  expect(saved?.headers.get("Authorization")).toBe("Bearer fixture-saved");
+  // 除了登录本身，请求头与读 CLI 登录的那次一模一样（同一个浏览器 User-Agent）。
+  cli?.headers.delete("Authorization");
+  saved?.headers.delete("Authorization");
+  expect(Object.fromEntries(saved?.headers ?? [])).toEqual(Object.fromEntries(cli?.headers ?? []));
+});
+
 test("discovery input requires a route and rejects raw credentials", () => {
   for (const input of [
     { codexHome: "/unused" },

@@ -4437,14 +4437,56 @@ export const ko: TranslationResources = {
         empty:
           "아직 계정이 없습니다. {{name}}이(가) 구독 계정으로 로그인하면 그 계정이 첫 번째 계정이 됩니다.",
         single: "전환하려면 계정을 하나 더 추가하세요.",
+        add: "계정 추가",
+        alreadyAdded: "{{email}} 계정이 이미 목록에 있어 로그인 정보를 업데이트했습니다.",
+        needsSignInHint:
+          "로그인이 거부되었거나 취소되었습니다. 다시 로그인할 때까지 이 계정으로 전환하지 않습니다.",
+        signInAgain: "다시 로그인",
         unknownEmail: "알 수 없는 계정",
-        badges: { inUse: "사용 중", first: "우선" },
+        badges: { inUse: "사용 중", first: "우선", needsSignIn: "다시 로그인 필요" },
         usage: {
           reading: "사용량을 읽는 중…",
           failed: "사용량을 읽을 수 없습니다: {{reason}}",
           reasons: {
             not_found: "플랜 사용량에서 이 로그인이 보이지 않습니다",
             not_read_yet: "아직 읽지 않았습니다",
+            rejected: "로그인이 거부되었습니다",
+          },
+        },
+        signIn: {
+          addTitle: "{{name}} 계정 추가",
+          addFailedTitle: "이 계정을 추가하지 못했습니다",
+          reSignInFailedTitle: "다시 로그인하지 못했습니다",
+          reSignInTitle: "{{email}} 다시 로그인",
+          starting: "로그인을 준비하는 중…",
+          startFailed: "로그인을 시작하지 못했습니다: {{reason}}",
+          waitingTitle: "브라우저에서 로그인을 완료하세요",
+          waitingHint: "추가할 ChatGPT 계정으로 로그인하세요. 완료되면 이 창은 자동으로 닫힙니다.",
+          openPage: "로그인 페이지 열기",
+          copyLink: "링크 복사",
+          linkLabel: "로그인 링크",
+          pasteLabel: "브라우저가 마지막으로 연 주소",
+          pasteHint:
+            "다른 기기에서 로그인하면 브라우저가 마지막에 열리지 않는 페이지에 멈춥니다. 주소 표시줄의 전체 주소를 복사해 여기에 붙여 넣으세요.",
+          pasteHintBlocked:
+            "호스트의 1455 포트가 사용 중이어서 브라우저가 Osuna로 돌아올 수 없습니다. 브라우저가 마지막으로 연 전체 주소를 복사해 여기에 붙여 넣으세요.",
+          pasteSubmit: "완료",
+          retry: "다시 시도",
+          canceled: "로그인이 취소되었습니다.",
+          failed: "로그인을 완료하지 못했습니다: {{reason}}",
+          pasteErrors: {
+            paste_invalid: "http://로 시작하는 전체 주소를 붙여 넣으세요",
+            paste_mismatch:
+              "이 로그인에서 나온 주소가 아닙니다. 이 로그인의 브라우저 탭 주소를 붙여 넣으세요.",
+            not_waiting: "이 로그인은 끝났습니다. 다시 시도하세요.",
+          },
+          failures: {
+            timed_out: "10분 안에 로그인이 완료되지 않았습니다.",
+            refused: "로그인 페이지가 거부했습니다: {{reason}}",
+            exchange_failed: "ChatGPT가 로그인을 완료하지 않았습니다({{reason}}).",
+            no_account: "ChatGPT가 어떤 계정으로 로그인했는지 알려 주지 않았습니다.",
+            different_account: "다른 계정입니다. 이 계정으로 로그인하세요.",
+            cli_sign_ins_off: "'CLI 로그인 정보 읽기'가 꺼져 있어 계정을 추가할 수 없습니다.",
           },
         },
         riskNotice: {

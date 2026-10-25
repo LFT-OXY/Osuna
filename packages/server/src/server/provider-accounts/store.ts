@@ -4,6 +4,7 @@ import type pino from "pino";
 import { z } from "zod";
 import {
   ACCOUNT_ROTATION_PROVIDERS,
+  ProviderAccountNeedsSignInSchema,
   ProviderAccountWindowSchema,
   type AccountRotationProvider,
 } from "@getpaseo/protocol/provider-account/rpc-schemas";
@@ -17,8 +18,9 @@ import {
  * $PASEO_HOME/accounts/accounts.json（目录 0700、文件 0600、明文，与第三方接口的 keys.json 同样处理）：
  * Codex、Claude Code 的号与每家的多号自动轮换设置。写坏时用上一份好的 .bak（last-good.ts）。
  * 不进 config.json：get_daemon_config 会把配置原样发给客户端。
- * 一个登录只有一个持有者：CLI 现在登录的号在这里只有资料，它的 token 只在 CLI 自己那里。
- * 只有 daemon 写这个文件，不加跨进程锁。
+ * 一个登录只有一个持有者：CLI 现在登录的号在这里只有资料，它的 token 只在 CLI 自己那里；
+ * 存着的 Codex 号（加号得来的）的整份登录只在这里的 login。
+ * 写是同步的、整份替换；续期这种「读、发请求、写回」的一段在跨进程锁里做（file-lock.ts），写前重读。
  */
 
 const StoredUsageSchema = z.object({
@@ -36,6 +38,12 @@ const StoredAccountSchema = z.object({
   plan: z.string().optional(),
   // 最近一次读到的额度。
   usage: StoredUsageSchema.optional(),
+  // 存着的 Codex 号的整份登录（与 auth.json 同形，含 refresh token）；CLI 现在登录的号没有。
+  login: z.record(z.string(), z.unknown()).optional(),
+  // 续期被拒或被吊销：「需要重新登录」，退出轮换。
+  needsSignIn: ProviderAccountNeedsSignInSchema.optional(),
+  // Osuna 最近一次续这个号（加号、续期、保活）的时间。
+  renewedAt: z.string().optional(),
 });
 export type StoredAccount = z.infer<typeof StoredAccountSchema>;
 
@@ -108,6 +116,36 @@ export class ProviderAccountStore {
     const added: StoredAccount = { id: randomUUID(), ...input };
     this.file.write({ ...current, accounts: [...current.accounts, added] });
     return added;
+  }
+
+  account(accountId: string): StoredAccount | null {
+    return this.read().accounts.find((account) => account.id === accountId) ?? null;
+  }
+
+  findByIdentity(provider: AccountRotationProvider, identity: string): StoredAccount | null {
+    return (
+      this.read().accounts.find(
+        (account) => account.provider === provider && account.identity === identity,
+      ) ?? null
+    );
+  }
+
+  /** 改一个号；值为 undefined 的键被去掉。号已被移除时返回 null。 */
+  updateAccount(
+    accountId: string,
+    patch: Partial<Omit<StoredAccount, "id" | "provider">>,
+  ): StoredAccount | null {
+    const current = this.read();
+    const existing = current.accounts.find((account) => account.id === accountId);
+    if (!existing) return null;
+    const updated = StoredAccountSchema.parse(
+      JSON.parse(JSON.stringify({ ...existing, ...patch })),
+    );
+    this.file.write({
+      ...current,
+      accounts: current.accounts.map((account) => (account === existing ? updated : account)),
+    });
+    return updated;
   }
 
   /** 记下这个号最近一次读到的额度；号已被移除时什么都不做。 */

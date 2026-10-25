@@ -202,6 +202,7 @@ import type { ApiEndpointService } from "./api-endpoints/service.js";
 import type { ProviderAccountService } from "./provider-accounts/service.js";
 import {
   createProviderAccountSession,
+  isProviderAccountRequest,
   type ProviderAccountRequest,
   type ProviderAccountSession,
 } from "./session/provider-account/provider-account-session.js";
@@ -3110,6 +3111,7 @@ export class Session {
   }
 
   private dispatchProviderMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    if (isProviderAccountRequest(msg)) return this.dispatchProviderAccountMessage(msg);
     switch (msg.type) {
       case "list_provider_models_request":
         return this.providerCatalogSession.handleListProviderModelsRequest(msg);
@@ -3135,9 +3137,6 @@ export class Session {
         return this.providerCatalogSession.handleProviderVersionCheckRequest(msg);
       case "provider.upgrade.request":
         return this.providerCatalogSession.handleProviderUpgradeRequest(msg);
-      case "provider.account.list.request":
-      case "provider.account.set_rotation.request":
-        return this.dispatchProviderAccountMessage(msg);
       case "provider.codex.session.list_model_providers.request":
       case "provider.codex.session.move_model_provider.request":
         if (!this.codexConversationSession) {

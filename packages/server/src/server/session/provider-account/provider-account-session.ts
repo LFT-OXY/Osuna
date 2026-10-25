@@ -1,5 +1,6 @@
 import type pino from "pino";
 import type { SessionInboundMessage, SessionOutboundMessage } from "../../messages.js";
+import { SignInPasteError } from "../../provider-accounts/codex-sign-in.js";
 import {
   ProviderAccountRequestError,
   type ProviderAccountService,
@@ -9,6 +10,7 @@ import {
   isAccountRotationProvider,
   type AccountRotationProvider,
   type ProviderAccountError,
+  type ProviderAccountSignIn,
 } from "@getpaseo/protocol/provider-account/rpc-schemas";
 
 export interface ProviderAccountSessionHost {
@@ -20,7 +22,32 @@ type SetRotationRequest = Extract<
   SessionInboundMessage,
   { type: "provider.account.set_rotation.request" }
 >;
-export type ProviderAccountRequest = ListRequest | SetRotationRequest;
+type SignInRequest = Extract<
+  SessionInboundMessage,
+  {
+    type:
+      | "provider.account.sign_in.start.request"
+      | "provider.account.sign_in.get.request"
+      | "provider.account.sign_in.cancel.request"
+      | "provider.account.sign_in.submit.request";
+  }
+>;
+export type ProviderAccountRequest = ListRequest | SetRotationRequest | SignInRequest;
+
+const PROVIDER_ACCOUNT_REQUESTS = new Set<string>([
+  "provider.account.list.request",
+  "provider.account.set_rotation.request",
+  "provider.account.sign_in.start.request",
+  "provider.account.sign_in.get.request",
+  "provider.account.sign_in.cancel.request",
+  "provider.account.sign_in.submit.request",
+] satisfies ProviderAccountRequest["type"][]);
+
+export function isProviderAccountRequest(
+  msg: SessionInboundMessage,
+): msg is ProviderAccountRequest {
+  return PROVIDER_ACCOUNT_REQUESTS.has(msg.type);
+}
 
 const EMPTY_STATE: ProviderAccountState = {
   settings: { rotationEnabled: false, riskNoticeSeen: false },
@@ -50,6 +77,12 @@ export class ProviderAccountSession {
   ) {}
 
   async handle(request: ProviderAccountRequest): Promise<void> {
+    if (
+      request.type !== "provider.account.list.request" &&
+      request.type !== "provider.account.set_rotation.request"
+    ) {
+      return this.handleSignIn(request);
+    }
     const { requestId, provider } = request;
     let state = EMPTY_STATE;
     let error: ProviderAccountError | null = null;
@@ -81,6 +114,66 @@ export class ProviderAccountSession {
     }
   }
 
+  private async handleSignIn(request: SignInRequest): Promise<void> {
+    const { service } = this.options;
+    let signIn: ProviderAccountSignIn | null = null;
+    let error: ProviderAccountError | null = null;
+    try {
+      switch (request.type) {
+        case "provider.account.sign_in.start.request":
+          if (!isAccountRotationProvider(request.provider)) {
+            error = {
+              code: "unsupported_provider",
+              message: `${request.provider} has no account rotation`,
+            };
+          } else {
+            signIn = await service.startSignIn({
+              provider: request.provider,
+              ...(request.accountId !== undefined ? { accountId: request.accountId } : {}),
+            });
+          }
+          break;
+        case "provider.account.sign_in.get.request":
+          signIn = service.signIn(request.signInId);
+          break;
+        case "provider.account.sign_in.cancel.request":
+          signIn = service.cancelSignIn(request.signInId);
+          break;
+        case "provider.account.sign_in.submit.request":
+          signIn = await service.submitSignIn({
+            signInId: request.signInId,
+            callbackUrl: request.callbackUrl,
+          });
+          break;
+      }
+    } catch (cause) {
+      if (cause instanceof SignInPasteError) {
+        error = { code: cause.code, message: cause.message };
+        // 粘贴的地址不能用，这次登录照旧等着：一起回它现在的样子。
+        if (request.type === "provider.account.sign_in.submit.request") {
+          signIn = service.signIn(request.signInId);
+        }
+      } else {
+        error = this.failure({ cause, request });
+      }
+    }
+    const payload = { requestId: request.requestId, signIn, error };
+    switch (request.type) {
+      case "provider.account.sign_in.start.request":
+        this.options.host.emit({ type: "provider.account.sign_in.start.response", payload });
+        return;
+      case "provider.account.sign_in.get.request":
+        this.options.host.emit({ type: "provider.account.sign_in.get.response", payload });
+        return;
+      case "provider.account.sign_in.cancel.request":
+        this.options.host.emit({ type: "provider.account.sign_in.cancel.response", payload });
+        return;
+      case "provider.account.sign_in.submit.request":
+        this.options.host.emit({ type: "provider.account.sign_in.submit.response", payload });
+        return;
+    }
+  }
+
   private failure(input: {
     cause: unknown;
     request: ProviderAccountRequest;
@@ -89,10 +182,7 @@ export class ProviderAccountSession {
     if (cause instanceof ProviderAccountRequestError) {
       return { code: cause.code, message: cause.message };
     }
-    this.options.logger.warn(
-      { err: cause, provider: request.provider, type: request.type },
-      "Provider account request failed",
-    );
+    this.options.logger.warn({ err: cause, type: request.type }, "Provider account request failed");
     const message = cause instanceof Error ? cause.message : String(cause);
     return { code: "failed", message };
   }

@@ -160,6 +160,17 @@ export class UsageSourceRegistry {
     return { outcome: { ...outcome, message: resetOutcomeText(outcome) }, entry };
   }
 
+  /**
+   * Reads one account through a source with an input the caller holds (a saved account's own login),
+   * past discovery and the cache. Throws when Read CLI sign-ins is off or the source is gone.
+   */
+  async fetchInput(sourceId: string, input: unknown): Promise<UsageReport> {
+    if (!this.cliSignIns.allowed()) throw new CliSignInsOffError("usage_fetch", sourceId);
+    const source = this.sources.get(sourceId);
+    if (!source) throw new Error(`Unknown usage source: ${sourceId}`);
+    return this.fetchBeforeDeadline(source, input);
+  }
+
   async listReports(options: ListUsageReportsOptions = {}): Promise<UsageReportEntry[]> {
     if (options.agentId !== undefined && options.reportIds !== undefined)
       throw new Error("agentId and reportIds cannot be combined");

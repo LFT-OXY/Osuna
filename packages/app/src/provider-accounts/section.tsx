@@ -1,8 +1,9 @@
-import React from "react";
+import React, { useCallback } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
+import { Plus } from "lucide-react-native";
 import type {
   AccountRotationProvider,
   ProviderAccount,
@@ -15,11 +16,12 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { Switch } from "@/components/ui/switch";
 import { settingsStyles } from "@/styles/settings";
 import { UsageWindowBar } from "@/usage/window-bar";
+import type { SignedInAccount } from "./use-account-sign-in";
 import type { ProviderAccountsLoad } from "./use-provider-accounts";
 
 /*
  * Codex / Claude Code 提供方页的「账号」一节，从上到下：说明行（总开关关着、登录换不了）、
- * 「多号自动轮换」开关、账号列表。纯 props，运行时接线在 view.tsx。
+ * 「多号自动轮换」开关、账号列表、「添加账号」。纯 props，运行时接线在 view.tsx。
  */
 
 const KEY = "settings.providers.accounts";
@@ -34,6 +36,11 @@ export interface ProviderAccountsSectionProps {
   rotationError: string | null;
   onToggleRotation: (enabled: boolean) => void;
   onOpenPrivacySettings: () => void;
+  // 这家能加号时给；没有就不出现「添加账号」。
+  onAddAccount?: () => void;
+  onSignInAgain: (account: ProviderAccount) => void;
+  // 刚加上或更新的号：高亮它的行。
+  highlighted: SignedInAccount | null;
 }
 
 export function ProviderAccountsSection(props: ProviderAccountsSectionProps) {
@@ -75,7 +82,15 @@ export function ProviderAccountsSection(props: ProviderAccountsSectionProps) {
           />
         </View>
       </View>
-      <AccountList load={load} providerLabel={providerLabel} rotationOn={savedValue} />
+      <AccountList
+        load={load}
+        providerLabel={providerLabel}
+        rotationOn={savedValue}
+        canManage={canManage}
+        onAddAccount={blocked ? undefined : props.onAddAccount}
+        onSignInAgain={props.onSignInAgain}
+        highlighted={props.highlighted}
+      />
     </SettingsSection>
   );
 }
@@ -151,15 +166,18 @@ function unsupportedReason(
   return t(`${KEY}.unsupportedReasons.${blocked.code}`);
 }
 
-function AccountList({
-  load,
-  providerLabel,
-  rotationOn,
-}: {
+interface AccountListProps {
   load: ProviderAccountsLoad;
   providerLabel: string;
   rotationOn: boolean;
-}) {
+  canManage: boolean;
+  onAddAccount: (() => void) | undefined;
+  onSignInAgain: (account: ProviderAccount) => void;
+  highlighted: SignedInAccount | null;
+}
+
+function AccountList(props: AccountListProps) {
+  const { load, providerLabel, rotationOn, canManage, onAddAccount, highlighted } = props;
   const { t } = useTranslation();
   if (load.kind === "loading") {
     return (
@@ -185,45 +203,88 @@ function AccountList({
   const { accounts } = load.data;
   // 轮换关着、也没有号：开关下面不再多一块空列表。
   if (accounts.length === 0 && !rotationOn) return null;
+  const addButton = onAddAccount ? (
+    <View style={styles.addRow}>
+      <Button
+        variant="outline"
+        size="sm"
+        leftIcon={Plus}
+        onPress={onAddAccount}
+        disabled={!canManage}
+        testID="provider-accounts-add"
+      >
+        {t(`${KEY}.add`)}
+      </Button>
+    </View>
+  ) : null;
   if (accounts.length === 0) {
     return (
-      <View style={settingsStyles.card} testID="provider-accounts-empty">
-        <View style={settingsStyles.row}>
-          <Text style={settingsStyles.rowHint}>{t(`${KEY}.empty`, { name: providerLabel })}</Text>
+      <View style={styles.list}>
+        <View style={settingsStyles.card} testID="provider-accounts-empty">
+          <View style={settingsStyles.row}>
+            <Text style={settingsStyles.rowHint}>{t(`${KEY}.empty`, { name: providerLabel })}</Text>
+          </View>
         </View>
+        {addButton}
       </View>
     );
   }
+  const highlightedAccount = highlighted
+    ? accounts.find((account) => account.id === highlighted.accountId)
+    : undefined;
   return (
     <View style={styles.list}>
       <View style={settingsStyles.card} testID="provider-accounts-list">
         {accounts.map((account, index) => (
-          <AccountRow key={account.id} account={account} first={index === 0} divided={index > 0} />
+          <AccountRow
+            key={account.id}
+            account={account}
+            first={index === 0}
+            divided={index > 0}
+            highlighted={account.id === highlighted?.accountId}
+            canManage={canManage}
+            onSignInAgain={props.onSignInAgain}
+          />
         ))}
       </View>
+      {highlighted?.alreadyAdded && highlightedAccount ? (
+        <Text style={styles.listHint} testID="provider-accounts-already-added">
+          {t(`${KEY}.alreadyAdded`, {
+            email: highlightedAccount.email ?? highlighted.email ?? t(`${KEY}.unknownEmail`),
+          })}
+        </Text>
+      ) : null}
       {accounts.length === 1 ? (
         <Text style={styles.listHint} testID="provider-accounts-single">
           {t(`${KEY}.single`)}
         </Text>
       ) : null}
+      {addButton}
     </View>
   );
 }
 
-function AccountRow({
-  account,
-  first,
-  divided,
-}: {
+interface AccountRowProps {
   account: ProviderAccount;
   first: boolean;
   divided: boolean;
-}) {
+  highlighted: boolean;
+  canManage: boolean;
+  onSignInAgain: (account: ProviderAccount) => void;
+}
+
+function AccountRow(props: AccountRowProps) {
+  const { account, first, divided, highlighted, canManage, onSignInAgain } = props;
   const { t } = useTranslation();
   const { usage } = account;
+  const signInAgain = useCallback(() => onSignInAgain(account), [account, onSignInAgain]);
   return (
     <View
-      style={[styles.accountRow, divided && settingsStyles.rowBorder]}
+      style={[
+        styles.accountRow,
+        divided && settingsStyles.rowBorder,
+        highlighted && styles.accountRowHighlighted,
+      ]}
       testID={`provider-account-${account.id}`}
     >
       <View style={styles.accountHeader}>
@@ -238,14 +299,33 @@ function AccountRow({
             <StatusBadge size="xs" variant="success" label={t(`${KEY}.badges.inUse`)} />
           ) : null}
           {first ? <StatusBadge size="xs" label={t(`${KEY}.badges.first`)} /> : null}
+          {account.needsSignIn ? (
+            <StatusBadge size="xs" variant="error" label={t(`${KEY}.badges.needsSignIn`)} />
+          ) : null}
         </View>
       </View>
+      {account.needsSignIn ? (
+        <View style={styles.needsSignIn} testID="provider-account-needs-sign-in">
+          <Text style={[settingsStyles.rowHint, styles.needsSignInText]}>
+            {t(`${KEY}.needsSignInHint`)}
+          </Text>
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={signInAgain}
+            disabled={!canManage}
+            testID="provider-account-sign-in-again"
+          >
+            {t(`${KEY}.signInAgain`)}
+          </Button>
+        </View>
+      ) : null}
       {usage.status === "reading" ? (
         <Text style={settingsStyles.rowHint} testID="provider-account-usage-reading">
           {t(`${KEY}.usage.reading`)}
         </Text>
       ) : null}
-      {usage.status === "failed" ? (
+      {usage.status === "failed" && !account.needsSignIn ? (
         <Text style={settingsStyles.rowHint} testID="provider-account-usage-failed">
           {t(`${KEY}.usage.failed`, { reason: usageFailure(t, usage) })}
         </Text>
@@ -272,7 +352,7 @@ function AccountRow({
 
 function noop(): void {}
 
-const USAGE_FAILURE_CODES = new Set(["not_found", "not_read_yet"]);
+const USAGE_FAILURE_CODES = new Set(["not_found", "not_read_yet", "rejected"]);
 
 function usageFailure(
   t: TFunction,
@@ -305,6 +385,22 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: theme.spacing[4],
     paddingVertical: theme.spacing[3],
     gap: theme.spacing[2],
+  },
+  accountRowHighlighted: {
+    backgroundColor: theme.colors.surface2,
+  },
+  needsSignIn: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: theme.spacing[2],
+  },
+  needsSignInText: {
+    flex: 1,
+    minWidth: 160,
+  },
+  addRow: {
+    flexDirection: "row",
   },
   accountHeader: {
     flexDirection: "row",

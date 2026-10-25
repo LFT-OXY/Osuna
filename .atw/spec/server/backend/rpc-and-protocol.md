@@ -2297,3 +2297,58 @@ const keychain = createSystemKeychain(); // a Playwright daemon would run the re
 // e2e seal installs Symbol.for("paseo.e2e.cliKeychain"), backed by PASEO_E2E_KEYCHAIN_PATH;
 // createSystemKeychain() returns it before touching `security`. Vitest daemons pass FakeCliKeychain.
 ```
+
+## Scenario: Codex add account, saved-account renewal and usage (multi-account-rotation ticket 03, `accountRotation`)
+
+### 1. Scope / Trigger
+- Osuna runs Codex's own OAuth (ADR 0015 identity exceptions 1–2), keeps the tokens of saved accounts in `accounts.json`, renews them, and reads their usage with their own token. New RPCs, a localhost HTTP callback server, a cross-process lock and a new plugin input route.
+
+### 2. Signatures
+- Protocol (`provider-account/rpc-schemas.ts`): `provider.account.sign_in.{start,get,cancel,submit}.request` → matching `.response {requestId, signIn: ProviderAccountSignIn | null, error}`; all `daemon.manage`. `start {provider, accountId?}` (accountId = Sign in again), `get|cancel {signInId}`, `submit {signInId, callbackUrl}` (waits ≤60 s for the exchange; client timeout 60 s).
+- `ProviderAccountSignIn` = `{id, provider, accountId?, authUrl, callbackBlocked}` + `status: waiting | done{result{accountId, email?, alreadyAdded}} | failed{error{code,message}} | canceled`. `ProviderAccount.needsSignIn?: {reason, code?}`.
+- Server: `ProviderAccountService.startSignIn / signIn / cancelSignIn / submitSignIn / start() / stop()`; `CodexSignIn` (`codex-sign-in.ts`); `exchangeCodexCode`, `refreshCodexLogin`, `CodexTokenRequestError{refused, code, detail}` (`codex-oauth.ts`); `withFileLock(path, run)` (`file-lock.ts`); `UsageSourceRegistry.fetchInput(sourceId, input)` → `PluginManager.fetchUsageInput`.
+- Overrides (`ProviderAccountOverrides`): `codexSignIn {endpoints{authorizeUrl, tokenUrl}, callbackPort, timeoutMs}`, `checks {firstDelayMs, intervalMs}`, `now`.
+
+### 3. Contracts
+- Store fields: `login` (whole auth.json-shaped object, only for saved accounts), `needsSignIn`, `renewedAt`. The account the CLI holds never has `login`; re-adding it through sign-in drops the new tokens **and** clears any old `login` (single holder).
+- Duplicate = same `identity` (`chatgpt_account_id` from the id_token): updates that account, `alreadyAdded: true`, clears `needsSignIn`. Sign in again that lands on another account → `failed different_account`, nothing written.
+- Callback `127.0.0.1:1455/auth/callback`; redirect_uri `http://localhost:<port>/auth/callback`. Port taken (EADDRINUSE/EACCES): GET `/cancel` once (asks a waiting `codex login` to stop, as Codex/magpie do), 10 tries × 200 ms, then `callbackBlocked: true` (paste only). Browser and paste race through one `claimed` flag; the code is traded once. 10-minute timeout. The gate is asked again right before trading the code.
+- Renewal (`renew.lock` in `accounts/`, plus an in-process per-account queue): re-read inside the lock; if the refresh token differs from the one seen before queueing, adopt it; renew only when `force` or access-token `exp` ≤ 5 min away. Refused = HTTP 400/401 or `invalid_grant|refresh_token_reused|token_revoked` (magpie's `refreshFailed`) → `needsSignIn`. The refresh is not tied to any caller; its only limit is its own 30 s (as magpie).
+- Usage of a saved account: renew-if-expiring → plugin input `{route:{store:"token", accessToken, accountId?}}` through the same `fetchUsage` (same headers, browser UA); `rejected` (401/403) → force renew once and re-read. Lapsed accounts are not read.
+- Checks: 1 min after start, then every 5 min: keep-alive (renew saved Codex accounts whose `max(renewedAt, last_refresh)` ≥ 24 h) always; stale saved-account usage only for providers with rotation on. Gate off → nothing.
+- Every state change broadcasts `provider.account.changed`; the client re-`get`s the sign-in it shows.
+
+### 4. Validation & Error Matrix
+| Condition | Result |
+|---|---|
+| start with Read CLI sign-ins off | `error.code = cli_sign_ins_off` |
+| start for `claude` | `error.code = unsupported_provider` (ticket 07) |
+| start/get/cancel unknown id or removed account | `error.code = not_found` |
+| paste not an http URL with code/error | `error.code = paste_invalid`, sign-in still waiting |
+| paste with another port/path/state | `error.code = paste_mismatch`, still waiting |
+| paste after it ended | `error.code = not_waiting` |
+| OAuth page `?error=` | `failed refused` (message = page's description) |
+| token endpoint non-200 / unreachable | `failed exchange_failed`, message = detail only (`HTTP 400: invalid_grant`) |
+| gate turned off mid sign-in | `failed cli_sign_ins_off`, no token request |
+
+### 5. Good/Base/Bad Cases
+- Good: two daemons on one `$PASEO_HOME` renewing the same account spend its refresh token once.
+- Base: a freshly added account is not renewed by the keep-alive until 24 h later.
+- Bad: storing a second copy of the CLI-held account's tokens; renewing outside `renew.lock`.
+
+### 6. Tests Required
+- `daemon-e2e/provider-account-sign-in.e2e.test.ts` with `test-utils/fake-openai-auth.ts` (local token endpoint that rotates refresh tokens and answers `refresh_token_reused`): callback, paste, port taken, timeout, cancel, OAuth refusal, duplicate, CLI-held, renew-before-read, refused renewal + Sign in again, two daemons, keep-alive with a shifted clock, gate off.
+- `plugins/codex-usage-source/server/usage.test.ts`: the token route sends the same headers as the CLI route.
+- `app/e2e/browser/settings-provider-account-sign-in.spec.ts`: the authorize page is intercepted by `context.route` and 302s to the daemon callback.
+
+### 7. Wrong vs Correct
+#### Wrong
+```ts
+const tokens = await exchangeCodexCode(...); // then check the gate when saving
+```
+#### Correct
+```ts
+if (!this.options.allowed()) { this.finish({ status: "failed", error: { code: "cli_sign_ins_off", ... } }); }
+// the test daemon closes the seams: codexSignIn.endpoints → 127.0.0.1:9, callbackPort 0;
+// the browser seal sets Symbol.for("paseo.e2e.codexCallbackPort") = 0 and fakes https://auth.openai.com/.
+```

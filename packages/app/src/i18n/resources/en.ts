@@ -4540,14 +4540,57 @@ export const en = {
         empty:
           "No accounts yet. Once {{name}} is signed in to a subscription, that account becomes the first one.",
         single: "Add another account to start rotating.",
+        add: "Add account",
+        alreadyAdded: "{{email}} was already in the list, so its sign-in was updated.",
+        needsSignInHint:
+          "Its sign-in was refused or revoked, so it won't be rotated to until you sign in again.",
+        signInAgain: "Sign in again",
         unknownEmail: "Unknown account",
-        badges: { inUse: "In use", first: "First" },
+        badges: { inUse: "In use", first: "First", needsSignIn: "Needs sign-in" },
         usage: {
           reading: "Reading usage…",
           failed: "Couldn't read usage: {{reason}}",
           reasons: {
             not_found: "plan usage doesn't see this sign-in",
             not_read_yet: "not read yet",
+            rejected: "the sign-in was rejected",
+          },
+        },
+        signIn: {
+          addTitle: "Add a {{name}} account",
+          addFailedTitle: "Couldn't add this account",
+          reSignInFailedTitle: "Couldn't sign in again",
+          reSignInTitle: "Sign in again to {{email}}",
+          starting: "Preparing the sign-in…",
+          startFailed: "Couldn't start the sign-in: {{reason}}",
+          waitingTitle: "Finish signing in in your browser",
+          waitingHint:
+            "Sign in with the ChatGPT account you want to add. This closes on its own when you're done.",
+          openPage: "Open sign-in page",
+          copyLink: "Copy link",
+          linkLabel: "Sign-in link",
+          pasteLabel: "Address the browser ended on",
+          pasteHint:
+            "Signing in on another device? The browser ends on a page that won't load. Copy the whole address from its address bar and paste it here.",
+          pasteHintBlocked:
+            "Port 1455 on the host is taken, so the browser can't come back to Osuna. Copy the whole address the browser ends on and paste it here.",
+          pasteSubmit: "Finish",
+          retry: "Try again",
+          canceled: "The sign-in was canceled.",
+          failed: "The sign-in didn't finish: {{reason}}",
+          pasteErrors: {
+            paste_invalid: "Paste the whole address, starting with http://",
+            paste_mismatch:
+              "That address isn't from this sign-in. Paste the one from this sign-in's browser tab.",
+            not_waiting: "This sign-in is over. Try again.",
+          },
+          failures: {
+            timed_out: "The sign-in wasn't finished within 10 minutes.",
+            refused: "The sign-in page refused: {{reason}}",
+            exchange_failed: "ChatGPT didn't complete the sign-in ({{reason}}).",
+            no_account: "ChatGPT didn't say which account signed in.",
+            different_account: "That's a different account. Sign in with this account to fix it.",
+            cli_sign_ins_off: "“Read CLI sign-ins” is off, so accounts can't be added.",
           },
         },
         riskNotice: {

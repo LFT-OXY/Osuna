@@ -736,6 +736,10 @@ type ProviderAccountSetRotationPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.account.set_rotation.response" }
 >["payload"];
+type ProviderAccountSignInPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.account.sign_in.start.response" }
+>["payload"];
 type ApiEndpointVendorStatusPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.vendor_status.response" }
@@ -6813,6 +6817,50 @@ export class DaemonClient {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId,
       message: { type: "provider.account.set_rotation.request", ...options },
+    });
+  }
+
+  /** 开始加号；带 accountId 是给这个号重新登录。只有声明了 accountRotation 的 daemon 认。 */
+  async providerAccountSignInStart(
+    options: { provider: string; accountId?: string },
+    requestId?: string,
+  ): Promise<ProviderAccountSignInPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.account.sign_in.start.request", ...options },
+    });
+  }
+
+  /** 这次加号现在的样子；收到 provider.account.changed 后重读。 */
+  async providerAccountSignInGet(
+    options: { signInId: string },
+    requestId?: string,
+  ): Promise<ProviderAccountSignInPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.account.sign_in.get.request", ...options },
+    });
+  }
+
+  async providerAccountSignInCancel(
+    options: { signInId: string },
+    requestId?: string,
+  ): Promise<ProviderAccountSignInPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.account.sign_in.cancel.request", ...options },
+    });
+  }
+
+  /** 用粘贴的回调地址完成加号；daemon 换完 token 才回，最多等一分钟。 */
+  async providerAccountSignInSubmit(
+    options: { signInId: string; callbackUrl: string },
+    requestId?: string,
+  ): Promise<ProviderAccountSignInPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.account.sign_in.submit.request", ...options },
+      timeout: 60_000,
     });
   }
 

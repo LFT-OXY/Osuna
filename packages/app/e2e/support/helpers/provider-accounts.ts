@@ -1,4 +1,4 @@
-import { rm } from "node:fs/promises";
+import { rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { expect, type Page } from "@playwright/test";
@@ -24,6 +24,10 @@ interface AccountsRouteOptions {
   failSetRotation?: { reason: string; times: number };
   // 改写 server_info：去掉 daemon.manage 模拟只能查看的设备。
   readOnly?: boolean;
+  // 列表里的号标成登录失效（「需要重新登录」）；给了 email 只标那个号。
+  needsSignIn?: { reason: string; code?: string; email?: string };
+  // 开始加号的回复里，这次登录改成已经失败（模拟 10 分钟超时）。
+  signInFailsWith?: { code: string; message: string };
 }
 
 interface Envelope {
@@ -88,21 +92,41 @@ export async function installProviderAccountsRoute(
           payload.permissions = permissions.filter((permission) => permission !== "daemon.manage");
         }
       }
-      const isAccountsReply =
-        inner.type === "provider.account.list.response" ||
-        inner.type === "provider.account.set_rotation.response";
-      if (isAccountsReply && options.windows && Array.isArray(payload?.accounts)) {
-        for (const account of payload.accounts as Array<Record<string, unknown>>) {
-          account.usage = {
-            status: "read",
-            fetchedAt: new Date().toISOString(),
-            windows: options.windows,
-          };
-        }
-      }
+      rewriteAccountsMessage({ type: inner.type, payload, options });
       ws.send(JSON.stringify(envelope));
     });
   });
+}
+
+/** 这一节的回复按用例改写：额度换成假读数、号标成失效、加号的回复改成已失败。 */
+function rewriteAccountsMessage(input: {
+  type: unknown;
+  payload: Record<string, unknown> | undefined;
+  options: AccountsRouteOptions;
+}): void {
+  const { type, payload, options } = input;
+  const isAccountsReply =
+    type === "provider.account.list.response" || type === "provider.account.set_rotation.response";
+  if (isAccountsReply && Array.isArray(payload?.accounts)) {
+    for (const account of payload.accounts as Array<Record<string, unknown>>) {
+      if (options.windows) {
+        account.usage = {
+          status: "read",
+          fetchedAt: new Date().toISOString(),
+          windows: options.windows,
+        };
+      }
+      const lapse = options.needsSignIn;
+      if (lapse && (lapse.email === undefined || lapse.email === account.email)) {
+        account.needsSignIn = { reason: lapse.reason, ...(lapse.code ? { code: lapse.code } : {}) };
+      }
+    }
+  }
+  const signIn = payload?.signIn as Record<string, unknown> | null | undefined;
+  if (type === "provider.account.sign_in.start.response" && options.signInFailsWith && signIn) {
+    signIn.status = "failed";
+    signIn.error = options.signInFailsWith;
+  }
 }
 
 export async function withAccountsClient<T>(run: (client: DaemonClient) => Promise<T>): Promise<T> {
@@ -151,6 +175,52 @@ export async function expectRotateSwitch(
   await expect(control).toHaveAttribute("aria-checked", String(state.checked));
   if (state.disabled) await expect(control).toHaveAttribute("aria-disabled", "true");
   else await expect(control).not.toHaveAttribute("aria-disabled", "true");
+}
+
+export function signInSheet(page: Page) {
+  return page.getByTestId("account-sign-in").filter({ visible: true });
+}
+
+/** OpenAI 换 token 的回复：经封条的假外网（PASEO_E2E_FAKE_SITES_PATH）回给测试 daemon。 */
+export async function setFakeOpenAiToken(
+  sitesPath: string,
+  reply: { status: number; body: Record<string, unknown> },
+): Promise<void> {
+  await writeFile(
+    sitesPath,
+    JSON.stringify({
+      "https://auth.openai.com/oauth/token": {
+        status: reply.status,
+        body: JSON.stringify(reply.body),
+      },
+    }),
+  );
+}
+
+/** 换 token 成功时 OpenAI 回的 token；access token 一年后才到期，不会马上去续。 */
+export function fakeOpenAiTokens(input: { accountId: string; email: string; plan: string }) {
+  const part = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  const jwt = (claims: Record<string, unknown>) => `${part({ alg: "none" })}.${part(claims)}.sig`;
+  return {
+    id_token: jwt({
+      email: input.email,
+      "https://api.openai.com/auth": {
+        chatgpt_account_id: input.accountId,
+        chatgpt_plan_type: input.plan,
+      },
+    }),
+    access_token: jwt({ sub: input.accountId, exp: Math.floor(Date.now() / 1000) + 365 * 86400 }),
+    refresh_token: `e2e-refresh-${input.accountId}`,
+  };
+}
+
+/** 浏览器最后跳到的地址：登录页里写的回调地址，带上 code 与这次登录的 state。 */
+export function callbackFor(authUrl: string, code: string): string {
+  const page = new URL(authUrl);
+  const redirect = new URL(page.searchParams.get("redirect_uri") ?? "");
+  redirect.searchParams.set("code", code);
+  redirect.searchParams.set("state", page.searchParams.get("state") ?? "");
+  return redirect.toString();
 }
 
 /** 与 Codex 的 auth.json 同形；id_token 只在本机解，签名不校验。 */

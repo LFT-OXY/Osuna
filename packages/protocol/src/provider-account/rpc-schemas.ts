@@ -40,6 +40,16 @@ export const ProviderAccountUsageSchema = z.discriminatedUnion("status", [
 ]);
 export type ProviderAccountUsage = z.infer<typeof ProviderAccountUsageSchema>;
 
+/**
+ * 号的登录失效（「需要重新登录」）：续期被拒或被吊销，这个号退出轮换，直到用户「重新登录」。
+ * reason 是英文原因；code 是 OpenAI 回的错误码（invalid_grant、refresh_token_reused、token_revoked）或 refused。
+ */
+export const ProviderAccountNeedsSignInSchema = z.object({
+  reason: z.string(),
+  code: z.string().optional(),
+});
+export type ProviderAccountNeedsSignIn = z.infer<typeof ProviderAccountNeedsSignInSchema>;
+
 /** 列表里的一个号；按用户排的顺序，第一个就是「第一」。signedIn：CLI 现在登录的就是它（「使用中」）。 */
 export const ProviderAccountSchema = z.object({
   id: z.string(),
@@ -47,6 +57,8 @@ export const ProviderAccountSchema = z.object({
   plan: z.string().optional(),
   signedIn: z.boolean(),
   usage: ProviderAccountUsageSchema,
+  // 没有就是登录正常。
+  needsSignIn: ProviderAccountNeedsSignInSchema.optional(),
 });
 export type ProviderAccount = z.infer<typeof ProviderAccountSchema>;
 
@@ -137,3 +149,124 @@ export const ProviderAccountChangedMessageSchema = z.object({
   type: z.literal("provider.account.changed"),
 });
 export type ProviderAccountChangedMessage = z.infer<typeof ProviderAccountChangedMessageSchema>;
+
+/*
+ * 加号与重新登录（照 magpie 的 signin.go）：Codex 由 daemon 跑 PKCE OAuth，回调监听 127.0.0.1:1455；
+ * 端口被占（callbackBlocked）或用户不在主机前时，把浏览器最后跳到的地址粘回来（submit）完成。
+ * 10 分钟没完成算超时。状态变化经 provider.account.changed 广播，客户端用 get 重读这次登录。
+ */
+
+const ProviderAccountSignInBaseSchema = z.object({
+  id: z.string(),
+  provider: z.string(),
+  // 「重新登录」的那个号；加号时没有。
+  accountId: z.string().optional(),
+  // 要在浏览器里打开的登录页。
+  authUrl: z.string(),
+  // 主机上的回调端口开不了，只能粘贴地址完成。
+  callbackBlocked: z.boolean(),
+});
+
+/**
+ * 一次登录：等浏览器、完成、失败、被取消。
+ * done：accountId 是加上或更新的号；alreadyAdded 为真时这个号原来就在列表里（「已经有这个号」）。
+ * failed：code 是已知取值之一或别的字符串，message 是英文原因（exchange_failed 只是技术细节，
+ * 如「HTTP 400: invalid_grant」，refused 是登录页给的原文）：
+ *   timed_out（10 分钟没完成）、refused（登录页回了错误）、exchange_failed（换 token 失败）、
+ *   no_account（登录没说是哪个号）、different_account（重新登录登的不是这个号）、cli_sign_ins_off、failed。
+ */
+export const ProviderAccountSignInSchema = z.discriminatedUnion("status", [
+  ProviderAccountSignInBaseSchema.extend({ status: z.literal("waiting") }),
+  ProviderAccountSignInBaseSchema.extend({
+    status: z.literal("done"),
+    result: z.object({
+      accountId: z.string(),
+      email: z.string().optional(),
+      alreadyAdded: z.boolean(),
+    }),
+  }),
+  ProviderAccountSignInBaseSchema.extend({
+    status: z.literal("failed"),
+    error: ProviderAccountErrorSchema,
+  }),
+  ProviderAccountSignInBaseSchema.extend({ status: z.literal("canceled") }),
+]);
+export type ProviderAccountSignIn = z.infer<typeof ProviderAccountSignInSchema>;
+
+/**
+ * 加号、重新登录各个请求的回复。signIn 是这次登录现在的样子（没找到时为 null）；
+ * error：请求本身被拒——cli_sign_ins_off、unsupported_provider、not_found（没有这次登录或这个号）、
+ * paste_invalid（粘贴的不是浏览器最后跳到的整段地址）、paste_mismatch（地址不是这次登录的）、
+ * not_waiting（这次登录已经结束）、failed。
+ */
+const ProviderAccountSignInPayloadSchema = z.object({
+  requestId: z.string(),
+  signIn: ProviderAccountSignInSchema.nullable(),
+  error: ProviderAccountErrorSchema.nullable(),
+});
+
+/** 开始加号；带 accountId 是给这个号「重新登录」。同一家同时只有一次登录，新开的取代旧的。 */
+export const ProviderAccountSignInStartRequestSchema = z.object({
+  type: z.literal("provider.account.sign_in.start.request"),
+  requestId: z.string(),
+  provider: z.string(),
+  accountId: z.string().optional(),
+});
+export type ProviderAccountSignInStartRequest = z.infer<
+  typeof ProviderAccountSignInStartRequestSchema
+>;
+export const ProviderAccountSignInStartResponseSchema = z.object({
+  type: z.literal("provider.account.sign_in.start.response"),
+  payload: ProviderAccountSignInPayloadSchema,
+});
+export type ProviderAccountSignInStartResponse = z.infer<
+  typeof ProviderAccountSignInStartResponseSchema
+>;
+
+export const ProviderAccountSignInGetRequestSchema = z.object({
+  type: z.literal("provider.account.sign_in.get.request"),
+  requestId: z.string(),
+  signInId: z.string(),
+});
+export type ProviderAccountSignInGetRequest = z.infer<typeof ProviderAccountSignInGetRequestSchema>;
+export const ProviderAccountSignInGetResponseSchema = z.object({
+  type: z.literal("provider.account.sign_in.get.response"),
+  payload: ProviderAccountSignInPayloadSchema,
+});
+export type ProviderAccountSignInGetResponse = z.infer<
+  typeof ProviderAccountSignInGetResponseSchema
+>;
+
+export const ProviderAccountSignInCancelRequestSchema = z.object({
+  type: z.literal("provider.account.sign_in.cancel.request"),
+  requestId: z.string(),
+  signInId: z.string(),
+});
+export type ProviderAccountSignInCancelRequest = z.infer<
+  typeof ProviderAccountSignInCancelRequestSchema
+>;
+export const ProviderAccountSignInCancelResponseSchema = z.object({
+  type: z.literal("provider.account.sign_in.cancel.response"),
+  payload: ProviderAccountSignInPayloadSchema,
+});
+export type ProviderAccountSignInCancelResponse = z.infer<
+  typeof ProviderAccountSignInCancelResponseSchema
+>;
+
+/** 用粘贴的地址（浏览器最后跳到的那个）完成登录；回复等这次登录结束（完成或失败）再回。 */
+export const ProviderAccountSignInSubmitRequestSchema = z.object({
+  type: z.literal("provider.account.sign_in.submit.request"),
+  requestId: z.string(),
+  signInId: z.string(),
+  callbackUrl: z.string(),
+});
+export type ProviderAccountSignInSubmitRequest = z.infer<
+  typeof ProviderAccountSignInSubmitRequestSchema
+>;
+export const ProviderAccountSignInSubmitResponseSchema = z.object({
+  type: z.literal("provider.account.sign_in.submit.response"),
+  payload: ProviderAccountSignInPayloadSchema,
+});
+export type ProviderAccountSignInSubmitResponse = z.infer<
+  typeof ProviderAccountSignInSubmitResponseSchema
+>;

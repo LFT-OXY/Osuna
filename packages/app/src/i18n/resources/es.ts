@@ -4511,14 +4511,58 @@ export const es: TranslationResources = {
         empty:
           "Aún no hay cuentas. Cuando {{name}} inicie sesión con una suscripción, esa cuenta será la primera.",
         single: "Añade otra cuenta para empezar a rotar.",
+        add: "Añadir cuenta",
+        alreadyAdded: "{{email}} ya estaba en la lista, así que se actualizó su inicio de sesión.",
+        needsSignInHint:
+          "Su inicio de sesión fue rechazado o revocado, así que no se rotará a ella hasta que vuelvas a iniciar sesión.",
+        signInAgain: "Volver a iniciar sesión",
         unknownEmail: "Cuenta desconocida",
-        badges: { inUse: "En uso", first: "Primera" },
+        badges: { inUse: "En uso", first: "Primera", needsSignIn: "Requiere iniciar sesión" },
         usage: {
           reading: "Leyendo el uso…",
           failed: "No se pudo leer el uso: {{reason}}",
           reasons: {
             not_found: "el uso del plan no ve este inicio de sesión",
             not_read_yet: "aún no leído",
+            rejected: "se rechazó el inicio de sesión",
+          },
+        },
+        signIn: {
+          addTitle: "Añadir una cuenta de {{name}}",
+          addFailedTitle: "No se pudo añadir esta cuenta",
+          reSignInFailedTitle: "No se pudo volver a iniciar sesión",
+          reSignInTitle: "Volver a iniciar sesión en {{email}}",
+          starting: "Preparando el inicio de sesión…",
+          startFailed: "No se pudo iniciar sesión: {{reason}}",
+          waitingTitle: "Termina de iniciar sesión en el navegador",
+          waitingHint:
+            "Inicia sesión con la cuenta de ChatGPT que quieres añadir. Esto se cierra solo cuando termines.",
+          openPage: "Abrir página de inicio de sesión",
+          copyLink: "Copiar enlace",
+          linkLabel: "Enlace de inicio de sesión",
+          pasteLabel: "Dirección en la que terminó el navegador",
+          pasteHint:
+            "¿Inicias sesión en otro dispositivo? El navegador termina en una página que no carga. Copia la dirección completa de la barra de direcciones y pégala aquí.",
+          pasteHintBlocked:
+            "El puerto 1455 del host está ocupado, así que el navegador no puede volver a Osuna. Copia la dirección completa en la que termina el navegador y pégala aquí.",
+          pasteSubmit: "Terminar",
+          retry: "Reintentar",
+          canceled: "Se canceló el inicio de sesión.",
+          failed: "El inicio de sesión no terminó: {{reason}}",
+          pasteErrors: {
+            paste_invalid: "Pega la dirección completa, empezando por http://",
+            paste_mismatch:
+              "Esa dirección no es de este inicio de sesión. Pega la de la pestaña de este inicio de sesión.",
+            not_waiting: "Este inicio de sesión terminó. Vuelve a intentarlo.",
+          },
+          failures: {
+            timed_out: "El inicio de sesión no terminó en 10 minutos.",
+            refused: "La página de inicio de sesión lo rechazó: {{reason}}",
+            exchange_failed: "ChatGPT no completó el inicio de sesión ({{reason}}).",
+            no_account: "ChatGPT no indicó qué cuenta inició sesión.",
+            different_account: "Es otra cuenta. Inicia sesión con esta cuenta para arreglarla.",
+            cli_sign_ins_off:
+              "«Leer inicios de sesión de las CLI» está desactivado, así que no se pueden añadir cuentas.",
           },
         },
         riskNotice: {

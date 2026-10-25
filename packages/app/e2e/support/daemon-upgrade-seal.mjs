@@ -32,6 +32,9 @@
  * 9. 不读本机真实的钥匙串：多号自动轮换读 CLI 登录用的钥匙串（provider-accounts/keychain.ts）换成这里装上的假的，
  *    内容读 PASEO_E2E_KEYCHAIN_PATH 文件（{ "服务名\u0000账号": 内容 }，没设或没有这个文件就是空的），绝不跑 `security`。
  *
+ * 10. Codex 加号不占本机的 1455、不连 OpenAI：回调端口换成随便一个空端口（provider-accounts/service.ts 的
+ *     SEALED_CODEX_CALLBACK_PORT），换 token 与续期（https://auth.openai.com/oauth/token）由上面第 8 条的假外网回答。
+ *
  * 2026-10-18 一条浏览器用例点中了升级按钮，测试 daemon 真的跑了 `brew upgrade --cask claude-code@latest`
  * 又被中途杀掉，弄坏了开发者本机的 Claude Code。
  */
@@ -77,6 +80,8 @@ const SEALED_VENDOR_ORIGINS = [
   "https://tokenhub.tencentmaas.com/",
   // Codex 的套餐用量与重置卡（plugins/codex-usage-source）：测试的 CODEX_HOME 是空的不会去问，这里兜底。
   "https://chatgpt.com/",
+  // Codex 加号换 token、存着的号续期（provider-accounts/codex-oauth.ts）。
+  "https://auth.openai.com/",
   // 人民币显示用的汇率（usage/exchange-rate.ts）：价格表自动更新开着又选了人民币才会去问，这里兜底。
   "https://open.er-api.com/",
 ];
@@ -202,6 +207,8 @@ globalThis[Symbol.for("paseo.e2e.hostProcesses")] = {
   },
   readSystemProxy: async () => readFakeSystemProxy(),
 };
+
+globalThis[Symbol.for("paseo.e2e.codexCallbackPort")] = 0;
 
 globalThis[Symbol.for("paseo.e2e.cliKeychain")] = {
   available: true,

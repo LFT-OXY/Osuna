@@ -138,6 +138,7 @@ export async function readAuth(
   lookup: StoreLookup = {},
 ): Promise<Auth | null> {
   const route = input.route;
+  if (route.store === "token") return { token: route.accessToken, accountId: route.accountId };
   if (route.store !== "codex") {
     const oauth = await readHarness(route, lookup);
     return oauth
@@ -329,6 +330,6 @@ function accountIdentity(auth: Auth, input: CodexUsageInput): { key: string; lab
 }
 
 function harnessLabel(input: CodexUsageInput): string {
-  const labels = { codex: "Codex", opencode: "OpenCode", pi: "Pi", omp: "OMP" };
+  const labels = { codex: "Codex", token: "Codex", opencode: "OpenCode", pi: "Pi", omp: "OMP" };
   return labels[input.route.store];
 }

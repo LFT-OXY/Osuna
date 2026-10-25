@@ -94,6 +94,14 @@ import {
   ProviderAccountListResponseSchema,
   ProviderAccountSetRotationRequestSchema,
   ProviderAccountSetRotationResponseSchema,
+  ProviderAccountSignInCancelRequestSchema,
+  ProviderAccountSignInCancelResponseSchema,
+  ProviderAccountSignInGetRequestSchema,
+  ProviderAccountSignInGetResponseSchema,
+  ProviderAccountSignInStartRequestSchema,
+  ProviderAccountSignInStartResponseSchema,
+  ProviderAccountSignInSubmitRequestSchema,
+  ProviderAccountSignInSubmitResponseSchema,
 } from "./provider-account/rpc-schemas.js";
 import { UsagePricingOverrideSchema } from "./usage/types.js";
 import {
@@ -3596,6 +3604,10 @@ export const SubscriptionReleaseResponseSchema = z.object({
 export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ProviderAccountListRequestSchema,
   ProviderAccountSetRotationRequestSchema,
+  ProviderAccountSignInStartRequestSchema,
+  ProviderAccountSignInGetRequestSchema,
+  ProviderAccountSignInCancelRequestSchema,
+  ProviderAccountSignInSubmitRequestSchema,
   BrowserHostRegisterRequestSchema,
   SubscriptionReleaseRequestSchema,
   SessionEventsSetSubscriptionRequestSchema,
@@ -4276,7 +4288,8 @@ export const ServerInfoStatusPayloadSchema = z
         // daemon 理解 checkout diff compare 的 filesOnly，只发文件清单。
         checkoutDiffFilesOnly: z.boolean().optional(),
         // COMPAT(accountRotation): added in v0.17.0, remove gate after 2027-04-25.
-        // 任务 10-16-multi-account-rotation：provider.account.list / set_rotation 与 provider.account.changed 事件
+        // 任务 10-16-multi-account-rotation：provider.account.list / set_rotation、加号的 provider.account.sign_in.*
+        // 与 provider.account.changed 事件
         // （Codex、Claude Code 设置页的「账号」一节与「多号自动轮换」）。
         accountRotation: z.boolean().optional(),
       })
@@ -7469,6 +7482,10 @@ export const AgentSkillsImportLegacySelectionResponseSchema = z.object({
 export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ProviderAccountListResponseSchema,
   ProviderAccountSetRotationResponseSchema,
+  ProviderAccountSignInStartResponseSchema,
+  ProviderAccountSignInGetResponseSchema,
+  ProviderAccountSignInCancelResponseSchema,
+  ProviderAccountSignInSubmitResponseSchema,
   ProviderAccountChangedMessageSchema,
   BrowserHostRegisterResponseSchema,
   SubscriptionReleaseResponseSchema,

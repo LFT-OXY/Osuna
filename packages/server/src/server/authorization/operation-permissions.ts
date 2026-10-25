@@ -177,6 +177,11 @@ const INBOUND_PERMISSION = {
   "provider.api_endpoint.vendor_status.request": "daemon.read",
   "provider.account.list.request": "daemon.read",
   "provider.account.set_rotation.request": "daemon.manage",
+  // 加号：登录页地址与粘贴的回调只给能管理主机的设备。
+  "provider.account.sign_in.start.request": "daemon.manage",
+  "provider.account.sign_in.get.request": "daemon.manage",
+  "provider.account.sign_in.cancel.request": "daemon.manage",
+  "provider.account.sign_in.submit.request": "daemon.manage",
   "provider.api_endpoint.read_balance.request": "daemon.read",
   "provider.api_endpoint.set_balance_auto_refresh.request": "daemon.manage",
   // 用表单里的 key 当场查，和测试连接同一级。
@@ -468,6 +473,10 @@ const OUTBOUND_PERMISSION = {
   "provider.api_endpoint.vendor_status.response": "daemon.read",
   "provider.account.list.response": "daemon.read",
   "provider.account.set_rotation.response": "daemon.manage",
+  "provider.account.sign_in.start.response": "daemon.manage",
+  "provider.account.sign_in.get.response": "daemon.manage",
+  "provider.account.sign_in.cancel.response": "daemon.manage",
+  "provider.account.sign_in.submit.response": "daemon.manage",
   "provider.api_endpoint.read_balance.response": "daemon.read",
   "provider.api_endpoint.set_balance_auto_refresh.response": "daemon.manage",
   "provider.api_endpoint.check_balance.response": "daemon.manage",

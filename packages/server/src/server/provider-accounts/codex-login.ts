@@ -97,9 +97,29 @@ function readAuthJson(text: string | undefined): CliLoginReading {
   } catch {
     return { kind: "unsupported", code: "login_unparsable", reason: "Codex's login can't be read" };
   }
-  const tokens = isRecord(auth) && isRecord(auth.tokens) ? auth.tokens : null;
+  const profile = codexLoginProfile(auth);
   // 只用 API key 登录的 Codex 没有 ChatGPT 的 tokens：没有可轮换的订阅号。
-  if (!tokens || !nonEmptyString(tokens.id_token)) return { kind: "signed_out" };
+  if (profile === "no_tokens") return { kind: "signed_out" };
+  if (profile === "no_account") {
+    return {
+      kind: "unsupported",
+      code: "login_unparsable",
+      reason: "Codex's login names no ChatGPT account",
+    };
+  }
+  return { kind: "signed_in", ...profile };
+}
+
+export interface CodexLoginProfile {
+  identity: string;
+  email?: string;
+  plan?: string;
+}
+
+/** 一份 auth.json 形状的登录是哪个号：账号 ID（与套餐用量的报告 ID 同口径）、邮箱与套餐，都从 id_token 解出。 */
+export function codexLoginProfile(auth: unknown): CodexLoginProfile | "no_tokens" | "no_account" {
+  const tokens = isRecord(auth) && isRecord(auth.tokens) ? auth.tokens : null;
+  if (!tokens || !nonEmptyString(tokens.id_token)) return "no_tokens";
   const claims = decodeJwtClaims(nonEmptyString(tokens.id_token));
   const openAiAuth =
     claims && isRecord(claims["https://api.openai.com/auth"])
@@ -107,19 +127,8 @@ function readAuthJson(text: string | undefined): CliLoginReading {
       : null;
   const identity =
     nonEmptyString(tokens.account_id) ?? nonEmptyString(openAiAuth?.chatgpt_account_id);
-  if (!identity) {
-    return {
-      kind: "unsupported",
-      code: "login_unparsable",
-      reason: "Codex's login names no ChatGPT account",
-    };
-  }
+  if (!identity) return "no_account";
   const email = nonEmptyString(claims?.email);
   const plan = planLabel(nonEmptyString(openAiAuth?.chatgpt_plan_type));
-  return {
-    kind: "signed_in",
-    identity,
-    ...(email ? { email } : {}),
-    ...(plan ? { plan } : {}),
-  };
+  return { identity, ...(email ? { email } : {}), ...(plan ? { plan } : {}) };
 }

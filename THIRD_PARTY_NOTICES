@@ -1537,6 +1537,22 @@ internal/gui/assets/app.js:
   packages/server/src/server/usage/exchange-rate.ts
   packages/app/src/usage-stats/format.ts
 
+Adding a Codex account and keeping saved ones signed in (the sign-in page's
+parameters with Codex's OAuth client, scopes and originator, the PKCE pair,
+the callback on 127.0.0.1:1455 with a waiting `codex login` asked to stop
+first, an address pasted back taken only for this sign-in's port, path and
+state, whichever of the browser and the paste comes first trading the code
+once, the 10-minute timeout, the code traded for tokens, an auth.json-shaped
+login, a refresh waited for once sent, a refresh refused by HTTP 400 or 401,
+and saved sign-ins renewed after 24 hours) follows begin, listenCodexCallback,
+pastedCallback, ownCallback, claim, finish, callback, codexExchange and
+codexLogin in magpie's internal/provider/signin.go, codexRefresh and
+refreshFailed in account.go, and renewalDue and RenewLogins in keepalive.go:
+
+  packages/server/src/server/provider-accounts/codex-oauth.ts
+  packages/server/src/server/provider-accounts/codex-sign-in.ts
+  packages/server/src/server/provider-accounts/service.ts
+
 MIT License
 
 Copyright (c) 2026 yetone

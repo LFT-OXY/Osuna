@@ -4531,14 +4531,59 @@ export const fr: TranslationResources = {
         empty:
           "Aucun compte pour l'instant. Dès que {{name}} est connecté à un abonnement, ce compte devient le premier.",
         single: "Ajoutez un autre compte pour lancer la rotation.",
+        add: "Ajouter un compte",
+        alreadyAdded: "{{email}} était déjà dans la liste, sa connexion a donc été mise à jour.",
+        needsSignInHint:
+          "Sa connexion a été refusée ou révoquée : la rotation ne passera plus par lui tant que vous ne vous reconnectez pas.",
+        signInAgain: "Se reconnecter",
         unknownEmail: "Compte inconnu",
-        badges: { inUse: "Utilisé", first: "Premier" },
+        badges: { inUse: "Utilisé", first: "Premier", needsSignIn: "Reconnexion requise" },
         usage: {
           reading: "Lecture de l'utilisation…",
           failed: "Impossible de lire l'utilisation : {{reason}}",
           reasons: {
             not_found: "l'utilisation du forfait ne voit pas cette connexion",
             not_read_yet: "pas encore lue",
+            rejected: "la connexion a été refusée",
+          },
+        },
+        signIn: {
+          addTitle: "Ajouter un compte {{name}}",
+          addFailedTitle: "Impossible d’ajouter ce compte",
+          reSignInFailedTitle: "Impossible de se reconnecter",
+          reSignInTitle: "Se reconnecter à {{email}}",
+          starting: "Préparation de la connexion…",
+          startFailed: "Impossible de lancer la connexion : {{reason}}",
+          waitingTitle: "Terminez la connexion dans votre navigateur",
+          waitingHint:
+            "Connectez-vous avec le compte ChatGPT à ajouter. Cette fenêtre se ferme toute seule une fois terminé.",
+          openPage: "Ouvrir la page de connexion",
+          copyLink: "Copier le lien",
+          linkLabel: "Lien de connexion",
+          pasteLabel: "Adresse sur laquelle le navigateur s’est arrêté",
+          pasteHint:
+            "Vous vous connectez sur un autre appareil ? Le navigateur s’arrête sur une page qui ne se charge pas. Copiez l’adresse complète de la barre d’adresse et collez-la ici.",
+          pasteHintBlocked:
+            "Le port 1455 de l’hôte est occupé : le navigateur ne peut pas revenir vers Osuna. Copiez l’adresse complète sur laquelle le navigateur s’arrête et collez-la ici.",
+          pasteSubmit: "Terminer",
+          retry: "Réessayer",
+          canceled: "La connexion a été annulée.",
+          failed: "La connexion n’a pas abouti : {{reason}}",
+          pasteErrors: {
+            paste_invalid: "Collez l’adresse complète, commençant par http://",
+            paste_mismatch:
+              "Cette adresse ne vient pas de cette connexion. Collez celle de l’onglet de cette connexion.",
+            not_waiting: "Cette connexion est terminée. Réessayez.",
+          },
+          failures: {
+            timed_out: "La connexion n’a pas été terminée en 10 minutes.",
+            refused: "La page de connexion a refusé : {{reason}}",
+            exchange_failed: "ChatGPT n’a pas terminé la connexion ({{reason}}).",
+            no_account: "ChatGPT n’a pas indiqué quel compte s’est connecté.",
+            different_account:
+              "C’est un autre compte. Connectez-vous avec ce compte pour le réparer.",
+            cli_sign_ins_off:
+              "« Lire les connexions des CLI » est désactivé : impossible d’ajouter des comptes.",
           },
         },
         riskNotice: {
