@@ -30,7 +30,7 @@
 
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
-| 44 | 2026-10-25 | 登录凭证开关与风险提示：6 张工单实现、验收、归档 | `2d24030b3`, `69a61652c`, `0cf401052`, `2d465cf4b`, `be26b2a27`, `23736519e`, `d5da62829`, `6af4f7c6a`, `0b252dc42`, `b1b3d578c`, `f401f8ff3`, `8b89e7892`, `5a0809329` | `complete-magpie-osuna-gaps-subtask-8-login-credential-switch` |
+| 44 | 2026-10-25 | 登录凭证开关与风险提示：6 张工单实现、验收、归档 | `2d24030b3`, `69a61652c`, `f4099a746`, `c2c324a3c`, `cb4715486`, `48e017fbe`, `9d320b500`, `b1ae4b4bd`, `cd3378c04`, `e260f294e`, `61f64fa2b`, `cf09ee240`, `2d122035d` | `complete-magpie-osuna-gaps-subtask-8-login-credential-switch` |
 | 43 | 2026-10-25 | 10-16-gemini-upstream 验收、开 PR #30、修 CI、合并后归档 | `3afaed04e`, `cff8cacca` | `-` |
 | 42 | 2026-10-22 | 余额与套餐用量：工单 13–14 收尾、验收、PR #27 与归档 | `ba60206be`, `88a5b70ea`, `23f96419c`, `4965ded0a` | `magpie-osuna-gaps-balance-quota` |
 | 41 | 2026-10-22 | 同步 main、收尾接口管理遗留任务、修复本机依赖 | - | `main` |
