@@ -506,7 +506,7 @@ jobs:
     name: playwright (shard 5/8)
     needs: changes
     if: ${{ !cancelled() && (needs.changes.outputs.full != 'false' || needs.changes.outputs.browser != 'false') }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       PLAYWRIGHT_SHARD: "5/8"
       PLAYWRIGHT_ARTIFACT: "5"
@@ -516,7 +516,7 @@ jobs:
     name: playwright (shard 6/8)
     needs: changes
     if: ${{ !cancelled() && (needs.changes.outputs.full != 'false' || needs.changes.outputs.browser != 'false') }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       PLAYWRIGHT_SHARD: "6/8"
       PLAYWRIGHT_ARTIFACT: "6"
@@ -526,7 +526,7 @@ jobs:
     name: playwright (shard 7/8)
     needs: changes
     if: ${{ !cancelled() && (needs.changes.outputs.full != 'false' || needs.changes.outputs.browser != 'false') }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       PLAYWRIGHT_SHARD: "7/8"
       PLAYWRIGHT_ARTIFACT: "7"
@@ -536,7 +536,7 @@ jobs:
     name: playwright (shard 8/8)
     needs: changes
     if: ${{ !cancelled() && (needs.changes.outputs.full != 'false' || needs.changes.outputs.browser != 'false') }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       PLAYWRIGHT_SHARD: "8/8"
       PLAYWRIGHT_ARTIFACT: "8"
