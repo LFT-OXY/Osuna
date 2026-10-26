@@ -418,6 +418,7 @@ export const en = {
       details: "Details",
     },
     dictation: {
+      paused: "Microphone interrupted. Waiting to resume…",
       start: "Start voice dictation",
       cancel: "Cancel dictation",
       retry: "Retry dictation",
@@ -427,6 +428,7 @@ export const en = {
       failedRetry: "Dictation failed. Tap retry.",
     },
     question: {
+      responseFailed: "Could not send your response. Try again.",
       submit: "Submit",
       next: "Next",
       answerPlaceholder: "Type your answer...",
@@ -1431,7 +1433,7 @@ export const en = {
     },
     fields: {
       project: "Project",
-      base: "Base",
+      branch: "Branch",
       baseNotApplicable: "Not applicable",
       host: "Host",
     },

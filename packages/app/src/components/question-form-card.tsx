@@ -1,3 +1,4 @@
+import { Alert } from "@/components/ui/alert";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useState, useCallback, useMemo, type ReactNode } from "react";
 import { View, Pressable, type PressableStateCallbackType } from "react-native";
@@ -41,6 +42,7 @@ interface QuestionFormCardProps {
   permission: PendingPermission;
   onRespond: (response: AgentPermissionResponse) => void;
   isResponding: boolean;
+  responseError: string | null;
 }
 
 /** 哪个控件触发了这次发送，加载指示就画在哪里。 */
@@ -505,7 +507,12 @@ function QuestionFormFooter({
   );
 }
 
-export function QuestionFormCard({ permission, onRespond, isResponding }: QuestionFormCardProps) {
+export function QuestionFormCard({
+  permission,
+  onRespond,
+  isResponding,
+  responseError,
+}: QuestionFormCardProps) {
   const { t } = useTranslation();
   const isCompact = useIsCompactFormFactor();
   const questions = useMemo(
@@ -694,6 +701,8 @@ export function QuestionFormCard({ permission, onRespond, isResponding }: Questi
           />
         )}
       </View>
+
+      {responseError ? <Alert variant="error" description={responseError} size="sm" /> : null}
 
       <QuestionFormFooter
         skipLabel={resolveSkipLabel(questions, t("message.question.skip"))}
