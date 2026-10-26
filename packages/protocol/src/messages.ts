@@ -4090,9 +4090,9 @@ export const ServerInfoStatusPayloadSchema = z
         creationLifecycle: z.boolean().optional(),
         // COMPAT(hubAgentRpc): added in v0.8.0; remove gate after 2027-03-05.
         hubAgentRpc: z.boolean().optional(),
-        // COMPAT(internalAgents): added in v0.9.0; remove gate after 2027-03-17.
+        // COMPAT(internalAgents): added in v0.18.0; remove gate after 2027-03-17.
         internalAgents: z.boolean().optional(),
-        // COMPAT(internalWorkspaces): added in v0.9.0; remove gate after 2027-03-17.
+        // COMPAT(internalWorkspaces): added in v0.18.0; remove gate after 2027-03-17.
         internalWorkspaces: z.boolean().optional(),
         backgroundWorkspaces: z.boolean().optional(),
         providersSnapshot: z.boolean().optional(),
@@ -4221,7 +4221,7 @@ export const ServerInfoStatusPayloadSchema = z
         commitBaseClassification: z.boolean().optional(),
         // COMPAT(providerRemoval): added in v0.1.105, drop the gate when floor >= v0.1.105.
         providerRemoval: z.boolean().optional(),
-        // COMPAT(hopliteProvider): added after v0.11.2, remove after 2027-04-15 once host floor includes the bundled adapter.
+        // COMPAT(hopliteProvider): added in v0.18.0, remove after 2027-04-15 once host floor includes the bundled adapter.
         hopliteProvider: z.boolean().optional(),
         // COMPAT(importSessionWorkspaceTarget): added in v0.1.110, remove gate after 2027-01-16.
         importSessionWorkspaceTarget: z.boolean().optional(),

@@ -704,7 +704,7 @@ export const zhCN: TranslationResources = {
       },
       switcher: {
         trigger: "切换标签（已打开 {{count}} 个）",
-        title: "Workspace 标签",
+        title: "工作区标签",
         searchPlaceholder: "搜索标签",
       },
       menu: {
@@ -2388,9 +2388,9 @@ export const zhCN: TranslationResources = {
     feedback: {
       send: "发送反馈 ({{count}})",
       sending: "正在发送反馈 ({{count}})",
-      chooseAgent: "选择智能体",
+      chooseAgent: "选择 Agent",
       sent: "已向 {{recipient}} 发送反馈",
-      "no-agents": "请在此工作区打开智能体标签页以发送反馈。",
+      "no-agents": "请在此工作区打开 Agent 标签页以发送反馈。",
       disconnected: "请连接到主机以发送反馈。",
       "no-context": "保存的评论不再匹配此差异。",
       failed: "发送反馈失败。请重试。",

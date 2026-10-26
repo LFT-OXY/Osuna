@@ -29,7 +29,7 @@ export function addRunOptions(cmd: Command): Command {
       .argument("<prompt>", "The task/prompt for the agent")
       .option("--no-wait", "Return immediately without waiting for completion")
       // COMPAT(backgroundRunFlag): --background was the documented spelling of
-      // --no-wait. Added in v0.2.0; remove after 2027-04-01.
+      // --no-wait. Added in v0.18.0; remove after 2027-04-01.
       .addOption(new Option("-d, --background", "Legacy alias for --no-wait").hideHelp())
       // COMPAT(detachRunFlag): --detach used to mean background execution, not
       // ownership transfer. Added in v0.2.0; remove after 2027-01-17.

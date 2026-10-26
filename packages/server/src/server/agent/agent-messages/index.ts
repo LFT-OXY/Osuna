@@ -149,7 +149,7 @@ export function projectAgentMessage(item: AgentTimelineItem): AgentTimelineItem 
   if (item.type !== "user_message") return item;
   const message = parseAgentMessage(item.text);
   if (!message) {
-    // COMPAT(legacySystemEnvelope): added in v0.11.1; remove after 2027-04-08 once
+    // COMPAT(legacySystemEnvelope): added in v0.18.0; remove after 2027-04-08 once
     // legacy notification history is retired. Schedules still use this envelope.
     return isSystemInjectedEnvelope(item.text) ? null : item;
   }
@@ -165,7 +165,7 @@ export function projectAgentMessage(item: AgentTimelineItem): AgentTimelineItem 
       sender: { id: source.agentId, ...(source.title ? { title: source.title } : {}) },
       text: message.text,
     },
-    // COMPAT(agentMessageToolEnvelope): added in v0.11.1; remove after 2027-04-08
+    // COMPAT(agentMessageToolEnvelope): added in v0.18.0; remove after 2027-04-08
     // once clients can accept a dedicated timeline variant. Older clients still
     // parse this existing shape and can expand the delivered body.
     name: "agent_message",
