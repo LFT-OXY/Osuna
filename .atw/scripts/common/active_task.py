@@ -39,7 +39,7 @@ _SESSION_KEYS = ("session_id", "sessionId", "sessionID")
 _CONVERSATION_KEYS = ("conversation_id", "conversationId", "conversationID")
 _TRANSCRIPT_KEYS = ("transcript_path", "transcriptPath", "transcript")
 _NESTED_KEYS = ("input", "properties", "event", "hook_input", "hookInput")
-_KNOWN_PLATFORMS = {
+KNOWN_PLATFORMS = {
     "claude",
     "codex",
     "cursor",
@@ -716,7 +716,7 @@ def _context_metadata(
     platform_name = _detect_platform(data, platform)
     if platform_name == "session" and context_key:
         prefix = context_key.split("_", 1)[0]
-        if prefix in _KNOWN_PLATFORMS:
+        if prefix in KNOWN_PLATFORMS:
             platform_name = prefix
     metadata: dict[str, Any] = {
         "platform": platform_name,

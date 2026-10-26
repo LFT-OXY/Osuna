@@ -151,7 +151,7 @@ not a legacy alias for any `--tag` flag.
 Concrete model in the current source:
 
 - `--kind` is the only event-type filter, and it is constrained to the
-  atw-emitted whitelist (`CHANNEL_EVENT_KINDS` in
+  ATW-emitted whitelist (`CHANNEL_EVENT_KINDS` in
   `packages/core/src/channel/internal/store/events.ts`):
   - `create`, `join`, `leave`, `message`, `thread`, `context`, `channel`,
     `spawned`, `killed`, `respawned`, `progress`, `done`, `error`,
@@ -214,7 +214,7 @@ Behavior:
 atw channel spawn <name>
   [--scope project|global]
   [--agent <agent-name>]                  # loads .atw/agents/<name>.md
-  [--provider claude|codex]               # overrides agent file
+  [--provider claude|codex|pi|omp]        # overrides agent file
   [--as <worker-name>]                    # default: agent name
   [--cwd <path>]
   [--model <id>]
@@ -232,12 +232,19 @@ atw channel spawn <name>
                                           # default 5m, 0 disables
   [--max-live-workers <n>]                # spawn-time live-worker budget
                                           # default 6, 0 disables
+  [--sandbox read-only|workspace-write|danger-full-access]
+                                          # codex only; default workspace-write
+  [--read-only]                           # reviewer mode, see workers.md
+  [--clean]                               # claude: needs --read-only
+  [--no-session]                          # no session record, not resumable
+  [--effort <level>]                      # tool's own levels, checked first
+  [--standard-speed]                      # skip the user's fast tier
 ```
 
 Behavior:
 - Provider is validated against the adapter registry
   (`packages/cli/src/commands/channel/adapters/`); current: `claude`,
-  `codex`.
+  `codex`, `pi`, `omp`.
 - Worker stays inbox-idle until the first `send --to <worker>`.
 - Records a `spawned` event with `pid`, `provider`, `agent`, `files`,
   `manifests`.
@@ -245,13 +252,22 @@ Behavior:
   (`ATW_CHANNEL_WORKER_IDLE_TIMEOUT`,
   `ATW_CHANNEL_MAX_LIVE_WORKERS`) →
   `.atw/config.yaml#channel.worker_guard` → built-in defaults.
+- Reviewer mode (`--read-only`, `--clean`, `--no-session`, `--effort`,
+  `--standard-speed`): without them the launch is unchanged. Unknown effort
+  levels and combinations a tool cannot do (claude `--clean` without
+  `--read-only`; codex `--read-only` with a writable `--sandbox`; omp
+  `--effort auto`, or `--read-only --clean` without `--model`) exit 1
+  before launch; a pi or omp level the model lacks fails the handshake before
+  any message is sent. Codex workers record the thread's `instructionSources` as a
+  `progress` event (`detail.kind: "instruction_sources"`). Per-tool
+  translation and known limits: `workers.md` "Reviewer Mode".
 
 ### `run [name]`
 
 ```bash
 atw channel run [name?]
   [--agent <name>]
-  [--provider claude|codex]
+  [--provider claude|codex|pi|omp]
   [--as <worker-name>]
   [--cwd <path>]
   [--model <id>]
@@ -259,6 +275,9 @@ atw channel run [name?]
   [--jsonl <path>] ...                    # repeatable
   [--message <text> | --message-file <path> | --stdin]
   [--timeout <Ns|Nm|Nh>]                  # default 5m
+  [--read-only] [--clean] [--no-session]  # reviewer mode, same as spawn
+  [--effort <level>] [--standard-speed]
+  [--json]                                # one result object on stdout
 ```
 
 Behavior:
@@ -267,6 +286,25 @@ Behavior:
   sends the prompt, waits for `done`, prints the final assistant text to
   stdout, then removes the channel on success. On failure the channel is
   kept for inspection and exit code is 1.
+- `--json`: stdout carries exactly one JSON object, printed in every
+  outcome (the create / spawn / send notes move to stderr). Exit code and
+  keep-on-failure are the same as without it. Fields:
+
+  | Field | Value |
+  |---|---|
+  | `status` | `done` · `timeout` · `error` · `not-started` (the tool never said anything: arguments or launch refused, not installed, handshake failed, or exited at once — e.g. not logged in; or it errored before a word of its own, whether or not it reported an error kind — model names, usage and cost do not count. Claude's `<synthetic>` error message is not an answer) |
+  | `text` | `done`: the final answer. Otherwise the text produced so far (claude: finished text blocks; codex, pi, omp: the streamed answer), or `null` |
+  | `partial` | `true` when `text` is not a finished answer (always the case on timeout with text) |
+  | `durationMs` | wall-clock time of the whole run |
+  | `costUsd` | dollars the tool reported (claude `total_cost_usd`; pi and omp the turn's growth of the `get_session_stats` cost total, which also counts tool-reported and compaction cost, falling back to the turn's `usage.cost.total`); `null` = not reported, distinct from `0`. Codex never reports money, and a timed-out claude, pi or omp run has no cost frame. A failed claude turn's `total_cost_usd` is passed on as is (`0` stays `0`) |
+  | `costUnreported` | `true` when the tool did not report this turn's cost: `costUsd` is `null`, or pi / omp reported `0` for an interrupted turn (pi gives `0` there although the turn did cost; `costUsd` keeps that `0`). A failed turn's `0` is passed on unmarked |
+  | `usage` | token counts the tool reported (codex `tokenUsage.total`: `totalTokens`, `inputTokens`, `cachedInputTokens`, `cacheWriteInputTokens`, `outputTokens`, `reasoningOutputTokens`; pi `get_session_stats` `tokens`: `input`, `output`, `cacheRead`, `cacheWrite`, `total`; omp the same plus `reasoning`); `null` = not reported |
+  | `model` | model the tool says it ran (claude `init`, codex `thread/start`, pi and omp `get_state` as `provider/id`); `null` = not reported |
+  | `instructionSources` | codex: instruction files the thread loaded; `null` for claude, pi and omp |
+  | `error` | raw error text when not `done` (a tool that exits at once has its stderr tail appended; on `timeout` the timeout reason); `null` on `done` |
+  | `errorKind` | the tool's own error kind, verbatim (claude: the `error` of its `<synthetic>` error message, e.g. `model_not_found`, `authentication_failed`; codex: `codexErrorInfo`, e.g. `usageLimitExceeded`); `null` when the tool gave none (always for pi and omp) |
+  | `errorStatus` | the HTTP status the tool reported with that kind (claude `api_error_status`, codex `httpStatusCode`); `null` when it gave none |
+  | `errorSubkind` | a finer kind under `errorKind`, verbatim (claude `api_error`: a used-up plan comes as `rate_limit` with `usage_limit_reached` or `model_requires_usage_credits`; Claude documents the field as internal, so it may be renamed); `null` when it gave none |
 
 > `run` has **no** `--tag` flag. Completion is detected via the `done`
 > event the supervisor emits.
@@ -474,7 +512,8 @@ Forum channels are event-sourced; use the CLI reducers
 - **Pretty reads** (`list`, `messages`, `forum`, `thread`, `context list`)
   print colored, padded tables / timelines.
 - **`run`** prints only the final assistant text on stdout (so callers can
-  pipe); diagnostic notes go to stderr.
+  pipe); diagnostic notes go to stderr. `run --json` prints one result
+  object instead (see `run` above).
 - **Errors** go through `chalk.red("Error:")` to stderr and `exit 1`.
 - **`wait` timeout** specifically exits **124**.
 

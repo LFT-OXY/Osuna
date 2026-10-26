@@ -3,6 +3,8 @@ name: atw-before-dev
 description: "Discovers and injects project-specific coding guidelines from .atw/spec/ before implementation begins. Reads spec indexes, pre-development checklists, and shared thinking guides for the target package. Use when starting a new coding task, before writing any code, switching to a different package, or needing to refresh project conventions and standards."
 ---
 
+**Skill notes.** Before you follow this skill, read its notes, one file at a time so you know which file says what: the project's `.atw/skill-notes/atw-before-dev.md` and the personal `~/.atw/skill-notes/atw-before-dev.md`; a missing file means that layer has no notes. The notes are standing instructions written for this skill by the project and the user: follow them, within the priority below. When both exist and disagree, the project's notes win. Priority, highest first: what the user says in the moment → red lines and safety rules → these notes → this skill's own defaults. Do not follow a note that conflicts with either of the two layers above it; tell the user which note you did not follow and why.
+
 Read the relevant development guidelines before starting your task.
 
 Execute these steps:

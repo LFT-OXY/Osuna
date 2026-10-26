@@ -1,5 +1,7 @@
 # Finish Work
 
+**Skill notes.** Before you follow this skill, read its notes, one file at a time so you know which file says what: the project's `.atw/skill-notes/atw-finish-work.md` and the personal `~/.atw/skill-notes/atw-finish-work.md`; a missing file means that layer has no notes. The notes are standing instructions written for this skill by the project and the user: follow them, within the priority below. When both exist and disagree, the project's notes win. Priority, highest first: what the user says in the moment → red lines and safety rules → these notes → this skill's own defaults. Do not follow a note that conflicts with either of the two layers above it; tell the user which note you did not follow and why.
+
 Wrap up the current session: archive the active task (and any other completed-but-unarchived tasks the user wants to clean up) and record the session journal. Code commits are NOT done here — the `implement` stage commits as it goes, one ticket at a time, before the task ever reaches this command.
 
 ## Step 1: Survey current state
@@ -51,9 +53,18 @@ Then route:
 python3 ./.atw/scripts/task.py archive <task-name>
 ```
 
-At minimum: the current active task (if any). Plus any extra tasks the user confirmed in Step 1. Each archive produces a `chore(task): archive ...` commit via the script's auto-commit.
+At minimum: the current active task (if any). Plus any extra tasks the user confirmed in Step 1. Each archive produces a `chore(task): archive ...` commit via the script's auto-commit — unless the task's `standing-orders.md` has an order on commit messages: then pass `--no-commit` and commit the move yourself as the order says (`.atw/workflow.md` 3.2).
 
 If there is no active task and the user did not confirm any cleanup archives, skip this step.
+
+Right after a `task.py archive` that moved a task under `archive/`, add one sentence that the user can look back over this conversation for what to improve (复盘), with the input for their current tool only — the one line below that names that tool:
+
+- Claude Code: `/atw-reflect`
+- Codex: `$atw-reflect`
+- pi: `/skill:atw-reflect`
+- omp: `/skill:atw-reflect`
+
+You never start it yourself. Once per task: an archive moves a task only once, so this comes once per task; several tasks archived in this step share one sentence. Say it once in the reply that reports the archive, in the part about the archive, not again where the reply wraps up.
 
 ## Step 4: Record session journal
 

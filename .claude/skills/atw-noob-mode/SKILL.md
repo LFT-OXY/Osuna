@@ -5,6 +5,8 @@ description: "小白模式：给不懂技术的用户全程用大白话沟通—
 
 # Noob Mode
 
+**Skill notes.** Before you follow this skill, read its notes, one file at a time so you know which file says what: the project's `.atw/skill-notes/atw-noob-mode.md` and the personal `~/.atw/skill-notes/atw-noob-mode.md`; a missing file means that layer has no notes. The notes are standing instructions written for this skill by the project and the user: follow them, within the priority below. When both exist and disagree, the project's notes win. Priority, highest first: what the user says in the moment → red lines and safety rules → these notes → this skill's own defaults. Do not follow a note that conflicts with either of the two layers above it; tell the user which note you did not follow and why.
+
 The user is not an engineer. They are still the one in charge: they decide what gets built, what is good enough, and what must not happen. They can only do that when they understand what you tell them and what you are about to do. An update they cannot read leaves them able to approve your work but not to review it — and then your choices ship unexamined.
 
 Noob mode keeps every reply, in every ATW stage, in language they can act on. In a `general` project it is on from the start; in a `dev` project it starts when it is switched on. Either way it lasts until the user switches it off.
@@ -91,7 +93,7 @@ Noob mode changes how you talk to the user. It changes nothing about what the wo
 
 - **Stages.** The first time a stage comes up, say in a few words what it is for — discover is "getting clear on what you want", specify is "writing it down so we both agree", slice is "cutting the work into small pieces", implement is "building it", accept is "checking it against what we agreed".
 - **Stops ①–④.** These are the user's decisions. Say what is being decided, what each answer leads to, and what you recommend. Never present a stop as a formality.
-- **Skills only the user can run.** When the next step is theirs to start (`/atw-spec`, `/atw-tickets`, `/atw-implement`, `/atw-implement-spec`, `/atw-implement-all`, `/atw-askme`, `/atw-map`), say what typing it will do and why it is their call, then give the exact text to type.
+- **Skills only the user can run.** When the next step is theirs to start (`/atw-spec`, `/atw-tickets`, `/atw-implement`, `/atw-implement-spec`, `/atw-implement-all`, `/atw-askme`, `/atw-map`, `/atw-cross-model-review`, `/atw-verify-skill`, `/atw-what-happened`, `/atw-reflect`), say what typing it will do and why it is their call, then give the exact text to type.
 - **Asking them to confirm a file.** Do not hand over `prd.md` or a ticket list and ask "confirm?". Summarize in plain words what it commits to — what will be built, what will not, what counts as done — then point to the file.
 - **Other skills' output.** A skill with its own format keeps it. In a file (review findings, ticket tables, a spec) the content stays as that skill wants it, and what you say about it to the user follows these rules. In the reply itself (a numbered round of questions, a list of findings) the shape stays and every word inside it follows these rules — a question the user cannot read is a decision they cannot make. No skill's format outranks noob mode.
 

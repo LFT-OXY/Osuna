@@ -11,6 +11,7 @@ This directory is for local AI working in a user project where ATW was installed
 | "AI did not read context / change injected content" | `change-context-loading.md` |
 | "A platform hook is not behaving as expected" | `change-hooks.md` |
 | "Change implement/check/research agent behavior" | `change-agents.md` |
+| "Make an ATW skill or command behave differently" | `change-skills-or-commands.md` (write its skill notes) |
 | "Add a skill/command/workflow/prompt" | `change-skills-or-commands.md` |
 | "Adjust the project spec structure" | `change-spec-structure.md` |
 | "Add team conventions and local notes" | `add-project-local-conventions.md` |

@@ -16,6 +16,8 @@ Provides:
     get_phase_index   - Extract the Phase Index section (no --step)
     get_step          - Extract a single step (#### X.X) section
     filter_platform   - Strip platform blocks that don't include the given name
+    select_platform_blocks - Per-turn breadcrumbs: keep only the matching block,
+                             or every block when none matches
 """
 
 from __future__ import annotations
@@ -240,3 +242,34 @@ def filter_platform(content: str, platform: str) -> str:
             collapsed.append(line)
 
     return "\n".join(collapsed).rstrip() + "\n"
+
+
+def select_platform_blocks(content: str, platform: str | None) -> str:
+    """Per-turn breadcrumb variant of ``filter_platform``.
+
+    Keeps only the platform blocks that include ``platform``; when no block
+    matches (a platform the breadcrumb has no block for, or ``None``), keeps
+    every block instead, so each line must name its own tool. Marker lines
+    are always dropped. Content outside blocks is unchanged.
+    """
+    lines = content.splitlines()
+    names_seen: list[list[str]] = []
+    for line in lines:
+        marker = _parse_marker(line)
+        if marker is not None and not marker[0]:
+            names_seen.append(marker[1])
+    any_match = platform is not None and any(
+        _platform_matches(platform, names) for names in names_seen
+    )
+
+    out: list[str] = []
+    keep_block = True
+    for line in lines:
+        marker = _parse_marker(line)
+        if marker is not None:
+            is_closing, names = marker
+            keep_block = True if is_closing or not any_match else _platform_matches(platform or "", names)
+            continue
+        if keep_block:
+            out.append(line)
+    return "\n".join(out)

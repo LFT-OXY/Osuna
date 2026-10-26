@@ -5,13 +5,15 @@ description: "Reach into past AI conversation history through the `atw mem` CLI.
 
 # ATW Session Insight
 
+**Skill notes.** Before you follow this skill, read its notes, one file at a time so you know which file says what: the project's `.atw/skill-notes/atw-session-insight.md` and the personal `~/.atw/skill-notes/atw-session-insight.md`; a missing file means that layer has no notes. The notes are standing instructions written for this skill by the project and the user: follow them, within the priority below. When both exist and disagree, the project's notes win. Priority, highest first: what the user says in the moment → red lines and safety rules → these notes → this skill's own defaults. Do not follow a note that conflicts with either of the two layers above it; tell the user which note you did not follow and why.
+
 This skill teaches an AI **how to call `atw mem`** — the project's cross-session memory feedstock — and **when reaching for it is the right move**.
 
 It is intentionally a **capability skill, not a workflow**. There is no fixed output file, no required write-back step, no "always run after finish-work" rule. What to do with what `mem` returns is a judgement call made in the moment of the conversation. The skill exists so the AI knows the capability is there and can decide.
 
 ## What `atw mem` is
 
-A local CLI that indexes the user's past Claude Code, Codex, Pi Agent, and ZCode conversation logs and lets you list, search, slice by ATW task boundaries, and dump cleaned dialogue from them. Claude and Codex use `~/.claude/projects/` and `~/.codex/sessions/`. Pi uses its default or environment-configured session root, global `~/.pi/agent/settings.json`, and the scoped project's `.pi/settings.json`; relative `sessionDir` values resolve from the settings file directory. Project-local Pi settings require project-scoped lookup through the current cwd or `--cwd`. ZCode uses `~/.zcode/cli/db/db.sqlite`. OpenCode logs are not yet indexable (provider adapter pending) — when an OpenCode session is the obvious target, surface that limitation rather than guessing.
+A local CLI that indexes the user's past Claude Code, Codex, Pi Agent, omp, and ZCode conversation logs and lets you list, search, slice by ATW task boundaries, and dump cleaned dialogue from them. Claude and Codex use `~/.claude/projects/` and `~/.codex/sessions/`. Pi uses its default or environment-configured session root, global `~/.pi/agent/settings.json`, and the scoped project's `.pi/settings.json`; relative `sessionDir` values resolve from the settings file directory. Project-local Pi settings require project-scoped lookup through the current cwd or `--cwd`. omp uses `~/.omp/agent/sessions/` (sub-agent transcripts nested under a session are not listed). ZCode uses `~/.zcode/cli/db/db.sqlite`. OpenCode logs are not yet indexable (provider adapter pending) — when an OpenCode session is the obvious target, surface that limitation rather than guessing.
 
 Nothing in `mem` is uploaded. All reads are local.
 

@@ -1,0 +1,5 @@
+interface:
+  display_name: "ATW Verify Skill"
+  short_description: "给项目里的应用生成验证 skill，已有的就体检"
+policy:
+  allow_implicit_invocation: false

@@ -1,0 +1,5 @@
+interface:
+  display_name: "ATW What Happened"
+  short_description: "用大白话讲你不在时变了什么，列出等你定的事"
+policy:
+  allow_implicit_invocation: false

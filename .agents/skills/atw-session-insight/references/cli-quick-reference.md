@@ -9,14 +9,15 @@ Full flag reference for the five subcommands. Pin this as the authoritative sour
 | `list`                 | List sessions. Default subcommand when none is given.                                                                  |
 | `search <keyword>`     | Find sessions whose contents match a keyword.                                                                          |
 | `context <session-id>` | Drill into one session: top-N hit turns + surrounding context. Pair with `--grep` for keyword anchoring.               |
-| `extract <session-id>` | Dump cleaned dialogue. Combine with `--phase` / `--grep` to slice.                                                     |
+| `extract <session-id>` | Dump cleaned dialogue. Combine with `--phase` / `--grep` to slice, or `--tools` / `--after` for the tools reading.     |
+| `extract --context <id>` | Same, finding the session by its ATW context id instead of a session id.                                           |
 | `projects`             | List active project `cwd` values with session counts. Use this to discover which `--cwd` to pass to other subcommands. |
 
 ## Flags (apply where meaningful)
 
 | Flag                                          | Subcommands       | Meaning                                                                                                                                                    |
 | --------------------------------------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--platform claude\|codex\|opencode\|pi\|all` | all               | Default `all`. OpenCode sessions are read, but `--phase` does not apply to them — see "Caveats" below.                                                      |
+| `--platform claude\|codex\|omp\|opencode\|pi\|all` | all          | Default `all`. OpenCode sessions are read, but `--phase` does not apply to them — see "Caveats" below.                                                      |
 | `--since YYYY-MM-DD`                          | list / search     | Inclusive lower date bound.                                                                                                                                |
 | `--until YYYY-MM-DD`                          | list / search     | Inclusive upper date bound.                                                                                                                                |
 | `--global`                                    | list / search     | Include sessions from every project on this machine. Default is the current project `cwd`.                                                                 |
@@ -24,6 +25,10 @@ Full flag reference for the five subcommands. Pin this as the authoritative sour
 | `--limit N`                                   | list / search     | Cap output rows. Default `50`.                                                                                                                             |
 | `--grep KW`                                   | extract / context | Filter turns by keyword. Multi-token AND when whitespace-separated.                                                                                        |
 | `--phase brainstorm\|implement\|all`          | extract           | Slice session by ATW task boundaries. `brainstorm` = `[task.py create, task.py start)`. `implement` = turns outside brainstorm windows. Default `all`. |
+| `--tools`                                     | extract           | Tools reading: in recorded order, the dialogue plus each tool call (name + command, or a `key: value` argument summary) and its result, and on Claude Code each message a hook had it show the user (`## Hook message`). Thinking is never shown. Claude Code, Codex, Pi, omp only. Cannot be combined with `--phase` / `--grep`. |
+| `--result-lines N`                            | extract --tools   | Lines kept at the start and at the end of a long call input or result; the cut is written as `[... K lines omitted ...]`. Default `20`.                   |
+| `--after <ISO time>`                          | extract           | Only what was recorded at or after this time (e.g. `2026-10-18T15:30:12+08:00`). Without `--tools` it gives the dialogue only. Claude Code, Codex, Pi, omp only. |
+| `--context <id>`                              | extract           | Find the session by ATW context id — copy it from the evidence cell of the decision-log `start` row (`claude_<session-id>`, `omp_transcript_<hash>`, `session_<id>`, …). Exact match only; no match, or more than one, is an error — nothing is guessed. |
 | `--turns N`                                   | context           | Number of hit turns to return. Default `3`.                                                                                                                |
 | `--around N`                                  | context           | Surrounding turns to include per hit. Default `1`.                                                                                                         |
 | `--max-chars N`                               | context           | Total character budget. Default `6000` (~1500 tokens).                                                                                                     |
@@ -43,6 +48,10 @@ atw mem context 5842592d --grep "lock contention" --turns 5 --around 2
 # Recover the brainstorm window for a session — useful when continuing a task
 # the user started a week ago.
 atw mem extract 5842592d --phase brainstorm
+
+# Re-read a run's commands and results: take the context id from the evidence
+# cell of the run's decision-log `start` row and the time from its time cell.
+atw mem extract --context claude_<session-id> --tools --after 2026-10-18T15:30:12+08:00
 
 # List every project this machine has ATW sessions for, with counts.
 atw mem projects

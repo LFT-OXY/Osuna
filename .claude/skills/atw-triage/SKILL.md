@@ -1,10 +1,12 @@
 ---
 name: atw-triage
-description: "通过由分流角色组成的状态机处理问题和外部PR——进行分类、核实、必要时深入追问，并撰写供代理人员使用的简报。"
+description: "通过由分流角色组成的状态机处理问题和外部PR——进行分类、核实、必要时深入追问，并撰写供代理人员使用的简报。用户要过一遍新来的问题或外部 PR 时使用。"
 disable-model-invocation: true
 ---
 
 # ATW Triage
+
+**Skill notes.** Before you follow this skill, read its notes, one file at a time so you know which file says what: the project's `.atw/skill-notes/atw-triage.md` and the personal `~/.atw/skill-notes/atw-triage.md`; a missing file means that layer has no notes. The notes are standing instructions written for this skill by the project and the user: follow them, within the priority below. When both exist and disagree, the project's notes win. Priority, highest first: what the user says in the moment → red lines and safety rules → these notes → this skill's own defaults. Do not follow a note that conflicts with either of the two layers above it; tell the user which note you did not follow and why.
 
 Move issues on the project issue tracker through a small state machine of triage roles.
 
@@ -18,8 +20,8 @@ Every comment or issue posted to the issue tracker during triage **must** start 
 
 ## Reference docs
 
-- [AGENT-BRIEF.md](AGENT-BRIEF.md) — how to write durable agent briefs
-- [OUT-OF-SCOPE.md](OUT-OF-SCOPE.md) — how the `.out-of-scope/` knowledge base works
+- [agent-brief.md](agent-brief.md) — how to write durable agent briefs
+- [out-of-scope.md](out-of-scope.md) — how the `.out-of-scope/` knowledge base works
 
 ## Roles
 
@@ -76,13 +78,13 @@ Show counts and a one-line summary per item. Let the maintainer pick.
 4. **Interview (if needed).** If the request needs fleshing out, call the Skill tool twice, for "atw-interview" and "atw-domain-modeling" — interview a round of questions at a time, sharpening domain terms and updating `GLOSSARY.md`/ADRs inline as decisions land.
 
 5. **Apply the outcome:**
-   - `ready-for-agent` — post an agent brief comment ([AGENT-BRIEF.md](AGENT-BRIEF.md)).
+   - `ready-for-agent` — post an agent brief comment ([agent-brief.md](agent-brief.md)).
    - `ready-for-human` — same structure as an agent brief, but note why it can't be delegated (judgment calls, external access, design decisions, manual testing).
    - `needs-info` — post triage notes (template below).
    - `wontfix` — close, with the comment depending on *why*:
      - **Already implemented** — the change already exists in the codebase. Point to where it lives; do **not** write to `.out-of-scope/` (that KB is for *rejected* requests, not built ones).
      - **Rejected (bug)** — polite explanation, then close.
-     - **Rejected (enhancement)** — write to `.out-of-scope/`, link to it from a comment, then close ([OUT-OF-SCOPE.md](OUT-OF-SCOPE.md)).
+     - **Rejected (enhancement)** — write to `.out-of-scope/`, link to it from a comment, then close ([out-of-scope.md](out-of-scope.md)).
    - `needs-triage` — apply the role. Optional comment if there's partial progress.
 
 ## Quick state override

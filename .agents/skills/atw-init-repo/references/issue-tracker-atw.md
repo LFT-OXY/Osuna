@@ -44,7 +44,7 @@ On top of the standard ticket template, tickets here carry two extra lines:
 
 | Field | Vocabulary | Who writes it |
 |---|---|---|
-| `Status:` | triage roles (see `triage-labels.md`) | The slicer, when it writes the ticket. Default `ready-for-agent`: these tickets are ones you sliced yourself, so they never go through triage. Set `ready-for-human` on a ticket a person must do — it needs an external account, a manual test pass, or a design or legal decision. `/atw-implement-all` never dispatches such a ticket and stops when the frontier holds only those; `/atw-implement` confirms with the user before touching code — they do it themselves, or explicitly authorize the AI. `tickets.py` does not read this field; the frontier ignores it. |
+| `Status:` | triage roles (see `triage-labels.md`) | The slicer, when it writes the ticket. Default `ready-for-agent`: these tickets are ones you sliced yourself, so they never go through triage. Set `ready-for-human` on a ticket a person must do — it needs an external account, a manual test pass, or a design or legal decision. Neither `/atw-implement-spec` nor `/atw-implement-all` dispatches such a ticket: both list it apart and stop when only those are left; `/atw-implement` confirms with the user before touching code — they do it themselves, or explicitly authorize the AI. `tickets.py frontier --agent-only` reads this field and lists `ready-for-human` tickets apart from the workable ones; a ticket without the line counts as `ready-for-agent`. `claim`, `done` and `summary` do not read it, so a human ticket the user finished is closed like any other. Two `tickets.py` commands also write it: `skip` sets `ready-for-human` on a ticket an unattended run gives up on, and `handback` sets it back to `ready-for-agent` once the user has decided. |
 | `Impl:` | `ready` / `doing` / `done` | `tickets.py`. This is the field the workflow actually routes on, and the only field the parser requires. |
 | `Issue:` | `#58`, or empty | Filled in by `github_sync.py sync-tickets`; it is also the only ticket ↔ remote-issue mapping, so there is no separate mapping table. |
 
@@ -72,9 +72,15 @@ Do not apply a triage label when publishing here; these artifacts don't enter th
 ```bash
 python3 .atw/scripts/tickets.py list        # all tickets + Impl state
 python3 .atw/scripts/tickets.py frontier    # Impl: ready with all blockers done
+python3 .atw/scripts/tickets.py frontier --agent-only  # the same, minus Status: ready-for-human tickets, listed apart
 python3 .atw/scripts/tickets.py claim <NN>  # → Impl: doing
 python3 .atw/scripts/tickets.py done <NN>   # → Impl: done
 python3 .atw/scripts/tickets.py claim <NN> --parallel  # → Impl: doing, alongside others (`/atw-implement-spec` only)
+python3 .atw/scripts/tickets.py revert <NN>  # revert commits since the claim; task directory kept as it was
+python3 .atw/scripts/tickets.py revert <NN> --with-uncommitted  # serial only: first record uncommitted changes outside the task directory as commits, then revert them too
+python3 .atw/scripts/tickets.py revert <NN> --merge <sha>  # parallel batch: revert that merge (first parent)
+python3 .atw/scripts/tickets.py skip <NN> --reason <why> --log-time <time>  # → Impl: ready, Status: ready-for-human, reason under ## Comments
+python3 .atw/scripts/tickets.py handback <NN> --decision <text>  # → Status: ready-for-agent, decision under ## Comments
 ```
 
 `claim` refuses tickets that aren't on the frontier, and the parser rejects blocker references that don't exist or form a cycle. `claim` also records `implementation_base_sha` and writes the ticket's path into `$TASK/check.jsonl`, which is what review sub-agents read to know which ticket is live; `done` withdraws that line.

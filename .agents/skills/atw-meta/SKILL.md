@@ -5,6 +5,8 @@ description: "Understand and customize the local ATW architecture inside a user 
 
 # ATW Meta
 
+**Skill notes.** Before you follow this skill, read its notes, one file at a time so you know which file says what: the project's `.atw/skill-notes/atw-meta.md` and the personal `~/.atw/skill-notes/atw-meta.md`; a missing file means that layer has no notes. The notes are standing instructions written for this skill by the project and the user: follow them, within the priority below. When both exist and disagree, the project's notes win. Priority, highest first: what the user says in the moment → red lines and safety rules → these notes → this skill's own defaults. Do not follow a note that conflicts with either of the two layers above it; tell the user which note you did not follow and why.
+
 This skill is for local ATW users who have already run `atw init` in a project. After reading it, an AI should understand the ATW architecture, operating model, and customization entry points inside that user project, then modify the generated `.atw/` and platform directory files according to the user's request.
 
 Beyond the workflow / persistence / platform model, ATW has three further architectural surfaces. First, a multi-agent collaboration runtime: `atw channel` coordinates multiple AI worker processes through project-scoped JSONL event logs at `~/.atw/channels/<project>/<channel>/events.jsonl`, with worker OOM guard, forum/thread channels, durable idempotency keys, and bundled `.atw/agents/{review,implement-agent}.md` runtime definitions. Second, cross-session memory: `atw mem list | search | context | extract | projects` reads raw Claude Code, Codex, and Pi Agent JSONL already on disk, slices by `--phase brainstorm|implement|all`, and never uploads anything. Third, a dual-package npm release: `@chinhae/atw-cli` (CLI) and `@chinhae/atw-core` (SDK with `/channel`, `/task`, `/mem`, `/testing` subpaths) ship in lockstep on one version. Treat these as first-class customization surfaces alongside the per-platform integration files.
@@ -57,7 +59,7 @@ Do not assume the user has the ATW source repository. Do not default to modifyin
 - `references/customize-local/change-context-loading.md`: Change how tasks, specs, journals, hook context, channel inbox messages, and `atw mem` recall are loaded.
 - `references/customize-local/change-hooks.md`: Change platform hooks, settings, task lifecycle hooks (`hooks.after_*`), and shell session bridges.
 - `references/customize-local/change-agents.md`: Change review and implement agent behavior across platform sub-agents, bundled channel runtime agents, and the Codex `dispatch_mode` toggle.
-- `references/customize-local/change-skills-or-commands.md`: Add or modify local skills, commands, prompts, and workflows; covers upstream bundled-skill auto-dispatch.
+- `references/customize-local/change-skills-or-commands.md`: Adjust an existing ATW skill or command by writing its skill notes; create a project skill (name not starting with `atw-`) only when a whole capability is missing; commands, prompts, and workflows; upstream bundled-skill auto-dispatch.
 - `references/customize-local/change-spec-structure.md`: Adjust the project spec structure under `.atw/spec/`, including registry-backed sources.
 - `references/customize-local/add-project-local-conventions.md`: Put team rules into project-local specs or local skills.
 

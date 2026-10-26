@@ -1,9 +1,11 @@
 ---
 name: atw-prototype
-description: "构建一次性原型来解答设计问题。用于验证状态模型或业务逻辑是否合理、探索界面应该长什么样（先用文字比较几个风格方向，要看画面时再做成首屏并排对比，由用户选定），或把选定方向做成能完整点一遍、带业务逻辑的可交互原型。原型只用于做决定，不是正式实现；按选定方向做正式界面、精修和评审交给 atw-ui。"
+description: "构建一次性原型来解答设计问题。用于验证状态模型或业务逻辑是否合理、探索界面应该长什么样（先用文字比较几个风格方向，要看画面时再做成首屏并排对比，由用户选定），或把选定方向做成能完整点一遍、带业务逻辑的可交互原型。原型只用于做决定，不是正式实现；按选定方向做正式界面、精修和评审交给 atw-ui。设计方向还没定、想先验证状态模型或比一比几个风格方向时使用。"
 ---
 
 # Prototype
+
+**Skill notes.** Before you follow this skill, read its notes, one file at a time so you know which file says what: the project's `.atw/skill-notes/atw-prototype.md` and the personal `~/.atw/skill-notes/atw-prototype.md`; a missing file means that layer has no notes. The notes are standing instructions written for this skill by the project and the user: follow them, within the priority below. When both exist and disagree, the project's notes win. Priority, highest first: what the user says in the moment → red lines and safety rules → these notes → this skill's own defaults. Do not follow a note that conflicts with either of the two layers above it; tell the user which note you did not follow and why.
 
 原型是**为回答一个问题而写、用完就扔的代码**。问题决定原型的形态。它属于 discover 阶段：产出是一个决定，不是可以上线的代码。
 
@@ -11,8 +13,8 @@ description: "构建一次性原型来解答设计问题。用于验证状态模
 
 先从用户的请求、相关代码判断要回答的是哪个问题；用户在场时可以直接问：
 
-- **“这套逻辑 / 状态模型对不对？”** → [LOGIC.md](LOGIC.md)。做一个可分享的单文件 HTML：自由操作的按钮加按标签页划分的引导演练，把纸面上难以推演的状态组合跑一遍，让不写代码的人也能自己操作。
-- **“这个界面应该长什么样？”** 或 **“这个页面用起来对不对？”** → [UI.md](UI.md)。分两段：先认品类、拆标杆，用文字写出三个风格明显不同的方向请用户选，用户要看画面时再把三个首屏放进对比页；需要时再把选定方向深化成带业务逻辑的可交互原型，业务逻辑按 LOGIC.md 的方式写成独立的纯模块。
+- **“这套逻辑 / 状态模型对不对？”** → [logic.md](logic.md)。做一个可分享的单文件 HTML：自由操作的按钮加按标签页划分的引导演练，把纸面上难以推演的状态组合跑一遍，让不写代码的人也能自己操作。
+- **“这个界面应该长什么样？”** 或 **“这个页面用起来对不对？”** → [ui.md](ui.md)。分两段：先认品类、拆标杆，用文字写出三个风格明显不同的方向请用户选，用户要看画面时再把三个首屏放进对比页；需要时再把选定方向深化成带业务逻辑的可交互原型，业务逻辑按 logic.md 的方式写成独立的纯模块。
 
 两个分支的产物差别很大，选错等于白做。问题确实模糊且用户不在时，按周边代码选：后端模块走逻辑，页面或组件走界面；并在原型顶部写明这个假设。
 

@@ -1,10 +1,12 @@
 ---
 name: atw-tickets
-description: "将计划、规格说明或当前对话拆分为一组“追踪子工单”，每个子工单都声明其阻塞边，并发布到已配置的跟踪系统中——这些边可以是本地每个子工单对应文件中的文本，也可以是真实跟踪系统上的原生阻塞链接。"
+description: "将计划、规格说明或当前对话拆分为一组“追踪子工单”，每个子工单都声明其阻塞边，并发布到已配置的跟踪系统中——这些边可以是本地每个子工单对应文件中的文本，也可以是真实跟踪系统上的原生阻塞链接。用户要把计划或规格拆成一张张工单、标清先后时使用。"
 disable-model-invocation: true
 ---
 
 # ATW Tickets
+
+**Skill notes.** Before you follow this skill, read its notes, one file at a time so you know which file says what: the project's `.atw/skill-notes/atw-tickets.md` and the personal `~/.atw/skill-notes/atw-tickets.md`; a missing file means that layer has no notes. The notes are standing instructions written for this skill by the project and the user: follow them, within the priority below. When both exist and disagree, the project's notes win. Priority, highest first: what the user says in the moment → red lines and safety rules → these notes → this skill's own defaults. Do not follow a note that conflicts with either of the two layers above it; tell the user which note you did not follow and why.
 
 Break a plan, spec, or conversation into a set of **tickets** — tracer-bullet vertical slices, each declaring the tickets that **block** it.
 

@@ -70,7 +70,7 @@ Active task is session-level state stored in `.atw/.runtime/sessions/`. Do not f
 `cmd_create` in `.atw/scripts/common/task_store.py` calls `set_active_task` best-effort right after writing the new task directory. The behavior:
 
 - When the calling shell carries session identity (`ATW_CONTEXT_ID` env var, or any platform-specific session env that `resolve_context_key` recognizes — see `active_task.py:_ENV_SESSION_KEYS`), the per-session pointer at `.atw/.runtime/sessions/<context_key>.json` is rewritten to point at the new task. The task's `status=discover` and `[workflow-state:discover]` fires on the very next `UserPromptSubmit`.
-- When session identity is unavailable (raw CLI invocation outside an AI session, or a platform that doesn't propagate identity to shell), the task directory is still created and `status=discover` is still written, but the active pointer is left untouched. The user can attach the task later with `task.py start <dir>` once they're back in an AI session.
+- When session identity is unavailable (raw CLI invocation outside an AI session, or a platform that doesn't propagate identity to shell), the task directory is still created and `status=discover` is still written, but the active pointer is left untouched. The user can attach the task later with `task.py resume <dir>` once they're back in an AI session — `resume` keeps it at `discover`, while `start` would move it on to `implement`.
 
 This makes `[workflow-state:discover]` the live breadcrumb during the brainstorm and JSONL curation work that follows `task.py create`. The pre-R7 behavior left the breadcrumb stuck on `no_task` until `task.py start`, so the discover block was effectively dead text.
 
