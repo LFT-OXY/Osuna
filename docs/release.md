@@ -312,6 +312,14 @@ git 不报冲突、结果却不对的：
 - 打包产物冲突时重新生成，不手工合并。
   `packages/app/src/terminal/webview/terminal-emulator-webview-html.ts` 在
   `packages/app` 下用 `npm run build:terminal-webview` 生成，再过一遍格式化。
+  不报冲突的生成产物也会过期：两边都给配置加了字段时，
+  `packages/website/public/schemas/paseo.config.v1.json` 要用
+  `npm run generate:config-schema --workspace=@getpaseo/server` 重新生成，
+  `persisted-config-json-schema.test.ts` 守着它。
+- 两边都留的冲突块，git 写进文件的块常比 diff3 视图短：两边相同的结尾几行在块外只出现一次。
+  用脚本拼「Osuna 段 + 上游段」时，这几行会被写两遍或被吃掉。v0.12.0-beta.1 时历史回放里
+  `historyEvents.push` 写了两遍，时间线每次刷新多出一份，typecheck 与 lint 都过，只有
+  `agent-manager.test.ts` 抓到。合完对冲突文件扫一遍新出现的相邻重复行，再跑对应测试。
 - Osuna 已删除、上游又改了的东西：上游的新代码需要它才恢复（`ExternalLink` 组件），
   否则保持删除（`publish-linux` 作业）。
 - 两边各做了一遍的功能，除了源码还要逐条对两边的测试。同一场景下两边用例结论相反时，
@@ -339,6 +347,9 @@ git 不报冲突、结果却不对的：
   要 `TMPDIR="$(cd "$TMPDIR" && pwd -P)"`：`/var` 是 `/private/var` 的软链接。
 - `packages/server/src/server/daemon-client.e2e.test.ts` 会启动本机真实的提供方，也不在 CI 的
   测试脚本里。不要整份跑。
+- 测试跑法因目录而异，按错的方式跑会报「No test files found」或「No test suite found」，
+  不是失败：`packages/cli/tests/*.test.ts` 是脚本，用 `npx tsx tests/<文件>` 跑；
+  `packages/app` 的 `*.browser.test.ts(x)` 要 `--project browser`，其余用 `--project unit`。
 - 官网包的 vitest 像 CI 一样从仓库根目录跑：`npx vitest run packages/website/src/...`。在
   `packages/website` 里跑会被 Cloudflare 的 Vite 插件挡住。
 - 上游新增的打包资源要核对进包。CI 只在 Linux 包上冒烟（Desktop Packages），macOS 包没有。v0.11.0 的内置插件（两个新提供方与全部
