@@ -1,0 +1,5 @@
+# Markdown file preview follows upstream's renderer
+
+Supersedes [ADR 0001](0001-markdown-file-preview-dom-renderer-with-lezer.md). When merging upstream v0.12.0 – v0.13.0, upstream moved every platform to `react-native-enriched-markdown` (#6973) and the file preview into `file-panels/` (#7366, #7411, #7614). We take upstream's preview on web and Electron too and delete Osuna's DOM preview (`file-pane/markdown-preview/*.web.*`, `github-alerts.ts`, `resource.ts` and their tests), so that every later upstream change to the preview merges without a second implementation to reconcile.
+
+Given up with it, and not rebuilt on upstream's renderer: GitHub alerts (`[!NOTE]`), raw HTML layout such as centered headers and badge rows, the DOM code-block highlighting, repo-link chips, the missing-image placeholder and refresh on disk change. A logic map node with a line target opens the source view at that line instead of the preview, as it already did on native. Any of these comes back only as its own task built on upstream's renderer.

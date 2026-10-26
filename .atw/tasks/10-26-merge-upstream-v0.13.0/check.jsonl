@@ -1,0 +1,30 @@
+{"file": ".atw/tasks/10-26-merge-upstream-v0.13.0/research/discovery.md", "reason": "范围、七段发布点、访谈确认的十六条决定与按规则直接定的事"}
+{"file": ".atw/tasks/10-26-merge-upstream-v0.13.0/research/conflicts.md", "reason": "逐段冲突清单、一边删一边改的文件、补丁分支 16 个文件、敏感文件、外链与 COMPAT 标签清单"}
+{"file": ".atw/tasks/10-26-merge-upstream-v0.13.0/research/feature-overlap.md", "reason": "两边功能重叠的三方对比与 33 条按规则的裁决"}
+{"file": "docs/release.md", "reason": "「Fork 分发 → 从上游同步」：分段、补丁分支、版本号与发版元数据、冲突裁决、合并后核对、踩过的坑；本次要更新同步点、补丁分支一节与开 PR 的时机"}
+{"file": "docs/adr/0016-markdown-file-preview-follows-upstream.md", "reason": "Markdown 文件预览改用上游渲染器、删除 DOM 预览，取代 ADR 0001"}
+{"file": "docs/adr/0002-rename-stops-at-app-identity.md", "reason": "桌面身份为 Osuna、数据目录不变"}
+{"file": "docs/adr/0003-command-list-never-spawns.md", "reason": "指令列表不启动进程；上游对 Claude 的改动据此核对"}
+{"file": "docs/adr/0004-agent-mention-dispatched-by-parent-agent.md", "reason": "Routing block 追加在 prompt 末尾；上游 Agent 间消息信封与插话改动据此核对"}
+{"file": "docs/adr/0006-usage-in-code-is-upstream-plan-usage.md", "reason": "代码里 usage 归上游套餐用量；本次套餐用量翻译键以上游为底"}
+{"file": "docs/adr/0013-logic-map-stores-skeleton-and-links-existing-docs.md", "reason": "逻辑图节点打开文档的约定；失去预览定位后改走源码视图"}
+{"file": "docs/adr/0015-account-rotation-holds-cli-logins.md", "reason": "多号轮换与套餐用量来源缓存；与上游 #7246 的缓存清理并存"}
+{"file": "docs/glossary.md", "reason": "用量、套餐用量、提供方等叫法，上游新文案按它改回"}
+{"file": "docs/design.md", "reason": "上游新界面用 Osuna 外观；上游加的 no-raw-pressable 一节"}
+{"file": "docs/i18n.md", "reason": "上游新文案走翻译键，九种语言齐全，zh-CN 真实翻译"}
+{"file": "docs/explorer-sidebar.md", "reason": "Explorer 三端统一后会话历史与逻辑图标签的补回"}
+{"file": "docs/agent-lifecycle.md", "reason": "子 Agent 与通知；上游通知批处理与 Osuna 权限文案"}
+{"file": "docs/plugins.md", "reason": "插件文件面板、插件翻译、UI 入口的变化"}
+{"file": "docs/protocol-compatibility.md", "reason": "协议兼容约束与 COMPAT 标签写法，标签改写成 v0.18.0"}
+{"file": "SECURITY.md", "reason": "中继连接强制带密码（#7668）的说明要同步"}
+{"file": "docs/testing.md", "reason": "本机只跑单个测试文件，整套交给 CI"}
+{"file": "docs/qa.md", "reason": "PR 证据要求与平台矩阵"}
+{"file": ".atw/spec/server/backend/testing.md", "reason": "提供方与会话的测试写法；上游新用例在 Osuna 必挂的几类"}
+{"file": ".atw/spec/server/backend/quality-guidelines.md", "reason": "server 侧冲突解决后的质量检查"}
+{"file": ".atw/spec/server/backend/rpc-and-protocol.md", "reason": "上游新增 RPC 与 features 键和 Osuna 的并存核对"}
+{"file": ".atw/spec/app/frontend/component-guidelines.md", "reason": "新界面的组件与 i18n 规则；Composer 的 Tiptap 输入"}
+{"file": ".atw/spec/app/frontend/styling.md", "reason": "样式规则；其中 DOM Markdown 预览一节随 ADR 0016 删改"}
+{"file": ".atw/spec/app/frontend/state-management.md", "reason": "Explorer 标签、侧栏显示偏好的存储"}
+{"file": ".atw/spec/app/frontend/quality-guidelines.md", "reason": "App 质量检查与禁止模式"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "App 单元测试与浏览器测试写法；Composer 读 textContent"}
+{"file": ".atw/spec/guides/cross-layer-thinking-guide.md", "reason": "daemon 与 App 两侧冲突的跨层检查"}
