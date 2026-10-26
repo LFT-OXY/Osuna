@@ -1070,6 +1070,8 @@ export async function createPaseoDaemon(
     cliSignIns,
     planUsage: pluginRuntime,
     claudeRuntime: () => config.agentProviderSettings?.claude,
+    // apiEndpointService 在下面创建；只在列出账号时调用，那时 daemon 已经启动。
+    claudeThroughEndpoints: () => apiEndpointService.activeEndpointId("claude") !== null,
     onChanged: () => {
       broadcastProviderAccountsChanged();
       // 号或设置变了：第二层要不要经过中转站可能跟着变（apiEndpointService 在下面创建）。
@@ -1096,6 +1098,8 @@ export async function createPaseoDaemon(
       wsServer?.broadcast(wrapSessionMessage({ type: "usage.pricing.updated" }));
     },
     onActiveEndpointChanged: (provider) => {
+      // Claude Code 的「使用第三方接口」开关一动，账号一节顶上的说明跟着变。
+      if (provider === "claude") broadcastProviderAccountsChanged();
       void providerSnapshotManager
         .refreshSettingsSnapshot({ providers: [provider] })
         .catch((error) => {

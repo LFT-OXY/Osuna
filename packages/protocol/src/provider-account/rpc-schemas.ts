@@ -20,11 +20,12 @@ export const ACCOUNT_LIMIT_MIN = 1;
 export const ACCOUNT_LIMIT_MAX = 99;
 
 /**
- * 这个窗口算不算整个号的额度：ID 带「:」的是某个模型或功能自己的窗口（如 Code review），
- * 换号不看它，也不能给它设上限（照 magpie 只看不限模型、不另计的窗口）。
+ * 这个窗口算不算整个号的额度：ID 带「:」的是 Codex 某个模型或功能自己的窗口（如 Code review），
+ * weekly_model_<名字> 是 Claude 某个模型的每周窗口（如 Weekly · Opus）；换号不看它们，也不能给它们设上限
+ * （照 magpie 只看不限模型、不另计的窗口）。
  */
 export function isWholeAccountWindow(window: { id: string }): boolean {
-  return !window.id.includes(":");
+  return !window.id.includes(":") && !window.id.startsWith("weekly_model_");
 }
 
 /** 一个窗口的用量，取自套餐用量来源的同一份读数（字段是 usage 报告窗口的子集）。 */
@@ -181,6 +182,8 @@ const ProviderAccountStateSchema = z.object({
   // 工单 04 起的 daemon 才发。
   switches: z.array(ProviderAccountSwitchSchema).optional(),
   switchFailure: ProviderAccountSwitchFailureSchema.nullable().optional(),
+  // 工单 08 起：Claude Code 开着「使用第三方接口」，订阅号要等关掉开关才用得上（轮换照常转）。
+  throughEndpoints: z.boolean().optional(),
 });
 
 export const ProviderAccountListRequestSchema = z.object({

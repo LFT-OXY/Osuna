@@ -4363,8 +4363,11 @@ export const zhCN: TranslationResources = {
           title: "多号自动轮换",
           hint: "换号只对新会话生效，开着的会话仍在原来的号上。",
           codexHint: "请求会经过 Osuna，Osuna 没在运行时终端里的 Codex 连不上。",
+          claudeHint: "换号只对新会话生效；开着的 Claude Code 可能在登录过期时也跟着换到新号。",
           saveFailed: "改不了多号自动轮换：{{reason}}",
         },
+        throughEndpoints:
+          "Claude Code 现在走第三方接口，订阅号要等你关掉「使用第三方接口」才用得上。",
         cliSignInsOff: "已关闭读取 CLI 登录凭证，多号自动轮换已停止",
         openPrivacySettings: "打开设置",
         loginUnsupported: "Osuna 换不了这种 {{name}} 登录：{{reason}}",

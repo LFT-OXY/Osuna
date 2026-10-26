@@ -2,6 +2,7 @@
 // keepalive.go、logins.go 的 switchSavedLogin、codex_switch.go，internal/provider/routing.go 的 OnCredits
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
+import { rmSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -21,7 +22,6 @@ import type {
 import {
   ACCOUNT_LIMIT_MAX,
   ACCOUNT_LIMIT_MIN,
-  isAccountRotationProvider,
 } from "@getpaseo/protocol/provider-account/rpc-schemas";
 import type {
   ChatGptAccount,
@@ -43,9 +43,14 @@ import {
   type ProviderRuntimeSettings,
 } from "../agent/provider-launch-config.js";
 import {
+  putClaudeConfigDir,
+  readClaudeCliLogin,
   readClaudeLogin,
   readOauthAccount,
   removeClaudeConfigDir,
+  writeClaudeCliLogin,
+  writeClaudeOauthAccount,
+  type ClaudeCliLogin,
   type ClaudeLoginLocation,
 } from "./claude-login.js";
 import { ClaudeSignIn } from "./claude-sign-in.js";
@@ -135,6 +140,8 @@ export interface ProviderAccountServiceOptions {
   codexSignIn: CodexSignInSettings;
   claude: ClaudeAccountSettings;
   checks?: AccountCheckTiming;
+  // Claude Code 开着「使用第三方接口」：订阅号此时用不上，账号一节顶上说明（轮换照常转）。
+  claudeThroughEndpoints: () => boolean;
 }
 
 /**
@@ -143,6 +150,8 @@ export interface ProviderAccountServiceOptions {
  */
 export interface ClaudeAccountSettings {
   accountsDir: string;
+  // 提供方环境里的 CLAUDE_CONFIG_DIR（没设为 null）：Claude Code 自己的登录在这里，换号时读写它。
+  cliConfigDir: string | null;
   resolveCli: ResolveClaudeCli;
   login: Omit<ClaudeLoginLocation, "configDir">;
   signInTimeoutMs: number;
@@ -231,8 +240,16 @@ export interface ProviderAccountState {
   settings: ProviderAccountSettings;
   accounts: ProviderAccount[];
   blocked: ProviderAccountBlock | null;
+  throughEndpoints?: boolean;
   switches?: ProviderAccountSwitch[];
   switchFailure?: ProviderAccountSwitchFailure | null;
+}
+
+/** 收回到私有目录的 Claude 登录：换号记录的起点、写不进 CLI 时的撤回、这个号原来留着的私有目录。 */
+interface ClaudeTakeBack {
+  end: ProviderAccountSwitchEnd;
+  undo: () => void;
+  staleDir?: string;
 }
 
 /** 打开或关掉轮换被拒；code 见 protocol 的 ProviderAccountError。 */
@@ -285,10 +302,13 @@ export class ProviderAccountService {
   private readonly usage = new Map<string, KnownUsage>();
   // 正在读的号；定时检查等它读完再判断。
   private readonly reading = new Map<string, Promise<ProviderAccountUsage>>();
+  // 正在换上 CLI 的 Claude 号：这段时间不在它的私有目录里运行 /usage。
+  private readonly handingOver = new Set<string>();
   private readonly renewLockPath: string;
   private readonly codexSignInSettings: CodexSignInSettings;
   private readonly claude: ClaudeAccountSettings;
   private readonly checks: AccountCheckTiming;
+  private readonly claudeThroughEndpoints: () => boolean;
   // 同一个号的续期在这个进程里排队；跨进程靠锁文件。
   private readonly renewals = new Map<string, Promise<unknown>>();
   // 每家同时只有一次登录；查过的登录留着，直到这家开始新的一次。
@@ -312,6 +332,7 @@ export class ProviderAccountService {
     this.codexSignInSettings = options.codexSignIn;
     this.claude = options.claude;
     this.checks = options.checks ?? DEFAULT_CHECKS;
+    this.claudeThroughEndpoints = options.claudeThroughEndpoints;
   }
 
   /** 开始定时检查：保活到期的号，读开着轮换的那家各号的额度。 */
@@ -380,7 +401,9 @@ export class ProviderAccountService {
       linkWaitMs: this.claude.linkWaitMs,
       allowed: () => this.cliSignIns.allowed(),
       keep: () => this.keepClaudeLogin({ configDir, accountId, launch }),
-      discard: () => this.removeClaudeDir(configDir),
+      discard: async () => {
+        await this.removeClaudeDir(configDir);
+      },
       onChange: () => this.onChanged("claude"),
     });
   }
@@ -557,14 +580,17 @@ export class ProviderAccountService {
     };
   }
 
-  private async removeClaudeDir(configDir: string): Promise<void> {
+  /** 清掉一个私有目录；删不掉只记日志，返回 false。 */
+  private async removeClaudeDir(configDir: string): Promise<boolean> {
     try {
       await removeClaudeConfigDir({ ...this.claude.login, configDir });
+      return true;
     } catch (error) {
       this.logger.warn(
         { err: error, provider: "claude" },
         "Removing an account's directory failed",
       );
+      return false;
     }
   }
 
@@ -712,7 +738,7 @@ export class ProviderAccountService {
     return run;
   }
 
-  /** 定时检查：当前登录的 Codex 号快到期就续；存着的 Codex 号保活；开着轮换的那家，各存着的号额度过期就重读。 */
+  /** 定时检查：当前登录的 Codex 号快到期就续；存着的 Codex 号保活；开着轮换的那家读各号的额度、按规则换号。 */
   private async check(): Promise<void> {
     if (!this.cliSignIns.allowed()) return;
     if (this.store.settings("codex").rotationEnabled) {
@@ -731,26 +757,16 @@ export class ProviderAccountService {
       }
     }
     for (const provider of ["codex", "claude"] as const) {
-      if (!this.store.settings(provider).rotationEnabled) continue;
-      if (provider === "codex") {
-        await this.rotate(provider);
-        continue;
-      }
-      for (const account of this.store.accounts(provider)) {
-        if (!isSaved(account) || account.needsSignIn) continue;
-        const known = this.usage.get(account.id);
-        if (!known || this.now() - known.at >= USAGE_TTL_MS)
-          void this.readUsage({ account, signedIn: false });
-      }
+      if (this.store.settings(provider).rotationEnabled) await this.rotate(provider);
     }
   }
 
   /**
    * 按 rotation-rules.ts 判断这家该不该换号，该换就换（与「立即使用」同一套步骤与换号记录）。
-   * 先把各号的额度读到（过期的重读，等它读完）。Claude Code 的换号在后面的工单里做。
+   * 先把各号的额度读到（过期的重读，等它读完）。
    */
   private async rotate(provider: AccountRotationProvider): Promise<void> {
-    if (provider !== "codex" || !this.cliSignIns.allowed()) return;
+    if (!this.cliSignIns.allowed()) return;
     const login = await this.readLogin(provider);
     if (login.kind !== "signed_in") return;
     const listed = this.store.accounts(provider);
@@ -788,7 +804,7 @@ export class ProviderAccountService {
     inUse: boolean;
   }): Promise<RotationAccount> {
     const { account, inUse } = input;
-    const switchable = !account.needsSignIn && (inUse || account.login !== undefined);
+    const switchable = !account.needsSignIn && (inUse || isSaved(account));
     const usage = switchable ? await this.freshUsage({ account, signedIn: inUse }) : undefined;
     return { id: account.id, inUse, switchable, usage, limits: account.limits ?? {} };
   }
@@ -942,12 +958,6 @@ export class ProviderAccountService {
         "Read CLI sign-ins is off, so accounts can't be switched",
       );
     }
-    if (provider !== "codex") {
-      throw new ProviderAccountRequestError(
-        "unsupported_provider",
-        "Switching Claude Code accounts isn't available on this daemon yet",
-      );
-    }
     const target = this.store.account(accountId);
     if (target?.provider !== provider) {
       throw new ProviderAccountRequestError("not_found", "That account isn't in the list anymore");
@@ -959,7 +969,7 @@ export class ProviderAccountService {
   }
 
   /**
-   * 换号（照 magpie 的 switchSavedLogin）：要换上的号快到期先续；然后在跨进程锁里重读，把 CLI 里现在的登录
+   * 换号（照 magpie 的 switchSavedLogin）：要换上的 Codex 号快到期先续；然后在跨进程锁里重读，把 CLI 里现在的登录
    * （最新一份）收回到它自己的记录，把目标号的登录写进 CLI，再清掉目标号在 Osuna 这边的那份。
    * 写不进 CLI 时把收回的那份撤掉，一个登录始终只有一个持有者。失败记进 switchFailure 并抛出。
    */
@@ -971,6 +981,7 @@ export class ProviderAccountService {
     onlyFrom?: string;
   }): Promise<void> {
     const { reason, window, onlyFrom } = input;
+    const provider = input.target.provider;
     let target: StoredAccount | null = input.target;
     if (target.login && !target.needsSignIn) {
       target = await this.renewCodex({ accountId: target.id, force: false });
@@ -985,19 +996,34 @@ export class ProviderAccountService {
         message: `${target.email ?? "That account"} needs signing in again`,
       });
     }
-    const switched = await withFileLock(this.renewLockPath, () =>
-      this.switchLocked({
-        accountId: target.id,
-        reason,
-        ...(window ? { window } : {}),
-        ...(onlyFrom !== undefined ? { onlyFrom } : {}),
-      }),
-    );
+    const options = {
+      accountId: target.id,
+      reason,
+      ...(window ? { window } : {}),
+      ...(onlyFrom !== undefined ? { onlyFrom } : {}),
+    };
+    let switched: ProviderAccountSwitch | null;
+    if (provider === "claude") {
+      // Claude Code 可能正在这个号的私有目录里读额度、顺手续期：换号期间不再起新的，等正在跑的读完再换，
+      // 交给 CLI 的才是续过的那份（照 magpie 的 claudeDirRun）。
+      const accountId = target.id;
+      this.handingOver.add(accountId);
+      try {
+        await this.reading.get(accountId);
+        switched = await withFileLock(this.renewLockPath, () => this.switchClaudeLocked(options));
+      } finally {
+        this.handingOver.delete(accountId);
+        // 换号期间被挡下的读数不留：下一次照常重读。
+        this.usage.delete(accountId);
+      }
+    } else {
+      switched = await withFileLock(this.renewLockPath, () => this.switchLocked(options));
+    }
     if (!switched) return;
     this.usage.delete(target.id);
     if (switched.from) this.usage.delete(switched.from.accountId);
-    this.logger.info({ provider: "codex", reason }, "Switched the CLI to another account");
-    this.onChanged("codex");
+    this.logger.info({ provider, reason }, "Switched the CLI to another account");
+    this.onChanged(provider);
   }
 
   private async switchLocked(input: {
@@ -1078,15 +1104,16 @@ export class ProviderAccountService {
       reason,
       ...(window ? { window } : {}),
     };
+    const { provider } = target;
     const returning = from
       ? returningAfter({
           move: { from: from.accountId, to: target.id, reason },
-          returning: this.liveReturning("codex"),
-          order: this.store.accounts("codex").map((account) => account.id),
+          returning: this.liveReturning(provider),
+          order: this.store.accounts(provider).map((account) => account.id),
         })
       : null;
-    this.store.recordSwitch("codex", entry);
-    this.store.updateSettings("codex", { returning: returning ?? undefined });
+    this.store.recordSwitch(provider, entry);
+    this.store.updateSettings(provider, { returning: returning ?? undefined });
     return entry;
   }
 
@@ -1114,18 +1141,189 @@ export class ProviderAccountService {
     return { end: switchEnd(added), undo: () => this.store.removeAccount(added.id) };
   }
 
+  /**
+   * 换 Claude Code 的号（照 magpie 的 switchSavedLogin、putClaudeLogin）：在锁里重读 CLI 的登录，收回到换下的号
+   * 新的私有目录；把目标号私有目录里的登录（Claude Code 在那里续过的最新一份）写进 CLI 的默认存储，
+   * .claude.json 的 oauthAccount 换成目标号的，再清掉目标号的私有目录。哪一步写不进就撤回前面写的与收回的，
+   * 一个登录始终只有一个持有者。
+   */
+  private async switchClaudeLocked(input: {
+    accountId: string;
+    reason: SwitchReason;
+    window?: ProviderAccountSwitchWindow;
+    onlyFrom?: string;
+  }): Promise<ProviderAccountSwitch | null> {
+    const target = this.store.account(input.accountId);
+    if (!target) {
+      throw new ProviderAccountRequestError("not_found", "That account isn't in the list anymore");
+    }
+    const location = this.claudeCliLocation();
+    const cli = await readClaudeCliLogin(location);
+    if (cli.kind === "unsupported") {
+      throw this.switchFailed({ target, code: "login_unsupported", message: cli.reason });
+    }
+    const signedInNow = cli.kind === "signed_in" ? cli.identity : null;
+    if (input.onlyFrom !== undefined && signedInNow !== input.onlyFrom) return null;
+    if (signedInNow === target.identity) {
+      // 已经在用：CLI 拿着它，Osuna 这边不留第二份。
+      if (target.configDir && (await this.removeClaudeDir(target.configDir))) {
+        this.store.updateAccount(target.id, { configDir: undefined });
+      }
+      return null;
+    }
+    const targetDir = target.configDir;
+    const saved = targetDir
+      ? await readClaudeCliLogin({ ...this.claude.login, configDir: targetDir })
+      : null;
+    if (!targetDir || saved?.kind !== "signed_in") {
+      throw this.switchFailed({
+        target,
+        code: "needs_sign_in",
+        message: `Osuna has no sign-in for ${target.email ?? "that account"}; sign in again`,
+      });
+    }
+    return this.handOverClaude({
+      target,
+      targetDir,
+      saved,
+      cli,
+      location,
+      reason: input.reason,
+      ...(input.window ? { window: input.window } : {}),
+    });
+  }
+
+  /** 收回 CLI 现在的登录、写进目标号的登录与 oauthAccount、清掉目标号的私有目录，记下这次换号。 */
+  private async handOverClaude(input: {
+    target: StoredAccount;
+    targetDir: string;
+    saved: Extract<ClaudeCliLogin, { kind: "signed_in" }>;
+    cli: Exclude<ClaudeCliLogin, { kind: "unsupported" }>;
+    location: ClaudeLoginLocation;
+    reason: SwitchReason;
+    window?: ProviderAccountSwitchWindow;
+  }): Promise<ProviderAccountSwitch> {
+    const { target, saved, cli, location } = input;
+    const current = cli.text ?? null;
+    let takenBack: ClaudeTakeBack | null = null;
+    let written: string | null;
+    try {
+      takenBack = cli.kind === "signed_in" ? this.takeBackClaude(cli) : null;
+      written = await writeClaudeCliLogin({
+        location,
+        where: cli.where,
+        expected: current,
+        text: saved.text,
+      });
+    } catch (error) {
+      takenBack?.undo();
+      throw this.claudeWriteFailed({ target, error });
+    }
+    try {
+      writeClaudeOauthAccount({
+        location,
+        oauthAccount: target.oauthAccount ?? saved.oauthAccount,
+      });
+    } catch (error) {
+      // 撤回刚写进去的登录：目标号的登录仍只在它的私有目录里。
+      await writeClaudeCliLogin({
+        location,
+        where: cli.where,
+        expected: written,
+        text: current,
+      }).catch((undoError: unknown) =>
+        this.logger.warn(
+          { err: undoError, provider: "claude" },
+          "Putting Claude Code's login back failed",
+        ),
+      );
+      takenBack?.undo();
+      throw this.claudeWriteFailed({ target, error });
+    }
+    if (takenBack?.staleDir) await this.removeClaudeDir(takenBack.staleDir);
+    // 删不掉就留着记录：这个号仍在用，下一次换到它（「已经在用」那一步）或收回它时再清。
+    const removed = await this.removeClaudeDir(input.targetDir);
+    if (removed) this.store.updateAccount(target.id, { configDir: undefined });
+    return this.recordSwitch({
+      from: takenBack?.end,
+      target,
+      reason: input.reason,
+      window: input.window,
+    });
+  }
+
+  private claudeWriteFailed(input: { target: StoredAccount; error: unknown }) {
+    this.logger.warn({ err: input.error, provider: "claude" }, "Writing the CLI's login failed");
+    return this.switchFailed({
+      target: input.target,
+      code: "write_failed",
+      message: `Claude Code's login couldn't be written (${writeFailureCause(input.error)})`,
+    });
+  }
+
+  /**
+   * 把 Claude Code 现在的登录收回到这个号新的私有目录（照 magpie 的 upsertLogin 与 claudeSavedDir）；
+   * 不在列表里的号排到最后。staleDir 是这个号原来留着的私有目录，换成后清掉。
+   */
+  private takeBackClaude(cli: Extract<ClaudeCliLogin, { kind: "signed_in" }>): ClaudeTakeBack {
+    const configDir = path.join(this.claude.accountsDir, randomToken(12));
+    putClaudeConfigDir({ configDir, text: cli.text, oauthAccount: cli.oauthAccount });
+    // 新目录里只有文件，没有钥匙串项。
+    const discard = () => rmSync(configDir, { recursive: true, force: true });
+    const details = {
+      ...(cli.email ? { email: cli.email } : {}),
+      ...(cli.plan ? { plan: cli.plan } : {}),
+      oauthAccount: cli.oauthAccount,
+    };
+    const existing = this.store.findByIdentity("claude", cli.identity);
+    if (existing) {
+      this.store.updateAccount(existing.id, { ...details, configDir });
+      return {
+        end: switchEnd(existing),
+        undo: () => {
+          this.store.updateAccount(existing.id, {
+            email: existing.email,
+            plan: existing.plan,
+            oauthAccount: existing.oauthAccount,
+            configDir: existing.configDir,
+          });
+          discard();
+        },
+        ...(existing.configDir ? { staleDir: existing.configDir } : {}),
+      };
+    }
+    const added = this.store.addAccount({
+      provider: "claude",
+      identity: cli.identity,
+      ...details,
+      configDir,
+    });
+    return {
+      end: switchEnd(added),
+      undo: () => {
+        this.store.removeAccount(added.id);
+        discard();
+      },
+    };
+  }
+
+  private claudeCliLocation(): ClaudeLoginLocation {
+    return { ...this.claude.login, configDir: this.claude.cliConfigDir };
+  }
+
   private switchFailed(input: {
     target: StoredAccount;
     code: "needs_sign_in" | "write_failed" | "login_unsupported";
     message: string;
   }): ProviderAccountRequestError {
+    const { provider } = input.target;
     this.recordFailure({
-      provider: "codex",
+      provider,
       to: switchEnd(input.target),
       code: input.code,
       message: input.message,
     });
-    this.onChanged("codex");
+    this.onChanged(provider);
     return new ProviderAccountRequestError(input.code, input.message);
   }
 
@@ -1150,9 +1348,10 @@ export class ProviderAccountService {
    */
   readonly savedAccountLogins: SavedAccountLogins = {
     accountAt: ({ provider, at, env }) => {
-      if (!isAccountRotationProvider(provider)) return null;
+      // 开着的 Claude Code 可能在登录过期时跟着换到新号（cli-login-mechanics.md），说不准它在哪个号上：照常读当前号。
+      if (provider !== "codex") return null;
       // 换号记录只记 Osuna 换的这个 CODEX_HOME；用别的目录的 Agent 不在其列。
-      if (provider === "codex" && !this.isCodexHome(env)) return null;
+      if (!this.isCodexHome(env)) return null;
       const switches = this.store.settings(provider).switches ?? [];
       const firstAfter = switches.findLast((entry) => Date.parse(entry.at) > at);
       const from = firstAfter?.from;
@@ -1431,6 +1630,7 @@ export class ProviderAccountService {
       },
       accounts,
       blocked: input.blocked,
+      ...(provider === "claude" && this.claudeThroughEndpoints() ? { throughEndpoints: true } : {}),
       switches: settings.switches ?? [],
       switchFailure: settings.switchFailure ?? null,
     };
@@ -1523,6 +1723,9 @@ export class ProviderAccountService {
     }
     if (!this.cliSignIns.allowed()) {
       return { status: "failed", reason: "Read CLI sign-ins is off" };
+    }
+    if (this.handingOver.has(accountId)) {
+      return { status: "failed", reason: "The account is being switched in" };
     }
     let launch;
     try {
@@ -1632,6 +1835,7 @@ export interface CreateProviderAccountServiceInput {
   onChanged: (provider: AccountRotationProvider) => void;
   // Claude 提供方的设置（命令与环境），与新会话同一份。
   claudeRuntime: () => ProviderRuntimeSettings | undefined;
+  claudeThroughEndpoints?: () => boolean;
   overrides?: ProviderAccountOverrides;
 }
 
@@ -1646,6 +1850,7 @@ export function createProviderAccountService(
   // 与终端 hooks、第三方接口同一套规则：CODEX_HOME 优先，缺省 ~/.codex。
   const codexLogin = { codexHome: env.CODEX_HOME || path.join(homeDir, ".codex"), keychain };
   const claudeLogin = { homeDir, user: env.USER, platform, keychain };
+  const claudeConfigDir = env.CLAUDE_CONFIG_DIR || null;
   const claudeCommand = overrides.claude?.command ?? sealedClaudeCommand();
   return new ProviderAccountService({
     store: new ProviderAccountStore({ paseoHome: input.paseoHome, logger: input.logger }),
@@ -1653,7 +1858,7 @@ export function createProviderAccountService(
     readLogin: (provider) =>
       provider === "codex"
         ? readCodexLogin(codexLogin)
-        : readClaudeLogin({ ...claudeLogin, configDir: env.CLAUDE_CONFIG_DIR || null }),
+        : readClaudeLogin({ ...claudeLogin, configDir: claudeConfigDir }),
     codexLogin,
     usage: overrides.usage ?? createPlanUsageAccountReader(input.planUsage),
     onChanged: input.onChanged,
@@ -1667,6 +1872,7 @@ export function createProviderAccountService(
     },
     claude: {
       accountsDir: path.join(input.paseoHome, "accounts", "claude"),
+      cliConfigDir: claudeConfigDir,
       login: claudeLogin,
       resolveCli: () =>
         resolveClaudeCli({ runtime: input.claudeRuntime(), env, command: claudeCommand }),
@@ -1675,6 +1881,7 @@ export function createProviderAccountService(
     },
     ...(overrides.checks ? { checks: overrides.checks } : {}),
     ...(overrides.now ? { now: overrides.now } : {}),
+    claudeThroughEndpoints: input.claudeThroughEndpoints ?? (() => false),
   });
 }
 

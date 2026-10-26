@@ -2533,7 +2533,7 @@ const change = kept.change.kind === "keep" ? plan.change : kept.change;
 - Keep after a successful login, inside the renew lock: read the CLI's login → same identity as the CLI: remove the new dir, keep only the profile (one holder); existing account (duplicate or Sign in again): point it at the new dir, remove the old dir, clear `needsSignIn`, `alreadyAdded: true`; else add.
 - Email/plan come from the dir (`readClaudeLogin`); when either is missing ask `claude auth status --json` (magpie `claudeSignedIn`). No email → refused.
 - Remove deletes the account's dir and keychain item.
-- Usage of a saved account: `/usage` args exactly `-p /usage --output-format json --tools "" --strict-mcp-config --setting-sources "" --no-session-persistence`, cwd a fresh temp dir, stdin ignored, env cleaned of `ANTHROPIC_*`, `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CONFIG_DIR`, `BROWSER`, outer-session vars, plus `DISABLE_TELEMETRY/ERROR_REPORTING/AUTOUPDATER=1`. Window IDs match `claude-usage-source`: `five_hour`, `weekly`, `weekly_model_<normalized name>`. These IDs carry no `:`, so `isWholeAccountWindow` counts the per-model weekly window as whole-account — ticket 08 decides.
+- Usage of a saved account: `/usage` args exactly `-p /usage --output-format json --tools "" --strict-mcp-config --setting-sources "" --no-session-persistence`, cwd a fresh temp dir, stdin ignored, env cleaned of `ANTHROPIC_*`, `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CONFIG_DIR`, `BROWSER`, outer-session vars, plus `DISABLE_TELEMETRY/ERROR_REPORTING/AUTOUPDATER=1`. Window IDs match `claude-usage-source`: `five_hour`, `weekly`, `weekly_model_<normalized name>`. `isWholeAccountWindow` excludes both `:` IDs and `weekly_model_*` (ticket 08, magpie `usedPast` skips `w.Model != ""`).
 - Command: Claude provider settings (`agentProviderSettings.claude`, same resolution as new sessions) unless overridden. The "browser" given to `auth login` is a script in the dir that writes the URL to `PASEO_CLAUDE_OPENED_URL`; on Windows it opens nothing, so only the printed link + code works there.
 
 ### 4. Validation & Error Matrix
@@ -2574,4 +2574,53 @@ await withFileLock(lock, async () => {
   const cli = await this.readLogin("claude"); // re-read inside the lock: a switch may land in between
   heldByCli = cli.kind === "signed_in" && cli.identity === reading.identity;
 });
+```
+
+## Scenario: Claude Code switching — Use now, automatic rules, API-endpoints notice (multi-account-rotation ticket 08, `accountRotation`)
+
+### 1. Scope / Trigger
+- Switching now rewrites Claude Code's own sign-in (keychain item or `.credentials.json`) and the `oauthAccount` key of `.claude.json`; the account state gains an optional field. Port of magpie `switchSavedLogin` + `putClaudeLogin` + `claudeSavedDir` (d5805372).
+
+### 2. Signatures
+- `provider.account.use` / `set_keep_signed_in` / automatic checks now accept `provider: "claude"` (no more `unsupported_provider`).
+- State payload gains optional `throughEndpoints?: boolean` (only ever `true`, only for Claude): Claude Code's "Use API endpoints" is on, so subscription accounts can't be used yet; rotation keeps running.
+- `claude-login.ts`: `readClaudeCliLogin(location) → ClaudeCliLogin` (`signed_in {where, text, identity, email?, plan?, oauthAccount}` | `signed_out {where, text?}` | `unsupported`), `writeClaudeCliLogin({location, where, expected, text|null}) → written text` (null text deletes), `writeClaudeOauthAccount({location, oauthAccount})`, `putClaudeConfigDir({configDir, text, oauthAccount})`, `ClaudeLoginChangedError`.
+- Service option `claudeThroughEndpoints: () => boolean`; bootstrap passes `apiEndpointService.activeEndpointId("claude") !== null` and broadcasts `provider.account.changed` from `onActiveEndpointChanged("claude")`.
+
+### 3. Contracts
+- Where the CLI's login is: keychain item `claudeKeychainService(CLAUDE_CONFIG_DIR)` / `$USER` if present (even an emptied one — Claude Code reads no file beside it), else `<configDir ?? ~/.claude>/.credentials.json`; neither → keychain on macOS, file elsewhere. Writes go back to the same place; keychain value on **one line** (multi-line comes back from `security -w` as hex, which Claude Code reads as signed out).
+- Switch, inside the renew lock, in this order: re-read CLI → `onlyFrom` guard (auto switch skips if the user switched meanwhile) → target already in use: drop its dir → read the target's dir login (missing → `needs_sign_in`) → take the CLI login back into a **new** `$PASEO_HOME/accounts/claude/<random>/` as `.credentials.json` + `.claude.json {oauthAccount, hasCompletedOnboarding}` (file even on macOS; Claude Code falls back to it), upsert the account (unlisted → appended) → write target text into the CLI store (expected = text read) → replace `oauthAccount` in `.claude.json` (JSONC edit of that key only, guarded write) → remove the target's dir + keychain item, clear `configDir` → record the switch.
+- `oauthAccount` written = the store's copy (magpie `Profile`), else the dir's.
+- Before locking, the target is put in `handingOver`: no new `/usage` starts in its dir; an in-flight one is awaited (a refresh there would spend the refresh token being handed over). In-process only; another daemon on the same home is not covered.
+- If removing the target's dir fails, `configDir` stays recorded and is cleaned up next time (in-use branch or take-back `staleDir`).
+- Plan-usage card: `savedAccountLogins.accountAt` returns null for Claude — an open Claude Code may follow the new sign-in on its next 401, so the card reads the current account.
+- The periodic check runs `rotate()` for Claude too; it reads usage only when the CLI is signed in.
+
+### 4. Validation & Error Matrix
+| Condition | Result |
+|---|---|
+| Read CLI sign-ins off | `use` → `cli_sign_ins_off`; checks read nothing |
+| CLI login unreadable / no `oauthAccount` | `login_unsupported` + `switchFailure` |
+| target dir has no usable sign-in | `needs_sign_in` + `switchFailure` |
+| CLI store or `.claude.json` can't be written / changed underneath | `write_failed` + `switchFailure`; credentials restored (`expected` = written text), take-back undone, target dir intact |
+| target never read / read failed | never a rotation target |
+| `weekly_model_*` at 100% | not "used up" |
+
+### 5. Good/Base/Bad Cases
+- Good: Linux file store — Use now; CLI file holds the target, old sign-in sits only in a new private dir, `.claude.json` keeps every other key.
+- Base: macOS keychain store — item rewritten on one line, no `.credentials.json` created beside it.
+- Bad: copying the target's dir login while `/usage` still runs there — the CLI gets a refresh token Claude Code just spent; the account signs out on its next refresh.
+
+### 6. Tests Required
+- `daemon-e2e/provider-account-claude-switch.e2e.test.ts`: Use now on file and keychain stores (each refresh token in exactly one file under the temp root, `.claude.json` other keys kept, switch back), unwritable config dir → everything restored, missing dir login → `needs_sign_in`, gate off, 98% away / 89% back (saved account usage via fake `/usage` text keyed by the **email in the dir's `.claude.json`** — take-back must write it), pinned, never-read target, model window ignored, `throughEndpoints` via `apiEndpointSetActive`.
+- Browser `settings-provider-account-claude-switch.spec.ts`: Use now, write failure + retry, notice row (route rewrite `throughEndpoints`), 390 row menu.
+
+### 7. Wrong vs Correct
+#### Wrong
+```ts
+await keychain.write(service, user, savedText); // pretty-printed JSON from the dir's file
+```
+#### Correct
+```ts
+await keychain.write(service, user, JSON.stringify(JSON.parse(savedText))); // one line, as Claude Code writes it
 ```

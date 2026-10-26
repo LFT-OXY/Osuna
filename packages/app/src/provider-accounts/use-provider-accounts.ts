@@ -23,6 +23,8 @@ export interface ProviderAccountsData {
   // 最近的换号，最新的在前；老 daemon 不发时为空。
   switches: ProviderAccountSwitch[];
   switchFailure: ProviderAccountSwitchFailure | null;
+  // Claude Code 开着「使用第三方接口」：订阅号此时用不上。
+  throughEndpoints: boolean;
 }
 
 /** 正在进行的号操作：立即使用、移除、设上限某个号，保存顺序、「固定登录到」或 Codex 的「只换登录」。 */
@@ -283,9 +285,13 @@ export function useProviderAccounts(serverId: string, provider: string): UseProv
   };
 }
 
-type StatePayload = Omit<ProviderAccountsData, "switches" | "switchFailure"> & {
+type StatePayload = Omit<
+  ProviderAccountsData,
+  "switches" | "switchFailure" | "throughEndpoints"
+> & {
   switches?: ProviderAccountSwitch[];
   switchFailure?: ProviderAccountSwitchFailure | null;
+  throughEndpoints?: boolean;
   error: ProviderAccountError | null;
 };
 
@@ -311,5 +317,6 @@ function dataOf(payload: Omit<StatePayload, "error">): ProviderAccountsData {
     blocked: payload.blocked,
     switches: payload.switches ?? [],
     switchFailure: payload.switchFailure ?? null,
+    throughEndpoints: payload.throughEndpoints === true,
   };
 }

@@ -4453,8 +4453,12 @@ export const ja: TranslationResources = {
           hint: "切り替えは新しいセッションにだけ適用され、開いているセッションは元のアカウントのままです。",
           codexHint:
             "リクエストは Osuna を経由するため、Osuna が動いていないとターミナルの Codex は接続できません。",
+          claudeHint:
+            "切り替えは新しいセッションにだけ適用されます。開いている Claude Code も、ログインの期限が切れたときに新しいアカウントへ移ることがあります。",
           saveFailed: "アカウントの自動切り替えを変更できません：{{reason}}",
         },
+        throughEndpoints:
+          "Claude Code は今「サードパーティ API を使う」経由です。サブスクリプションのアカウントはこのスイッチをオフにすると使われます。",
         cliSignInsOff:
           "「CLI のログイン情報を読み取る」がオフのため、アカウントの自動切り替えは停止しています",
         openPrivacySettings: "設定を開く",

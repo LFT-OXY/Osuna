@@ -4522,8 +4522,12 @@ export const en = {
           hint: "Switching only applies to new sessions; open sessions stay on their account.",
           codexHint:
             "Requests go through Osuna, so while Osuna isn't running, Codex in a terminal can't connect.",
+          claudeHint:
+            "Switching only applies to new sessions; Claude Code sessions already open may also move to the new account when their sign-in expires.",
           saveFailed: "Couldn't change Rotate accounts: {{reason}}",
         },
+        throughEndpoints:
+          "Claude Code is going through “Use API endpoints” now; your subscription accounts are used once you turn that switch off.",
         cliSignInsOff: "“Read CLI sign-ins” is off, so Rotate accounts has stopped",
         openPrivacySettings: "Open settings",
         loginUnsupported: "Osuna can't switch this {{name}} sign-in: {{reason}}",

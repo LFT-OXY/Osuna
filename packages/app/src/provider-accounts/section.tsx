@@ -35,7 +35,7 @@ import type {
 } from "./use-provider-accounts";
 
 /*
- * Codex / Claude Code 提供方页的「账号」一节，从上到下：说明行（总开关关着、登录换不了、换号失败）、
+ * Codex / Claude Code 提供方页的「账号」一节，从上到下：说明行（总开关关着、登录换不了、Claude Code 走第三方接口、换号失败）、
  * 「多号自动轮换」开关、「固定登录到」、账号列表（行菜单与拖动排序）、「添加账号」、「最近换号」。纯 props，运行时接线在 view.tsx。
  */
 
@@ -82,6 +82,16 @@ export function ProviderAccountsSection(props: ProviderAccountsSectionProps) {
           providerLabel={providerLabel}
           onOpenPrivacySettings={props.onOpenPrivacySettings}
         />
+      ) : null}
+      {data?.throughEndpoints ? (
+        <View style={styles.notice}>
+          <Alert
+            size="sm"
+            variant="info"
+            description={t(`${KEY}.throughEndpoints`)}
+            testID="provider-accounts-through-endpoints"
+          />
+        </View>
       ) : null}
       {data?.switchFailure ? (
         <SwitchFailureNotice failure={data.switchFailure} providerLabel={providerLabel} />
@@ -350,13 +360,14 @@ function SwitchFailureNotice({
   );
 }
 
-/** 开关下的说明行；Codex 没开「只换登录」时多一句请求经过 Osuna。 */
+/** 开关下的说明行；Claude Code 换成说明开着的会话可能跟着换号的那句，Codex 没开「只换登录」时多一句请求经过 Osuna。 */
 function rotateHint(input: {
   t: TFunction;
   provider: AccountRotationProvider;
   switchOnly: boolean;
 }): string {
   const { t } = input;
+  if (input.provider === "claude") return t(`${KEY}.rotate.claudeHint`);
   const hint = t(`${KEY}.rotate.hint`);
   if (input.provider !== "codex" || input.switchOnly) return hint;
   return `${hint} ${t(`${KEY}.rotate.codexHint`)}`;

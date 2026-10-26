@@ -4419,8 +4419,12 @@ export const ko: TranslationResources = {
           hint: "전환은 새 세션에만 적용되며, 열려 있는 세션은 원래 계정에 남습니다.",
           codexHint:
             "요청이 Osuna를 거치므로 Osuna가 실행 중이 아니면 터미널의 Codex가 연결되지 않습니다.",
+          claudeHint:
+            "전환은 새 세션에만 적용됩니다. 이미 열려 있는 Claude Code도 로그인이 만료될 때 새 계정으로 옮겨갈 수 있습니다.",
           saveFailed: "계정 자동 전환을 변경할 수 없습니다: {{reason}}",
         },
+        throughEndpoints:
+          "Claude Code가 지금 '서드파티 API 사용'을 거치고 있습니다. 구독 계정은 이 스위치를 끄면 사용됩니다.",
         cliSignInsOff: "“CLI 로그인 읽기”가 꺼져 있어 계정 자동 전환이 중지되었습니다",
         openPrivacySettings: "설정 열기",
         loginUnsupported: "Osuna가 이 {{name}} 로그인을 전환할 수 없습니다: {{reason}}",

@@ -221,6 +221,14 @@ Codex、Claude Code 的提供方设置页各多一节「账号」（**Account**�
 - **判定、选目标、换回、节奏**：与 Codex 第一层相同。
 - **生效范围**：新会话用新号。开着的 Claude Code 进程可能在登录过期、重读存储时跟着换到新号（Claude Code 的行为，见 `cli-login-mechanics.md`），这一点写进说明，不另做处理。
 - **与「使用第三方接口」**：Claude Code 开着「使用第三方接口」时订阅号用不上（中转站不转发 claude.ai 登录，ADR 0012），轮换照常转，界面加说明（Q20）。
+- （工单 08 实现时定，照 magpie）：
+  - 某个模型的每周窗口（`weekly_model_*`）不算整个号的窗口，换号不看、也不能设上限（magpie `usedPast` 只看 `Model == ""`）。老客户端仍会给它显示上限入口，设了也不起作用。
+  - 换下的号收回到一个新的私有目录，写成 `.credentials.json` 加记着 `oauthAccount` 的 `.claude.json`，macOS 也写文件（magpie `claudeSavedDir`）。CLI 的默认存储：钥匙串里有那一项就以它为准，否则用文件；都没有时 macOS 写钥匙串（写成一行），其他系统写文件。`oauthAccount` 用账号存储里的那份。
+  - 写 `oauthAccount` 失败时撤回已写的登录和收回；目标号的私有目录删不掉时留着记录，下一次再清。换号期间不在目标号的目录里起新的 `/usage`，正在跑的等它读完（只管本进程）。
+  - 「使用第三方接口」由 daemon 按 Claude 是否有生效的接口在账号状态里给可选的 `throughEndpoints`，开关一动就广播。
+  - Agent 的套餐用量卡片对 Claude 不按换号记录找启动时的号：开着的 Claude Code 可能已跟着换号。
+  - 开关下的说明对 Claude Code 换成一整句：「换号只对新会话生效；开着的 Claude Code 可能在登录过期时也跟着换到新号。」
+  - 定时检查对 Claude 也走同一套换号判断；CLI 没登录时不读存着的号的额度（工单 07 时会读）。
 
 ### 加号
 

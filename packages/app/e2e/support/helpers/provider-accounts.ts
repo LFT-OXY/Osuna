@@ -34,6 +34,8 @@ interface AccountsRouteOptions {
   signInFailsWith?: { code: string; message: string };
   // 按邮箱给号标上自动换号后的位置（first_when_room、temporarily_first），模拟第一个号用完、暂时换到别的号。
   standing?: Record<string, string>;
+  // 回复里标上 Claude Code 开着「使用第三方接口」。
+  throughEndpoints?: boolean;
 }
 
 interface Envelope {
@@ -135,24 +137,34 @@ function rewriteAccountsMessage(input: {
 }): void {
   const { type, payload, options } = input;
   const isAccountsReply = typeof type === "string" && ACCOUNT_STATE_REPLIES.has(type);
+  if (isAccountsReply && payload && options.throughEndpoints) payload.throughEndpoints = true;
   if (isAccountsReply && Array.isArray(payload?.accounts)) {
     for (const account of payload.accounts as Array<Record<string, unknown>>) {
-      const windows = options.windowsByEmail?.[String(account.email)] ?? options.windows;
-      if (windows) {
-        account.usage = { status: "read", fetchedAt: new Date().toISOString(), windows };
-      }
-      const standing = options.standing?.[String(account.email)];
-      if (standing) account.standing = standing;
-      const lapse = options.needsSignIn;
-      if (lapse && (lapse.email === undefined || lapse.email === account.email)) {
-        account.needsSignIn = { reason: lapse.reason, ...(lapse.code ? { code: lapse.code } : {}) };
-      }
+      rewriteAccount({ account, options });
     }
   }
   const signIn = payload?.signIn as Record<string, unknown> | null | undefined;
   if (type === "provider.account.sign_in.start.response" && options.signInFailsWith && signIn) {
     signIn.status = "failed";
     signIn.error = options.signInFailsWith;
+  }
+}
+
+/** 一个号：额度换成假读数、标上自动换号后的位置、标成失效。 */
+function rewriteAccount(input: {
+  account: Record<string, unknown>;
+  options: AccountsRouteOptions;
+}): void {
+  const { account, options } = input;
+  const windows = options.windowsByEmail?.[String(account.email)] ?? options.windows;
+  if (windows) {
+    account.usage = { status: "read", fetchedAt: new Date().toISOString(), windows };
+  }
+  const standing = options.standing?.[String(account.email)];
+  if (standing) account.standing = standing;
+  const lapse = options.needsSignIn;
+  if (lapse && (lapse.email === undefined || lapse.email === account.email)) {
+    account.needsSignIn = { reason: lapse.reason, ...(lapse.code ? { code: lapse.code } : {}) };
   }
 }
 

@@ -4512,8 +4512,12 @@ export const fr: TranslationResources = {
           hint: "Le changement ne s'applique qu'aux nouvelles sessions ; les sessions ouvertes restent sur leur compte.",
           codexHint:
             "Les requêtes passent par Osuna : tant qu'Osuna ne tourne pas, Codex dans un terminal ne peut pas se connecter.",
+          claudeHint:
+            "Le changement ne s'applique qu'aux nouvelles sessions ; les sessions Claude Code déjà ouvertes peuvent aussi passer au nouveau compte quand leur connexion expire.",
           saveFailed: "Impossible de modifier la rotation des comptes : {{reason}}",
         },
+        throughEndpoints:
+          "Claude Code passe maintenant par « Utiliser les points d'accès API » ; vos comptes d'abonnement serviront une fois cet interrupteur désactivé.",
         cliSignInsOff:
           "« Lire les connexions des CLI » est désactivé, la rotation des comptes est donc arrêtée",
         openPrivacySettings: "Ouvrir les réglages",
