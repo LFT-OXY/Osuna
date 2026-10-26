@@ -1452,3 +1452,26 @@ PR #16 并入后在主工作树拉取 main、重装依赖并重建，核对同�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 45: 多号轮换工单 13：bootstrap 不点名提供方，PR #32 合入并归档
+<!-- atw-session: v=2 fp=e7e1dd9d2210c6e0 -->
+
+**Date**: 2026-10-26
+**Task**: 多号轮换工单 13：bootstrap 不点名提供方，PR #32 合入并归档
+**Package**: app
+**Branch**: `feat/prd-9-multi-account-rotation`
+
+### Summary
+
+bootstrap.ts 的 4 处 claude 挪进账号服务（providerRuntimeSettings / activeEndpointId 回调 + noticeFollowsActiveEndpoint），e2e 补开关广播断言，spec 补一句；PR #32 CI 全绿后合并（0105c64e7），勾完验收项、归档任务，记录提交直推 main。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e4aa0beed` | fix(server): 启动代码不再点名提供方（多号轮换工单 13） |
+
+### Status
+
+[OK] **Completed**
