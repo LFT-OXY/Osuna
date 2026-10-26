@@ -293,6 +293,10 @@ Codex、Claude Code 的提供方设置页各多一节「账号」（**Account**�
 - `docs/usage.md` 的「Outbound requests」：逐类写明新增的请求——发给谁、带什么、什么时候发、怎么关。包括 Codex 续期、保活、各号额度读取、OAuth 登录，以及为存着的 Claude 号运行的 `claude -p /usage` 与 `claude auth login`。
 - `docs/data-model.md`：写明账号存储与「一个登录只有一个持有者」。
 - `THIRD_PARTY_NOTICES`：覆盖借鉴的 magpie 文件（`codex_switch.go`、`logins.go`、`logins_on.go`、`account.go`、`codex_store.go`、`claude_dirs.go`、`claude_usage_cli.go`、`signin.go`、`claude_signin.go`、`fallback.go` 的账号部分）。
+- （工单 09 实现时定）
+  - `THIRD_PARTY_NOTICES` 另覆盖 `claude-login.ts`、`keychain.ts`（`codex_store.go` 的 securityKeychain）、`file-lock.ts`（`logins_on.go` 的 savedTokenMu）、`store.ts`（`logins.go` 开头的说明与 login-returns），这几个文件顶上补了 MIT 声明。`codex-login.ts` 是照 Codex 源码 `login/src/auth/storage.rs` 写的，没借 magpie 的代码，不列。
+  - `docs/data-model.md` 新增第 10 节 Accounts（原第 10 节顺延为 11，没有链接指向旧锚点）。「一个登录只有一个持有者」只写每份 token 在哪，换号的步骤链到 ADR 0015，不重写。
+  - `docs/usage.md` 在「Outbound requests」下新增 Accounts 小节。存着的 Codex 号每天一次的保活不看「多号自动轮换」开关，所以算作 daemon 自己发起的请求，写进该节开头；只有关掉「读取 CLI 登录凭证」或移除这个号才会停。原来「登录文件只读不写」与「中转站不读凭证」两句已按第一层、第二层改写。
 
 ### 差距明细逐行
 

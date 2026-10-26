@@ -1,5 +1,6 @@
-// 运行环境的清理移植自 magpie（https://github.com/yetone/magpie，d5805372）：internal/provider/claude_signin.go 的
-// claudeSignInEnv、account.go 的 withoutClaudeWiring、internal/gateway/claude_warmup.go 的 claudeUsage。
+// 运行环境的清理与问 `claude auth status` 移植自 magpie（https://github.com/yetone/magpie，d5805372）：
+// internal/provider/claude_signin.go 的 claudeSignInEnv、claudeSignedIn，account.go 的 withoutClaudeWiring，
+// internal/gateway/claude_warmup.go 的 claudeUsage。
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { spawnProcess } from "../../utils/spawn.js";

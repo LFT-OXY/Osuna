@@ -1,3 +1,6 @@
+// 钥匙串的读写照 magpie（https://github.com/yetone/magpie，d5805372）：internal/provider/codex_store.go 的 securityKeychain。
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+
 import { execCommand } from "../../utils/spawn.js";
 
 /**

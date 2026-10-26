@@ -1,3 +1,7 @@
+// 一个登录只有一个持有者与等着换回的记录照 magpie（https://github.com/yetone/magpie，d5805372）：
+// internal/provider/logins.go 开头的说明，codex_switch.go 的 login-returns.json。
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type pino from "pino";

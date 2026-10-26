@@ -1,5 +1,6 @@
 // 续期、保活、换号与第二层的选号移植自 magpie（https://github.com/yetone/magpie，d5805372）：internal/provider/account.go、
-// keepalive.go、logins.go 的 switchSavedLogin、codex_switch.go，internal/provider/routing.go 的 OnCredits
+// keepalive.go、logins.go 的 switchSavedLogin、upsertLogin 与 putClaudeLogin、claude_dirs.go 的 claudeSavedDir 与 claudeDirRun、
+// codex_switch.go，internal/provider/routing.go 的 OnCredits
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { rmSync } from "node:fs";

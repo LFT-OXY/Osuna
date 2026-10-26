@@ -1,3 +1,6 @@
+// 续期的跨进程锁照 magpie（https://github.com/yetone/magpie，d5805372）：internal/provider/logins_on.go 的 savedTokenMu。
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+
 import { randomUUID } from "node:crypto";
 import { mkdir, open, readFile, rm, stat } from "node:fs/promises";
 import path from "node:path";

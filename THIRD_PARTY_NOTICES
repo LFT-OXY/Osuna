@@ -1597,6 +1597,47 @@ strict_affinity_test.go and fallback_test.go:
   packages/server/src/server/provider-accounts/service.ts
   plugins/codex-usage-source/server/usage.ts
 
+Where saved accounts are kept (each login held in exactly one place, the
+account in use only in the CLI's own store, the record of the account rotation
+moved off and switches back to, the cross-process lock around a renewal, the
+Keychain item replaced in place) follows the header of magpie's
+internal/provider/logins.go, login-returns.json in codex_switch.go,
+savedTokenMu in logins_on.go and securityKeychain in codex_store.go:
+
+  packages/server/src/server/provider-accounts/store.ts
+  packages/server/src/server/provider-accounts/file-lock.ts
+  packages/server/src/server/provider-accounts/keychain.ts
+
+Adding a Claude Code account (the real `claude auth login` run in a new private
+CLAUDE_CONFIG_DIR with the variables that would point it elsewhere removed,
+the address it would open caught through BROWSER, the printed link given to
+another device, a pasted code written to its input and a pasted address passed
+to the sign-in waiting on the host, 30 seconds for a link, `claude auth status`
+asked when the profile names no email or plan) follows startClaudeSignIn,
+TookOpenedURL, claudeNoLink, claudePaste, claudeSignedIn and claudeSignInEnv
+in magpie's internal/provider/claude_signin.go and withoutClaudeWiring in
+account.go.
+Reading a saved Claude account's plan usage (the real `claude -p /usage` run
+in its private folder and a throwaway working folder with tools, MCP, settings
+and session saving off, the "Current session" and "Current week" lines and
+their reset times read from its answer, a sign-in that no longer works told
+apart from a read that gave nothing) follows parseClaudeUsage and
+claudeResetTime in internal/provider/claude_usage_cli.go and claudeUsage,
+claudeResult and claudeUsageArgs in internal/gateway/claude_warmup.go.
+Switching Claude Code between accounts (the account switched in moved into
+Claude Code's own store and its private folder cleared, the account switched
+out taken back into a new private folder as .credentials.json and a
+.claude.json holding its oauthAccount, the Keychain item used when it is there
+and the file otherwise) follows switchSavedLogin, upsertLogin and
+putClaudeLogin in internal/provider/logins.go and claudeSavedDir,
+claudeDirRun, clearClaudeDir and forgetClaudeDir in claude_dirs.go:
+
+  packages/server/src/server/provider-accounts/claude-cli.ts
+  packages/server/src/server/provider-accounts/claude-sign-in.ts
+  packages/server/src/server/provider-accounts/claude-usage-cli.ts
+  packages/server/src/server/provider-accounts/claude-login.ts
+  packages/server/src/server/provider-accounts/service.ts
+
 MIT License
 
 Copyright (c) 2026 yetone

@@ -335,15 +335,18 @@ separately.
 
 The daemon downloads two public files on its own initiative, both plain GETs:
 no authentication, no query string, no request body, nothing about you or your
-machine beyond the IP and user agent any HTTP request carries. The one other
-request it makes on its own is the daily model list refresh of each API
-endpoint that is on, which carries that endpoint's key. Its other requests are
+machine beyond the IP and user agent any HTTP request carries. The other
+requests it makes on its own are the daily model list refresh of each API
+endpoint that is on, which carries that endpoint's key, and the daily renewal
+of each saved Codex [account](#accounts), which carries that account's login. Its other requests are
 something you asked for, such as the CLI update check or an endpoint's tests;
 follow from a page you have open, such as the vendor status pages read while the
 API endpoints or usage page is open, or an endpoint's balance; or follow from a choice or switch you turned on: the
-CNY currency, the API endpoint checks and the gateway's calls to endpoints, all below. Traffic the CLIs send
-through the gateway is theirs, not the daemon's. Plan usage reads, which carry a
-CLI's own login, are sent only while **Read CLI sign-ins** is on.
+CNY currency, the API endpoint checks, the gateway's calls to endpoints and
+**Rotate accounts**, all below. Traffic the CLIs send through the gateway is
+theirs, not the daemon's. Plan usage reads and the requests for
+[Accounts](#accounts), which carry a CLI's own login or an account's, are sent
+only while **Read CLI sign-ins** is on.
 
 | File                                           | Fetched when                                      | Used for                                                                                                                                                                                                                                                                                                                        |
 | ---------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -420,7 +423,8 @@ account holds resets, the same read sends `GET
 chatgpt.com/backend-api/wham/rate-limit-reset-credits` with the same bearer
 token, `ChatGPT-Account-Id` and `User-Agent: Osuna/<version>`, for when each
 one expires. It waits 4 seconds; on any failure the card shows the count alone.
-The sign-in file is read, never written.
+Reading plan usage never writes the sign-in; only renewing it for
+[Accounts](#accounts) does.
 
 **Use a reset** on the card is the one place Osuna uses a CLI's sign-in to change
 the account rather than read it; the sign-in itself is still only read. It sends
@@ -433,6 +437,30 @@ at most. If the list can't be read, it uses none and says so. The answer's
 `code` (`reset` with `windows_reset`, `nothing_to_reset`, `no_credit`,
 `already_redeemed`) is shown on the card, and the account is read again past
 the 5-minute cache. Osuna never uses a reset on its own.
+
+### Accounts
+
+What Osuna sends for the **Accounts** of Codex and Claude Code. All of it waits
+for **Read CLI sign-ins**: off, or held off by `PASEO_NO_CLI_SIGN_INS`, nothing
+here is sent and the saved accounts stay. Nothing is sent for a provider with
+no saved account and **Rotate accounts** off. The price table switch does not
+cover it. Where these requests take Codex's identity instead of Osuna's is in
+[ADR 0015](adr/0015-account-rotation-holds-cli-logins.md).
+
+| Request                                                                      | Sent when                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Carries                                                                                                                                                                                                                                                                                                                                                                                   |
+| ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Codex sign-in renewal: `POST https://auth.openai.com/oauth/token`            | The account in use, only while Rotate accounts is on for Codex: at a check when its access token expires within 5 minutes, or when reading its plan usage is refused (401, 403); the new tokens are written back to Codex's own store. A saved account: when it is about to be used (its plan usage read, a switch to it, the gateway sending for it) and its token expires within 5 minutes, and at the first check 24 hours after it was last renewed, whether or not Rotate accounts is on | JSON with Codex's OAuth client id, `grant_type: refresh_token`, the refresh token and `scope: openid profile email`; no user agent of Osuna's own (Node's `node`). Waits up to 30 seconds and is never cancelled once sent, so a new token is never lost. A refusal (HTTP 400 or 401, `invalid_grant`, `refresh_token_reused`, `token_revoked`) marks the account "Needs sign-in"         |
+| Codex sign-in: `POST https://auth.openai.com/oauth/token`                    | Once per "Add account" or "Sign in again", when the browser comes back to `127.0.0.1:1455` or you paste the address it ended on. The sign-in page itself is opened by your browser, with Codex's client id, scopes and `originator=codex_cli_rs`                                                                                                                                                                                                                                              | Form fields `grant_type=authorization_code`, the code, the redirect address, Codex's client id and the PKCE verifier. Given up after 10 minutes or when you cancel                                                                                                                                                                                                                        |
+| A saved Codex account's plan usage: `GET chatgpt.com/backend-api/wham/usage` | While a provider page's Accounts section is open, at most once in 5 minutes per account; at each check while Rotate accounts is on for Codex; for an agent's plan usage card when the agent started on an account Osuna has since switched away from. The account in use is read by the Codex plan usage source and its cache, with no request of its own                                                                                                                                     | The account's own bearer token and `ChatGPT-Account-Id`, with the plan usage source's browser user agent, the third identity exception in ADR 0015. When the account holds resets, the same read lists them as in [Codex's resets](#codexs-resets). Refused once, the account is renewed and read again                                                                                   |
+| `claude auth login --claudeai`                                               | "Add account" or "Sign in again" for Claude Code. When `.claude.json` names no email or plan afterwards, also `claude auth status --json`                                                                                                                                                                                                                                                                                                                                                     | Run in a new private `CLAUDE_CONFIG_DIR`; Claude Code talks to Anthropic itself. Osuna catches the address it would open in the browser, hands its code page to remote devices, writes a pasted code to its input, and passes a pasted address to the sign-in waiting on the host                                                                                                         |
+| `claude -p /usage`                                                           | For each saved Claude account: while the Accounts section is open, at most once in 5 minutes per account; at each check while Rotate accounts is on for Claude Code and Claude Code is signed in. The account in use is read by the Claude plan usage source                                                                                                                                                                                                                                  | Run in the account's private folder and a throwaway working folder, with tools, MCP, settings and session saving off, telemetry, error reports and auto-update off, and the environment's endpoint, token and config-folder variables removed. Claude Code asks Anthropic with that account's login and renews it in that folder; Osuna sends Anthropic nothing. Stopped after 60 seconds |
+
+The check runs a minute after start and every 5 minutes, and right after "Use
+now" or a sign-in finishes. Turning Rotate accounts off stops the checks'
+reads, the renewals of the account in use and the switches; an open Accounts
+section still reads its saved accounts, and a saved Codex account is still kept
+signed in once a day, until you remove it or turn off Read CLI sign-ins. A switch itself sends nothing: it
+moves logins between Osuna's store and the CLI's on this machine.
 
 ### API endpoints
 
@@ -650,14 +678,24 @@ its requests:
   carries a compaction summary the gateway made for an endpoint model: that item
   goes as a plain message. A request
   carrying an OpenAI API key goes to `api.openai.com` the same way. The daemon
-  reads no credential and adds nothing ([ADR 0010](adr/0010-codex-wiring-and-gateway-caller-recognition.md)).
+  reads no credential and adds nothing ([ADR 0010](adr/0010-codex-wiring-and-gateway-caller-recognition.md)),
+  except while Rotate accounts carries a conversation to another account: with
+  Rotate accounts on for Codex, **Only switch the sign-in** off and two accounts
+  that don't need signing in, a conversation or compaction the account in use
+  can't answer goes to the next account before any reply reaches Codex. That
+  request swaps in the other account's bearer token and `ChatGPT-Account-Id`
+  and leaves out the device proof, Luna Reserve and turn-state headers that
+  belong to the first account. Every request on this path is sent without
+  `Accept-Encoding`, so the gateway can read the reply.
 - To learn how Codex is signed in, the daemon starts Codex's own app-server and
   asks it. With a ChatGPT sign-in, Codex then asks `chatgpt.com` for the
   account's workspace, with its own credentials.
 
 Reading the login shell's environment, reading the system proxy settings,
-listing processes, and restarting Codex's shared background app-server stay on
-the machine.
+listing processes, restarting Codex's shared background app-server, reading and
+writing the CLIs' logins and the Keychain for Accounts, and asking a `codex
+login` waiting on port 1455 to stop (`GET 127.0.0.1:1455/cancel`) stay on the
+machine.
 
 ## Your own prices
 

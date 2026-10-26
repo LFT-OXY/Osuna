@@ -1,3 +1,7 @@
+// 写 Claude Code 的登录、换下的号收回私有目录与清目录移植自 magpie（https://github.com/yetone/magpie，d5805372）：
+// internal/provider/logins.go 的 putClaudeLogin，claude_dirs.go 的 claudeSavedDir、clearClaudeDir、forgetClaudeDir。
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+
 import { createHash } from "node:crypto";
 import { rm } from "node:fs/promises";
 import path from "node:path";
