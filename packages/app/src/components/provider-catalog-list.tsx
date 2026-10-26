@@ -55,7 +55,10 @@ function CatalogRow({ entry, installing, isFirst, onInstall }: CatalogRowProps) 
   }, [entry.installLink]);
 
   return (
-    <View style={[settingsStyles.row, !isFirst && settingsStyles.rowBorder]}>
+    <View
+      style={[settingsStyles.row, !isFirst && settingsStyles.rowBorder]}
+      testID={`provider-catalog-row-${entry.id}`}
+    >
       <View style={settingsStyles.rowIconFrame}>
         {entry.iconSvg ? (
           <ThemedSvgXml

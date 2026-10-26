@@ -5,10 +5,13 @@ import { isWeb } from "@/constants/platform";
 const monoFamily = (theme: Theme) =>
   theme.fontFamily.mono === "ui-monospace" && !isWeb ? "" : theme.fontFamily.mono;
 
+// iOS Safari needs the prefix to override the gesture host's selection suppression.
+const WEB_CONTAINER = { userSelect: "text", WebkitUserSelect: "text" } as const;
+
 export function createMarkdownStyles(
   theme: Theme,
   { compact = false, blockGap }: { compact?: boolean; blockGap: number },
-): { markdownStyle: MarkdownStyle; selectionColor: string } {
+): { markdownStyle: MarkdownStyle; selectionColor: string; containerStyle?: typeof WEB_CONTAINER } {
   // 正文与标题按内容字号走 Text 档位；compact 只把标题降一档，字号不变。
   const fontSize = theme.fontSize.content;
   // Every block is followed by the same gap; the library drops it after the last block.
@@ -26,6 +29,7 @@ export function createMarkdownStyles(
     color: theme.colors.foreground,
   });
   return {
+    containerStyle: isWeb ? WEB_CONTAINER : undefined,
     selectionColor: theme.colors.terminal.selectionBackground,
     markdownStyle: {
       paragraph,
