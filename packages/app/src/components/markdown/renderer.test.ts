@@ -4,7 +4,7 @@ import { QueryClient } from "@tanstack/react-query";
 import { decodeMarkdownImage, getMarkdownImageStatus } from "./image-decoding";
 import { describe, expect, it } from "vitest";
 import { darkTheme, lightTheme } from "@/styles/theme";
-import { createMarkdownStyles } from "./styles";
+import { createCodeBlockFrameStyle, createMarkdownStyles } from "./styles";
 import { prepareMarkdownSource, PENDING_MARKDOWN_IMAGE } from "./source";
 import { normalizeMarkdownHtml } from "./html";
 
@@ -162,7 +162,7 @@ describe("shared Markdown theme colours", () => {
       borderColor: theme.colors.border,
     });
     expect(style.list).toMatchObject({
-      color: theme.colors.foreground,
+      color: theme.colors.foregroundProse,
       bulletColor: theme.colors.foregroundMuted,
       markerColor: theme.colors.foregroundMuted,
     });
@@ -207,6 +207,112 @@ it.each([
     expect(style.thematicBreak?.color).toBe(theme.colors.border);
   },
 );
+
+describe("Osuna Markdown typography", () => {
+  it("sets prose on the content size with the ramp's prose line height, toned to 86%", () => {
+    const { markdownStyle: style } = createMarkdownStyles(darkTheme);
+    // darkTheme 的正文字号是 15；prose 一档在 14px 基础下为 14 / 22。
+    expect(darkTheme.fontSize.content).toBe(15);
+
+    expect(style.paragraph).toMatchObject({
+      color: darkTheme.colors.foregroundProse,
+      fontSize: 15,
+      lineHeight: 24,
+      marginBottom: darkTheme.spacing[3],
+    });
+    expect(style.list).toMatchObject({ fontSize: 15, lineHeight: 24 });
+  });
+
+  it("maps headings onto the Text ramp at the content size, full-strength", () => {
+    const { markdownStyle: style } = createMarkdownStyles(darkTheme);
+
+    expect(style.h1).toMatchObject({ fontSize: 21, lineHeight: 30 });
+    expect(style.h2).toMatchObject({ fontSize: 19, lineHeight: 30 });
+    expect(style.h3).toMatchObject({ fontSize: 17, lineHeight: 26 });
+    expect(style.h4).toMatchObject({ fontSize: 16, lineHeight: 24 });
+    expect(style.h5).toMatchObject({ fontSize: 15, lineHeight: 21 });
+    expect(style.h6).toMatchObject({
+      fontSize: 15,
+      lineHeight: 21,
+      color: darkTheme.colors.foregroundMuted,
+      fontWeight: darkTheme.fontWeight.semibold,
+    });
+    for (const heading of [style.h1, style.h2, style.h3, style.h4, style.h5]) {
+      expect(heading).toMatchObject({
+        color: darkTheme.colors.foreground,
+        fontWeight: darkTheme.fontWeight.semibold,
+      });
+    }
+    for (const heading of [style.h1, style.h2, style.h3, style.h4, style.h5, style.h6]) {
+      expect(heading).not.toHaveProperty("borderBottomWidth");
+      expect(heading).not.toHaveProperty("textTransform");
+    }
+  });
+
+  it("steps compact headings down the ramp", () => {
+    const { markdownStyle: style } = createMarkdownStyles(darkTheme, true);
+
+    expect(style.h1).toMatchObject({ fontSize: 17, lineHeight: 26 });
+    expect(style.h2).toMatchObject({ fontSize: 16, lineHeight: 24 });
+    expect(style.h3).toMatchObject({ fontSize: 15, lineHeight: 21 });
+    expect(style.paragraph?.marginBottom).toBe(darkTheme.spacing[2]);
+  });
+
+  it("uses the mono font-size token directly for inline and block code", () => {
+    for (const compact of [false, true]) {
+      const { markdownStyle: style } = createMarkdownStyles(darkTheme, compact);
+      expect(style.code).toMatchObject({
+        fontFamily: darkTheme.fontFamily.mono,
+        fontSize: darkTheme.fontSize.code,
+      });
+      expect(style.codeBlock).toMatchObject({
+        fontFamily: darkTheme.fontFamily.mono,
+        fontSize: darkTheme.fontSize.code,
+      });
+    }
+  });
+
+  it("scales prose and headings with the content size setting", () => {
+    const largeContentTheme = {
+      ...darkTheme,
+      fontSize: { ...darkTheme.fontSize, content: 21 },
+    };
+    const { markdownStyle: style } = createMarkdownStyles(largeContentTheme);
+
+    expect(style.paragraph).toMatchObject({ fontSize: 21, lineHeight: 33 });
+    expect(style.h1).toMatchObject({ fontSize: 30, lineHeight: 42 });
+    expect(style.h3).toMatchObject({ fontSize: 24, lineHeight: 36 });
+  });
+
+  it("frames code blocks on surface2 with the code-block border and large corners", () => {
+    const frame = {
+      backgroundColor: darkTheme.colors.surface2,
+      borderWidth: 1,
+      borderColor: darkTheme.colors.borderCodeBlock,
+      borderRadius: darkTheme.radius.lg,
+    };
+
+    expect(createMarkdownStyles(darkTheme).markdownStyle.codeBlock).toMatchObject(frame);
+    expect(createCodeBlockFrameStyle(darkTheme).textStyle).toMatchObject({
+      ...frame,
+      fontFamily: darkTheme.fontFamily.mono,
+      fontSize: darkTheme.fontSize.code,
+      marginVertical: darkTheme.spacing[3],
+    });
+  });
+
+  it("keeps blockquotes quiet with a square left edge", () => {
+    const { markdownStyle: style } = createMarkdownStyles(darkTheme);
+
+    expect(style.blockquote).toMatchObject({
+      backgroundColor: darkTheme.colors.surface1,
+      color: `${darkTheme.colors.foreground}cc`,
+      borderColor: darkTheme.colors.surface2,
+      padding: darkTheme.spacing[3],
+      borderRadius: 0,
+    });
+  });
+});
 
 it.each([darkTheme, lightTheme])("supplies the theme selection colour to the renderer", (theme) => {
   expect(createMarkdownStyles(theme)).toHaveProperty(

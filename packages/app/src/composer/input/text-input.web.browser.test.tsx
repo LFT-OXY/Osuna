@@ -61,6 +61,7 @@ interface Mounted {
   container: HTMLDivElement;
   editor: HTMLElement;
   handle: ComposerTextInputHandle;
+  ref: React.RefObject<ComposerTextInputHandle | null>;
   recorder: Recorder;
   render: (options: MountOptions) => void;
 }
@@ -98,7 +99,7 @@ function mount(options: MountOptions = {}): Mounted {
 
   const editor = container.querySelector<HTMLElement>('[role="textbox"]');
   if (!editor || !ref.current) throw new Error("composer text input did not mount");
-  const mounted = { root, container, editor, handle: ref.current, recorder, render };
+  const mounted = { root, container, editor, handle: ref.current, ref, recorder, render };
   mountedInputs.push(mounted);
   return mounted;
 }
@@ -344,6 +345,29 @@ describe("Composer text input on web", () => {
     await vi.waitFor(() => expect(mounted.recorder.changes).toEqual(["old你好"]));
     expect(mounted.handle.getText()).toBe("old你好");
     expect(mounted.recorder.selections.at(-1)).toEqual({ start: 5, end: 5 });
+  });
+
+  it("keeps its editing handle and selection across a rerender during composition", async () => {
+    const mounted = mount({ initialValue: "old" });
+    await focusAtEnd(mounted);
+
+    await cdp().send("Input.imeSetComposition", {
+      text: "你",
+      selectionStart: 1,
+      selectionEnd: 1,
+    });
+    mounted.render({ initialValue: "stale publication", placeholder: "updated presentation" });
+
+    expect(mounted.ref.current).toBe(mounted.handle);
+    expect(mounted.handle.getNativeRef()).toBe(mounted.editor);
+    expect(mounted.handle.getSelection?.()).toEqual({ start: 4, end: 4, blockBoundary: 0 });
+    expect(document.activeElement).toBe(mounted.editor);
+    expect(mounted.recorder.changes).toEqual([]);
+
+    await cdp().send("Input.insertText", { text: "你好" });
+
+    await vi.waitFor(() => expect(mounted.recorder.changes).toEqual(["old你好"]));
+    expect(mounted.handle.getText()).toBe("old你好");
   });
 });
 

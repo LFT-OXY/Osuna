@@ -74,7 +74,7 @@ export async function readComposerInput(input: Locator): Promise<ComposerInputSt
 
 interface ComposerTestEditorChain {
   insertContent(text: string): ComposerTestEditorChain;
-  setTextSelection(position: number): ComposerTestEditorChain;
+  setTextSelection(position: number | { from: number; to: number }): ComposerTestEditorChain;
   run(): boolean;
 }
 
@@ -84,7 +84,11 @@ interface ComposerTestEditorChain {
  */
 export interface ComposerTestEditor {
   chain(): ComposerTestEditorChain;
+  state: { selection: { from: number; to: number } };
 }
+
+/** 草稿是单个段落：文字偏移 t 对应编辑器位置 t + 1（换行占一个位置，与 `\n` 一致）。 */
+const COMPOSER_PARAGRAPH_START = 1;
 
 export async function expectComposerText(
   input: Locator,
@@ -434,11 +438,16 @@ export async function selectComposerDraftRange(
   await composerInput(page).focus();
   await composerInput(page).evaluate(
     (element, selection) => {
-      const input = element as HTMLTextAreaElement;
-      input.setSelectionRange(selection.start, selection.end);
-      input.dispatchEvent(new Event("select", { bubbles: true }));
+      const editor = Reflect.get(element, "editor") as ComposerTestEditor;
+      editor
+        .chain()
+        .setTextSelection({
+          from: selection.start + selection.offset,
+          to: selection.end + selection.offset,
+        })
+        .run();
     },
-    { start, end },
+    { start, end, offset: COMPOSER_PARAGRAPH_START },
   );
 }
 export async function expectComposerDraftSelection(
@@ -448,10 +457,10 @@ export async function expectComposerDraftSelection(
 ): Promise<void> {
   await expect
     .poll(() =>
-      composerInput(page).evaluate((element) => {
-        const input = element as HTMLTextAreaElement;
-        return [input.selectionStart, input.selectionEnd];
-      }),
+      composerInput(page).evaluate((element, offset) => {
+        const { from, to } = (Reflect.get(element, "editor") as ComposerTestEditor).state.selection;
+        return [from - offset, to - offset];
+      }, COMPOSER_PARAGRAPH_START),
     )
     .toEqual([start, end]);
 }
@@ -536,7 +545,8 @@ export async function recordVisibleComposerGeometry(page: Page): Promise<void> {
       if (!running) return;
       for (const root of document.querySelectorAll('[data-testid="message-input-root"]')) {
         if (root.getClientRects().length === 0) continue;
-        const input = root.querySelector("textarea");
+        // Tiptap 输入的外框（带最小高度与内边距）是带 data-composer-input 的根节点。
+        const input = root.querySelector("[data-composer-input]");
         if (input)
           frames.push({
             input: input.getBoundingClientRect().height,

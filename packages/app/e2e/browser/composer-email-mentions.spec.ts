@@ -2,6 +2,7 @@ import { expect, test, type Page } from "../support/fixtures";
 import {
   composerLocator,
   expectComposerDraft,
+  readComposerInput,
   expectComposerVisible,
   fillComposerDraft,
   enterComposerFullscreen,
@@ -21,7 +22,9 @@ async function selectReadmeMention(page: Page): Promise<void> {
   await expect(fileSuggestions(page).getByText("README.md", { exact: true })).toBeVisible();
   await expect(fileSuggestions(page).getByText("example.com", { exact: true })).toHaveCount(0);
   await composerLocator(page).press("Enter");
-  await expectComposerDraft(page, '"README.md"');
+  // Osuna 把选中的文件做成行内块：编辑器里显示文件名加一个空格，块只有一个。
+  await expectComposerDraft(page, "README.md ");
+  await expect(composerLocator(page).locator("[data-inline-block]")).toHaveCount(1);
 }
 
 async function sendEmailIntact(page: Page, email: string): Promise<void> {
@@ -77,12 +80,10 @@ test("fullscreen mention keys edit the draft while inline keys still complete fi
     await selectComposerDraftRange(page, draft.length, draft.length);
     await composerLocator(page).press("ArrowUp");
     await expect
-      .poll(() =>
-        composerLocator(page).evaluate((element) => {
-          const input = element as HTMLTextAreaElement;
-          return input.selectionStart === input.selectionEnd && input.selectionStart < 23;
-        }),
-      )
+      .poll(async () => {
+        const { caret } = await readComposerInput(composerLocator(page));
+        return caret !== null && caret < 23;
+      })
       .toBe(true);
     await selectComposerDraftRange(page, draft.length, draft.length);
     await composerLocator(page).press("Enter");

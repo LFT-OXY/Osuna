@@ -241,7 +241,7 @@ test("dictation shortcut leaves retained fullscreen and exposes recording contro
     ).toBeVisible();
     await page.getByRole("button", { name: "Cancel dictation", exact: true }).click();
     await expect(composerLocator(page)).toBeEditable();
-    await expect(composerLocator(page)).toHaveValue(draft);
+    await expectComposerText(composerLocator(page), draft);
     await resizeComposerViewport(page, "portrait");
     await enterComposerFullscreen(page);
     await resizeComposerViewport(page, "landscape");
@@ -250,7 +250,7 @@ test("dictation shortcut leaves retained fullscreen and exposes recording contro
     await expect(
       page.getByText("Realtime voice is disabled in this test.", { exact: true }),
     ).toBeVisible();
-    await expect(composerLocator(page)).toHaveValue(draft);
+    await expectComposerText(composerLocator(page), draft);
   } finally {
     await agent.cleanup();
   }

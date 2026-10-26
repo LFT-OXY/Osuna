@@ -45,6 +45,13 @@ async function composerHeight(page: Page): Promise<number> {
   return composerLocator(page).evaluate((element) => element.getBoundingClientRect().height);
 }
 
+/** 可见的输入框外框：Tiptap 的可编辑区随内容长高，滚动与高度上限在带 data-composer-input 的外框上。 */
+async function composerFrameHeight(page: Page): Promise<number> {
+  return composerLocator(page).evaluate(
+    (element) => element.closest("[data-composer-input]")!.getBoundingClientRect().height,
+  );
+}
+
 async function expectComposerHeight(page: Page, expected: number): Promise<void> {
   await expect.poll(() => composerHeight(page)).toBe(expected);
 }
@@ -206,7 +213,7 @@ async function expectFullscreenErrorAboveSend(page: Page): Promise<void> {
 
 async function writeCompactDraft(page: Page, text: string): Promise<void> {
   await composerLocator(page).fill(text);
-  await expect(composerLocator(page)).toHaveValue(text);
+  await expectComposerText(composerLocator(page), text);
 }
 
 test("compact long drafts stop growing before the header", async ({ page }) => {
@@ -219,7 +226,7 @@ test("compact long drafts stop growing before the header", async ({ page }) => {
     await openAgentRoute(page, agent);
     await expectComposerVisible(page);
     await writeCompactDraft(page, "A long draft line\n".repeat(40));
-    await expect.poll(() => composerHeight(page)).toBeLessThanOrEqual(160);
+    await expect.poll(() => composerFrameHeight(page)).toBeLessThanOrEqual(160);
   } finally {
     await agent.cleanup();
   }
@@ -264,7 +271,8 @@ test("compact fullscreen editing preserves the live draft and selection and retu
     await test.step("exit restores the inline composer with the fullscreen edits", async () => {
       await exitComposerFullscreen(page);
       await expectWorkspaceHeaderVisible(page);
-      await expect(composerLocator(page)).toHaveValue(
+      await expectComposerText(
+        composerLocator(page),
         "Edited fullscreen draft\nSecond line\nThird line",
       );
       await expectComposerDraftSelection(page, 3, 12);
@@ -273,11 +281,11 @@ test("compact fullscreen editing preserves the live draft and selection and retu
     });
     await test.step("sending inline after a fullscreen edit clears the visible editor", async () => {
       await sendComposerWithButton(page);
-      await expect(composerLocator(page)).toHaveValue("");
+      await expectComposerText(composerLocator(page), "");
       await expect(page.getByTestId("composer-image-attachment-pill")).toHaveCount(0);
       await writeCompactDraft(page, "Typed after the fullscreen cycle");
       await sendComposerWithButton(page);
-      await expect(composerLocator(page)).toHaveValue("");
+      await expectComposerText(composerLocator(page), "");
     });
     await test.step("sending inside fullscreen returns to chat and clears the editor", async () => {
       await writeCompactDraft(page, "First line\nSecond line\nThird line");
@@ -288,11 +296,11 @@ test("compact fullscreen editing preserves the live draft and selection and retu
       await resizeComposerViewport(page, "landscape");
       await expectComposerFullscreenControls(page);
       await expectComposerDraftSelection(page, 0, 5);
-      await expect(composerLocator(page)).toHaveValue("Short draft");
+      await expectComposerText(composerLocator(page), "Short draft");
       await expect(composerLocator(page)).toBeFocused();
       await resizeComposerViewport(page, "portrait");
       await sendComposerWithButton(page);
-      await expect(composerLocator(page)).toHaveValue("");
+      await expectComposerText(composerLocator(page), "");
       await expectWorkspaceHeaderVisible(page);
       await expect(page.getByTestId("composer-fullscreen")).toHaveCount(0);
     });
@@ -303,13 +311,13 @@ test("compact fullscreen editing preserves the live draft and selection and retu
       await expect(page.getByRole("button", { name: "Send message", exact: true })).toBeEnabled();
       await exitComposerFullscreen(page);
       await expectWorkspaceHeaderVisible(page);
-      await expect(composerLocator(page)).toHaveValue("Typed inside fullscreen");
+      await expectComposerText(composerLocator(page), "Typed inside fullscreen");
       await writeCompactDraft(page, "Typed inside fullscreen, finished inline");
       await sendComposerWithButton(page);
-      await expect(composerLocator(page)).toHaveValue("");
+      await expectComposerText(composerLocator(page), "");
       await writeCompactDraft(page, "One more inline message");
       await sendComposerWithButton(page);
-      await expect(composerLocator(page)).toHaveValue("");
+      await expectComposerText(composerLocator(page), "");
     });
   } finally {
     await agent.cleanup();
@@ -334,11 +342,11 @@ test("a caret inside an unpublished edit survives a breakpoint remount", async (
     await composerLocator(page).press("X");
     await resizeComposerViewport(page, "landscape");
     await page.clock.resume();
-    await expect(composerLocator(page)).toHaveValue("ShortX draft");
+    await expectComposerText(composerLocator(page), "ShortX draft");
     await expectComposerDraftSelection(page, 6, 6);
     await expect(composerLocator(page)).toBeFocused();
     await composerLocator(page).press("Y");
-    await expect(composerLocator(page)).toHaveValue("ShortXY draft");
+    await expectComposerText(composerLocator(page), "ShortXY draft");
   } finally {
     await agent.cleanup();
   }
@@ -364,11 +372,11 @@ test("fullscreen submit rejection retains the editable draft and supports retry"
     await expect(page.getByRole("alert")).toHaveText("Requested mock prompt rejection");
     await enterComposerFullscreen(page);
     await expectFullscreenErrorAboveSend(page);
-    await expect(composerLocator(page)).toHaveValue(draft);
+    await expectComposerText(composerLocator(page), draft);
     await expect(composerLocator(page)).toBeEditable();
     await expect(page.getByRole("button", { name: "Send message", exact: true })).toBeEnabled();
     await sendComposerWithButton(page);
-    await expect(composerLocator(page)).toHaveValue("");
+    await expectComposerText(composerLocator(page), "");
     await expectWorkspaceHeaderVisible(page);
   } finally {
     await agent.cleanup();
@@ -415,7 +423,7 @@ test("the reserved band beside the inline editor focuses it", async ({ page }) =
         await blurComposer(page);
         await page.mouse.click(point.x, point.y);
         await expect(composerLocator(page)).toBeFocused();
-        await expect(composerLocator(page)).toHaveValue(longDraft);
+        await expectComposerText(composerLocator(page), longDraft);
         await expect(exitButton).toHaveCount(0);
       }
     });
@@ -425,7 +433,7 @@ test("the reserved band beside the inline editor focuses it", async ({ page }) =
       await expectComposerFullscreenControls(page);
       await exitComposerFullscreen(page);
       await expect(exitButton).toHaveCount(0);
-      await expect(composerLocator(page)).toHaveValue(longDraft);
+      await expectComposerText(composerLocator(page), longDraft);
     });
 
     await test.step("with no fullscreen button, the whole band still focuses the editor", async () => {
@@ -436,7 +444,7 @@ test("the reserved band beside the inline editor focuses it", async ({ page }) =
         await blurComposer(page);
         await page.mouse.click(point.x, point.y);
         await expect(composerLocator(page)).toBeFocused();
-        await expect(composerLocator(page)).toHaveValue("Short");
+        await expectComposerText(composerLocator(page), "Short");
         await expect(exitButton).toHaveCount(0);
       }
     });
@@ -460,7 +468,7 @@ test("fullscreen Send keeps the configured queue behavior while an agent runs", 
     await enterComposerFullscreen(page);
     await expectComposerFullscreenControls(page);
     await queueComposerWithButton(page);
-    await expect(composerLocator(page)).toHaveValue("");
+    await expectComposerText(composerLocator(page), "");
     await expectWorkspaceHeaderVisible(page);
     await expectQueuedMessageButton(page);
   } finally {
@@ -533,7 +541,7 @@ test("retained agent tabs preserve fullscreen editing and paste when switched aw
     await activateRetainedComposerTab(page, second.title);
     await expectComposerFullscreenControls(page);
     await expectWorkspaceHeaderHidden(page);
-    await expect(composerLocator(page)).toHaveValue(draft);
+    await expectComposerText(composerLocator(page), draft);
     await expectComposerFullscreenFitsVisibleViewport(page);
     await expectComposerDraftSelection(page, 4, 17);
     await expect(composerLocator(page)).toBeFocused();
@@ -567,7 +575,7 @@ test("the compact sidebar over a fullscreen editor leaves the exit action alone"
     await closeMobileAgentSidebar(page);
     await expectMobileAgentSidebarHidden(page);
     await expectComposerFullscreenControls(page);
-    await expect(composerLocator(page)).toHaveValue(draft);
+    await expectComposerText(composerLocator(page), draft);
     await exitComposerFullscreen(page);
     await expectWorkspaceHeaderVisible(page);
   } finally {
@@ -598,8 +606,8 @@ test("retained inline composers keep usable capacity through hidden tab geometry
     await activateRetainedComposerTab(page, first.title);
     await writeCompactDraft(page, "Other visible draft");
     await activateRetainedComposerTab(page, second.title);
-    await expect(composerLocator(page)).toHaveValue(draft);
-    await expect.poll(() => composerHeight(page)).toBeLessThanOrEqual(160);
+    await expectComposerText(composerLocator(page), draft);
+    await expect.poll(() => composerFrameHeight(page)).toBeLessThanOrEqual(160);
     await expect(page.getByRole("button", { name: "Send message", exact: true })).toBeVisible();
     await expectNoCollapsedVisibleComposer(page);
   } finally {

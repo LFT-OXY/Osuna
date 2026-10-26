@@ -9,22 +9,14 @@ import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useFileLink } from "@/assistant-file-links";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { HighlightedCodeBlock } from "@/components/highlighted-code-block";
-import type { Theme } from "@/styles/theme";
 import { MermaidFence } from "./fence/mermaid";
 import { markdownLinkSource } from "./source";
+import { createCodeBlockFrameStyle } from "./styles";
 
 const ThemedCodeBlock = withUnistyles(HighlightedCodeBlock);
-const codeStyle = (theme: Theme) => ({
-  inheritedStyles: {
-    color: theme.colors.foreground,
-    fontFamily: theme.fontFamily.mono,
-    fontSize: theme.fontSize.code,
-  },
-  textStyle: { backgroundColor: theme.colors.surface2, padding: 12, borderRadius: 8 },
-});
 function WebCodeBlock({ code, language }: CodeBlockRendererProps) {
   if (language?.toLowerCase() === "mermaid") return <MermaidFence code={code} />;
-  return <ThemedCodeBlock code={code} language={language} uniProps={codeStyle} />;
+  return <ThemedCodeBlock code={code} language={language} uniProps={createCodeBlockFrameStyle} />;
 }
 
 function WebLink({ link, anchorProps, children }: LinkRendererProps) {

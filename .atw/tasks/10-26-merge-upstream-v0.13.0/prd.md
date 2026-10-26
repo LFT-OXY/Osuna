@@ -153,8 +153,8 @@ Osuna 在 2026-10-13 把上游 `getpaseo/paseo` 合到了 v0.11.2（`759532509`�
 
 ### Composer
 
-- Web 与 Electron 继续用 Osuna 的 Tiptap 输入，测高模块保持删除。
-- 手机端收下上游的全屏编辑（#6531）。它依赖的测高模块只在原生端恢复，范围以全屏编辑实际用到的为限，Web 端不引入。手机端免验收，只要求原生端的 typecheck 与相关单元测试通过。
+- Web 与 Electron 继续用 Osuna 的 Tiptap 输入，测高模块两端都不恢复（上游原生版只返回 `{ minHeight, maxHeight }`，Osuna 已内联同样的值）。
+- 收下上游的全屏编辑（#6531）。维护者 2026-10-26 决定 Web / Electron 窗口窄到紧凑宽度时也给（「网页窄窗口也给全屏」），以保住上游约 20 条全屏 e2e：草稿超过两行出全屏按钮，Web 的行数由 `composer/input/rendered-lines.web.ts` 量 Tiptap 段落，原生端沿用上游的隐藏文字测行。手机端免验收，只要求原生端的 typecheck 与相关单元测试通过。
 - 上游新用例里按 textarea 读 Composer 的，在 Osuna 改成读 contenteditable 的文字。
 
 ### Explorer

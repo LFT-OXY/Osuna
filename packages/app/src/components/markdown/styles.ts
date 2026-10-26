@@ -1,43 +1,57 @@
 import type { MarkdownStyle } from "react-native-enriched-markdown";
-import type { Theme } from "@/styles/theme";
+import { contentTypeStep, type Theme } from "@/styles/theme";
 import { isWeb } from "@/constants/platform";
+
+const monoFamily = (theme: Theme) =>
+  theme.fontFamily.mono === "ui-monospace" && !isWeb ? "" : theme.fontFamily.mono;
 
 export function createMarkdownStyles(
   theme: Theme,
   compact = false,
 ): { markdownStyle: MarkdownStyle; selectionColor: string } {
-  const fontSize = compact ? theme.fontSize.base : theme.fontSize.content;
+  // 正文与标题按内容字号走 Text 档位；compact 只把标题降一档、段距收紧，字号不变。
+  const fontSize = theme.fontSize.content;
   const paragraph = {
-    fontSize,
+    ...contentTypeStep(fontSize, "prose"),
     fontFamily: theme.fontFamily.ui,
-    lineHeight: Math.round(fontSize * 1.4),
-    color: theme.colors.foreground,
+    color: theme.colors.foregroundProse,
     marginTop: 0,
-    marginBottom: theme.spacing[3],
+    marginBottom: compact ? theme.spacing[2] : theme.spacing[3],
   };
-  const heading = (scale: number) => ({
+  const heading = (
+    variant: Parameters<typeof contentTypeStep>[1],
+    marginTop: number,
+    marginBottom: number,
+  ) => ({
     ...paragraph,
-    fontSize: Math.round(fontSize * scale),
-    lineHeight: Math.round(fontSize * scale * 1.3),
-    fontWeight: "bold",
-    marginTop: theme.spacing[3],
+    ...contentTypeStep(fontSize, variant),
+    fontWeight: theme.fontWeight.semibold,
+    color: theme.colors.foreground,
+    marginTop,
+    marginBottom,
   });
+  const major = (variant: Parameters<typeof contentTypeStep>[1]) =>
+    compact
+      ? heading(variant, theme.spacing[3], theme.spacing[2])
+      : heading(variant, theme.spacing[4], theme.spacing[2]);
+  const minor = (variant: Parameters<typeof contentTypeStep>[1]) =>
+    heading(variant, theme.spacing[3], theme.spacing[1]);
   return {
     selectionColor: theme.colors.terminal.selectionBackground,
     markdownStyle: {
       paragraph,
-      h1: heading(1.6),
-      h2: heading(1.4),
-      h3: heading(1.2),
-      h4: heading(1.1),
-      h5: heading(1),
-      h6: { ...heading(1), color: theme.colors.foregroundMuted },
+      h1: major(compact ? "title-sm" : "title-lg"),
+      h2: major(compact ? "body-lg" : "title"),
+      h3: compact ? minor("body") : major("title-sm"),
+      h4: minor("body-lg"),
+      h5: minor("body"),
+      h6: { ...minor("body"), color: theme.colors.foregroundMuted },
       list: {
         ...paragraph,
         bulletColor: theme.colors.foregroundMuted,
         markerColor: theme.colors.foregroundMuted,
         gapWidth: 7,
-        itemSpacing: 4,
+        itemSpacing: theme.spacing[1],
         marginLeft: 20,
       },
       blockquote: {
@@ -45,9 +59,11 @@ export function createMarkdownStyles(
         color: `${theme.colors.foreground}cc`,
         backgroundColor: theme.colors.surface1,
         borderColor: theme.colors.surface2,
-        borderWidth: 3,
-        padding: 12,
-        gapWidth: 8,
+        borderWidth: 4,
+        borderRadius: 0,
+        padding: theme.spacing[3],
+        gapWidth: theme.spacing[1],
+        marginTop: theme.spacing[3],
         admonitions: {
           note: { color: theme.colors.accentBright, backgroundColor: theme.colors.surface2 },
           tip: { color: theme.colors.statusSuccess, backgroundColor: theme.colors.surface2 },
@@ -63,7 +79,7 @@ export function createMarkdownStyles(
         },
       },
       code: {
-        fontFamily: theme.fontFamily.mono === "ui-monospace" && !isWeb ? "" : theme.fontFamily.mono,
+        fontFamily: monoFamily(theme),
         fontSize: theme.fontSize.code,
         color: theme.colors.foreground,
         backgroundColor: theme.colors.surface2,
@@ -71,15 +87,26 @@ export function createMarkdownStyles(
       },
       codeBlock: {
         ...paragraph,
-        fontFamily: theme.fontFamily.mono === "ui-monospace" && !isWeb ? "" : theme.fontFamily.mono,
+        fontFamily: monoFamily(theme),
         fontSize: theme.fontSize.code,
+        lineHeight: Math.round(theme.fontSize.code * 1.45),
+        color: theme.colors.foreground,
         backgroundColor: theme.colors.surface2,
-        borderColor: theme.colors.border,
-        borderRadius: 8,
-        padding: 12,
+        borderWidth: 1,
+        borderColor: theme.colors.borderCodeBlock,
+        borderRadius: theme.radius.lg,
+        padding: theme.spacing[3],
+        marginTop: theme.spacing[3],
+        marginBottom: theme.spacing[3],
       },
       table: {
         ...paragraph,
+        color: theme.colors.foreground,
+        borderRadius: theme.borderRadius.md,
+        cellPaddingHorizontal: theme.spacing[2],
+        cellPaddingVertical: theme.spacing[2],
+        marginTop: theme.spacing[3],
+        marginBottom: theme.spacing[3],
         borderColor: theme.colors.border,
         headerBackgroundColor: theme.colors.surface2,
         headerTextColor: theme.colors.foreground,
@@ -93,8 +120,41 @@ export function createMarkdownStyles(
         borderColor: theme.colors.foregroundMuted,
       },
       inlineImage: { size: paragraph.lineHeight },
-      image: { height: 320, resizeMode: "contain", borderRadius: 8 },
-      thematicBreak: { color: theme.colors.border, height: 1, marginTop: 12, marginBottom: 12 },
+      image: {
+        height: 320,
+        resizeMode: "contain",
+        borderRadius: theme.borderRadius.md,
+        marginTop: theme.spacing[2],
+        marginBottom: theme.spacing[2],
+      },
+      thematicBreak: { color: theme.colors.border, height: 1, marginTop: 10, marginBottom: 10 },
+    },
+  };
+}
+
+/**
+ * Web 代码块交给 HighlightedCodeBlock 自己画：外框（底色、描边、圆角、外边距）在容器上，
+ * 内边距给代码正文，语言标签与复制按钮那一行在正文上方。
+ */
+export function createCodeBlockFrameStyle(theme: Theme) {
+  return {
+    inheritedStyles: {
+      color: theme.colors.foreground,
+      fontFamily: theme.fontFamily.mono,
+      fontSize: theme.fontSize.code,
+    },
+    textStyle: {
+      backgroundColor: theme.colors.surface2,
+      color: theme.colors.foreground,
+      borderWidth: 1,
+      borderColor: theme.colors.borderCodeBlock,
+      borderRadius: theme.radius.lg,
+      paddingHorizontal: theme.spacing[3],
+      paddingTop: theme.spacing[1],
+      paddingBottom: theme.spacing[3],
+      fontFamily: theme.fontFamily.mono,
+      fontSize: theme.fontSize.code,
+      marginVertical: theme.spacing[3],
     },
   };
 }

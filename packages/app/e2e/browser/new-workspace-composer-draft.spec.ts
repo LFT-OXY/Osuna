@@ -3,6 +3,7 @@ import {
   enterComposerFullscreen,
   exitComposerFullscreen,
   resizeComposerViewport,
+  expectComposerText,
 } from "../support/helpers/composer";
 import { expect, test } from "../support/fixtures";
 import { gotoAppShell } from "../support/helpers/app";
@@ -148,7 +149,7 @@ test("fullscreen creation returns inline and keeps submission locked when reopen
 
     await test.step("submission returns inline with the original draft and spinner", async () => {
       await expect(page.getByTestId("composer-fullscreen")).toHaveCount(0);
-      await expect(composerLocator(page)).toHaveValue(DRAFT);
+      await expectComposerText(composerLocator(page), DRAFT);
       await expect(composerLocator(page)).not.toBeEditable();
       await expect(page.getByRole("button", { name: "Create", exact: true })).toBeDisabled();
       await expect(page.getByRole("progressbar")).toBeVisible();
@@ -156,7 +157,7 @@ test("fullscreen creation returns inline and keeps submission locked when reopen
     await test.step("fullscreen can reopen while pending without unlocking or duplicating submission", async () => {
       await enterComposerFullscreen(page);
       await expect(page.getByTestId("composer-fullscreen")).toBeVisible();
-      await expect(composerLocator(page)).toHaveValue(DRAFT);
+      await expectComposerText(composerLocator(page), DRAFT);
       await expect(composerLocator(page)).not.toBeEditable();
       await expect(page.getByRole("button", { name: "Create", exact: true })).toBeDisabled();
       await expect(page.getByRole("progressbar")).toBeVisible();
@@ -164,7 +165,7 @@ test("fullscreen creation returns inline and keeps submission locked when reopen
     });
     delay.release();
     await page.waitForURL((url) => url.pathname.includes("/workspace/"));
-    await expect(composerLocator(page)).toHaveValue("");
+    await expectComposerText(composerLocator(page), "");
     await expect(composerLocator(page)).toBeEditable();
     expect(delay.agentRequests).toHaveLength(1);
   } finally {

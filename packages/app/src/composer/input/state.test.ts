@@ -330,6 +330,7 @@ describe("queueComposerInput", () => {
   function queueContext(input: { value: string; hasExternalContent: boolean }) {
     const onQueue = vi.fn();
     const replaceText = vi.fn();
+    const exitFullscreen = vi.fn();
     queueComposerInput({
       value: input.value,
       attachments: [],
@@ -337,9 +338,17 @@ describe("queueComposerInput", () => {
       cwd: "/repo",
       onQueue,
       replaceText,
+      exitFullscreen,
     });
-    return { onQueue, replaceText };
+    return { onQueue, replaceText, exitFullscreen };
   }
+
+  it("leaves fullscreen only when something is queued", () => {
+    expect(queueContext({ value: "next", hasExternalContent: false }).exitFullscreen).toBeCalled();
+    expect(
+      queueContext({ value: "  ", hasExternalContent: false }).exitFullscreen,
+    ).not.toBeCalled();
+  });
 
   it("queues content held outside the text with an empty prompt", () => {
     const { onQueue, replaceText } = queueContext({ value: "  ", hasExternalContent: true });

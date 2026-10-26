@@ -114,7 +114,8 @@ test("focusing the feed preserves assistant text selection and code copy control
 
     const code = feed.locator('[data-paseo-markdown-language="bash"]');
     await code.hover();
-    await code.locator("[data-paseo-markdown-ignore]").click();
+    // Osuna 的代码块头部（语言标签）也不进复制，按钮按名字找。
+    await code.getByRole("button", { name: "Copy code" }).click();
     await expect(feed).not.toBeFocused();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("echo example");
     await expectComposerDraft(page, "Keep this draft");

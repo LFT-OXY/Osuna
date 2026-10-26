@@ -1383,6 +1383,7 @@ function ComposerSurfaceStack({
   planUsageProviderId,
   planUsageAgentId,
   showContextStrip,
+  fullscreen,
   children,
 }: {
   serverId: string;
@@ -1393,12 +1394,14 @@ function ComposerSurfaceStack({
   planUsageProviderId: string | null;
   planUsageAgentId: string | null;
   showContextStrip: boolean;
+  /** 全屏时只剩输入框撑满，上下文条不显示。 */
+  fullscreen: boolean;
   children: ReactNode;
 }) {
   return (
-    <View style={styles.surfaceStack}>
+    <View style={fullscreen ? styles.fullscreenFill : styles.surfaceStack}>
       <RenderProfile id="MessageInput">{children}</RenderProfile>
-      {showContextStrip ? (
+      {showContextStrip && !fullscreen ? (
         <ComposerContextStrip
           serverId={serverId}
           workspaceId={workspaceId}
@@ -2780,9 +2783,12 @@ function ComposerContentImpl({
                 planUsageProviderId={planUsageProviderId}
                 planUsageAgentId={planUsageAgentId}
                 showContextStrip={isContextStripVisible}
+                fullscreen={isFullscreen}
               >
                 <StableMessageInput
                   ref={messageInputRef}
+                  editingSession={editingSession}
+                  submissionError={sendErrorNode}
                   value={textSource.getSnapshot()}
                   valueSegments={textSource.getSegmentsSnapshot?.()}
                   onChangeText={setUserInput}
