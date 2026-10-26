@@ -1,5 +1,5 @@
-import type { UsageProblem } from "@getpaseo/protocol/messages";
 import type { TFunction } from "i18next";
+import type { UsageProblem } from "@getpaseo/protocol/messages";
 import { i18n } from "@/i18n/i18next";
 import { formatCompactTimeAgo } from "@/utils/time";
 import type { UsageDisplayAs } from "./preferences";
@@ -30,16 +30,16 @@ function agoProse(compact: string): string {
 
 export const usageCopy = {
   /** 额度不可用的原因：登录过期、登录被拒或没有额度，附上刷新方法。 */
-  problem: (problem: UsageProblem, now: Date = new Date()): string => {
+  problem: (problem: UsageProblem, now: Date = new Date(), t: TFunction = i18n.t): string => {
     if (problem.kind === "no_quota") return problem.detail;
     const remedy = problem.refreshedBy
-      ? i18n.t(key("remedyRun"), { command: problem.refreshedBy })
-      : i18n.t(key("remedySignIn"));
+      ? t(key("remedyRun"), { command: problem.refreshedBy })
+      : t(key("remedySignIn"));
     if (problem.kind === "rejected") {
-      return i18n.t(key("loginRejected"), { status: problem.status, remedy });
+      return t(key("loginRejected"), { status: problem.status, remedy });
     }
     const ago = agoProse(formatCompactTimeAgo(new Date(problem.expiresAt), now));
-    return i18n.t(key("loginExpired"), { ago, remedy });
+    return t(key("loginExpired"), { ago, remedy });
   },
   get title(): string {
     return i18n.t(key("title"));

@@ -83,6 +83,8 @@ describe("draft logic map", () => {
   it("reads the draft's toggle back after the app restarts", async () => {
     const storage = createMemoryStorage();
     const before = createDraftLogicMapStore(storage);
+    // 上游 v0.13 起读取存储期间的写入会被丢掉，先等启动时的读取结束。
+    await before.persist.rehydrate();
     before.getState().turnOnWithNewMap(KEY, "untitled-1a2b3c4d");
     before.getState().turnOnWithNewMap("server-1:draft-tab-2", "untitled-5e6f7a8b");
     before.getState().setEnabled("server-1:draft-tab-2", false);

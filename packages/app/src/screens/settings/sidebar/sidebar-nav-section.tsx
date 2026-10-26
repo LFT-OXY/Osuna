@@ -1,4 +1,4 @@
-import { useCallback, useMemo, type ReactElement } from "react";
+import { useCallback, useMemo, type ComponentType, type ReactElement } from "react";
 import { Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -28,7 +28,7 @@ import {
   type SidebarNavItem,
   type SidebarSection,
 } from "@/sidebar-nav/model";
-import { resolvePluginIcon } from "@/plugins/icons";
+import { pluginIconComponent } from "@/plugins/icons";
 import { useSidebarNavItems } from "@/sidebar-nav/use-sidebar-nav-items";
 import { settingsStyles } from "@/styles/settings";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
@@ -57,17 +57,19 @@ const HEADER_ICONS: Partial<Record<BuiltinSidebarItemId<"header">, LucideIcon>> 
 /** Plugin items register no icon, so they share this one; a legacy `addSidebarItem` keeps its own. */
 const PLUGIN_ICON = Blocks;
 
-function NavIcon({ Icon, color = "" }: { Icon: LucideIcon; color?: string }) {
+type NavIconComponent = ComponentType<{ size: number; color: string }>;
+
+function NavIcon({ Icon, color = "" }: { Icon: NavIconComponent; color?: string }) {
   return <Icon size={ICON_SIZE.md} color={color} />;
 }
 
 const ThemedNavIcon = withUnistyles(NavIcon);
 
-function navItemIcon(item: SidebarNavItem, section: SidebarSection): LucideIcon {
+function navItemIcon(item: SidebarNavItem, section: SidebarSection): NavIconComponent {
   if (item.kind === "builtin") {
     return (section === "header" ? HEADER_ICONS[item.id] : undefined) ?? BUILTIN_ICONS[item.id];
   }
-  return item.group.kind === "legacy" ? resolvePluginIcon(item.group.icon) : PLUGIN_ICON;
+  return item.group.kind === "legacy" ? pluginIconComponent(item.group.icon) : PLUGIN_ICON;
 }
 
 function navItemLabel(t: TFunction, item: SidebarNavItem, section: SidebarSection): string {

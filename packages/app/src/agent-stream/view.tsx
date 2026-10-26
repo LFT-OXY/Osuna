@@ -465,11 +465,6 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
           serverId: resolvedServerId,
           workspaceId: context.workspaceId ?? "",
         }),
-        checkout: {
-          serverId: resolvedServerId,
-          cwd: context.cwd,
-          isGit: isGitCheckout(context.projectPlacement),
-        },
         view,
       });
     });

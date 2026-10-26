@@ -1,3 +1,5 @@
+import type { TFunction } from "i18next";
+import { i18n } from "@/i18n/i18next";
 import { usageCopy } from "./copy";
 import type { UsageDisplayAs } from "./preferences";
 import type { UsageReport, UsageReportEntry, UsageView, UsageWindow } from "./types";
@@ -122,16 +124,26 @@ export interface UsageQueryState {
   cliSignInsOff?: boolean;
 }
 
-export function resolveUsageView(input: {
-  hostLabel: string;
-  isConnected: boolean;
-  supportsUsage: boolean;
-  query: UsageQueryState | undefined;
-}): UsageView {
+export function resolveUsageView(
+  input: {
+    hostLabel: string;
+    isConnected: boolean;
+    supportsUsage: boolean;
+    query: UsageQueryState | undefined;
+  },
+  t: TFunction = i18n.t,
+): UsageView {
   const { hostLabel, isConnected, supportsUsage, query } = input;
-  if (!isConnected) return { kind: "unavailable", message: usageCopy.hostUnavailable(hostLabel) };
+  if (!isConnected)
+    return {
+      kind: "unavailable",
+      message: t("providerUsage.hostUnavailable", { host: hostLabel }),
+    };
   if (!supportsUsage) {
-    return { kind: "unavailable", message: usageCopy.hostUpgradeRequired(hostLabel) };
+    return {
+      kind: "unavailable",
+      message: t("providerUsage.hostUpgradeRequired", { host: hostLabel }),
+    };
   }
   if (query?.data) {
     // 开回来后报告边到边显示，不等列表的回答把标记换掉。
@@ -155,17 +167,20 @@ export type AgentUsageView =
   | { kind: "error"; message: string }
   | { kind: "ready"; reports: UsageReportEntry[] };
 
-export function resolveAgentUsageView(input: {
-  canReport: boolean;
-  query: UsageQueryState;
-}): AgentUsageView {
+export function resolveAgentUsageView(
+  input: {
+    canReport: boolean;
+    query: UsageQueryState;
+  },
+  t: TFunction = i18n.t,
+): AgentUsageView {
   const { canReport, query } = input;
   if (!canReport) return { kind: "none" };
   // A failed request keeps the reports from before it, or those that streamed in before it failed;
   // shown alone they would pass for the agent's complete, current usage.
   if (query.error) {
     const reason = query.error instanceof Error ? query.error.message : String(query.error);
-    return { kind: "error", message: usageCopy.agentError(reason) };
+    return { kind: "error", message: t("providerUsage.agentError", { reason }) };
   }
   if (query.data) {
     return query.data.length === 0 ? { kind: "none" } : { kind: "ready", reports: query.data };
@@ -211,7 +226,7 @@ export function resolveUsageModalHostId(choice: UsageHostChoice): string | null 
 }
 
 /** Current outcome owns messages; only a successful poll owns values and freshness. */
-export function resolveUsageReport(entry: UsageReportEntry) {
+export function resolveUsageReport(entry: UsageReportEntry, t: TFunction) {
   const available = entry.report.status === "available";
   // COMPAT(usageLastSuccessful): added in v0.18.0, remove after 2027-04-17 once daemon floor >= v0.18.0.
   // Older daemons cannot provide history; a failed attempt is never a successful update.
@@ -221,10 +236,12 @@ export function resolveUsageReport(entry: UsageReportEntry) {
   if (!available) {
     if (entry.loginErrors)
       messages.push(
-        ...entry.loginErrors.map((login) => `${login.harness}: ${usageProblemText(login.report)}`),
+        ...entry.loginErrors.map(
+          (login) => `${login.harness}: ${usageProblemText(login.report, t)}`,
+        ),
       );
     // COMPAT(usageLoginErrors): added in v0.15.0, remove after 2027-04-05 once daemon floor >= v0.15.0.
-    else messages.push(usageProblemText(entry.report));
+    else messages.push(usageProblemText(entry.report, t));
   }
   return {
     windows: content?.windows ?? [],
@@ -241,8 +258,8 @@ export function resolveUsageReport(entry: UsageReportEntry) {
   };
 }
 
-function usageProblemText(report: UsageReport): string {
+function usageProblemText(report: UsageReport, t: TFunction): string {
   if (report.status === "error") return report.error;
-  if (report.status === "unavailable") return usageCopy.problem(report.problem);
+  if (report.status === "unavailable") return usageCopy.problem(report.problem, new Date(), t);
   return "";
 }

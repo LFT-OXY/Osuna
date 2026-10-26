@@ -32,9 +32,7 @@ describe("openTerminalTabFromSessionHistory", () => {
   it("opens the terminal in the main pane and focuses it, not in the Explorer sidebar", () => {
     openExplorerSidebarView({
       isCompact: false,
-      supportsPaneSplits: true,
       workspaceKey: WORKSPACE_KEY,
-      checkout: { serverId: "server-1", cwd: "/repo", isGit: true },
       view: "sessions",
     });
 

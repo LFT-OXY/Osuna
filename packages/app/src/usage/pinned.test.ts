@@ -224,11 +224,12 @@ describe("resolvePinnedUsage", () => {
     try {
       expect(windows([claude, codex], preferences(pins)).map((item) => item.label)).toEqual([
         "Claude Session 已用 31%",
-        "Codex Weekly 已用 12%",
+        // 上游 #7376 起已知窗口名（weekly 等）按界面语言写；自定义的窗口名照原样。
+        "Codex 每周 已用 12%",
       ]);
       expect(
         windows([claude, codex], preferences(pins, "remaining")).map((item) => item.label),
-      ).toEqual(["Claude Session 剩余 69%", "Codex Weekly 剩余 88%"]);
+      ).toEqual(["Claude Session 剩余 69%", "Codex 每周 剩余 88%"]);
     } finally {
       await i18n.changeLanguage("en");
     }
@@ -294,4 +295,29 @@ it("keeps unavailable and error reports out of the sidebar summary even with ret
     report: { status: "error", error: "Store deleted" },
   };
   expect(resolvePinnedUsage([expired, failed], preferences(null))).toEqual([]);
+});
+
+it("localizes pinned labels and meanings while preserving custom window names", async () => {
+  await i18n.changeLanguage("ja");
+  try {
+    const entries = [
+      report({
+        sourceId: "test",
+        sourceLabel: "Test",
+        windows: [
+          { id: "session", label: "Session", summary: true, usedPct: 70 },
+          { id: "weekly", label: "My allowance", summary: true, usedPct: 20 },
+        ],
+      }),
+    ];
+    expect(windows(entries, preferences(null)).map((w) => [w.label, w.shortLabel])).toEqual([
+      ["Test セッション 70% 使用済み", "セッション"],
+      ["Test My allowance 20% 使用済み", "My allowance"],
+    ]);
+    expect(windows(entries, preferences(null, "remaining"))[0].label).toBe(
+      "Test セッション 残り 30%",
+    );
+  } finally {
+    await i18n.changeLanguage("en");
+  }
 });

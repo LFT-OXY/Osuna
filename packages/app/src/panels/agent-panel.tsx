@@ -1273,7 +1273,6 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
           serverId={serverId}
           workspaceId={workspaceId}
           agentId={agentId}
-          cwd={cwd}
           subagentRows={subagentRows}
           tasks={tasks}
           archiveFinishedStatus={archiveFinishedSubagents.status}
@@ -1419,6 +1418,11 @@ const AgentStreamSection = memo(function AgentStreamSection({
   const isCompactFormFactor = useIsCompactFormFactor();
   const hasWorkspaceDiffStat = useWorkspaceHasDiffStat(serverId, workspaceId);
   const { openSubagent, openProviderSubagent } = useOpenSubagent({ serverId, workspaceId });
+  // 派发组只列本机的子智能体。
+  const openLocalSubagent = useCallback(
+    (subagentId: string) => openSubagent({ serverId, agentId: subagentId }),
+    [openSubagent, serverId],
+  );
   const hasVisibleComposerTracks =
     hasActiveComposer && (hasVisibleAgentTracks || hasWorkspaceDiffStat);
   const bottomOverlayTailClearance = hasVisibleComposerTracks
@@ -1488,7 +1492,7 @@ const AgentStreamSection = memo(function AgentStreamSection({
       pendingMessageSubmissions={pendingMessageSubmissions}
       turnPresentation={turnPresentation}
       onOpenWorkspaceFile={onOpenWorkspaceFile}
-      onOpenSubagent={openSubagent}
+      onOpenSubagent={openLocalSubagent}
       onOpenProviderSubagent={openProviderSubagent}
     />
   );
@@ -1604,11 +1608,10 @@ function ActiveAgentComposer({
       openWorkspaceChanges({
         isCompact: isCompactFormFactor,
         workspaceKey: buildWorkspaceTabPersistenceKey({ serverId, workspaceId }),
-        checkout: { serverId, cwd, isGit: true },
         preferences: openInSidePane,
       });
     },
-    [cwd, isCompactFormFactor, openInSidePane, serverId, workspaceId],
+    [isCompactFormFactor, openInSidePane, serverId, workspaceId],
   );
 
   const handleClientSlashCommand = useCallback(

@@ -93,7 +93,7 @@ test.describe("usage settings", () => {
     await expect(card.getByText("Alpha plan", { exact: true })).toBeVisible({ timeout: 10_000 });
     await expect(card.getByText("dev@example.com", { exact: true })).toBeVisible();
     await expect(card.getByText("Beta plan", { exact: true })).toBeVisible();
-    await expect(card.getByText("70%")).toBeVisible();
+    await expect(card.getByText("70% used")).toBeVisible();
     await expect(card.getByText("1,234 left", { exact: true })).toBeVisible();
     await expect(card.getByText("$5.00 / $20.00", { exact: true })).toBeVisible();
     await expect(card.getByText("2026-12-31", { exact: true })).toBeVisible();
@@ -132,7 +132,7 @@ test.describe("usage settings", () => {
     // Osuna：Usage 页的卡片头部是自己的「Refresh」按钮，作用与上游的「全部刷新」相同。
     await card.getByRole("button", { name: "Refresh", exact: true }).click();
     await expect.poll(() => forcedRefreshCount(usage)).toBe(1);
-    await expect(card.getByText("64%")).toBeVisible();
+    await expect(card.getByText("64% used")).toBeVisible();
   });
 
   test("asks to update a host without usage support and never calls it", async ({ page }) => {

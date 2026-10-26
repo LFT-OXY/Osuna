@@ -27,7 +27,7 @@ import type { ViewportFitOptions, ViewportRect } from "@/components/zoomable-vie
 import { useReplicaQuery } from "@/data/query";
 import { getErrorMessage } from "@getpaseo/protocol/error-utils";
 import { useToast } from "@/contexts/toast-api-context";
-import { explorerFileFromReadResult } from "@/file-explorer/read-result";
+import { decodeUtf8 } from "@/utils/decode-utf8";
 import type { WorkspaceFileLocation } from "@/workspace/file-open";
 import { LogicMapBackdrop } from "./backdrop";
 import {
@@ -398,7 +398,8 @@ async function readTextFile(
   path: string,
 ): Promise<string | null> {
   try {
-    return explorerFileFromReadResult(await client.readFile(cwd, path)).content ?? null;
+    const file = await client.readFile(cwd, path);
+    return file.kind === "text" ? decodeUtf8(file.bytes) : null;
   } catch (error) {
     if (error instanceof FileReadError) return null;
     throw error;

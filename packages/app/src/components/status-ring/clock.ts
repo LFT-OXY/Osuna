@@ -1,11 +1,13 @@
-import { useLayoutEffect } from "react";
+import { useLayoutEffect, useState } from "react";
 import { makeMutable, type SharedValue, useSharedValue } from "react-native-reanimated";
 import { scheduleOnUI } from "react-native-worklets";
+import { useRetainedPanelActive } from "@/components/retained-panel";
 import { getStatusRingRotation } from "@/components/status-ring/geometry";
 
 const sharedRotation = makeMutable(getStatusRingRotation(Date.now()));
 const activeRingCount = makeMutable(0);
 const clockRunning = makeMutable(false);
+let nextListenerId = 1;
 
 function advanceSharedRotation(): void {
   "worklet";
@@ -18,13 +20,21 @@ function advanceSharedRotation(): void {
   requestAnimationFrame(advanceSharedRotation);
 }
 
-function registerStatusRing(registered: SharedValue<boolean>): void {
+function registerStatusRing(
+  rotation: SharedValue<number>,
+  registered: SharedValue<boolean>,
+  listenerId: number,
+): void {
   "worklet";
   if (registered.value) {
     return;
   }
 
   registered.value = true;
+  rotation.value = getStatusRingRotation(Date.now());
+  sharedRotation.addListener(listenerId, (value) => {
+    rotation.value = value;
+  });
   activeRingCount.value += 1;
 
   if (!clockRunning.value) {
@@ -34,29 +44,32 @@ function registerStatusRing(registered: SharedValue<boolean>): void {
   }
 }
 
-function unregisterStatusRing(registered: SharedValue<boolean>): void {
+function unregisterStatusRing(registered: SharedValue<boolean>, listenerId: number): void {
   "worklet";
   if (!registered.value) {
     return;
   }
 
   registered.value = false;
+  sharedRotation.removeListener(listenerId);
   activeRingCount.value -= 1;
 }
 
 /** `enabled: false`（减少动态效果）时这个环完全不接入共享时钟。 */
 export function useStatusRingRotation({ enabled }: { enabled: boolean }): SharedValue<number> {
+  const active = useRetainedPanelActive();
+  // Hidden retained views must not subscribe their animated styles to the shared clock.
+  const rotation = useSharedValue(getStatusRingRotation(Date.now()));
   const registered = useSharedValue(false);
+  const [listenerId] = useState(() => nextListenerId++);
 
   useLayoutEffect(() => {
-    if (!enabled) {
-      return;
-    }
-    scheduleOnUI(registerStatusRing, registered);
+    if (!active || !enabled) return;
+    scheduleOnUI(registerStatusRing, rotation, registered, listenerId);
     return () => {
-      scheduleOnUI(unregisterStatusRing, registered);
+      scheduleOnUI(unregisterStatusRing, registered, listenerId);
     };
-  }, [enabled, registered]);
+  }, [active, enabled, listenerId, registered, rotation]);
 
-  return sharedRotation;
+  return rotation;
 }

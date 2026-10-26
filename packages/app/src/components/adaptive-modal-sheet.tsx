@@ -80,7 +80,7 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: "transparent",
   },
   desktopOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: "center",
     alignItems: "center",
     padding: theme.spacing[6],
@@ -90,7 +90,7 @@ const styles = StyleSheet.create((theme) => ({
   // with a backdrop filter would become the card's backdrop root, and the card's own blur would
   // then sample only the scrim tint instead of the page.
   desktopScrim: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     ...dialogScrimFill(theme, { glass: GLASS_SURFACES_ENABLED }),
   },
   desktopCard: {

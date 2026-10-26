@@ -1,6 +1,7 @@
+import type { PluginMessage } from "@getpaseo/plugin/client";
+import { isPluginMessage } from "@getpaseo/plugin/client/host";
 import { useMemo } from "react";
 import { z } from "zod";
-import type { PluginThemeContribution } from "@getpaseo/plugin";
 import { useBuiltInThemeNames } from "@/appearance/theme-labels";
 import { useHostFeatureMap } from "@/runtime/host-features";
 import {
@@ -17,7 +18,7 @@ import {
   rememberPluginContributionHost,
 } from "../contribution-host";
 import { useInstalledPlugins } from "../registry";
-import type { InstalledPlugin } from "../types";
+import type { InstalledPlugin, PluginThemeContribution } from "../types";
 
 const hexColorSchema = z
   .string()
@@ -25,7 +26,7 @@ const hexColorSchema = z
 
 const contributionSchema: z.ZodType<PluginThemeContribution> = z.strictObject({
   id: z.string(),
-  name: z.string().trim().min(1).max(60),
+  name: z.union([z.string().trim().min(1).max(60), z.custom<PluginMessage>(isPluginMessage)]),
   appearance: z.enum(["light", "dark"]),
   colors: z.strictObject({
     background: hexColorSchema,
@@ -56,10 +57,13 @@ interface PluginThemeTarget {
   serverId: string;
   pluginId: string;
   contribution: PluginThemeContribution;
+  plugin: InstalledPlugin;
 }
 
 interface ResolvedPluginTheme extends PluginThemeTarget {
   id: string;
+  /** 按插件自带翻译解析好的显示名，撞名判定看它。 */
+  name: string;
 }
 
 export function parsePluginThemeContribution(value: unknown): PluginThemeContribution {
@@ -134,10 +138,9 @@ function resolveTheme(id: string, targets: PluginThemeTarget[]): ResolvedPluginT
   const preferredHost = getPreferredPluginContributionHost(id);
   const target = targets.find((candidate) => candidate.serverId === preferredHost) ?? targets[0];
   return {
+    ...target,
     id,
-    serverId: target.serverId,
-    pluginId: target.pluginId,
-    contribution: target.contribution,
+    name: target.plugin.i18n.resolve(target.contribution.name, target.plugin.locale),
   };
 }
 
@@ -157,8 +160,7 @@ function buildCollisionIndex(
 ): NameCollisionIndex {
   const byName = new Map<string, number>();
   const byPluginAndName = new Map<string, number>();
-  for (const { pluginId, contribution } of resolved) {
-    const name = contribution.name;
+  for (const { pluginId, name } of resolved) {
     byName.set(name, (byName.get(name) ?? 0) + 1);
     const key = pluginNameKey(pluginId, name);
     byPluginAndName.set(key, (byPluginAndName.get(key) ?? 0) + 1);
@@ -168,12 +170,10 @@ function buildCollisionIndex(
 
 // 一个插件贡献两个同名主题时，插件 id 分辨不了它们，限定词退化为主题自己的 id。
 function qualifierFor(resolved: ResolvedPluginTheme, index: NameCollisionIndex): string | null {
-  const { pluginId, contribution } = resolved;
-  const collides =
-    index.builtInThemeNames.has(contribution.name) ||
-    (index.byName.get(contribution.name) ?? 0) > 1;
+  const { pluginId, contribution, name } = resolved;
+  const collides = index.builtInThemeNames.has(name) || (index.byName.get(name) ?? 0) > 1;
   if (!collides) return null;
-  return (index.byPluginAndName.get(pluginNameKey(pluginId, contribution.name)) ?? 0) > 1
+  return (index.byPluginAndName.get(pluginNameKey(pluginId, name)) ?? 0) > 1
     ? contribution.id
     : pluginId;
 }
@@ -192,7 +192,7 @@ export function collectPluginThemes(
     if (!supportedHosts.has(plugin.serverId)) continue;
     for (const contribution of plugin.themes) {
       const id = `${plugin.id}/theme/${contribution.id}`;
-      const target = { serverId: plugin.serverId, pluginId: plugin.id, contribution };
+      const target = { serverId: plugin.serverId, pluginId: plugin.id, contribution, plugin };
       const targets = targetsById.get(id);
       if (targets) targets.push(target);
       else targetsById.set(id, [target]);
@@ -207,7 +207,7 @@ export function collectPluginThemes(
     return {
       id: entry.id,
       serverId,
-      name: contribution.name,
+      name: entry.name,
       qualifier: qualifierFor(entry, index),
       swatch: contribution.colors.background,
       theme: buildPluginTheme(contribution),

@@ -52,7 +52,6 @@ export function useWorkingDiff({
     status?.error?.message ??
     (isStatusError && statusError instanceof Error ? statusError.message : null);
   const baseRef = gitStatus?.baseRef ?? undefined;
-  const hasUncommittedChanges = Boolean(gitStatus?.isDirty);
   const currentBranchName =
     gitStatus?.currentBranch && gitStatus.currentBranch !== "HEAD" ? gitStatus.currentBranch : null;
 
@@ -60,9 +59,9 @@ export function useWorkingDiff({
     serverId,
     workspaceId,
     cwd,
-    isDirty: hasUncommittedChanges,
   });
   const selectUncommitted = useCallback(() => selectComparison("uncommitted"), [selectComparison]);
+  const selectAll = useCallback(() => selectComparison("all"), [selectComparison]);
   const selectBase = useCallback(() => selectComparison("base"), [selectComparison]);
 
   const reviewDraftKey = useMemo(
@@ -126,6 +125,7 @@ export function useWorkingDiff({
     diffMode,
     selectUncommitted,
     selectBase,
+    selectAll,
     files,
     diffPayloadError,
     diffTooLarge,

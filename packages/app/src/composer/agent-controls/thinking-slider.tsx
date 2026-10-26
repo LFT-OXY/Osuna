@@ -396,7 +396,7 @@ const motionStyles = RNStyleSheet.create({
     overflow: "hidden",
   },
   fillContent: {
-    ...RNStyleSheet.absoluteFillObject,
+    ...RNStyleSheet.absoluteFill,
   },
   particle: {
     position: "absolute",

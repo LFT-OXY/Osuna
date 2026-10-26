@@ -31,7 +31,6 @@ export const AgentTracks = memo(function AgentTracks({
   serverId,
   workspaceId,
   agentId,
-  cwd,
   subagentRows,
   tasks,
   archiveFinishedStatus,
@@ -41,7 +40,6 @@ export const AgentTracks = memo(function AgentTracks({
   serverId: string;
   workspaceId: string;
   agentId: string;
-  cwd: string;
   subagentRows: SubagentRow[];
   tasks: TodoEntry[] | undefined;
   archiveFinishedStatus: ArchiveFinishedStatus;
@@ -55,8 +53,8 @@ export const AgentTracks = memo(function AgentTracks({
   const canDetachSubagents = useSessionStore(
     (state) => state.sessions[serverId]?.serverInfo?.features?.agentDetach === true,
   );
-  const archiveSubagent = useArchiveSubagent({ serverId });
-  const detachSubagent = useDetachSubagent({ serverId });
+  const archiveSubagent = useArchiveSubagent();
+  const detachSubagent = useDetachSubagent();
   const { openSubagent, openProviderSubagent } = useOpenSubagent({ serverId, workspaceId });
   const opensInSheet = useSubagentOpensInSheet(workspaceKey);
   const handleOpenChanges = useCallback(() => {
@@ -66,10 +64,9 @@ export const AgentTracks = memo(function AgentTracks({
     openComposerChanges({
       isCompact,
       workspaceKey,
-      checkout: { serverId, cwd, isGit: true },
       preferences: openInSidePane,
     });
-  }, [cwd, isCompact, openInSidePane, serverId, workspaceKey]);
+  }, [isCompact, openInSidePane, workspaceKey]);
 
   if (
     !hasWorkspaceDiffStat &&

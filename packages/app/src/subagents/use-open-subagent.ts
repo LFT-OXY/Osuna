@@ -1,3 +1,4 @@
+import type { AgentAddress } from "@getpaseo/protocol/addresses";
 import { useCallback } from "react";
 import { useSettings } from "@/hooks/use-settings";
 import { usePaneContext } from "@/panels/pane-context";
@@ -7,13 +8,13 @@ import { buildWorkspaceTabPersistenceKey, type WorkspaceTabTarget } from "@/work
 import { openPreferredWorkspaceTarget } from "@/workspace-tabs/open-beside";
 
 export interface OpenSubagentHandlers {
-  openSubagent: (subagentId: string) => void;
+  openSubagent: (address: AgentAddress) => void;
   openProviderSubagent: (parentAgentId: string, subagentId: string) => void;
 }
 
 /**
  * 打开子智能体：Subagents track 与时间线派发组共用。按"在侧栏打开"偏好放进本工作区的标签
- * （手机上由布局决定开成 sheet）；别的工作区里的子智能体导航过去。
+ * （手机上由布局决定开成 sheet）；别的主机或别的工作区里的子智能体导航过去。
  */
 export function useOpenSubagent({
   serverId,
@@ -38,12 +39,15 @@ export function useOpenSubagent({
     [openInSidePane, tabId, workspaceKey],
   );
   const openSubagent = useCallback(
-    (subagentId: string) => {
-      const session = useSessionStore.getState().sessions[serverId];
+    ({ serverId: targetServerId, agentId: subagentId }: AgentAddress) => {
+      const session = useSessionStore.getState().sessions[targetServerId];
       const agent = session?.agents.get(subagentId) ?? session?.agentDetails.get(subagentId);
-      // A subagent in another workspace lives in that workspace's tabs.
-      if (agent?.workspaceId && agent.workspaceId !== workspaceId) {
-        navigateToAgent({ serverId, agentId: subagentId });
+      // A subagent on another host or in another workspace lives in that workspace's tabs.
+      if (
+        targetServerId !== serverId ||
+        (agent?.workspaceId && agent.workspaceId !== workspaceId)
+      ) {
+        navigateToAgent({ serverId: targetServerId, agentId: subagentId });
         return;
       }
       openSubagentTarget({ kind: "agent", agentId: subagentId });

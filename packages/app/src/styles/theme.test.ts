@@ -1,3 +1,4 @@
+import { PluginTranslationRuntime } from "@getpaseo/plugin/client/host";
 import { QueryClient } from "@tanstack/react-query";
 import type { PluginThemeContribution } from "@getpaseo/plugin";
 import { describe, expect, it } from "vitest";
@@ -424,6 +425,9 @@ function buildPluginSamples(): CatalogEntry[] {
     id: "sample",
     cleanup: () => undefined,
     serverId: "host",
+    locale: "en",
+    i18n: new PluginTranslationRuntime({ getLocale: () => "en", subscribe: () => () => {} }),
+    filePanels: [],
     clientBundle: "host",
     lifetime: new AbortController(),
     queryClient: new QueryClient(),

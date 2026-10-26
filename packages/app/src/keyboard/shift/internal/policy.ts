@@ -30,13 +30,6 @@ export function resolveStreamKeyboardInset(input: {
   };
 }
 
-export function shouldUseCompactExplorerKeyboardPadding(input: {
-  isGit: boolean;
-  explorerTab: "changes" | "files" | "pr" | "sessions";
-}): boolean {
-  return !input.isGit || input.explorerTab !== "changes";
-}
-
 export function resolveKeyboardShift(input: {
   rawKeyboardHeight: number;
   keyboardProgress: number;

@@ -36,7 +36,7 @@ type CheckoutDiffPushPayload = Omit<CheckoutDiffResponsePayload, "requestId"> & 
 type ListTerminalsPayload = ListTerminalsResponse["payload"];
 
 interface CheckoutDiffCompare {
-  mode: "uncommitted" | "base";
+  mode: "uncommitted" | "base" | "all";
   baseRef?: string;
   ignoreWhitespace?: boolean;
   filesOnly?: boolean;
@@ -700,7 +700,7 @@ function readCheckoutDiffCompare(value: unknown): CheckoutDiffCompare | null {
   const baseRef = value.baseRef;
   const ignoreWhitespace = value.ignoreWhitespace;
   const filesOnly = value.filesOnly;
-  if (mode !== "uncommitted" && mode !== "base") {
+  if (mode !== "uncommitted" && mode !== "base" && mode !== "all") {
     return null;
   }
   if (baseRef !== undefined && typeof baseRef !== "string") {

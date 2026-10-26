@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useMemo } from "react";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -5,7 +6,6 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { settingsStyles } from "@/styles/settings";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
-import { usageCopy } from "./copy";
 import type { UsageDisplay } from "./display";
 import { UsageControls } from "./controls";
 import { UsageList } from "./list";
@@ -54,19 +54,25 @@ export function UsageBody({
   /** Osuna：要跳去别的页面时先调用，弹窗借它先关掉。 */
   onLeave?: () => void;
 }) {
+  const { t } = useTranslation();
   if (view.kind === "unavailable") {
     return <UsageMessage text={view.message} />;
   }
 
   if (view.kind === "loading") {
-    return <UsageMessage text={usageCopy.loading} />;
+    return <UsageMessage text={t("providerUsage.loading")} />;
   }
 
   if (view.kind === "error") {
     return (
-      <Alert size="sm" variant="error" title={usageCopy.errorTitle} description={view.message}>
+      <Alert
+        size="sm"
+        variant="error"
+        title={t("providerUsage.errorTitle")}
+        description={view.message}
+      >
         <Button variant="outline" size="sm" onPress={onRefresh}>
-          {usageCopy.retry}
+          {t("providerUsage.retry")}
         </Button>
       </Alert>
     );
@@ -77,7 +83,7 @@ export function UsageBody({
   }
 
   if (view.reports.length === 0) {
-    return <UsageMessage text={usageCopy.empty} />;
+    return <UsageMessage text={t("providerUsage.empty")} />;
   }
 
   return <UsageList serverId={serverId} reports={view.reports} display={display} />;

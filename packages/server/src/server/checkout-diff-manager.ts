@@ -181,15 +181,15 @@ export class CheckoutDiffManager {
     }
     const trimmedBaseRef = compare.baseRef?.trim();
     return trimmedBaseRef
-      ? { mode: "base", baseRef: trimmedBaseRef, ignoreWhitespace, ...filesOnly }
-      : { mode: "base", ignoreWhitespace, ...filesOnly };
+      ? { mode: compare.mode, baseRef: trimmedBaseRef, ignoreWhitespace, ...filesOnly }
+      : { mode: compare.mode, ignoreWhitespace, ...filesOnly };
   }
 
   private buildTargetKey(cwd: string, compare: CheckoutDiffCompareInput): string {
     return JSON.stringify([
       cwd,
       compare.mode,
-      compare.mode === "base" ? (compare.baseRef ?? "") : "",
+      compare.mode !== "uncommitted" ? (compare.baseRef ?? "") : "",
       compare.ignoreWhitespace === true,
       compare.filesOnly === true,
     ]);
@@ -464,7 +464,7 @@ export class CheckoutDiffManager {
   }
 
   private async openTarget(target: CheckoutDiffWatchTarget): Promise<void> {
-    if (target.compare.mode === "base") {
+    if (target.compare.mode !== "uncommitted") {
       const snapshot =
         this.workspaceGitService.peekSnapshot(target.cwd) ??
         (await this.workspaceGitService.getSnapshot(target.cwd, { includeForge: false }));
@@ -482,7 +482,7 @@ export class CheckoutDiffManager {
         return;
       }
       target.workspaceGitUnsubscribe = workspaceSubscription.unsubscribe;
-      return;
+      if (target.compare.mode === "base") return;
     }
 
     const { repoRoot, unsubscribe } = await this.workspaceGitService.requestWorkingTreeWatch(
