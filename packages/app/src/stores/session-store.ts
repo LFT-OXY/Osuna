@@ -153,7 +153,7 @@ export function normalizeWorkspaceDescriptor(
     // usable directory" (older daemons may omit it; the wire field is optional).
     workspaceDirectory: normalizeWorkspacePath(payload.workspaceDirectory) ?? "",
     worktreeSlug: payload.worktreeSlug,
-    // COMPAT(workspaceSetupObservation): added in v0.12.0, old hosts omit metadata; remove after 2027-04-19.
+    // COMPAT(workspaceSetupObservation): added in v0.18.0, old hosts omit metadata; remove after 2027-04-19.
     setupStatus: payload.setupStatus ?? null,
     projectKind: payload.projectKind,
     workspaceKind: payload.workspaceKind,

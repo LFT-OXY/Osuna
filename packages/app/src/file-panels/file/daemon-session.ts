@@ -11,7 +11,7 @@ import type { FileKind, FileObservation, FileSession } from "./handle";
 export interface DaemonFileFeatures {
   // COMPAT(workspaceFileEditing): added in v0.2.0, remove after 2027-01-18 once daemon floor >= v0.2.0.
   workspaceFileEditing: boolean;
-  // COMPAT(fileByteWrites): added in v0.13.0, remove gate after 2027-04-20.
+  // COMPAT(fileByteWrites): added in v0.18.0, remove gate after 2027-04-20.
   fileByteWrites: boolean;
 }
 
@@ -35,7 +35,7 @@ export function createDaemonFileSession(
         if (version.kind && version.mimeType) {
           kind = { kind: version.kind, mimeType: version.mimeType };
         }
-        // COMPAT(fileVersionKind): added in v0.13.0, remove after 2027-04-20. Older daemons
+        // COMPAT(fileVersionKind): added in v0.18.0, remove after 2027-04-20. Older daemons
         // classify a file only when reading it; the first read's kind stands for later versions.
         if (!kind) return { ...version, status: "error", error: "The file has no kind." };
         return { ...version, ...kind };

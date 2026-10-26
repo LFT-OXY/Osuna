@@ -260,7 +260,7 @@ export function buildWorktreeSetupDetail(input: {
     type: "worktree_setup",
     worktreePath: input.worktree.worktreePath,
     branchName: input.worktree.branchName,
-    // COMPAT(workspaceSetupCombinedLog): added in v0.12.0, remove after 2027-04-20 once legacy wire schemas no longer require log.
+    // COMPAT(workspaceSetupCombinedLog): added in v0.18.0, remove after 2027-04-20 once legacy wire schemas no longer require log.
     // Setup clients render commands[].log; retain the required wire field without duplicating output.
     log: "",
     commands,

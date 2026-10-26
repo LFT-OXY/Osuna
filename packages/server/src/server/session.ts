@@ -8843,7 +8843,7 @@ export class Session {
    */
   // COMPAT(explicitEventSubscriptions): added in v0.8.0, remove legacy broadcasts after 2027-03-08.
   private wantsEvent(event: SessionEventSubscription, source?: object): boolean {
-    // COMPAT(workspaceSetupObservation): added in v0.12.0, remove global setup delivery after 2027-04-19 once client floor >= v0.12.0.
+    // COMPAT(workspaceSetupObservation): added in v0.18.0, remove global setup delivery after 2027-04-19 once client floor >= v0.12.0.
     if (
       event === "workspace_setup_progress" &&
       source &&

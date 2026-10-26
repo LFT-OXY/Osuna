@@ -130,7 +130,7 @@ export interface SettingsActionProps extends SettingsRowProps {
   onPress(): void;
   disabled?: boolean;
 }
-// COMPAT(pluginSettingsGroup): added in v0.13.0, remove after 2027-04-20
+// COMPAT(pluginSettingsGroup): added in v0.18.0, remove after 2027-04-20
 /** @deprecated Use SettingsSection for plugin settings headings. */
 export declare const SettingsGroup: ComponentType<SettingsSectionProps>;
 export declare const SettingsSection: ComponentType<SettingsSectionProps>;

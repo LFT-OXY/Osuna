@@ -146,7 +146,7 @@ export function useCheckoutDiffQuery({
   filesOnly = false,
   onFiles,
 }: UseCheckoutDiffQueryOptions) {
-  // COMPAT(checkoutDiffAll): added in v0.12.0, remove after 2027-04-21 once host floor includes All changes.
+  // COMPAT(checkoutDiffAll): added in v0.18.0, remove after 2027-04-21 once host floor includes All changes.
   const allSupported = useSessionStore(
     (state) => state.sessions[serverId]?.serverInfo?.features?.checkoutDiffAll === true,
   );

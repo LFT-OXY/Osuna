@@ -16,7 +16,7 @@ export { DocumentFrame } from "@/file-panels/document-frame";
 
 export { FilePanelLoading as Loading } from "@/file-panels/loading";
 
-// COMPAT(pluginSettingsGroup): added in v0.13.0, remove after 2027-04-20
+// COMPAT(pluginSettingsGroup): added in v0.18.0, remove after 2027-04-20
 export { SettingsGroup } from "@/components/settings";
 
 export { Icon } from "../icons";

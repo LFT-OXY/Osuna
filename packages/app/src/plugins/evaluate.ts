@@ -491,7 +491,7 @@ export function runPluginClientBundle(
     },
   };
   const runtimeRequire = (name: string): unknown => {
-    // COMPAT(pluginReactNativeEntrypoint): added in v0.13.0, remove after 2027-04-20
+    // COMPAT(pluginReactNativeEntrypoint): added in v0.18.0, remove after 2027-04-20
     if (name === "@getpaseo/plugin/client/react-native") return pluginUiRuntime;
     if (name === "@getpaseo/plugin/client/ui") return pluginUiRuntime;
     if (name === "react") return React;

@@ -3245,7 +3245,7 @@ export const FileWriteRequestSchema = z.object({
   cwd: z.string(),
   path: z.string(),
   content: z.string(),
-  // COMPAT(fileByteWrites): added in v0.13.0. Daemons without the feature write `content` as text.
+  // COMPAT(fileByteWrites): added in v0.18.0. Daemons without the feature write `content` as text.
   contentEncoding: z.enum(["utf-8", "base64"]).optional(),
   expectedModifiedAt: z.string(),
   expectedRevision: z.string().optional(),
@@ -4228,7 +4228,7 @@ export const ServerInfoStatusPayloadSchema = z
         workspaceRecovery: z.boolean().optional(),
         // COMPAT(workspaceFileEditing): added in v0.2.0, remove after 2027-01-18 once daemon floor >= v0.2.0.
         workspaceFileEditing: z.boolean().optional(),
-        // COMPAT(fileByteWrites): added in v0.13.0, remove gate after 2027-04-20.
+        // COMPAT(fileByteWrites): added in v0.18.0, remove gate after 2027-04-20.
         fileByteWrites: z.boolean().optional(),
         // COMPAT(providerUsageList): added in v0.1.98, drop the gate when daemon floor >= v0.1.98.
         providerUsageList: z.boolean().optional(),
@@ -4682,7 +4682,7 @@ export const WorkspaceDescriptorPayloadSchema = z
     projectCustomIconRevision: z.string().nullable().optional(),
     projectRootPath: z.string(),
     workspaceDirectory: z.string().optional(),
-    // COMPAT(workspaceSetupObservation): added in v0.12.0, remove optional after 2027-04-19.
+    // COMPAT(workspaceSetupObservation): added in v0.18.0, remove optional after 2027-04-19.
     setupStatus: z.enum(["running", "completed", "failed", "blocked"]).nullable().optional(),
     // COMPAT(worktreeSlug): added in v0.2.6, remove optional after 2027-01-31.
     // Present only for Paseo-owned worktrees; this is the basename of their root directory.

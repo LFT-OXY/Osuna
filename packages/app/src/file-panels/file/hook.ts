@@ -16,7 +16,7 @@ export function useFileHandle(input: {
   const workspaceFileEditing = useSessionStore(
     (state) => state.sessions[serverId]?.serverInfo?.features?.workspaceFileEditing === true,
   );
-  // COMPAT(fileByteWrites): added in v0.13.0, remove gate after 2027-04-20.
+  // COMPAT(fileByteWrites): added in v0.18.0, remove gate after 2027-04-20.
   const fileByteWrites = useSessionStore(
     (state) => state.sessions[serverId]?.serverInfo?.features?.fileByteWrites === true,
   );
