@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync } from "node:fs";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import type { Locator } from "@playwright/test";
 import { expect, test, type Page } from "../support/fixtures";
 import { gotoAppShell, openSettings } from "../support/helpers/app";
 import { setReadCliSignInsOnDaemon } from "../support/helpers/host-privacy";
@@ -101,6 +102,18 @@ function limitsPart(page: Page, testId: string) {
   return page.getByTestId(testId).filter({ visible: true });
 }
 
+/** 选项在窗口里，而且没被弹层裁掉：列表不靠滚动就全部露出来。 */
+async function expectWholeMenuInView(page: Page, lastOption: Locator): Promise<void> {
+  await expect(page.getByTestId("provider-accounts-keep-none")).toBeInViewport({ ratio: 1 });
+  await expect(lastOption).toBeInViewport({ ratio: 1 });
+  const menu = page.getByTestId("combobox-desktop-container");
+  await expect
+    .poll(() => menu.evaluate((element) => element.scrollHeight - element.clientHeight))
+    .toBeLessThanOrEqual(1);
+  const [menuBox, optionBox] = await Promise.all([menu.boundingBox(), lastOption.boundingBox()]);
+  expect(optionBox!.y + optionBox!.height).toBeLessThanOrEqual(menuBox!.y + menuBox!.height);
+}
+
 let ids: { cli: string; second: string };
 
 test.describe("Codex automatic account rotation", () => {
@@ -187,8 +200,12 @@ test.describe("Codex automatic account rotation", () => {
     await openCodexPage(page);
     const trigger = accountsSection(page).getByTestId("provider-accounts-keep-trigger");
     await expect(trigger).toHaveText("Don't keep");
+    // 选择框贴着窗口底边时，选项要往上开、整块留在窗口里。
+    await trigger.evaluate((element) => element.scrollIntoView({ block: "end" }));
     await trigger.click();
-    await page.getByTestId(`provider-accounts-keep-${ids.second}`).click();
+    const keepSecond = page.getByTestId(`provider-accounts-keep-${ids.second}`);
+    await expectWholeMenuInView(page, keepSecond);
+    await keepSecond.click();
     await expect(trigger).toHaveText("second@example.com");
     await expect.poll(cliAccountId).toBe("acct-second");
     await expect(accountRow(page, ids.second)).toContainText("In use");
@@ -196,6 +213,7 @@ test.describe("Codex automatic account rotation", () => {
     await expect(switches).toContainText("You chose Keep signed in to second@example.com");
 
     await trigger.click();
+    await expectWholeMenuInView(page, page.getByTestId(`provider-accounts-keep-${ids.second}`));
     await page.getByTestId("provider-accounts-keep-none").click();
     await expect(trigger).toHaveText("Don't keep");
     await expect.poll(async () => (await daemonState()).settings.keepSignedInTo).toBeNull();

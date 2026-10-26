@@ -3,7 +3,7 @@
   "name": "multi-account-rotation",
   "title": "Codex 与 Claude Code 多号自动轮换",
   "description": "照 magpie 两层做 Codex、Claude Code 的多订阅号自动轮换：换登录，Codex 另加经过内置中转站换号；打开时提示一次封号风险",
-  "status": "implement",
+  "status": "accept",
   "dev_type": null,
   "scope": null,
   "package": "server",

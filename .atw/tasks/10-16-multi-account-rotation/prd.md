@@ -426,7 +426,7 @@ Codex、Claude Code 的提供方设置页各多一节「账号」（**Account**�
 
 - [x] User Stories 1–75 在 Codex 与 Claude Code 上各自成立；只属于一家的条目只在那一家成立。（第 73 条：用量窗口名与认不出的错误原因沿用上游英文原文，用户 2026-10-26 认可）
 - [x] 接缝一列出的 daemon 端到端场景都有测试并通过；测试不读写真实登录、不运行真的 CLI。
-- [ ] 每个会失败的界面操作，浏览器测试都覆盖成功与失败。
+- [x] 每个会失败的界面操作，浏览器测试都覆盖成功与失败。
 - [x] UI and Design 的截图验收项逐条有截图证据（宽 1280 与 390）。
 - [x] 新 ADR（ADR 0015）已写：推翻 ADR 0004 的 `auth.json` 规则，记下三处身份例外及被否决的做法；ADR 0004、0010 标出被它取代的条目；总任务的「身份」验收项已加注。
 - [x] `docs/usage.md` 的「Outbound requests」写全新增的每一类请求；`docs/glossary.md`、`docs/data-model.md`、`THIRD_PARTY_NOTICES` 已更新。
