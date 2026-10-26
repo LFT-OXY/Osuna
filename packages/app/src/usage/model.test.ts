@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { i18n } from "@/i18n/i18next";
 import {
+  resolveUsageReport,
   displayPercent,
   formatUsageFreshness,
   planUsageAccountNames,
@@ -421,4 +422,73 @@ describe("planUsageAccountNames", () => {
       await i18n.changeLanguage("en");
     }
   });
+});
+
+it("resolves retained usage and successful time without inventing old-daemon history", () => {
+  const success = entry({ windows: [{ id: "weekly", label: "Weekly", usedPct: 42 }] });
+  const failure: UsageReportEntry = {
+    ...success,
+    fetchedAt: "2026-01-01T00:06:00.000Z",
+    report: { status: "error", error: "Rate limited" },
+    lastSuccessful: {
+      fetchedAt: success.fetchedAt,
+      report: success.report as Extract<UsageReportEntry["report"], { status: "available" }>,
+    },
+  };
+  expect(resolveUsageReport(failure)).toEqual({
+    windows: success.report.status === "available" ? success.report.windows : [],
+    balances: [],
+    details: [],
+    planLabel: null,
+    successfulAt: success.fetchedAt,
+    retained: true,
+    messages: ["Rate limited"],
+  });
+  expect(resolveUsageReport({ ...failure, lastSuccessful: undefined })).toEqual({
+    windows: [],
+    balances: [],
+    details: [],
+    planLabel: null,
+    successfulAt: null,
+    retained: false,
+    messages: ["Rate limited"],
+  });
+  expect(resolveUsageReport(success)).toEqual({
+    windows: success.report.status === "available" ? success.report.windows : [],
+    balances: [],
+    details: [],
+    planLabel: null,
+    successfulAt: success.fetchedAt,
+    retained: false,
+    messages: [],
+  });
+});
+
+it("orders failed polls by attempt time even when successful data is older", () => {
+  const success = entry({});
+  if (success.report.status !== "available") throw new Error("fixture must be available");
+  const failure: UsageReportEntry = {
+    ...success,
+    fetchedAt: "2026-01-01T00:06:00.000Z",
+    report: { status: "error", error: "Rate limited" },
+    lastSuccessful: { fetchedAt: success.fetchedAt, report: success.report },
+  };
+  expect(upsertReport([failure], success)).toEqual([failure]);
+  expect(settleReports([failure], [success])).toEqual([failure]);
+  expect(upsertReport([success], failure)).toEqual([failure]);
+});
+
+it("available and retained usage show the same successful completion time", () => {
+  const success: UsageReportEntry = { ...entry({}), successfulAt: "2026-01-01T00:00:15.000Z" };
+  if (success.report.status !== "available") throw new Error("fixture must be available");
+  expect(resolveUsageReport(success).successfulAt).toBe("2026-01-01T00:00:15.000Z");
+  const failure: UsageReportEntry = {
+    ...success,
+    successfulAt: undefined,
+    fetchedAt: "2026-01-01T00:06:00.000Z",
+    report: { status: "error", error: "Rate limited" },
+    lastSuccessful: { fetchedAt: success.successfulAt!, report: success.report },
+  };
+  expect(resolveUsageReport(failure).successfulAt).toBe(resolveUsageReport(success).successfulAt);
+  expect(upsertReport([failure], success)).toEqual([failure]);
 });

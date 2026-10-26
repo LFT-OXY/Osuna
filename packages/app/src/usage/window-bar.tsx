@@ -30,7 +30,9 @@ export function UsageWindowBar({
   pace,
   limit,
   layout = "inline",
+  retained = false,
 }: {
+  retained?: boolean;
   window: UsageWindow;
   /** Osuna：用户给这个窗口设的上限，条上画出位置，数字后写出 label（如「上限 70%」）。 */
   limit?: { pct: number; label: string };
@@ -55,13 +57,14 @@ export function UsageWindowBar({
   const shownPct = displayPercent(window, displayAs);
   const tone = windowTone(window);
 
-  // Osuna：文案走翻译键，不能再从「resets 2h」里截字。用完时间已过时退回显示重置时间。
+  // Osuna：文案走翻译键，不能再从「resets 2h」里截字。用完时间已过时退回显示重置时间
+  // （上游只对保留下来的旧读数这样做；Osuna 一直如此）。
   const runsOut =
     window.runsOutAt != null && window.shortfallPct != null
       ? formatRunsOutLabel(window.runsOutAt)
       : null;
   const isAtRisk = runsOut != null;
-  const trailing = runsOut ?? formatResetLabel(window.resetsAt);
+  const trailing = runsOut ?? formatResetLabel(window.resetsAt, retained);
 
   const percent = shownPct != null ? formatDisplayPct(shownPct, displayAs) : "—";
   const counted = count ? `${count} · ${percent}` : percent;

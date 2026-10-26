@@ -16,7 +16,7 @@ import { useAgentInputDraft } from "@/composer/draft/input-draft";
 import type { CreateAgentInitialValues } from "@/hooks/use-agent-form-state";
 import { useDraftAgentCreateFlow, type DraftCreateAttempt } from "@/composer/draft/create-flow";
 import { resolveTurnPresentation, TURN_LIVENESS_IDLE } from "@/timeline/turn-liveness";
-import { useHostRuntimeClient } from "@/runtime/host-runtime";
+import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { buildWorkspaceDraftAgentConfig } from "@/screens/workspace/workspace-draft-agent-config";
 import { buildDraftStoreKey } from "@/stores/draft-keys";
 import { useCreateFlowStore } from "@/stores/create-flow-store";
@@ -315,6 +315,7 @@ export function WorkspaceDraftAgentTab({
   const client = useHostRuntimeClient(serverId);
   // 与 Composer 里逻辑图开关用的键一致：草稿 Composer 的 agentId 就是 tabId。
   const logicMapDraftKey = buildDraftLogicMapKey({ serverId, draftTabId: tabId });
+  const isConnected = useHostRuntimeIsConnected(serverId);
   const workspaceFields = useWorkspaceFields(serverId, workspaceId, (w) => ({
     workspaceDirectory: w.workspaceDirectory,
     id: w.id,
@@ -455,7 +456,7 @@ export function WorkspaceDraftAgentTab({
         composerState,
         autoSubmitConfig,
         workspaceDirectory: draftWorkingDirectory,
-        hasClient: Boolean(client),
+        isConnected,
       });
     },
     onBeforeSubmit: async () => {

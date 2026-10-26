@@ -64,6 +64,11 @@ export const usageCopy = {
   },
   ago: agoProse,
   updated: (ago: string): string => i18n.t(key("updated"), { ago }),
+  /** 这次刷新失败、卡片留着上次成功的读数时说的更新时间。 */
+  lastUpdated: (ago: string): string => i18n.t(key("lastUpdated"), { ago }),
+  get noSuccessfulUpdate(): string {
+    return i18n.t(key("noSuccessfulUpdate"));
+  },
   get loading(): string {
     return i18n.t(key("loading"));
   },
@@ -114,6 +119,9 @@ export const usageCopy = {
   resets: (duration: string): string => i18n.t(key("resets"), { duration }),
   get resettingNow(): string {
     return i18n.t(key("resettingNow"));
+  },
+  get resetTimePassed(): string {
+    return i18n.t(key("resetTimePassed"));
   },
   runsOut: (duration: string): string => i18n.t(key("runsOut"), { duration }),
   balanceLeft: (amount: string): string => i18n.t(key("balanceLeft"), { amount }),

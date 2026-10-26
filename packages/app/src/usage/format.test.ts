@@ -66,3 +66,10 @@ describe("window timing labels", () => {
     }
   });
 });
+
+it("retained reset times that have passed do not claim the quota is resetting", () => {
+  const past = "2000-01-01T00:00:00.000Z";
+  expect(formatResetLabel(past, true)).toBe("Reset time passed");
+  expect(formatResetLabel(past)).toBe("resetting now");
+  expect(formatResetLabel(null, true)).toBeNull();
+});

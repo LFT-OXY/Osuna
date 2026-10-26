@@ -6961,22 +6961,23 @@ export const UsageProblemSchema = z.discriminatedUnion("kind", [
   }),
   z.object({ kind: z.literal("no_quota"), detail: z.string() }),
 ]);
+const AvailableUsageReportSchema = z.object({
+  status: z.literal("available"),
+  planLabel: z.string().optional(),
+  windows: z.array(ProviderUsageWindowSchema),
+  balances: z.array(ProviderUsageBalanceSchema).optional(),
+  details: z.array(ProviderUsageDetailSchema).optional(),
+  // 账号还有几次重置（Codex 的 ChatGPT 账号），形状同接口读数的 resets；老 daemon 与没有重置的来源不发。
+  resets: ApiEndpointBalanceResetsSchema.optional(),
+  // Codex 应用不让这个号发送（额度用完且没有 credits，照 magpie 的 codexHeld）；多号自动轮换据此换走。
+  // 老 daemon 与别的来源不发。
+  held: z.boolean().optional(),
+  // 这个号窗口用完后改花 credits（Codex 的 has_credits 或 unlimited）；多号自动轮换的第二层据此再问一次。
+  // 老 daemon 与别的来源不发。
+  onCredits: z.boolean().optional(),
+});
 export const UsageReportSchema = z.discriminatedUnion("status", [
-  z.object({
-    status: z.literal("available"),
-    planLabel: z.string().optional(),
-    windows: z.array(ProviderUsageWindowSchema),
-    balances: z.array(ProviderUsageBalanceSchema).optional(),
-    details: z.array(ProviderUsageDetailSchema).optional(),
-    // 账号还有几次重置（Codex 的 ChatGPT 账号），形状同接口读数的 resets；老 daemon 与没有重置的来源不发。
-    resets: ApiEndpointBalanceResetsSchema.optional(),
-    // Codex 应用不让这个号发送（额度用完且没有 credits，照 magpie 的 codexHeld）；多号自动轮换据此换走。
-    // 老 daemon 与别的来源不发。
-    held: z.boolean().optional(),
-    // 这个号窗口用完后改花 credits（Codex 的 has_credits 或 unlimited）；多号自动轮换的第二层据此再问一次。
-    // 老 daemon 与别的来源不发。
-    onCredits: z.boolean().optional(),
-  }),
+  AvailableUsageReportSchema,
   z.object({ status: z.literal("unavailable"), problem: UsageProblemSchema }),
   z.object({ status: z.literal("error"), error: z.string() }),
 ]);
@@ -6990,6 +6991,11 @@ export const UsageReportEntrySchema = z.object({
   // 来源能从这里用掉一次重置（usage.reset.consume）；老 daemon 与不能用的来源不发。
   consumesResets: z.boolean().optional(),
   report: UsageReportSchema,
+  // Successful completion time; fetchedAt remains the attempt timestamp for ordering.
+  successfulAt: z.string().optional(),
+  lastSuccessful: z
+    .object({ fetchedAt: z.string(), report: AvailableUsageReportSchema })
+    .optional(),
   loginErrors: z
     .array(
       z.object({

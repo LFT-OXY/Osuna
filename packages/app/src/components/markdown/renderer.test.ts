@@ -307,7 +307,7 @@ describe("shared Markdown theme colours", () => {
     ["dark", darkTheme],
     ["light", lightTheme],
   ] as const)("uses %s theme colours for tables and task labels", (_name, theme) => {
-    const { markdownStyle: style } = createMarkdownStyles(theme);
+    const { markdownStyle: style } = createMarkdownStyles(theme, { blockGap: 16 });
     expect(style.table).toMatchObject({
       color: theme.colors.foreground,
       headerTextColor: theme.colors.foreground,
@@ -337,7 +337,7 @@ it.each([
 ] as const)(
   "uses %s theme colours for quotes, admonitions, code, links and dividers",
   (_name, theme) => {
-    const { markdownStyle: style } = createMarkdownStyles(theme);
+    const { markdownStyle: style } = createMarkdownStyles(theme, { blockGap: 16 });
     expect(style.blockquote).toMatchObject({
       color: `${theme.colors.foreground}cc`,
       backgroundColor: theme.colors.surface1,
@@ -365,7 +365,7 @@ it.each([
 
 describe("Osuna Markdown typography", () => {
   it("sets prose on the content size with the ramp's prose line height, toned to 86%", () => {
-    const { markdownStyle: style } = createMarkdownStyles(darkTheme);
+    const { markdownStyle: style } = createMarkdownStyles(darkTheme, { blockGap: 16 });
     // darkTheme 的正文字号是 15；prose 一档在 14px 基础下为 14 / 22。
     expect(darkTheme.fontSize.content).toBe(15);
 
@@ -373,13 +373,13 @@ describe("Osuna Markdown typography", () => {
       color: darkTheme.colors.foregroundProse,
       fontSize: 15,
       lineHeight: 24,
-      marginBottom: darkTheme.spacing[3],
+      marginBottom: 16,
     });
     expect(style.list).toMatchObject({ fontSize: 15, lineHeight: 24 });
   });
 
   it("maps headings onto the Text ramp at the content size, full-strength", () => {
-    const { markdownStyle: style } = createMarkdownStyles(darkTheme);
+    const { markdownStyle: style } = createMarkdownStyles(darkTheme, { blockGap: 16 });
 
     expect(style.h1).toMatchObject({ fontSize: 21, lineHeight: 30 });
     expect(style.h2).toMatchObject({ fontSize: 19, lineHeight: 30 });
@@ -405,17 +405,20 @@ describe("Osuna Markdown typography", () => {
   });
 
   it("steps compact headings down the ramp", () => {
-    const { markdownStyle: style } = createMarkdownStyles(darkTheme, true);
+    const { markdownStyle: style } = createMarkdownStyles(darkTheme, {
+      compact: true,
+      blockGap: 12,
+    });
 
     expect(style.h1).toMatchObject({ fontSize: 17, lineHeight: 26 });
     expect(style.h2).toMatchObject({ fontSize: 16, lineHeight: 24 });
     expect(style.h3).toMatchObject({ fontSize: 15, lineHeight: 21 });
-    expect(style.paragraph?.marginBottom).toBe(darkTheme.spacing[2]);
+    expect(style.paragraph?.marginBottom).toBe(12);
   });
 
   it("uses the mono font-size token directly for inline and block code", () => {
     for (const compact of [false, true]) {
-      const { markdownStyle: style } = createMarkdownStyles(darkTheme, compact);
+      const { markdownStyle: style } = createMarkdownStyles(darkTheme, { compact, blockGap: 16 });
       expect(style.code).toMatchObject({
         fontFamily: darkTheme.fontFamily.mono,
         fontSize: darkTheme.fontSize.code,
@@ -432,7 +435,7 @@ describe("Osuna Markdown typography", () => {
       ...darkTheme,
       fontSize: { ...darkTheme.fontSize, content: 21 },
     };
-    const { markdownStyle: style } = createMarkdownStyles(largeContentTheme);
+    const { markdownStyle: style } = createMarkdownStyles(largeContentTheme, { blockGap: 16 });
 
     expect(style.paragraph).toMatchObject({ fontSize: 21, lineHeight: 33 });
     expect(style.h1).toMatchObject({ fontSize: 30, lineHeight: 42 });
@@ -447,17 +450,21 @@ describe("Osuna Markdown typography", () => {
       borderRadius: darkTheme.radius.lg,
     };
 
-    expect(createMarkdownStyles(darkTheme).markdownStyle.codeBlock).toMatchObject(frame);
-    expect(createCodeBlockFrameStyle(darkTheme).textStyle).toMatchObject({
+    expect(createMarkdownStyles(darkTheme, { blockGap: 16 }).markdownStyle.codeBlock).toMatchObject(
+      frame,
+    );
+    const webFrame = createCodeBlockFrameStyle(darkTheme).textStyle;
+    expect(webFrame).toMatchObject({
       ...frame,
       fontFamily: darkTheme.fontFamily.mono,
       fontSize: darkTheme.fontSize.code,
-      marginVertical: darkTheme.spacing[3],
     });
+    // 块间距由渲染库照 codeBlock 的边距包在外面，外框自己不再带边距。
+    expect(webFrame).not.toHaveProperty("marginVertical");
   });
 
   it("keeps blockquotes quiet with a square left edge", () => {
-    const { markdownStyle: style } = createMarkdownStyles(darkTheme);
+    const { markdownStyle: style } = createMarkdownStyles(darkTheme, { blockGap: 16 });
 
     expect(style.blockquote).toMatchObject({
       backgroundColor: darkTheme.colors.surface1,
@@ -470,7 +477,7 @@ describe("Osuna Markdown typography", () => {
 });
 
 it.each([darkTheme, lightTheme])("supplies the theme selection colour to the renderer", (theme) => {
-  expect(createMarkdownStyles(theme)).toHaveProperty(
+  expect(createMarkdownStyles(theme, { blockGap: 16 })).toHaveProperty(
     "selectionColor",
     theme.colors.terminal.selectionBackground,
   );
@@ -537,7 +544,7 @@ it("preserves backslashes and decodes entities inside HTML code", () => {
 it.each([false, true])(
   "caps inline images to the paragraph line height (compact: %s)",
   (compact) => {
-    const { markdownStyle } = createMarkdownStyles(darkTheme, compact);
+    const { markdownStyle } = createMarkdownStyles(darkTheme, { compact, blockGap: 16 });
     expect(markdownStyle.inlineImage?.size).toBe(markdownStyle.paragraph?.lineHeight);
   },
 );

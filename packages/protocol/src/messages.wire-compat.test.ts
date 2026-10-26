@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { z } from "zod";
 import {
+  UsageReportEntrySchema,
   AgentSnapshotPayloadSchema,
   CheckoutDiffUpdateSchema,
   AgentTimelineItemPayloadSchema,
@@ -690,4 +691,41 @@ test("a host-wide API endpoint list still parses as the single-endpoint projecti
     defaultModelId: "gpt-5",
   });
   expect(oldClient.payload.activeEndpointId).toBe("ep_1");
+});
+
+test("usage entries accept older failures and additive successful snapshots", () => {
+  const oldEntry = {
+    id: "source:account",
+    sourceId: "source",
+    sourceLabel: "Source",
+    account: {},
+    fetchedAt: "2026-10-17T10:06:00Z",
+    report: { status: "error", error: "Rate limited" },
+  };
+  expect(UsageReportEntrySchema.parse(oldEntry)).toEqual(oldEntry);
+  const retained = {
+    ...oldEntry,
+    lastSuccessful: {
+      fetchedAt: "2026-10-17T10:00:00Z",
+      report: { status: "available", windows: [{ id: "weekly", label: "Weekly", usedPct: 42 }] },
+    },
+  };
+  expect(UsageReportEntrySchema.parse(retained)).toEqual(retained);
+  const available = {
+    ...oldEntry,
+    report: retained.lastSuccessful.report,
+    successfulAt: "2026-10-17T10:00:15Z",
+  };
+  expect(UsageReportEntrySchema.parse(available)).toEqual(available);
+  expect(
+    UsageReportEntrySchema.omit({ lastSuccessful: true, successfulAt: true }).parse(available),
+  ).toEqual({ ...oldEntry, report: available.report });
+  // An older client's entry shape strips the additive snapshot and still sees the failure.
+  expect(UsageReportEntrySchema.omit({ lastSuccessful: true }).parse(retained)).toEqual(oldEntry);
+  expect(
+    UsageReportEntrySchema.safeParse({
+      ...oldEntry,
+      lastSuccessful: { fetchedAt: oldEntry.fetchedAt, report: oldEntry.report },
+    }).success,
+  ).toBe(false);
 });

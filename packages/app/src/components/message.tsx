@@ -25,6 +25,7 @@ import { writeMarkdownToRichClipboard } from "@/utils/rich-clipboard";
 import { getDefaultMarkdownClipboardEnvironment } from "@/utils/rich-clipboard-default-environment";
 import { formatDuration, formatMessageTimestamp } from "@/utils/time";
 import { resolveToolCallIcon } from "@/utils/tool-call-icon";
+import { useTargetAgentTitle } from "@/tool-calls/use-target-agent-title";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import type { AgentMessage } from "@getpaseo/protocol/agent-message";
 import type { AgentCapabilityFlags, ToolCallDetail } from "@getpaseo/protocol/agent-types";
@@ -2071,6 +2072,7 @@ function areExpandableBadgePropsEqual(previous: ExpandableBadgeProps, next: Expa
 
 interface ToolCallProps {
   agentMessage?: AgentMessage;
+  serverId?: string;
   toolName: string;
   args?: unknown;
   result?: unknown;
@@ -2091,6 +2093,7 @@ interface ToolCallProps {
 
 export const ToolCall = memo(function ToolCall({
   agentMessage,
+  serverId,
   toolName,
   args,
   result,
@@ -2128,6 +2131,7 @@ export const ToolCall = memo(function ToolCall({
     return undefined;
   }, [detail, args, result]);
 
+  const targetAgentTitle = useTargetAgentTitle({ serverId, toolName, detail: effectiveDetail });
   const presentation = useMemo(
     () =>
       buildToolCallPresentation({
@@ -2138,9 +2142,10 @@ export const ToolCall = memo(function ToolCall({
         detail: effectiveDetail,
         metadata,
         cwd,
+        targetAgentTitle,
         resolveIcon: resolveToolCallIcon,
       }),
-    [toolName, status, error, effectiveDetail, metadata, cwd, agentMessage],
+    [toolName, status, error, effectiveDetail, metadata, cwd, agentMessage, targetAgentTitle],
   );
   const handleOpenFile = useMemo(() => {
     const openFilePath = presentation.openFilePath;
@@ -2257,6 +2262,8 @@ export const ToolCall = memo(function ToolCall({
 
 function areToolCallPropsEqual(previous: ToolCallProps, next: ToolCallProps) {
   if (previous.toolName !== next.toolName) return false;
+  if (previous.serverId !== next.serverId) return false;
+  if (previous.agentMessage !== next.agentMessage) return false;
   if (previous.args !== next.args) return false;
   if (previous.result !== next.result) return false;
   if (previous.error !== next.error) return false;

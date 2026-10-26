@@ -1,6 +1,6 @@
 import { usageCopy } from "./copy";
 import type { UsageDisplayAs } from "./preferences";
-import type { UsageReportEntry, UsageView, UsageWindow } from "./types";
+import type { UsageReport, UsageReportEntry, UsageView, UsageWindow } from "./types";
 
 export function usedPercent(window: UsageWindow): number | null {
   if (window.usedPct != null) return window.usedPct;
@@ -43,8 +43,9 @@ export function planUsageAccountNames(reports: readonly UsageReportEntry[]): str
 }
 
 /** When a report was fetched, from its compact relative time: "Updated 3m ago". */
-export function formatUsageFreshness(compactTimeAgo: string): string {
-  return usageCopy.updated(usageCopy.ago(compactTimeAgo));
+export function formatUsageFreshness(compactTimeAgo: string, retained = false): string {
+  const ago = usageCopy.ago(compactTimeAgo);
+  return retained ? usageCopy.lastUpdated(ago) : usageCopy.updated(ago);
 }
 
 /** A user-requested refresh of one report. The previous report stays on screen throughout. */
@@ -207,4 +208,41 @@ export function resolveUsageModalHostId(choice: UsageHostChoice): string | null 
   const connected = choice.hosts.filter((host) => host.isConnected);
   const picked = connected.find((host) => host.serverId === choice.pickedServerId);
   return picked?.serverId ?? resolveUsageHostId(choice) ?? connected[0]?.serverId ?? null;
+}
+
+/** Current outcome owns messages; only a successful poll owns values and freshness. */
+export function resolveUsageReport(entry: UsageReportEntry) {
+  const available = entry.report.status === "available";
+  // COMPAT(usageLastSuccessful): added in v0.12.0, remove after 2027-04-17 once daemon floor >= v0.12.0.
+  // Older daemons cannot provide history; a failed attempt is never a successful update.
+  const snapshot = available ? null : (entry.lastSuccessful ?? null);
+  const content = entry.report.status === "available" ? entry.report : (snapshot?.report ?? null);
+  const messages: string[] = [];
+  if (!available) {
+    if (entry.loginErrors)
+      messages.push(
+        ...entry.loginErrors.map((login) => `${login.harness}: ${usageProblemText(login.report)}`),
+      );
+    // COMPAT(usageLoginErrors): added in v0.11.0, remove after 2027-04-05 once daemon floor >= v0.11.0.
+    else messages.push(usageProblemText(entry.report));
+  }
+  return {
+    windows: content?.windows ?? [],
+    balances: content?.balances ?? [],
+    details: content?.details ?? [],
+    planLabel: content?.planLabel ?? null,
+    // COMPAT(usageSuccessfulAt): added in v0.12.0, remove after 2027-04-17 once daemon floor >= v0.12.0.
+    // Old daemons expose only attempt time for available reports, never for failures.
+    successfulAt: available
+      ? (entry.successfulAt ?? entry.fetchedAt)
+      : (snapshot?.fetchedAt ?? null),
+    retained: snapshot !== null,
+    messages,
+  };
+}
+
+function usageProblemText(report: UsageReport): string {
+  if (report.status === "error") return report.error;
+  if (report.status === "unavailable") return usageCopy.problem(report.problem);
+  return "";
 }

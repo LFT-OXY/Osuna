@@ -787,3 +787,298 @@ test("with CLI sign-ins off no source is asked, and a read in flight when they g
   expect((await registry.listReports()).map((entry) => entry.id)).toEqual(["codex:work"]);
   expect(calls).toEqual(["discover", "fetch", "discover", "fetch"]);
 });
+
+test("retains the last successful poll across failures, cache expiry, and recovery", async () => {
+  let now = 0;
+  let report: unknown = {
+    status: "available",
+    windows: [{ id: "week", label: "Weekly", usedPct: 42 }],
+  };
+  const registry = new UsageSourceRegistry({ now: () => now });
+  registry.register(
+    source({
+      id: "quota",
+      discover: async () => [{ key: "account", input: {} }],
+      fetch: async () => report,
+    }),
+  );
+  registry.register(source({ id: "other", discover: async () => [{ key: "account", input: {} }] }));
+  const [success] = await registry.listReports();
+  now = 360_000;
+  // An unrelated write evicts the expired fetch result, but must not discard its snapshot.
+  await registry.listReports({ reportIds: ["other:account"], forceRefresh: true });
+  report = { status: "error", error: "Rate limited" };
+  const [failure] = await registry.listReports({ reportIds: ["quota:account"] });
+  expect(failure).toMatchObject({
+    fetchedAt: new Date(now).toISOString(),
+    report,
+    lastSuccessful: { fetchedAt: success!.fetchedAt, report: success!.report },
+  });
+  now += 360_000;
+  const [repeated] = await registry.listReports({ reportIds: ["quota:account"] });
+  expect(repeated?.lastSuccessful).toEqual(failure?.lastSuccessful);
+  report = { status: "unavailable", problem: { kind: "no_quota", detail: "No quota" } };
+  const [unavailable] = await registry.listReports({
+    reportIds: ["quota:account"],
+    forceRefresh: true,
+  });
+  expect(unavailable?.lastSuccessful).toEqual(failure?.lastSuccessful);
+  now += 1000;
+  report = { status: "available", windows: [{ id: "week", label: "Weekly", usedPct: 43 }] };
+  const [recovered] = await registry.listReports({
+    reportIds: ["quota:account"],
+    forceRefresh: true,
+  });
+  expect(recovered?.report).toEqual(report);
+  expect(recovered?.lastSuccessful).toBeUndefined();
+  expect(recovered?.fetchedAt).toBe(new Date(now).toISOString());
+});
+
+test("successful history is isolated by login set and pruned when identities retire", async () => {
+  let login = "old";
+  let present = true;
+  let available = true;
+  const registry = new UsageSourceRegistry();
+  const fixture = source({
+    id: "source",
+    discover: async () => (present ? [{ key: "same", input: login }] : []),
+    fetch: async () =>
+      available ? { status: "available", windows: [] } : { status: "error", error: "failed" },
+  });
+  registry.register(fixture);
+  await registry.listReports();
+  available = false;
+  login = "new";
+  expect((await registry.listReports({ forceRefresh: true }))[0]?.lastSuccessful).toBeUndefined();
+  login = "old";
+  expect((await registry.listReports({ forceRefresh: true }))[0]?.lastSuccessful).toBeUndefined();
+  available = true;
+  await registry.listReports({ forceRefresh: true });
+  present = false;
+  expect(await registry.listReports()).toEqual([]);
+  present = true;
+  available = false;
+  expect((await registry.listReports())[0]?.lastSuccessful).toBeUndefined();
+  available = true;
+  await registry.listReports({ forceRefresh: true });
+  registry.unregister("source");
+  registry.register(fixture);
+  available = false;
+  expect((await registry.listReports())[0]?.lastSuccessful).toBeUndefined();
+});
+
+test("host fallback history never supplies an agent's failed login, and removed agents lose history", async () => {
+  const sessions = new Map([["agent", { provider: "codex", env: {}, sessionKey: "one" }]]);
+  let available = true;
+  const registry = new UsageSourceRegistry({
+    agents: {
+      hasAgent: (id) => sessions.has(id),
+      usageSession: (id) => sessions.get(id) ?? null,
+    },
+  });
+  registry.register({
+    id: "source",
+    label: "Source",
+    discover: async (scope) =>
+      (scope.kind === "global" ? ["host", "agent"] : ["agent"]).map((input) => ({
+        key: "same",
+        input,
+      })),
+    fetch: async () =>
+      available ? { status: "available", windows: [] } : { status: "error", error: "failed" },
+  });
+  await registry.listReports();
+  available = false;
+  expect((await registry.listReports({ agentId: "agent" }))[0]?.lastSuccessful).toBeUndefined();
+  available = true;
+  const [success] = await registry.listReports({ agentId: "agent", forceRefresh: true });
+  available = false;
+  expect(
+    (await registry.listReports({ agentId: "agent", forceRefresh: true }))[0]?.lastSuccessful
+      ?.report,
+  ).toEqual(success?.report);
+  sessions.delete("agent");
+  await registry.listReports();
+  sessions.set("agent", { provider: "codex", env: {}, sessionKey: "two" });
+  expect((await registry.listReports({ agentId: "agent" }))[0]?.lastSuccessful).toBeUndefined();
+});
+
+test("a timed out poll retains successful values and late completion cannot replace the failure", async () => {
+  let now = 1000;
+  let finish!: (value: unknown) => void;
+  let slow = false;
+  const registry = new UsageSourceRegistry({ now: () => now, deadlineMs: 10 });
+  registry.register(
+    source({
+      id: "source",
+      discover: async () => [{ key: "same", input: {} }],
+      fetch: async () =>
+        slow
+          ? new Promise((resolve) => {
+              finish = resolve;
+            })
+          : { status: "available", windows: [] },
+    }),
+  );
+  const [success] = await registry.listReports();
+  now = 2000;
+  slow = true;
+  const [failure] = await registry.listReports({ forceRefresh: true });
+  expect(failure?.report).toEqual({ status: "error", error: "Usage fetch timed out" });
+  expect(failure?.lastSuccessful).toEqual({
+    fetchedAt: success?.fetchedAt,
+    report: success?.report,
+  });
+  finish({ status: "available", windows: [{ id: "late", label: "Late" }] });
+  expect((await registry.listReports())[0]).toEqual(failure);
+});
+
+test("attempt ordering keeps its timestamp while retained freshness records successful completion", async () => {
+  let now = 1000;
+  let available = true;
+  const registry = new UsageSourceRegistry({ now: () => now });
+  registry.register(
+    source({
+      id: "source",
+      discover: async () => [{ key: "same", input: {} }],
+      fetch: async () => {
+        if (available) now = 2000;
+        return available
+          ? { status: "available", windows: [] }
+          : { status: "error", error: "failed" };
+      },
+    }),
+  );
+  const [success] = await registry.listReports();
+  expect(success?.fetchedAt).toBe(new Date(1000).toISOString());
+  expect(success?.successfulAt).toBe(new Date(2000).toISOString());
+  available = false;
+  now = 3000;
+  const [failure] = await registry.listReports({ forceRefresh: true });
+  expect(failure?.fetchedAt).toBe(new Date(3000).toISOString());
+  expect(failure?.lastSuccessful?.fetchedAt).toBe(success?.successfulAt);
+});
+
+test("failed discovery preserves history until discovery confirms account removal", async () => {
+  let discoveryFails = false;
+  let present = true;
+  let available = true;
+  const registry = new UsageSourceRegistry({ now: () => 1000, logger: { warn: () => {} } });
+  registry.register(
+    source({
+      id: "source",
+      discover: async () => {
+        if (discoveryFails) throw new Error("Login store temporarily unavailable");
+        return present ? [{ key: "account", input: {} }] : [];
+      },
+      fetch: async () =>
+        available
+          ? { status: "available", windows: [{ id: "weekly", label: "Weekly", usedPct: 42 }] }
+          : { status: "error", error: "Rate limited" },
+    }),
+  );
+  const [success] = await registry.listReports();
+  available = false;
+  discoveryFails = true;
+  const [duringDiscoveryFailure] = await registry.listReports({ forceRefresh: true });
+  expect(duringDiscoveryFailure?.lastSuccessful).toEqual({
+    fetchedAt: success?.successfulAt,
+    report: success?.report,
+  });
+  discoveryFails = false;
+  const [afterDiscoveryRecovery] = await registry.listReports({ forceRefresh: true });
+  expect(afterDiscoveryRecovery?.lastSuccessful).toEqual(duringDiscoveryFailure?.lastSuccessful);
+  expect(afterDiscoveryRecovery?.report).toEqual({ status: "error", error: "Rate limited" });
+  present = false;
+  expect(await registry.listReports()).toEqual([]);
+  present = true;
+  expect((await registry.listReports())[0]?.lastSuccessful).toBeUndefined();
+});
+
+test("turning Read CLI sign-ins off forgets successful readings, and a read in flight leaves none behind", async () => {
+  let available = true;
+  let hold = false;
+  let release = () => {};
+  const calls: string[] = [];
+  const registry = new UsageSourceRegistry();
+  registry.register(
+    source({
+      id: "codex",
+      discover: async () => [{ key: "work", input: {} }],
+      fetch: async () => {
+        calls.push("fetch");
+        if (hold)
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+        return available
+          ? { status: "available", windows: [] }
+          : { status: "error", error: "failed" };
+      },
+    }),
+  );
+  await registry.listReports();
+  registry.forget();
+  available = false;
+  expect((await registry.listReports())[0]?.lastSuccessful).toBeUndefined();
+
+  // 关掉之前开始、关掉之后才成功的读取，不留下读数。
+  available = true;
+  hold = true;
+  calls.length = 0;
+  const inFlight = registry.listReports({ forceRefresh: true });
+  await expect.poll(() => calls).toEqual(["fetch"]);
+  registry.forget();
+  release();
+  expect(await inFlight).toEqual([]);
+  hold = false;
+  available = false;
+  expect((await registry.listReports())[0]?.lastSuccessful).toBeUndefined();
+});
+
+test("an agent's launch account keeps its own last successful reading after the CLI switched accounts", async () => {
+  let cliAccount = "one";
+  let switchedAt: number | null = null;
+  let savedLoginWorks = true;
+  const registry = new UsageSourceRegistry({
+    agents: {
+      hasAgent: () => true,
+      usageSession: () => ({ provider: "codex", env: {}, sessionKey: "launch", launchedAt: 1_000 }),
+    },
+  });
+  registry.useSavedAccounts({
+    accountAt: ({ at }) =>
+      switchedAt !== null && switchedAt > at && cliAccount !== "one"
+        ? { key: "one", label: "one@example.com" }
+        : null,
+    usageInput: async ({ key }) => ({ token: `saved-${key}` }),
+  });
+  registry.register(
+    source({
+      id: "codex",
+      discover: async () => [
+        { key: cliAccount, label: `${cliAccount}@example.com`, input: { token: "cli" } },
+      ],
+      fetch: async (input) => {
+        const token = (input as { token: string }).token;
+        if (token !== "cli" && !savedLoginWorks) return { status: "error", error: "saved failed" };
+        return {
+          status: "available",
+          windows: [{ id: "who", label: token === "cli" ? cliAccount : token }],
+        };
+      },
+    }),
+  );
+  await registry.listReports({ agentId: "agent" });
+  cliAccount = "two";
+  switchedAt = 2_000;
+  const [pinned] = await registry.listReports({ agentId: "agent", forceRefresh: true });
+  expect(pinned?.report).toMatchObject({ windows: [{ label: "saved-one" }] });
+
+  // 存着的登录读失败时，卡片留着的是这个号自己上次读成功的值，不是 CLI 现在的号。
+  savedLoginWorks = false;
+  const [failed] = await registry.listReports({ agentId: "agent", forceRefresh: true });
+  expect(failed?.id).toBe("codex:one");
+  expect(failed?.report).toEqual({ status: "error", error: "saved failed" });
+  expect(failed?.lastSuccessful?.report).toEqual(pinned?.report);
+});
