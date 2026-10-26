@@ -1414,6 +1414,11 @@ export class ProviderAccountService {
     return this.store.accounts("codex").filter((account) => !account.needsSignIn).length >= 2;
   }
 
+  /** 账号一节顶上的说明跟着这家的当前第三方接口变（只有 Claude Code 有这条说明）。 */
+  noticeFollowsActiveEndpoint(provider: string): boolean {
+    return provider === "claude";
+  }
+
   /** 最近一次读到的额度（这次进程读到的，否则存着的那份）；没读到为 null。 */
   private lastUsage(
     account: StoredAccount,
@@ -1631,7 +1636,9 @@ export class ProviderAccountService {
       },
       accounts,
       blocked: input.blocked,
-      ...(provider === "claude" && this.claudeThroughEndpoints() ? { throughEndpoints: true } : {}),
+      ...(this.noticeFollowsActiveEndpoint(provider) && this.claudeThroughEndpoints()
+        ? { throughEndpoints: true }
+        : {}),
       switches: settings.switches ?? [],
       switchFailure: settings.switchFailure ?? null,
     };
@@ -1834,9 +1841,10 @@ export interface CreateProviderAccountServiceInput {
   cliSignIns: CliSignInGate;
   planUsage: PlanUsageReports;
   onChanged: (provider: AccountRotationProvider) => void;
-  // Claude 提供方的设置（命令与环境），与新会话同一份。
-  claudeRuntime: () => ProviderRuntimeSettings | undefined;
-  claudeThroughEndpoints?: () => boolean;
+  // 提供方的设置（命令与环境），与新会话同一份。
+  providerRuntimeSettings: (provider: string) => ProviderRuntimeSettings | undefined;
+  // 这家当前用着的第三方接口；没开为 null。
+  activeEndpointId?: (provider: string) => string | null;
   overrides?: ProviderAccountOverrides;
 }
 
@@ -1876,13 +1884,17 @@ export function createProviderAccountService(
       cliConfigDir: claudeConfigDir,
       login: claudeLogin,
       resolveCli: () =>
-        resolveClaudeCli({ runtime: input.claudeRuntime(), env, command: claudeCommand }),
+        resolveClaudeCli({
+          runtime: input.providerRuntimeSettings("claude"),
+          env,
+          command: claudeCommand,
+        }),
       signInTimeoutMs: overrides.claude?.signInTimeoutMs ?? SIGN_IN_TIMEOUT_MS,
       linkWaitMs: overrides.claude?.linkWaitMs ?? CLAUDE_LINK_WAIT_MS,
     },
     ...(overrides.checks ? { checks: overrides.checks } : {}),
     ...(overrides.now ? { now: overrides.now } : {}),
-    claudeThroughEndpoints: input.claudeThroughEndpoints ?? (() => false),
+    claudeThroughEndpoints: () => (input.activeEndpointId?.("claude") ?? null) !== null,
   });
 }
 

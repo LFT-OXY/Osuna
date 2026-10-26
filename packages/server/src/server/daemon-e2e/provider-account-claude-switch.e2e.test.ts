@@ -478,9 +478,19 @@ describe.skipIf(process.platform === "win32")("Claude Code account switching", (
       defaultModelId: "relay/sonnet",
     });
     if (!saved.endpoint) throw new Error(`Saving failed: ${saved.error?.message}`);
+    await client.observeEvents(["provider.account.changed"]);
+    let changes = 0;
+    const unsubscribe = client.on("provider.account.changed", () => {
+      changes += 1;
+    });
     await client.apiEndpointSetActive("claude", saved.endpoint.id);
+    // 开关一动就告诉客户端重读，说明才会跟着变。
+    await expect.poll(() => changes).toBeGreaterThan(0);
     expect((await list()).throughEndpoints).toBe(true);
+    changes = 0;
     await client.apiEndpointSetActive("claude", null);
+    await expect.poll(() => changes).toBeGreaterThan(0);
+    unsubscribe();
     expect((await list()).throughEndpoints).toBeUndefined();
   });
 });
