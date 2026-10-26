@@ -283,12 +283,23 @@ test("browser and desktop tests have exclusive, directory-owned suites", () => {
 });
 
 test("packaging runs on main without allocating pull-request runners", () => {
-  for (const workflowPath of [dockerWorkflowPath, nixWorkflowPath]) {
+  const source = readFileSync(dockerWorkflowPath, "utf8");
+  const trigger = source.split("jobs:", 1)[0];
+  assert.match(trigger, /push:\s*\n\s+branches: \[main\]/);
+  assert.doesNotMatch(trigger, /pull_request/);
+  assert.doesNotMatch(source, /dorny\/paths-filter/);
+});
+
+// 本 fork 不发布 Nix 包，两个 Nix 工作流只保留手动触发
+test("nix workflows only run when dispatched by hand", () => {
+  for (const workflowPath of [
+    nixWorkflowPath,
+    new URL(".github/workflows/nix-update-hash.yml", repoRoot),
+  ]) {
     const source = readFileSync(workflowPath, "utf8");
     const trigger = source.split("jobs:", 1)[0];
-    assert.match(trigger, /push:\s*\n\s+branches: \[main\]/);
-    assert.doesNotMatch(trigger, /pull_request/);
-    assert.doesNotMatch(source, /dorny\/paths-filter/);
+    assert.match(trigger, /on:\s*\n\s+workflow_dispatch:/);
+    assert.doesNotMatch(trigger, /push:|pull_request/);
   }
 });
 
