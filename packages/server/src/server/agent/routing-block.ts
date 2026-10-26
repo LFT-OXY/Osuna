@@ -8,7 +8,7 @@ import type { ProviderMentionDefaults } from "@getpaseo/protocol/provider-config
 
 import { filterSelectableAgentModels, type ProviderSnapshotEntry } from "./agent-sdk-types.js";
 import type { ProviderSnapshotManager } from "./provider-snapshot-manager.js";
-import { formatSystemNotificationPrompt } from "./agent-prompt.js";
+import { formatSystemNotificationPrompt } from "./agent-messages/index.js";
 import { resolveThinkingOptionId, selectDefaultModel } from "./structured-generation-providers.js";
 
 export interface RoutingBlockSettings {

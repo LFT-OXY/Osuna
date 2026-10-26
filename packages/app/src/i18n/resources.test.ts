@@ -86,6 +86,7 @@ const zhCNEnglishAllowlist = {
     "settings.apiEndpoints.form.apiKey",
     "settings.providers.version.value",
     "settings.providers.version.update",
+    "providerCatalog.types.acp",
   ],
   brands: [
     "sidebar.help.appName",

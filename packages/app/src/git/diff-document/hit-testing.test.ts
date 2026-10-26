@@ -323,6 +323,7 @@ function reviewActionsForFirstAddition(): NonNullable<
     commentsByTarget: new Map(),
     editor: { target, commentId: null, body: "" },
     onStartComment() {},
+    onChangeEditorBody() {},
     onCancelEditor() {},
     onSaveEditor() {},
     onEditComment() {},

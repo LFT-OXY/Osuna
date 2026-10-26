@@ -65,7 +65,9 @@ interface FakeAgentSessionOptions {
   sessionId?: string;
   memoryMarker?: string | null;
   closeSession?: () => Promise<void>;
-  onStartTurn?: (prompt: AgentPromptInput) => void;
+  onStartTurn?: (prompt: AgentPromptInput, config: AgentSessionConfig) => void;
+  beforeTurnComplete?: (prompt: AgentPromptInput) => Promise<void>;
+  historyEvents?: readonly AgentStreamEvent[];
 }
 
 export interface TestAgentClientOptions {
@@ -73,14 +75,16 @@ export interface TestAgentClientOptions {
   nextSessionId?: () => string;
   /** Handed each new session, so a test can drive it — a resume, for instance. */
   onSessionCreated?: (session: FakeAgentSessionControl) => void;
-  beforeCreateSession?: () => Promise<void>;
+  beforeCreateSession?: (config: AgentSessionConfig) => Promise<void>;
   closeSession?: () => Promise<void>;
-  onStartTurn?: (prompt: AgentPromptInput) => void;
+  onStartTurn?: (prompt: AgentPromptInput, config: AgentSessionConfig) => void;
+  beforeTurnComplete?: (prompt: AgentPromptInput) => Promise<void>;
   supportsMcpServers?: boolean;
   /** 像 Pi 一样声明 client 上的 MCP 支持要按会话决定。 */
   mcpServersDecidedPerSession?: boolean;
   /** 替换内置目录；reject 时 provider 快照停在 `error`。 */
   fetchCatalog?: () => Promise<ProviderCatalog>;
+  historyEvents?: readonly AgentStreamEvent[];
 }
 
 function createDeferred<T>(): Deferred<T> {
@@ -353,7 +357,9 @@ class FakeAgentSession implements AgentSession {
   private activeForegroundTurnId: string | null = null;
 
   private readonly closeSession: (() => Promise<void>) | undefined;
-  private readonly onStartTurn: ((prompt: AgentPromptInput) => void) | undefined;
+  private readonly onStartTurn: TestAgentClientOptions["onStartTurn"];
+  private readonly beforeTurnComplete: ((prompt: AgentPromptInput) => Promise<void>) | undefined;
+  private readonly historyEvents: readonly AgentStreamEvent[] | undefined;
 
   constructor(options: FakeAgentSessionOptions) {
     this.capabilities = {
@@ -366,6 +372,8 @@ class FakeAgentSession implements AgentSession {
     this.memoryMarker = options.memoryMarker ?? null;
     this.closeSession = options.closeSession;
     this.onStartTurn = options.onStartTurn;
+    this.beforeTurnComplete = options.beforeTurnComplete;
+    this.historyEvents = options.historyEvents;
     this.historyPath = path.join(
       tmpdir(),
       "paseo-fake-provider-history",
@@ -476,7 +484,7 @@ class FakeAgentSession implements AgentSession {
 
     const turnId = `fake-turn-${this.nextTurnOrdinal++}`;
     this.activeForegroundTurnId = turnId;
-    this.onStartTurn?.(prompt);
+    this.onStartTurn?.(prompt, this.config);
 
     void this.emitTurnEvents(prompt);
 
@@ -835,6 +843,7 @@ class FakeAgentSession implements AgentSession {
         this.notifySubscribers(assistantChunkB);
       }
 
+      await this.beforeTurnComplete?.(prompt);
       const completed: AgentStreamEvent = {
         type: "turn_completed",
         provider: this.providerName,
@@ -848,6 +857,10 @@ class FakeAgentSession implements AgentSession {
   }
 
   async *streamHistory(): AsyncGenerator<AgentStreamEvent> {
+    if (this.historyEvents) {
+      yield* this.historyEvents;
+      return;
+    }
     let contents: string;
     try {
       contents = await readFile(this.historyPath, "utf8");
@@ -1250,7 +1263,7 @@ class FakeAgentClient implements AgentClient {
     config: AgentSessionConfig,
     _launchContext?: AgentLaunchContext,
   ): Promise<AgentSession> {
-    await this.options.beforeCreateSession?.();
+    await this.options.beforeCreateSession?.(config);
     const sessionId = this.options.nextSessionId?.();
     const session = new FakeAgentSession({
       providerName: this.provider,
@@ -1259,6 +1272,8 @@ class FakeAgentClient implements AgentClient {
       ...(sessionId ? { sessionId } : {}),
       closeSession: this.options.closeSession,
       onStartTurn: this.options.onStartTurn,
+      beforeTurnComplete: this.options.beforeTurnComplete,
+      historyEvents: this.options.historyEvents,
     });
     this.options.onSessionCreated?.(session);
     return session;
@@ -1286,6 +1301,8 @@ class FakeAgentClient implements AgentClient {
       memoryMarker: typeof marker === "string" ? marker : null,
       closeSession: this.options.closeSession,
       onStartTurn: this.options.onStartTurn,
+      beforeTurnComplete: this.options.beforeTurnComplete,
+      historyEvents: this.options.historyEvents,
     });
   }
 

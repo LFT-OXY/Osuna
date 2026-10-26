@@ -1,3 +1,5 @@
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { floatingActionsClearance } from "@/components/ui/floating-action-button";
 import { useState, useCallback, useMemo, type ReactElement, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -37,6 +39,7 @@ import {
   expandAllFiles,
   recordDefaultFileExpansion,
 } from "@/panels/changes/file-expansion";
+import { ReviewCommentSheet, ReviewFeedbackAction } from "@/review";
 import { DiffDocument, type WorkingDiffMode } from "@/git/diff-document";
 import { ChangedFilesTree } from "@/git/changed-files-tree";
 import { JUMP_TO_FILE_CLEARANCE, JumpToFile } from "@/git/jump-to-file";
@@ -1554,7 +1557,9 @@ export function ChangesSurface({
     reviewActions,
     reviewAttachment,
     publishReviewAttachment,
+    reviewFeedback,
   } = useWorkingDiff({
+    presentation,
     serverId,
     workspaceId: workspaceId ?? undefined,
     cwd,
@@ -1738,6 +1743,7 @@ export function ChangesSurface({
     ],
   );
 
+  const { bottom: bottomInset } = useSafeAreaInsets();
   const hasChanges = files.length > 0;
   const jumpToFileInset = jumpToFileClearance({
     isCompact: isMobile,
@@ -1801,27 +1807,41 @@ export function ChangesSurface({
   });
 
   const diffContent: ReactElement = (
-    <DiffBodyContent
-      isStatusLoading={isStatusLoading}
-      statusErrorMessage={statusErrorMessage}
-      notGit={notGit}
-      isDiffLoading={isDiffLoading}
-      diffErrorMessage={diffErrorMessage}
-      diffTooLarge={diffTooLarge}
-      hasChanges={hasChanges}
-      emptyMessage={emptyMessage}
-      emptyAction={emptyAction}
-      checkingRepositoryLabel={t("workspace.git.diff.checkingRepository")}
-      notRepositoryLabel={t("workspace.git.diff.notRepository")}
-    >
-      <DiffDocument
-        files={files}
-        contentInsetBottom={jumpToFileInset}
-        collapseState={collapseState}
-        displayPreferences={sharedDisplayPreferences}
-        mode={workingMode}
+    <View style={styles.diffContainer}>
+      <DiffBodyContent
+        isStatusLoading={isStatusLoading}
+        statusErrorMessage={statusErrorMessage}
+        notGit={notGit}
+        isDiffLoading={isDiffLoading}
+        diffErrorMessage={diffErrorMessage}
+        diffTooLarge={diffTooLarge}
+        hasChanges={hasChanges}
+        emptyMessage={emptyMessage}
+        emptyAction={emptyAction}
+        checkingRepositoryLabel={t("workspace.git.diff.checkingRepository")}
+        notRepositoryLabel={t("workspace.git.diff.notRepository")}
+      >
+        <DiffDocument
+          files={files}
+          contentInsetBottom={floatingActionsClearance(
+            [jumpToFileInset, reviewFeedback.clearance],
+            bottomInset,
+          )}
+          collapseState={collapseState}
+          displayPreferences={sharedDisplayPreferences}
+          mode={workingMode}
+        />
+      </DiffBodyContent>
+      <ReviewFeedbackAction
+        bottomOffset={jumpToFileInset}
+        enabled={enabled}
+        hasDiff={presentation !== "tree"}
+        model={reviewFeedback.model}
+        state={reviewFeedback.state}
+        serverId={serverId}
+        workspaceId={workspaceId}
       />
-    </DiffBodyContent>
+    </View>
   );
   const bodyContent = (
     <ChangesBody
@@ -1956,6 +1976,13 @@ export function ChangesSurface({
           <JumpToFile files={files} mode={workingMode} onSelectFile={handleSelectTreeFile} />
         ) : null}
       </View>
+
+      <ReviewCommentSheet
+        enabled={enabled}
+        editor={reviewActions.sheetEditor}
+        reviewActions={reviewActions}
+        onChangeBody={reviewActions.onChangeEditorBody}
+      />
 
       <ChangesCommits
         presentation={presentation}

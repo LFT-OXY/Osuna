@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { DropdownTrigger } from "@/components/ui/dropdown-trigger";
 import { FormTextInput } from "@/components/ui/form-field";
+import type { EditingTextInputHandle } from "@/components/ui/text-input/types";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { localFontProbe } from "@/appearance/font-probe";
@@ -314,7 +315,7 @@ interface FontFamilyRowProps {
   draft: string;
   withBorder: boolean;
   onChangeDraft: (value: string) => void;
-  onCommit: (value: string) => void;
+  onCommit: (value: string) => string;
 }
 
 function FontFamilyRow({
@@ -329,13 +330,16 @@ function FontFamilyRow({
   onCommit,
 }: FontFamilyRowProps) {
   const isCompact = useIsCompactFormFactor();
+  const inputRef = useRef<EditingTextInputHandle>(null);
   const handleCommit = useCallback(() => {
-    onCommit(draft);
+    const committed = onCommit(draft);
+    inputRef.current?.replaceText(committed);
   }, [draft, onCommit]);
 
   // Resync from the committed value when it changes elsewhere.
   useEffect(() => {
     onChangeDraft(value);
+    inputRef.current?.replaceText(value);
     // Only resync on external value changes, not on local keystrokes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
@@ -348,6 +352,7 @@ function FontFamilyRow({
       </View>
       <FormTextInput
         size={isCompact ? "md" : "sm"}
+        ref={inputRef}
         initialValue={draft}
         onChangeText={onChangeDraft}
         onBlur={handleCommit}
@@ -584,12 +589,13 @@ export function AppearanceSection() {
       const sanitized = sanitizeFontFamily(value);
       if (sanitized === null) {
         setMonoFontDraft(settings.monoFontFamily);
-        return;
+        return settings.monoFontFamily;
       }
       setMonoFontDraft(sanitized);
       if (sanitized !== settings.monoFontFamily) {
         void updateSettings({ monoFontFamily: sanitized });
       }
+      return sanitized;
     },
     [settings.monoFontFamily, updateSettings],
   );

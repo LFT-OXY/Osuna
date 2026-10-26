@@ -577,6 +577,11 @@ export const ComposerTextInput = forwardRef<ComposerTextInputHandle, ComposerTex
         isFocused: () => editor.view.hasFocus(),
         getText: () => docText(editor.state.doc),
         getSelection: () => readSelection(editor.state),
+        setSelection: (selection) => {
+          const tr = editor.state.tr;
+          setTextSelection(tr, selection, docText(editor.state.doc).length);
+          editor.view.dispatch(tr);
+        },
         replaceText,
         reset: () => replaceText(""),
         insertInlineBlock: (block, range) => insertInlineBlock(editor, block, range),

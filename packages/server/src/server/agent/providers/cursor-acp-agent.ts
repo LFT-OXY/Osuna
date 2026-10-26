@@ -91,6 +91,7 @@ export class CursorACPAgentClient extends GenericACPAgentClient {
       env: options.env,
       providerId: options.providerId,
       label: options.label,
+      usageProvider: "cursor",
       clientCapabilityMeta: CURSOR_CLIENT_CAPABILITY_META,
       configFeatureOptions: [CURSOR_FAST_FEATURE_OPTION],
       catalogModelResolver: resolveCursorCatalogModels,

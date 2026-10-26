@@ -62,6 +62,11 @@ interface FileMarkdownPreviewProps {
   lineStart?: number;
   /** 同一行再打开一次时加一，让预览重新滚过去。 */
   navigationRevision: number;
+  // 以下给原生版的上游渲染器用；Web 版的相对资源走 resources。
+  filePath: string;
+  workspaceRoot?: string;
+  client?: unknown;
+  serverId?: string;
 }
 
 export function FileMarkdownPreview({

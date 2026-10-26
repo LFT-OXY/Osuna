@@ -4,7 +4,6 @@ import {
   getAutocompleteFallbackIndex,
   getAutocompleteGroup,
   getAutocompleteNextIndex,
-  getAutocompleteScrollOffset,
   hasSelectableAutocompleteOption,
   orderAutocompleteGroups,
 } from "./autocomplete-utils";
@@ -100,53 +99,5 @@ describe("hasSelectableAutocompleteOption", () => {
     expect(hasSelectableAutocompleteOption([])).toBe(false);
     expect(hasSelectableAutocompleteOption([disabled])).toBe(false);
     expect(hasSelectableAutocompleteOption([disabled, enabled])).toBe(true);
-  });
-});
-
-describe("getAutocompleteScrollOffset", () => {
-  it("scrolls up when the active item is above the viewport", () => {
-    expect(
-      getAutocompleteScrollOffset({
-        currentOffset: 120,
-        viewportHeight: 80,
-        itemTop: 90,
-        itemHeight: 20,
-      }),
-    ).toBe(90);
-  });
-
-  it("scrolls down when the active item is below the viewport", () => {
-    expect(
-      getAutocompleteScrollOffset({
-        currentOffset: 0,
-        viewportHeight: 100,
-        itemTop: 150,
-        itemHeight: 24,
-      }),
-    ).toBe(74);
-  });
-
-  it("keeps the active item above the bottom fade when scrolling down", () => {
-    expect(
-      getAutocompleteScrollOffset({
-        currentOffset: 0,
-        viewportHeight: 100,
-        bottomInset: 16,
-        itemTop: 150,
-        itemHeight: 24,
-      }),
-    ).toBe(90);
-  });
-
-  it("treats an item under the bottom fade as out of view", () => {
-    expect(
-      getAutocompleteScrollOffset({
-        currentOffset: 0,
-        viewportHeight: 100,
-        bottomInset: 16,
-        itemTop: 70,
-        itemHeight: 24,
-      }),
-    ).toBe(10);
   });
 });

@@ -26,7 +26,6 @@
  */
 import { memo, type ComponentProps, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
-import type { TextStyle } from "react-native";
 import {
   Info,
   Lightbulb,
@@ -40,11 +39,8 @@ import ReactMarkdown, {
   type Components,
   type ExtraProps,
 } from "react-markdown";
-import { withUnistyles } from "react-native-unistyles";
-import { getMarkdownFenceLanguage } from "@/components/markdown/fence/language";
 import { MermaidFence } from "@/components/markdown/fence/mermaid";
-import { createMarkdownStyles } from "@/styles/markdown-styles";
-import { ICON_SIZE, type Theme } from "@/styles/theme";
+import { ICON_SIZE } from "@/styles/theme";
 import { MarkdownCodeBlock } from "./code-block.web";
 import { isGithubAlertKind, type GithubAlertKind } from "./github-alerts";
 import { MarkdownImage } from "./image.web";
@@ -63,12 +59,15 @@ function previewUrlTransform(url: string, key: string, node: Readonly<HastNode>)
   return defaultUrlTransform(url);
 }
 
-const EMPTY_TEXT_STYLE: TextStyle = {};
-
 function hastText(node: HastChild): string {
   if (node.type === "text") return node.value;
   if (node.type === "element") return node.children.map(hastText).join("");
   return "";
+}
+
+// 上游删掉了 fence/language.ts；预览只需要信息串的第一个词。
+function getMarkdownFenceLanguage(info: string | null | undefined): string | null {
+  return info?.trim().split(/\s+/)[0]?.toLowerCase() || null;
 }
 
 interface MarkdownFence {
@@ -93,31 +92,10 @@ function readFence(node: HastNode | undefined): MarkdownFence | null {
   };
 }
 
-interface PreviewMermaidFenceProps {
-  code: string;
-  textStyle: TextStyle;
-}
-
-function PreviewMermaidFence({ code, textStyle }: PreviewMermaidFenceProps) {
-  return (
-    <MermaidFence
-      code={code}
-      phase="complete"
-      inheritedStyles={EMPTY_TEXT_STYLE}
-      textStyle={textStyle}
-    />
-  );
-}
-
-const ThemedPreviewMermaidFence = withUnistyles(PreviewMermaidFence);
-function mapFenceStyle(theme: Theme) {
-  return { textStyle: createMarkdownStyles(theme).fence };
-}
-
 function MarkdownPre({ node, children, ...props }: ComponentProps<"pre"> & ExtraProps) {
   const fence = readFence(node);
   if (fence?.language === "mermaid") {
-    return <ThemedPreviewMermaidFence code={fence.code} uniProps={mapFenceStyle} />;
+    return <MermaidFence code={fence.code} />;
   }
   if (fence) {
     return <MarkdownCodeBlock language={fence.language} code={fence.code} />;

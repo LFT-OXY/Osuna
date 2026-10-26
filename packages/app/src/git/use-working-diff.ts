@@ -8,6 +8,7 @@ import {
   useInlineReviewController,
   useReviewAttachmentSnapshot,
   useReviewCommentCount,
+  useReviewFeedback,
 } from "@/review";
 import { type ParsedDiffFile, useCheckoutDiffQuery } from "@/git/use-diff-query";
 import { useCheckoutStatusQuery } from "@/git/use-status-query";
@@ -24,6 +25,7 @@ interface UseWorkingDiffOptions {
   /** 只开文件树、diff 正文不可见。 */
   diffBodyHidden?: boolean;
   onFiles?: (files: ParsedDiffFile[]) => void;
+  presentation?: string;
 }
 
 export function useWorkingDiff({
@@ -35,6 +37,7 @@ export function useWorkingDiff({
   queryScope,
   diffBodyHidden = false,
   onFiles,
+  presentation,
 }: UseWorkingDiffOptions) {
   const {
     status,
@@ -96,13 +99,20 @@ export function useWorkingDiff({
     filesOnly,
     onFiles,
   });
-  const reviewActions = useInlineReviewController({ reviewDraftKey });
+  const reviewActions = useInlineReviewController({ reviewDraftKey, presentation });
   const reviewAttachment = useReviewAttachmentSnapshot({
     key: reviewDraftKey,
     diffFiles: files,
     cwd,
     mode: diffMode,
     baseRef,
+  });
+
+  const reviewFeedback = useReviewFeedback({
+    serverId,
+    workspaceId,
+    reviewDraftKey,
+    attachment: reviewAttachment,
   });
 
   return {
@@ -123,6 +133,7 @@ export function useWorkingDiff({
     reviewActions,
     reviewAttachment,
     publishReviewAttachment,
+    reviewFeedback,
   };
 }
 

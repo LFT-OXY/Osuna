@@ -30,7 +30,7 @@ import { useTranslation } from "react-i18next";
 import * as Clipboard from "expo-clipboard";
 import { Check, Copy, WrapText } from "lucide-react-native";
 import { TRAILING_CODE_LINE_BREAKS } from "@/assistant-selection-copy/markup";
-import { fenceLanguageToExtension } from "@/components/markdown/fence/language";
+import { fenceLanguageToExtension } from "@/components/highlighted-code-block";
 import { MaterialFileIcon } from "@/components/material-file-icon";
 import { useToast } from "@/contexts/toast-context";
 import { ICON_SIZE } from "@/styles/theme";

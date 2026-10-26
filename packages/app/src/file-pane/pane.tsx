@@ -56,6 +56,9 @@ interface FilePreviewBodyProps {
   navigationRevision: number;
   imagePreviewUri: string | null;
   markdownResources: MarkdownPreviewResources;
+  workspaceRoot: string;
+  client: DaemonClient | null;
+  serverId: string;
 }
 
 type TextExplorerFile = ExplorerFile & { kind: "text" };
@@ -138,6 +141,9 @@ function FilePreviewBody({
   navigationRevision,
   imagePreviewUri,
   markdownResources,
+  workspaceRoot,
+  client,
+  serverId,
 }: FilePreviewBodyProps) {
   const { t } = useTranslation();
   const filePath = location.path;
@@ -188,6 +194,10 @@ function FilePreviewBody({
               resources={markdownResources}
               lineStart={location.lineStart}
               navigationRevision={navigationRevision}
+              filePath={filePath}
+              workspaceRoot={workspaceRoot}
+              client={client}
+              serverId={serverId}
             />
           </RNScrollView>
         </View>
@@ -329,6 +339,7 @@ export function FilePane({
   return (
     <FilePanePresentation
       serverId={serverId}
+      workspaceRoot={normalizedWorkspaceRoot}
       client={client}
       readTarget={readTarget}
       preview={preview}
@@ -376,6 +387,7 @@ function isEditableTextFile(input: {
 
 function FilePanePresentation({
   serverId,
+  workspaceRoot,
   client,
   readTarget,
   preview,
@@ -398,6 +410,7 @@ function FilePanePresentation({
   markdownResources,
 }: {
   serverId: string;
+  workspaceRoot: string;
   client: DaemonClient | null;
   readTarget: { cwd: string; path: string } | null;
   preview: ExplorerFile | null;
@@ -433,6 +446,8 @@ function FilePanePresentation({
     return (
       <EditableFilePane
         key={`${serverId}:${readTarget.cwd}:${readTarget.path}`}
+        serverId={serverId}
+        workspaceRoot={workspaceRoot}
         client={client}
         cwd={readTarget.cwd}
         path={readTarget.path}
@@ -491,12 +506,17 @@ function FilePanePresentation({
         navigationRevision={navigationRevision}
         imagePreviewUri={imagePreviewUri}
         markdownResources={markdownResources}
+        workspaceRoot={workspaceRoot}
+        client={client}
+        serverId={serverId}
       />
     </View>
   );
 }
 
 function EditableFilePane({
+  serverId,
+  workspaceRoot,
   client,
   cwd,
   path,
@@ -513,6 +533,8 @@ function EditableFilePane({
   navigationRevision,
   markdownResources,
 }: {
+  serverId: string;
+  workspaceRoot: string;
   client: DaemonClient;
   cwd: string;
   path: string;
@@ -667,6 +689,9 @@ function EditableFilePane({
           navigationRevision={navigationRevision}
           imagePreviewUri={null}
           markdownResources={markdownResources}
+          workspaceRoot={workspaceRoot}
+          client={client}
+          serverId={serverId}
         />
       )}
     </View>

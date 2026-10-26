@@ -2,13 +2,13 @@ import React, { useCallback, useEffect, useMemo, useRef, useState, type ReactNod
 import {
   Pressable,
   View,
+  Text as NativeText,
   type PressableStateCallbackType,
   type StyleProp,
   type TextStyle,
   type ViewStyle,
 } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
-import { MarkdownTextSpan } from "@/components/markdown-text";
 import { Text } from "@/components/ui/text";
 import {
   iconButtonChromeGlyphSize,
@@ -18,7 +18,6 @@ import * as Clipboard from "expo-clipboard";
 import { Check, Copy } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 import type { HighlightToken } from "@getpaseo/highlight";
-import { fenceLanguageToExtension } from "@/components/markdown/fence/language";
 import { isWeb } from "@/constants/platform";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { syntaxTokenStyleFor } from "@/styles/syntax-token-styles";
@@ -37,6 +36,32 @@ interface HighlightedCodeBlockProps {
   textStyle: TextStyle;
   /** 头部里排在复制按钮之前的额外控件（Mermaid 源码视图的切回图表按钮）。 */
   renderHeaderActions?: () => ReactNode;
+}
+
+// Fence info strings ("```ts", "```typescript", "```ts {1,3}") map to the
+// extension-based parser table in @getpaseo/highlight. Aliases here only
+// cover names that don't already match an extension key in parsers.ts.
+const LANGUAGE_ALIASES: Record<string, string> = {
+  typescript: "ts",
+  javascript: "js",
+  python: "py",
+  rust: "rs",
+  golang: "go",
+  "c++": "cpp",
+  csharp: "cs",
+  "c#": "cs",
+  objc: "m",
+  "objective-c": "m",
+  markdown: "md",
+  elixir: "ex",
+};
+
+export function fenceLanguageToExtension(info: string | null | undefined): string | null {
+  if (!info) return null;
+  const first = info.trim().split(/\s+/)[0]?.toLowerCase();
+  if (!first) return null;
+  const normalized = first.replace(/^\./, "");
+  return LANGUAGE_ALIASES[normalized] ?? normalized;
 }
 
 function stripTerminalFenceNewline(code: string): string {
@@ -91,13 +116,13 @@ export const HighlightedCodeBlock = React.memo(function HighlightedCodeBlock({
         </View>
       </View>
       {keyedLines ? (
-        <MarkdownTextSpan style={innerTextStyle} copyTag="code">
+        <NativeText style={innerTextStyle} dataSet={markdownCopyDataSet.code}>
           {renderCodeSegments(keyedLines)}
-        </MarkdownTextSpan>
+        </NativeText>
       ) : (
-        <MarkdownTextSpan style={innerTextStyle} copyTag="code">
+        <NativeText style={innerTextStyle} dataSet={markdownCopyDataSet.code}>
           {renderedCode}
-        </MarkdownTextSpan>
+        </NativeText>
       )}
     </View>
   );
@@ -123,9 +148,9 @@ interface TokenSpanProps {
 
 const TokenSpan = React.memo(function TokenSpan({ token }: TokenSpanProps) {
   return (
-    <MarkdownTextSpan style={token.style ? syntaxTokenStyleFor(token.style) : undefined}>
+    <NativeText style={token.style ? syntaxTokenStyleFor(token.style) : undefined}>
       {token.text}
-    </MarkdownTextSpan>
+    </NativeText>
   );
 });
 
@@ -134,7 +159,7 @@ interface CodeTextSpanProps {
 }
 
 const CodeTextSpan = React.memo(function CodeTextSpan({ text }: CodeTextSpanProps) {
-  return <MarkdownTextSpan>{text}</MarkdownTextSpan>;
+  return <NativeText>{text}</NativeText>;
 });
 
 interface SplitStyles {

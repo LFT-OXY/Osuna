@@ -1,7 +1,8 @@
+import { MarkdownRenderer } from "@/components/markdown/renderer";
+import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { useMemo } from "react";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
-import { MarkdownRenderer } from "@/components/markdown/renderer";
 import { parseMarkdownPreviewDocument } from "./document";
 import type { MarkdownPreviewResources } from "./resource";
 
@@ -10,13 +11,23 @@ export const MARKDOWN_PREVIEW_SCROLLS_TO_LINE = false;
 
 interface FileMarkdownPreviewProps {
   source: string;
-  // 相对资源和滚到指定行只在 Web 版支持；原生版沿用 RN 渲染器，签名与 Web 版保持一致。
+  // 滚到指定行只在 Web 版支持；原生版用上游的渲染器，签名与 Web 版保持一致。
   resources: MarkdownPreviewResources;
   lineStart?: number;
   navigationRevision: number;
+  filePath: string;
+  workspaceRoot?: string;
+  client?: DaemonClient | null;
+  serverId?: string;
 }
 
-export function FileMarkdownPreview({ source }: FileMarkdownPreviewProps) {
+export function FileMarkdownPreview({
+  source,
+  filePath,
+  workspaceRoot,
+  client,
+  serverId,
+}: FileMarkdownPreviewProps) {
   const document = useMemo(() => parseMarkdownPreviewDocument(source), [source]);
 
   return (
@@ -43,7 +54,13 @@ export function FileMarkdownPreview({ source }: FileMarkdownPreviewProps) {
             ))}
           </View>
         ) : null}
-        <MarkdownRenderer text={document.body} />
+        <MarkdownRenderer
+          text={document.body}
+          filePath={filePath}
+          workspaceRoot={workspaceRoot}
+          client={client}
+          serverId={serverId}
+        />
       </View>
     </View>
   );

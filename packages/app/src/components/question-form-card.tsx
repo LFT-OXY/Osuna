@@ -17,6 +17,7 @@ import { FormTextInput } from "@/components/ui/form-field";
 import { Text } from "@/components/ui/text";
 import { EditingTextInput } from "@/components/ui/text-input";
 import { ICON_SIZE } from "@/styles/theme";
+import { ScrollableCodeSurface } from "@/components/ui/scrollable-code-surface";
 import {
   buildQuestionFormAnswers,
   canConfirmQuestion,
@@ -48,6 +49,9 @@ type RespondingSource =
   | { kind: "primary" }
   | { kind: "skip" }
   | { kind: "dismiss" };
+// Native previews are uncapped: inside the option's Pressable, Android never hands a
+// drag to the preview's nested scroll, so lines past a cap would be unreachable.
+const OPTION_PREVIEW_MAX_HEIGHT = isNative ? undefined : 240;
 
 type HoverableState = PressableStateCallbackType & { hovered?: boolean };
 
@@ -143,6 +147,20 @@ function QuestionOptionRow({
         <View style={styles.rowText}>
           <Text>{option.label}</Text>
           {option.description ? <Text color="foregroundMuted">{option.description}</Text> : null}
+          {option.preview ? (
+            // Shown for every option at once so they can be compared before picking.
+            // Long lines wrap, as in Claude Code, since most previews are prose.
+            <ScrollableCodeSurface
+              tone="surface0"
+              maxHeight={OPTION_PREVIEW_MAX_HEIGHT}
+              horizontal={false}
+              selectable={false}
+              textStyle={styles.optionPreviewText}
+              testID="question-form-option-preview"
+            >
+              {option.preview}
+            </ScrollableCodeSurface>
+          ) : null}
         </View>
         {/* → 表示点下去就作答：多选行和"其他..."行点下去只是切换或展开，不显示。 */}
         {multiSelect ? null : (
@@ -150,7 +168,16 @@ function QuestionOptionRow({
         )}
       </>
     ),
-    [isLoading, isSelected, multiSelect, option.description, option.label, optIndex, showArrow],
+    [
+      isLoading,
+      isSelected,
+      multiSelect,
+      option.description,
+      option.label,
+      option.preview,
+      optIndex,
+      showArrow,
+    ],
   );
 
   return (
@@ -719,6 +746,10 @@ const styles = StyleSheet.create((theme) => ({
   body: {
     // 行的悬停底色比内容多出一圈，向外借回这圈留白，让编号圆圈和问题文字对齐。
     marginHorizontal: -theme.spacing[2],
+  },
+  optionPreviewText: {
+    lineHeight: 20,
+    ...(isNative ? null : { whiteSpace: "pre-wrap", overflowWrap: "break-word" }),
   },
   options: {
     gap: theme.spacing[0.5],

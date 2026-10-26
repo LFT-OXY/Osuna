@@ -11,7 +11,7 @@ interface FindActiveFileMentionInput {
   blockBoundary: number;
 }
 
-const INVALID_MENTION_QUERY_CHARS = /[\s\n\r\t"']/;
+const INVALID_MENTION_QUERY_CHARS = /[\s\n\r\t"'<>]/;
 
 export function findActiveFileMention(input: FindActiveFileMentionInput): FileMentionRange | null {
   const clampedCursor = Math.max(0, Math.min(input.cursorIndex, input.text.length));
@@ -22,6 +22,11 @@ export function findActiveFileMention(input: FindActiveFileMentionInput): FileMe
     atIndex >= 0;
     atIndex = atIndex === 0 ? -1 : beforeCursor.lastIndexOf("@", atIndex - 1)
   ) {
+    // Skip @ that looks like part of an email address (local-part char immediately before @).
+    if (atIndex > 0 && /[\w+]/.test(beforeCursor[atIndex - 1]!)) {
+      continue;
+    }
+
     const query = beforeCursor.slice(atIndex + 1);
     if (INVALID_MENTION_QUERY_CHARS.test(query)) {
       continue;

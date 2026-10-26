@@ -6,7 +6,7 @@ import { LOGIC_MAPS_DIRECTORY } from "@getpaseo/protocol/logic-map-docs";
 import type { LogicMapSkeleton } from "@getpaseo/protocol/messages";
 
 import type { AgentManager } from "../agent/agent-manager.js";
-import { formatSystemNotificationPrompt } from "../agent/agent-prompt.js";
+import { formatSystemNotificationPrompt } from "../agent/agent-messages/index.js";
 import { LogicMapCorruptError, LogicMapNotFoundError } from "./logic-map-errors.js";
 import { readLogicMap } from "./logic-map-store.js";
 import { READ_LOGIC_MAP_TOOL, UPDATE_LOGIC_MAP_TOOL } from "./logic-map-tools.js";

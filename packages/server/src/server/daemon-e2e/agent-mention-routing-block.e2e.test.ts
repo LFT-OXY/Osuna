@@ -20,6 +20,8 @@ import {
 import { DaemonClient } from "../test-utils/daemon-client.js";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 import { getAskModeConfig } from "./agent-configs.js";
+import { parseAgentMessage } from "../agent/agent-messages/index.js";
+import { stripTrailingRoutingBlock } from "../agent/trailing-routing-block.js";
 
 const WAIT_MS = 15_000;
 const CLAUDE = "[@Claude](paseo://agent/provider/claude)";
@@ -179,6 +181,8 @@ async function createViaLegacyRequest({
         appVersion: "0.8.0",
       }),
     );
+    // hello 是异步处理的：等 daemon 回了第一帧（server_info）再发会话消息，否则会被当成 hello 之前的消息断开。
+    await new Promise<void>((resolve) => socket.once("message", () => resolve()));
     const requestId = randomUUID();
     socket.send(
       JSON.stringify({
@@ -395,7 +399,12 @@ Rules:
       name: "send_agent_prompt",
       arguments: { agentId: target.id, prompt: text, background: false },
     });
-    expect(scenario.prompts).toEqual([text]);
+    // 上游给 Agent 间消息套了发送者信封；信封整串可解析，说明末尾没有追加 Routing block。
+    expect(scenario.prompts).toHaveLength(1);
+    expect(parseAgentMessage(scenario.prompts[0])).toMatchObject({
+      text,
+      source: { kind: "agent-message", agentId: caller.id },
+    });
 
     const created = await scenario.client.scheduleCreate({
       prompt: text,
@@ -407,8 +416,14 @@ Rules:
     await scenario.client.waitForFinish(target.id, WAIT_MS);
     const runId = fired.schedule?.runs.at(-1)?.id;
 
-    expect(scenario.prompts).toEqual([
-      text,
+    // 上游会把子 Agent 的结束通知发给调用方，这类通知不是本用例要看的，过滤掉后逐条比对。
+    const notifications = scenario.prompts.filter(
+      (prompt) => parseAgentMessage(prompt)?.source?.kind === "agent-notification",
+    );
+    expect(notifications.every((prompt) => stripTrailingRoutingBlock(prompt) === prompt)).toBe(
+      true,
+    );
+    expect(scenario.prompts.filter((prompt) => !notifications.includes(prompt)).slice(1)).toEqual([
       `<paseo-system>\nSchedule fired (id=${created.schedule.id}, run=${runId}).\n${text}\n</paseo-system>`,
     ]);
   });
@@ -464,7 +479,15 @@ describe("Routing block for the first message of a new agent", () => {
       },
     });
 
-    await expect.poll(() => scenario.prompts, { timeout: WAIT_MS }).toEqual([text]);
+    // 首个 prompt 套着上游的发送者信封，整串可解析即末尾没有 Routing block；之后发给调用方的结束通知同样不带。
+    await expect.poll(() => scenario.prompts.length, { timeout: WAIT_MS }).toBeGreaterThan(0);
+    expect(parseAgentMessage(scenario.prompts[0])).toMatchObject({
+      text,
+      source: { kind: "agent-message", agentId: caller.id },
+    });
+    for (const prompt of scenario.prompts) {
+      expect(stripTrailingRoutingBlock(prompt)).toBe(prompt);
+    }
   });
 });
 
