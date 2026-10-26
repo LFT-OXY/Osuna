@@ -4026,6 +4026,7 @@ export const ko: TranslationResources = {
             apiEndpointsKeepWorking: "API 엔드포인트는 계속 작동합니다.",
             confirm: "끄기",
             listSeparator: ", ",
+            rotationStops: "{{providers}}의 계정 자동 전환이 중지됩니다.",
           },
         },
       },
@@ -4411,6 +4412,195 @@ export const ko: TranslationResources = {
           termsLink: "Antigravity FAQ",
         },
       },
+      accounts: {
+        title: "계정",
+        rotate: {
+          title: "계정 자동 전환",
+          hint: "전환은 새 세션에만 적용되며, 열려 있는 세션은 원래 계정에 남습니다.",
+          codexHint:
+            "요청이 Osuna를 거치므로 Osuna가 실행 중이 아니면 터미널의 Codex가 연결되지 않습니다.",
+          hintWithCodex: "{{hint}} {{codexHint}}",
+          claudeHint:
+            "전환은 새 세션에만 적용됩니다. 이미 열려 있는 Claude Code도 로그인이 만료될 때 새 계정으로 옮겨갈 수 있습니다.",
+          saveFailed: "계정 자동 전환을 저장하지 못했습니다: {{reason}}",
+        },
+        throughEndpoints:
+          "Claude Code가 지금 '서드파티 API 사용'을 거치고 있습니다. 구독 계정은 이 스위치를 끄면 사용됩니다.",
+        cliSignInsOff: "“CLI 로그인 읽기”가 꺼져 있어 계정 자동 전환이 중지되었습니다",
+        openPrivacySettings: "설정 열기",
+        loginUnsupported: "Osuna가 이 {{name}} 로그인을 전환할 수 없습니다: {{reason}}",
+        unsupportedReasons: {
+          ephemeral:
+            'Codex가 로그인을 메모리에만 저장합니다(cli_auth_credentials_store = "ephemeral")',
+          unknown_store: "Osuna가 모르는 방식으로 Codex가 로그인을 저장합니다",
+          config_unparsable: "Codex의 config.toml을 읽을 수 없습니다",
+          keyring_unavailable: "이 시스템에서는 Osuna가 키체인을 읽을 수 없습니다",
+          login_unparsable: "저장된 로그인을 읽을 수 없습니다",
+          account_unknown: "Claude Code가 어떤 계정으로 로그인했는지 기록하지 않았습니다",
+        },
+        loadFailed: "계정을 불러올 수 없습니다: {{reason}}",
+        empty:
+          "아직 계정이 없습니다. {{name}}이(가) 구독 계정으로 로그인하면 그 계정이 첫 번째 계정이 됩니다.",
+        single: "전환하려면 계정을 하나 더 추가하세요.",
+        add: "계정 추가",
+        alreadyAdded: "{{email}} 계정이 이미 목록에 있어 로그인 정보를 업데이트했습니다.",
+        needsSignInHint:
+          "로그인이 거부되었거나 취소되었습니다. 다시 로그인할 때까지 이 계정으로 전환하지 않습니다.",
+        signInAgain: "다시 로그인",
+        switching: "CLI를 이 계정으로 전환하는 중…",
+        removing: "삭제하는 중…",
+        menu: {
+          label: "{{email}} 작업",
+          useNow: "지금 사용",
+          makeFirst: "첫 번째로",
+          moveUp: "위로 이동",
+          moveDown: "아래로 이동",
+          moveToTop: "맨 위로 이동",
+          moveToBottom: "맨 아래로 이동",
+          setLimits: "한도 설정",
+          remove: "삭제",
+        },
+        orderHint:
+          "끌어서 순서 변경: 순환은 위쪽 계정부터 전환합니다. Alt+↑/↓로 이동, 오른쪽 클릭으로 메뉴.",
+        orderFailed: "순서를 저장하지 못했습니다: {{reason}}",
+        remove: {
+          title: "{{email}}을(를) 삭제할까요?",
+          message:
+            "Osuna가 보관한 이 계정({{email}})의 사본을 삭제합니다. CLI는 로그아웃되지 않습니다.",
+          confirm: "삭제",
+        },
+        switchFailure: {
+          title: "계정을 전환하지 못했습니다",
+          write_failed:
+            "{{name}}을(를) {{email}}(으)로 전환하지 못했습니다: 로그인을 쓸 수 없습니다. Osuna가 {{name}}의 로그인을 쓸 수 있는지 확인한 뒤 다시 '지금 사용'을 선택하세요.",
+          login_unsupported:
+            "{{name}}을(를) {{email}}(으)로 전환하지 못했습니다: Osuna가 이 로그인을 전환할 수 없습니다.",
+          needs_sign_in:
+            "{{name}}을(를) {{email}}(으)로 전환하지 못했습니다: 다시 로그인해야 합니다. 해당 행에서 '다시 로그인'을 선택하세요.",
+          no_account:
+            "사용 중인 계정은 다시 로그인해야 하고 대신할 계정이 없습니다. 다시 로그인하거나 다른 계정을 추가하세요.",
+          other: "{{name}}을(를) 전환하지 못했습니다: {{reason}}",
+        },
+        switches: {
+          title: "최근 전환",
+          fromTo: "{{from}} → {{to}}",
+          toOnly: "{{to}}에 로그인",
+          showAll: "{{count}}개 모두 보기",
+          showFewer: "접기",
+          reasons: {
+            use_now: "'지금 사용'을 선택함",
+            lapsed: "{{from}}의 로그인이 더 이상 작동하지 않음",
+            used_up: "{{from}}의 {{window}} 창을 {{pct}}% 사용함",
+            limit: "{{from}}의 {{window}} 창이 설정한 한도 {{limit}}%에 닿음",
+            held: "ChatGPT가 {{from}}의 전송을 막음(사용량 소진, 크레딧 없음)",
+            room_again: "{{to}}에 다시 여유가 생김",
+            keep_signed_in: "{{to}}에 로그인 고정을 선택함",
+            not_listed: "로그인한 계정이 목록에 없음",
+            other: "Osuna가 전환함",
+          },
+        },
+        switchOnly: {
+          title: "로그인만 바꾸기",
+          hint: "끄면 Codex 요청이 Osuna를 거치고, 사용 중인 계정이 받지 못한 요청은 응답 전에 다음 계정으로 넘깁니다. 켜면 Codex가 OpenAI에 바로 연결하고 로그인만 바꿉니다.",
+          saveFailed: "로그인만 바꾸기를 저장하지 못했습니다: {{reason}}",
+        },
+        keep: {
+          title: "로그인 고정",
+          hint: "계정을 선택해 두면 Osuna는 다 써도 자동으로 바꾸지 않습니다.",
+          none: "고정 안 함",
+          saveFailed: "로그인 고정을 저장하지 못했습니다: {{reason}}",
+        },
+        limits: {
+          title: "{{email}}의 한도",
+          hint: "창이 한도에 닿으면 다음 계정으로 바꿉니다. 비워 둔 창은 98%입니다.",
+          inputLabel: "{{window}} 한도",
+          placeholder: "기본 98",
+          invalid: "1에서 99 사이의 정수를 입력하세요",
+          noWindows: "이 계정의 사용량을 읽은 뒤 한도를 설정할 수 있습니다.",
+          save: "저장",
+          saving: "저장 중…",
+          saveFailed: "한도를 저장하지 못했습니다: {{reason}}",
+          onBar: "한도 {{pct}}%",
+        },
+        unknownEmail: "알 수 없는 계정",
+        badges: {
+          temporarilyFirst: "임시 우선",
+          firstWhenRoom: "여유가 생기면 다시 우선",
+          inUse: "사용 중",
+          first: "우선",
+          needsSignIn: "다시 로그인 필요",
+        },
+        usage: {
+          reading: "사용량을 읽는 중…",
+          failed: "사용량을 읽을 수 없습니다: {{reason}}",
+          reasons: {
+            not_found: "플랜 사용량에서 이 로그인이 보이지 않습니다",
+            not_read_yet: "아직 읽지 않았습니다",
+            rejected: "로그인이 거부되었습니다",
+          },
+        },
+        signIn: {
+          addTitle: "{{name}} 계정 추가",
+          addFailedTitle: "이 계정을 추가하지 못했습니다",
+          reSignInFailedTitle: "다시 로그인하지 못했습니다",
+          reSignInTitle: "{{email}} 다시 로그인",
+          starting: "로그인을 준비하는 중…",
+          startFailed: "로그인을 시작하지 못했습니다: {{reason}}",
+          waitingTitle: "브라우저에서 로그인을 완료하세요",
+          waitingHint: "추가할 ChatGPT 계정으로 로그인하세요. 완료되면 이 창은 자동으로 닫힙니다.",
+          openPage: "로그인 페이지 열기",
+          copyLink: "링크 복사",
+          linkLabel: "로그인 링크",
+          pasteLabel: "브라우저가 마지막으로 연 주소",
+          pasteHint:
+            "다른 기기에서 로그인하면 브라우저가 마지막에 열리지 않는 페이지에 멈춥니다. 주소 표시줄의 전체 주소를 복사해 여기에 붙여 넣으세요.",
+          pasteHintBlocked:
+            "호스트의 1455 포트가 사용 중이어서 브라우저가 Osuna로 돌아올 수 없습니다. 브라우저가 마지막으로 연 전체 주소를 복사해 여기에 붙여 넣으세요.",
+          pasteSubmit: "완료",
+          retry: "다시 시도",
+          canceled: "로그인이 취소되었습니다.",
+          failed: "로그인을 완료하지 못했습니다: {{reason}}",
+          claude: {
+            waitingHint: "추가할 Claude 계정으로 로그인하세요. 완료되면 이 창은 자동으로 닫힙니다.",
+            pasteLabel: "로그인 페이지에 표시된 코드",
+            pasteHint:
+              "다른 기기에서 로그인하나요? 그 기기에서 링크를 열고, 로그인 후 페이지에 표시되는 코드를 복사해 여기에 붙여넣으세요.",
+            pasteHintBlocked:
+              "Claude Code가 Osuna로 돌아오는 페이지를 열지 않았습니다. 로그인 후 페이지에 표시되는 코드를 복사해 여기에 붙여넣으세요.",
+          },
+          pasteErrors: {
+            paste_invalid: "http://로 시작하는 전체 주소를 붙여 넣으세요",
+            paste_mismatch:
+              "이 로그인에서 나온 주소가 아닙니다. 이 로그인의 브라우저 탭 주소를 붙여 넣으세요.",
+            not_waiting: "이 로그인은 끝났습니다. 다시 시도하세요.",
+            code_invalid: "로그인 페이지에 표시된 코드를 붙여넣으세요.",
+          },
+          failures: {
+            timed_out: "10분 안에 로그인이 완료되지 않았습니다.",
+            refused: "로그인 페이지가 거부했습니다: {{reason}}",
+            exchange_failed: "ChatGPT가 로그인을 완료하지 않았습니다({{reason}}).",
+            no_account: "ChatGPT가 어떤 계정으로 로그인했는지 알려 주지 않았습니다.",
+            different_account: "다른 계정입니다. 이 계정으로 로그인하세요.",
+            cli_sign_ins_off: "'CLI 로그인 정보 읽기'가 꺼져 있어 계정을 추가할 수 없습니다.",
+            no_email: "Claude Code가 계정 이메일을 기록하지 않아 추가하지 않았습니다.",
+            login_failed: "Claude Code 로그인이 완료되지 않았습니다: {{reason}}",
+          },
+        },
+        riskNotice: {
+          sheetTitle: "{{name}}의 계정 자동 전환을 켤까요?",
+          confirm: "이해했습니다, 켜기",
+          codexTitle: "계정 자동 전환으로 ChatGPT 계정이 제한되거나 정지될 수 있습니다",
+          codexBody:
+            'OpenAI의 Sign in with ChatGPT 약관 제4조는 "Creating multiple accounts, splitting usage, rotating accounts, or otherwise bypassing usage limits"을(를) 조장하거나 권장해서는 안 된다고 하며, 제1조는 "Do not impersonate OpenAI, another application, or another open-source project."라고 명시합니다. Osuna는 계정을 추가하고 로그인을 갱신할 때 Codex의 신원을 사용합니다. OpenAI의 Codex 메인테이너도 여러 계정으로 플랜 한도를 우회해서는 안 된다고 공개적으로 말했습니다(직원의 발언이며 약관이 아닙니다).',
+          codexTermsLink: "Sign in with ChatGPT 약관",
+          codexMaintainerLink: "메인테이너의 발언",
+          claudeTitle: "계정 자동 전환으로 Claude 계정이 제한되거나 정지될 수 있습니다",
+          claudeBody:
+            'Anthropic의 이용 정책은 "create multiple accounts, to avoid detection, circumvent product guardrails"을(를) 플랫폼 남용으로 규정합니다. Claude Code 법률 페이지는 Pro와 Max의 공개된 한도가 "ordinary, individual usage"을(를) 전제로 한다고 하며, "developers may not collect, store, or intermediate Claude.ai credentials or session tokens"라고 명시합니다. Osuna는 다른 계정의 로그인을 저장합니다. Anthropic은 전환에 대해 따로 언급하지 않습니다.',
+          claudePolicyLink: "이용 정책",
+          claudeLegalLink: "Claude Code 법률 페이지",
+        },
+      },
       actions: {
         menu: "{{name}} 작업",
         remove: "프로바이더 제거",
@@ -4764,6 +4954,7 @@ export const ko: TranslationResources = {
       refresh: "새로 고침",
       allSources: "전체",
       official: "공식",
+      officialAccount: "공식 · {{email}}",
       deletedEndpoint: "(삭제됨)",
       deletedEndpointName: "{{name}} (삭제됨)",
       breakdown: {
@@ -4983,6 +5174,7 @@ export const ko: TranslationResources = {
         failed: "실패",
         failedWith: "실패 ({{reason}})",
         switched: "{{count}}회 전환",
+        switchedAccounts: "{{count}}회 전환",
       },
       failures: {
         credit: "잔액 부족",

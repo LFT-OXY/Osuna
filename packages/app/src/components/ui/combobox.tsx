@@ -41,6 +41,7 @@ import {
   useFloating,
 } from "@floating-ui/react-native";
 import { getNextActiveIndex } from "./combobox-keyboard";
+import { shouldFlipDesktopUp } from "./combobox-placement";
 import {
   buildVisibleComboboxOptions,
   getComboboxFallbackIndex,
@@ -81,6 +82,9 @@ import { SPACING } from "@/styles/theme";
 export { buildDesktopFrameStyle } from "./combobox-frame-style";
 
 const IS_WEB = isWeb;
+
+/** 网页端弹层离锚点的距离，与 floatingOffset、往上开的测量定位一致。 */
+const DESKTOP_FLOATING_OFFSET = 5;
 
 const DEFAULT_MOBILE_SNAP_POINTS = ["60%", "90%"];
 
@@ -504,7 +508,7 @@ function computeDesktopPosition(input: DesktopPositionInput): DesktopPositionRes
       : null;
   const measuredTopStartBottom =
     useMeasuredTopStartPosition && referenceTop !== null
-      ? Math.max(windowHeight - referenceTop + 5, collisionPadding)
+      ? Math.max(windowHeight - referenceTop + DESKTOP_FLOATING_OFFSET, collisionPadding)
       : null;
 
   const resolvedPositionReady = resolvePositionReady(
@@ -837,12 +841,14 @@ function applySetSearchQuery(
 function applyDesktopContentLayout(
   event: LayoutChangeEvent,
   setDesktopContentWidth: React.Dispatch<React.SetStateAction<number | null>>,
+  setDesktopContentHeight: React.Dispatch<React.SetStateAction<number | null>>,
   useMeasuredTopStartPosition: boolean,
   hasResolvedDesktopPosition: boolean,
   update: () => unknown,
 ) {
-  const { width } = event.nativeEvent.layout;
+  const { width, height } = event.nativeEvent.layout;
   setDesktopContentWidth((prev) => (prev === width ? prev : width));
+  setDesktopContentHeight((prev) => (prev === height ? prev : height));
   if (!useMeasuredTopStartPosition || !hasResolvedDesktopPosition) {
     void update();
   }
@@ -869,6 +875,68 @@ function runIfSubmitSearch(input: {
   if (input.showCustomOption && !input.isCustomValueDisabled) {
     input.handleSelect(input.sanitizedSearchValue);
   }
+}
+
+interface DesktopFlipState {
+  isOpen: boolean;
+  isMobile: boolean;
+  isDesktopAboveSearch: boolean;
+  desktopPlacement: ComboboxDesktopPlacement;
+  contentHeight: number | null;
+  availableBelow: number | undefined;
+  referenceTop: number | null;
+  collisionPadding: number;
+}
+
+interface DesktopFlip {
+  placement: ComboboxDesktopPlacement;
+  availableHeight: number | undefined;
+}
+
+/**
+ * 网页端往下开的弹层贴着窗口底边时会整块画到窗口外（floating-ui 的 flip 只给原生端用），
+ * 量出放不下就在这次打开里改走往上开的测量定位，关上再复原。
+ */
+function useDesktopFlipUp(
+  state: DesktopFlipState,
+  setContentHeight: React.Dispatch<React.SetStateAction<number | null>>,
+): DesktopFlip {
+  const [flippedUp, setFlippedUp] = useState(false);
+  const { isOpen, contentHeight, availableBelow, referenceTop, collisionPadding } = state;
+  const canFlip =
+    IS_WEB &&
+    !state.isMobile &&
+    !state.isDesktopAboveSearch &&
+    state.desktopPlacement === "bottom-start";
+  useEffect(() => {
+    if (!isOpen) {
+      setFlippedUp(false);
+      setContentHeight(null);
+      return;
+    }
+    if (!canFlip || flippedUp) return;
+    if (contentHeight === null || availableBelow === undefined || referenceTop === null) return;
+    if (shouldFlipDesktopUp({ contentHeight, availableBelow, referenceTop, collisionPadding })) {
+      setFlippedUp(true);
+    }
+  }, [
+    availableBelow,
+    canFlip,
+    collisionPadding,
+    contentHeight,
+    flippedUp,
+    isOpen,
+    referenceTop,
+    setContentHeight,
+  ]);
+  if (!canFlip || !flippedUp || referenceTop === null) {
+    return { placement: state.desktopPlacement, availableHeight: availableBelow };
+  }
+  // 网页端 floating-ui 给往上开算的可用高度偏小，会把列表压扁；翻上去时按量到的锚点顶部算。
+  return {
+    placement: "top-start",
+    availableHeight: referenceTop - DESKTOP_FLOATING_OFFSET - collisionPadding,
+  };
 }
 
 function computeCollisionPadding(): number {
@@ -918,7 +986,7 @@ interface FloatingMiddlewareInput {
 function buildFloatingMiddleware(input: FloatingMiddlewareInput) {
   const { collisionPadding, isDesktopAboveSearch, setAvailableSize, setReferenceWidth } = input;
   return [
-    floatingOffset(isWeb ? 5 : 4),
+    floatingOffset(isWeb ? DESKTOP_FLOATING_OFFSET : 4),
     ...(isWeb ? [] : [flip({ padding: collisionPadding })]),
     ...(isDesktopAboveSearch ? [] : [shift({ padding: collisionPadding })]),
     floatingSize({
@@ -1387,6 +1455,7 @@ export function Combobox({
   const [activeIndex, setActiveIndex] = useState<number>(-1);
   const desktopOptionsScrollRef = useRef<ScrollView>(null);
   const [desktopContentWidth, setDesktopContentWidth] = useState<number | null>(null);
+  const [desktopContentHeight, setDesktopContentHeight] = useState<number | null>(null);
 
   const [internalOpen, setInternalOpen] = useState(false);
   const { isControlled, isOpen } = resolveControlledOpen(open, internalOpen);
@@ -1429,8 +1498,23 @@ export function Combobox({
     [collisionPadding, isDesktopAboveSearch],
   );
 
+  const desktopFlip = useDesktopFlipUp(
+    {
+      isOpen,
+      isMobile,
+      isDesktopAboveSearch,
+      desktopPlacement,
+      contentHeight: desktopContentHeight,
+      availableBelow: availableSize?.height,
+      referenceTop,
+      collisionPadding,
+    },
+    setDesktopContentHeight,
+  );
+  const effectiveDesktopPlacement = desktopFlip.placement;
+
   const { refs, floatingStyles, update } = useFloating({
-    placement: isWeb ? desktopPlacement : "bottom-start",
+    placement: isWeb ? effectiveDesktopPlacement : "bottom-start",
     middleware,
     sameScrollView: false,
     elements: {
@@ -1438,7 +1522,7 @@ export function Combobox({
     },
   });
 
-  useDesktopPositionReset(isOpen, isMobile, desktopPlacement, update, {
+  useDesktopPositionReset(isOpen, isMobile, effectiveDesktopPlacement, update, {
     setAvailableSize,
     setDesktopContentWidth,
     setReferenceLeft,
@@ -1464,7 +1548,7 @@ export function Combobox({
   } = computeDesktopPosition({
     isDesktopAboveSearch,
     isMobile,
-    desktopPlacement,
+    desktopPlacement: effectiveDesktopPlacement,
     referenceTop,
     referenceLeft,
     referenceAtOrigin,
@@ -1535,6 +1619,7 @@ export function Combobox({
       applyDesktopContentLayout(
         event,
         setDesktopContentWidth,
+        setDesktopContentHeight,
         useMeasuredTopStartPosition,
         hasResolvedDesktopPosition,
         update,
@@ -1621,6 +1706,8 @@ export function Combobox({
     [theme.colors.palette.zinc],
   );
 
+  const desktopAvailableHeight = desktopFlip.availableHeight;
+
   const desktopFrameStyle = useMemo(
     () =>
       buildDesktopFrameStyle({
@@ -1630,7 +1717,7 @@ export function Combobox({
         desktopFixedHeight,
         desktopPositionStyle,
         shouldHideDesktopContent,
-        availableHeight: availableSize?.height,
+        availableHeight: desktopAvailableHeight,
       }),
     [
       desktopMinWidth,
@@ -1639,7 +1726,7 @@ export function Combobox({
       desktopFixedHeight,
       desktopPositionStyle,
       shouldHideDesktopContent,
-      availableSize?.height,
+      desktopAvailableHeight,
     ],
   );
 

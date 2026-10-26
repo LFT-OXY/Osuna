@@ -35,6 +35,24 @@ interface KnownReport {
   source: UsageSource;
   logins: [Login, ...Login[]];
   label?: string;
+  // 这张卡读的是 Osuna 存着的号（多号自动轮换），登录每次读时向账号服务要；值是账号键。
+  savedAccount?: string;
+}
+
+/**
+ * Osuna 存着的号（多号自动轮换）：Agent 启动后 CLI 换到了别的号，它的卡片仍是启动时的号，
+ * 用那个号自己存着的登录读。
+ */
+export interface SavedAccountLogins {
+  /** at 那一刻 CLI 登录、现在已不是 CLI 登录的号；之后没换过号或已换回时为 null。 */
+  accountAt(input: {
+    provider: string;
+    at: number;
+    // Agent 启动时的环境：只认它用的是 Osuna 换号的那个 CLI 目录。
+    env: Record<string, string>;
+  }): { key: string; label?: string } | null;
+  /** 用这个号自己的登录读额度的输入；读不了（号被移除、需要重新登录）为 null。 */
+  usageInput(input: { provider: string; key: string }): Promise<unknown>;
 }
 
 export interface AgentUsageLookup {
@@ -97,6 +115,7 @@ export class UsageSourceRegistry {
   private readonly agents: AgentUsageLookup;
   private readonly deadlineMs: number;
   private readonly cliSignIns: CliSignInGate;
+  private savedAccounts: SavedAccountLogins | null = null;
 
   constructor(options: UsageSourceRegistryOptions = {}) {
     this.now = options.now ?? Date.now;
@@ -116,6 +135,11 @@ export class UsageSourceRegistry {
     this.cache.clear();
     this.pending.clear();
     this.answeredBy.clear();
+  }
+
+  /** 账号服务比插件晚建，建好后接上。 */
+  useSavedAccounts(savedAccounts: SavedAccountLogins): void {
+    this.savedAccounts = savedAccounts;
   }
 
   register(source: UsageSource): void {
@@ -158,6 +182,17 @@ export class UsageSourceRegistry {
       if (key.startsWith(`${reportId}:`)) this.pending.delete(key);
     const entry = await this.fetchId(reportId, known, true);
     return { outcome: { ...outcome, message: resetOutcomeText(outcome) }, entry };
+  }
+
+  /**
+   * Reads one account through a source with an input the caller holds (a saved account's own login),
+   * past discovery and the cache. Throws when Read CLI sign-ins is off or the source is gone.
+   */
+  async fetchInput(sourceId: string, input: unknown): Promise<UsageReport> {
+    if (!this.cliSignIns.allowed()) throw new CliSignInsOffError("usage_fetch", sourceId);
+    const source = this.sources.get(sourceId);
+    if (!source) throw new Error(`Unknown usage source: ${sourceId}`);
+    return this.fetchBeforeDeadline(source, input);
   }
 
   async listReports(options: ListUsageReportsOptions = {}): Promise<UsageReportEntry[]> {
@@ -212,7 +247,7 @@ export class UsageSourceRegistry {
       previous?.sessionKey === session.sessionKey &&
       previous.provider === session.provider &&
       previous.model === session.model;
-    if (sameScope) return [...previous.reports.keys()];
+    if (sameScope) return this.pinLaunchAccount({ agentId, session });
     const generation = this.generation;
     const reports = await this.discover({
       kind: "session",
@@ -230,7 +265,50 @@ export class UsageSourceRegistry {
       reports,
     });
     this.mergeKnown();
-    return [...reports.keys()];
+    return this.pinLaunchAccount({ agentId, session });
+  }
+
+  /**
+   * Agent 启动后 CLI 换过号：卡片换成启动时的号（照账号服务说的），用它存着的登录读；换回来后重新照 CLI 发现。
+   */
+  private async pinLaunchAccount(input: {
+    agentId: string;
+    session: AgentUsageSession;
+  }): Promise<string[]> {
+    const { agentId, session } = input;
+    const mapping = this.byAgent.get(agentId);
+    if (!mapping) return [];
+    const pinned = [...mapping.reports.values()].some((report) => report.savedAccount);
+    const source = this.sources.get(session.provider);
+    const account =
+      this.savedAccounts && session.launchedAt !== undefined && source
+        ? this.savedAccounts.accountAt({
+            provider: session.provider,
+            at: session.launchedAt,
+            env: session.env,
+          })
+        : null;
+    if (!account || !source) {
+      if (!pinned) return [...mapping.reports.keys()];
+      this.byAgent.delete(agentId);
+      return this.discoverAgent(agentId);
+    }
+    const id = `${source.id}:${account.key}`;
+    if (mapping.reports.get(id)?.savedAccount !== account.key) {
+      mapping.reports = new Map([
+        [
+          id,
+          {
+            source,
+            logins: [{ input: null, harness: source.label }],
+            label: account.label,
+            savedAccount: account.key,
+          },
+        ],
+      ]);
+      this.mergeKnown();
+    }
+    return [id];
   }
 
   private mergeKnown(): void {
@@ -380,6 +458,18 @@ export class UsageSourceRegistry {
   ): Promise<Pick<UsageReportEntry, "report" | "loginErrors">> {
     // Start each login within the same deadline window, then prefer discovery order.
     // Sequential deadlines can exceed the client's RPC timeout before all errors arrive.
+    if (known.savedAccount !== undefined) {
+      const input = await this.savedAccounts?.usageInput({
+        provider: known.source.id,
+        key: known.savedAccount,
+      });
+      if (input === null || input === undefined) {
+        return {
+          report: { status: "error", error: "Osuna no longer keeps this account's sign-in" },
+        };
+      }
+      return { report: await this.fetchBeforeDeadline(known.source, input) };
+    }
     const attempts = known.logins.map((login) =>
       this.fetchBeforeDeadline(known.source, login.input),
     );

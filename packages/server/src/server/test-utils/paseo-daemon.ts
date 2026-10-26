@@ -18,6 +18,7 @@ import { AGENT_PROVIDER_DEFINITIONS } from "@getpaseo/protocol/provider-manifest
 import { FakeHostProcesses } from "./fake-host-processes.js";
 import { BALANCE_VENDOR_URLS } from "../api-endpoints/balance.js";
 import { loadConfig } from "../config.js";
+import { FakeCliKeychain } from "./fake-cli-keychain.js";
 
 interface TestPaseoDaemonOptions {
   daemonVersion?: string;
@@ -66,6 +67,7 @@ interface TestPaseoDaemonOptions {
   usage?: PaseoDaemonConfig["usage"];
   apiEndpoints?: PaseoDaemonConfig["apiEndpoints"];
   providerVersions?: PaseoDaemonConfig["providerVersions"];
+  providerAccounts?: PaseoDaemonConfig["providerAccounts"];
 }
 
 export interface TestPaseoDaemon {
@@ -308,6 +310,33 @@ async function prepareTestDaemonConfig(
         openCodeAuth: path.join(paseoHomeRoot, "import-sources", "opencode", "auth.json"),
         ...options.apiEndpoints?.importSourcePaths,
       },
+    },
+    // 多号自动轮换读 CLI 登录：测试 daemon 默认指向临时目录与空的假钥匙串，额度一律读不到，加号连不上，
+    // 绝不碰真实的 ~/.codex、~/.claude 与钥匙串。关心它的用例自己传。
+    providerAccounts: {
+      env: {
+        CLAUDE_CONFIG_DIR: path.join(paseoHomeRoot, "claude-config"),
+        CODEX_HOME: path.join(paseoHomeRoot, "codex-home"),
+      },
+      homeDir: paseoHomeRoot,
+      keychain: new FakeCliKeychain(),
+      // 加号与续期绝不连 OpenAI，也不占本机的 1455：关心它的用例指向自己的假登录服务。
+      codexSignIn: {
+        endpoints: {
+          authorizeUrl: "http://127.0.0.1:9/oauth/authorize",
+          tokenUrl: "http://127.0.0.1:9/oauth/token",
+        },
+        callbackPort: 0,
+      },
+      // 绝不运行真的 Claude Code：关心加号与读额度的用例给自己的假 claude。
+      claude: { command: path.join(paseoHomeRoot, "no-claude-in-tests") },
+      usage: {
+        read: async () => ({
+          status: "failed",
+          reason: "The test daemon never reads plan usage: pass providerAccounts.usage",
+        }),
+      },
+      ...options.providerAccounts,
     },
     // 测试 daemon 绝不去 npm registry 查最新版本；关心这件事的测试注入自己的桩。
     providerVersions: {

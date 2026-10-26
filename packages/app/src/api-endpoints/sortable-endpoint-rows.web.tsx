@@ -24,11 +24,11 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS as DndCss } from "@dnd-kit/utilities";
-import type { ApiEndpoint } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
-import type { EndpointPlace } from "./internal/host-list";
+import type { RowPlace } from "./sortable-order";
 import type {
   SortableEndpointRowInfo,
   SortableEndpointRowsProps,
+  SortableItem,
 } from "./sortable-endpoint-rows.types";
 
 /*
@@ -53,19 +53,23 @@ const OVERLAY_MODIFIERS = [snapToDropSlot];
 const MOUSE_ACTIVATION = { activationConstraint: { distance: 6 } };
 const TOUCH_ACTIVATION = { activationConstraint: { delay: 180, tolerance: 8 } };
 
-function keyboardPlace(event: KeyboardEvent<HTMLDivElement>): EndpointPlace | null {
+function keyboardPlace(event: KeyboardEvent<HTMLDivElement>): RowPlace | null {
   if (!event.altKey || event.ctrlKey || event.metaKey) return null;
   if (event.key === "ArrowUp") return event.shiftKey ? "top" : "up";
   if (event.key === "ArrowDown") return event.shiftKey ? "bottom" : "down";
   return null;
 }
 
-export function SortableEndpointRows({
+const ENDPOINT_ROW_TEST_ID_PREFIX = "api-endpoint-row-";
+
+export function SortableEndpointRows<T extends SortableItem>({
   endpoints,
   isSortable,
   renderRow,
   onMove,
-}: SortableEndpointRowsProps) {
+  rowTestIdPrefix = ENDPOINT_ROW_TEST_ID_PREFIX,
+  hint: hintOverride,
+}: SortableEndpointRowsProps<T>) {
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -84,15 +88,15 @@ export function SortableEndpointRows({
     const id = focusAfterMoveRef.current;
     if (id === null) return;
     const row = containerRef.current?.querySelector<HTMLElement>(
-      `[data-testid="api-endpoint-row-${CSS.escape(id)}"]`,
+      `[data-testid="${rowTestIdPrefix}${CSS.escape(id)}"]`,
     );
     if (!row) return;
     row.focus({ preventScroll: true });
     if (document.activeElement === row) focusAfterMoveRef.current = null;
-  }, [order]);
+  }, [order, rowTestIdPrefix]);
 
   const handleKeyDown = useCallback(
-    (endpoint: ApiEndpoint, event: KeyboardEvent<HTMLDivElement>) => {
+    (endpoint: T, event: KeyboardEvent<HTMLDivElement>) => {
       const place = keyboardPlace(event);
       if (!place) return;
       event.preventDefault();
@@ -102,11 +106,11 @@ export function SortableEndpointRows({
     },
     [onMove],
   );
-  const handleContextMenu = useCallback((endpoint: ApiEndpoint, event: MouseEvent) => {
+  const handleContextMenu = useCallback((endpoint: T, event: MouseEvent) => {
     event.preventDefault();
     setMenuEndpointId(endpoint.id);
   }, []);
-  const handleMenuOpenChange = useCallback((endpoint: ApiEndpoint, open: boolean) => {
+  const handleMenuOpenChange = useCallback((endpoint: T, open: boolean) => {
     setMenuEndpointId(open ? endpoint.id : null);
   }, []);
 
@@ -132,7 +136,7 @@ export function SortableEndpointRows({
     justDraggedRef.current = false;
     return true;
   }, []);
-  const hint = t("settings.apiEndpoints.order.hint");
+  const hint = hintOverride ?? t("settings.apiEndpoints.order.hint");
 
   if (!isSortable) {
     return (
@@ -209,7 +213,7 @@ export function SortableEndpointRows({
   );
 }
 
-function SortableEndpoint({
+function SortableEndpoint<T extends SortableItem>({
   endpoint,
   index,
   hint,
@@ -220,15 +224,15 @@ function SortableEndpoint({
   onContextMenu,
   onMenuOpenChange,
 }: {
-  endpoint: ApiEndpoint;
+  endpoint: T;
   index: number;
   hint: string;
   isMenuOpen: boolean;
-  renderRow: (info: SortableEndpointRowInfo) => ReactElement;
+  renderRow: (info: SortableEndpointRowInfo<T>) => ReactElement;
   isPressSuppressed: () => boolean;
-  onKeyDown: (endpoint: ApiEndpoint, event: KeyboardEvent<HTMLDivElement>) => void;
-  onContextMenu: (endpoint: ApiEndpoint, event: MouseEvent) => void;
-  onMenuOpenChange: (endpoint: ApiEndpoint, open: boolean) => void;
+  onKeyDown: (endpoint: T, event: KeyboardEvent<HTMLDivElement>) => void;
+  onContextMenu: (endpoint: T, event: MouseEvent) => void;
+  onMenuOpenChange: (endpoint: T, open: boolean) => void;
 }) {
   const {
     attributes,

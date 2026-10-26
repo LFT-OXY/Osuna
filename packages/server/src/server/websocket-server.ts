@@ -106,6 +106,7 @@ import { OWNER_PERMISSIONS, type DaemonPermission } from "./authorization/index.
 import type { WorkspaceLabelService } from "./workspace-labels/index.js";
 import type { UsageService } from "./usage/service.js";
 import type { ApiEndpointService } from "./api-endpoints/service.js";
+import type { ProviderAccountService } from "./provider-accounts/service.js";
 import {
   ProviderVersionCheckService,
   type ProviderVersionsConfig,
@@ -585,6 +586,7 @@ export class VoiceAssistantWebSocketServer {
   private readonly workspaceLabelService: WorkspaceLabelService | null;
   private readonly usageService: UsageService | undefined;
   private readonly apiEndpointService: ApiEndpointService | undefined;
+  private readonly providerAccountService: ProviderAccountService | undefined;
   private readonly providerVersionCheckService: ProviderVersionCheckService;
   private readonly providerUpgradeService: ProviderUpgradeService;
   private readonly scheduleService: ScheduleService;
@@ -709,6 +711,7 @@ export class VoiceAssistantWebSocketServer {
     apiEndpointService?: ApiEndpointService,
     // 查 CLI 最新版本的联网函数与升级超时；缺省查 npm registry，测试 daemon 注入桩。
     providerVersions?: ProviderVersionsConfig,
+    providerAccountService?: ProviderAccountService,
   ) {
     this.logger = logger.child({ module: "websocket-server" });
     this.workspaceSetupRuntime = workspaceSetupRuntime;
@@ -740,6 +743,7 @@ export class VoiceAssistantWebSocketServer {
     this.workspaceLabelService = workspaceLabelService ?? null;
     this.usageService = usageService;
     this.apiEndpointService = apiEndpointService;
+    this.providerAccountService = providerAccountService;
     const requiredServices = requireWebSocketServices({
       scheduleService,
       checkoutDiffManager,
@@ -1556,6 +1560,7 @@ export class VoiceAssistantWebSocketServer {
       workspaceLabelService: this.workspaceLabelService ?? undefined,
       usageService: this.usageService,
       apiEndpointService: this.apiEndpointService,
+      providerAccountService: this.providerAccountService,
       directorySync: this.directorySync,
       scheduleService: this.scheduleService,
       checkoutDiffManager: this.checkoutDiffManager,
@@ -1888,6 +1893,8 @@ export class VoiceAssistantWebSocketServer {
         ...(this.pluginRuntime ? { planUsageResets: true } : {}),
         // COMPAT(readCliSignIns): added in v0.17.0, remove gate after 2027-04-25.
         readCliSignIns: true,
+        // COMPAT(accountRotation): added in v0.17.0, remove gate after 2027-04-25.
+        ...(this.providerAccountService ? { accountRotation: true } : {}),
         // COMPAT(gatewayLedger): added in v0.17.0, remove gate after 2027-04-23.
         ...(this.usageService && this.apiEndpointService ? { gatewayLedger: true } : {}),
         // COMPAT(apiEndpointPi): added in v0.17.0, remove gate after 2027-04-24.

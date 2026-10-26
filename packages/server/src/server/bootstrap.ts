@@ -251,6 +251,10 @@ import {
 } from "./hub/relationship-remote.js";
 import { DaemonExecutions } from "./hub/daemon-executions.js";
 import { PluginService } from "./plugins/index.js";
+import {
+  createProviderAccountService,
+  type ProviderAccountOverrides,
+} from "./provider-accounts/service.js";
 import { BuiltinPluginLoader } from "./plugins/builtin/index.js";
 import { ManagedPluginSources } from "./plugins/managed-source.js";
 
@@ -518,6 +522,8 @@ export interface PaseoDaemonConfig {
   apiEndpoints?: ApiEndpointServiceOverrides & ApiEndpointGatewayOverrides & RetiredModelsOverrides;
   // 查内置提供方 CLI 最新版本的联网函数与升级超时；缺省查 npm registry、10 分钟，测试换成桩和短超时。
   providerVersions?: ProviderVersionsConfig;
+  // 多号自动轮换读 CLI 登录的环境、钥匙串与读额度的办法；缺省用 daemon 自己的环境、系统钥匙串与套餐用量来源。
+  providerAccounts?: ProviderAccountOverrides;
   log?: PersistedConfig["log"];
   onLifecycleIntent?: (intent: DaemonLifecycleIntent) => void;
   pushNotificationSender?: PushNotificationSender;
@@ -846,6 +852,8 @@ export async function createPaseoDaemon(
       noteCliVersion: (headers) => apiEndpointService.noteCliVersion(headers),
       // usageService 在下面创建；它在读完盘上的记录之前收到的账先排着。
       ledger: { record: (row) => usageService.recordGatewayCall(row) },
+      // providerAccountService 在下面创建；只在 daemon 启动后收到请求时才问。
+      chatGptAccounts: { forRequest: () => providerAccountService.chatGptAccounts.forRequest() },
       daemonVersion,
       overrides: config.apiEndpoints,
     }),
@@ -1052,6 +1060,28 @@ export async function createPaseoDaemon(
     isDirectory: async (target) => (await stat(target).catch(() => null))?.isDirectory() ?? false,
     logger,
   });
+  // 提供方设置页的「账号」一节；变化经 provider.account.changed 告诉客户端重读。
+  const broadcastProviderAccountsChanged = () => {
+    wsServer?.broadcast(wrapSessionMessage({ type: "provider.account.changed" }));
+  };
+  const providerAccountService = createProviderAccountService({
+    paseoHome: config.paseoHome,
+    logger,
+    cliSignIns,
+    planUsage: pluginRuntime,
+    providerRuntimeSettings: (provider) => config.agentProviderSettings?.[provider],
+    // apiEndpointService 在下面创建；只在列出账号时调用，那时 daemon 已经启动。
+    activeEndpointId: (provider) => apiEndpointService.activeEndpointId(provider),
+    onChanged: () => {
+      broadcastProviderAccountsChanged();
+      // 号或设置变了：第二层要不要经过中转站可能跟着变（apiEndpointService 在下面创建）。
+      void apiEndpointService.syncAccountsGateway();
+    },
+    overrides: config.providerAccounts,
+  });
+  pluginRuntime.useSavedAccounts(providerAccountService.savedAccountLogins);
+  // 「读取 CLI 登录凭证」一开一关，这一节跟着显示停着或恢复。
+  cliSignIns.onChange(broadcastProviderAccountsChanged);
   // 先于提供方快照创建：第三方接口启用时，快照和新会话的默认模型都取自它。
   // 两个回调里的 providerSnapshotManager 在下面创建，回调只在 daemon 启动后才会被调用。
   const apiEndpointService = new ApiEndpointService({
@@ -1061,12 +1091,16 @@ export async function createPaseoDaemon(
     retiredModels: apiEndpointRetiredModels,
     sightings: apiEndpointSightings,
     cliSignIns,
+    accountsGateway: () => providerAccountService.gatewayWanted(),
     daemonVersion,
     // 估算成本读时现算：倍率一改，用量页、会话列表与每轮花费都要重读（同改价格表）。
     onPriceMultipliersChanged: () => {
       wsServer?.broadcast(wrapSessionMessage({ type: "usage.pricing.updated" }));
     },
     onActiveEndpointChanged: (provider) => {
+      // 「使用第三方接口」开关一动，账号一节顶上的说明可能跟着变。
+      if (providerAccountService.noticeFollowsActiveEndpoint(provider))
+        broadcastProviderAccountsChanged();
       void providerSnapshotManager
         .refreshSettingsSnapshot({ providers: [provider] })
         .catch((error) => {
@@ -1986,9 +2020,12 @@ export async function createPaseoDaemon(
               usageService,
               apiEndpointService,
               config.providerVersions,
+              providerAccountService,
             );
             pluginRuntime.bindPaseoSessionHost(wsServer);
             await pluginRuntime.start();
+            // 存着的号保活与读额度的定时检查（启动 1 分钟后第一次）。
+            providerAccountService.start();
             providerSnapshotManager.settlePluginProviders();
             wsServer.beginAcceptingConnections();
             relayRuntime = createRelayRuntime({
@@ -2079,6 +2116,7 @@ export async function createPaseoDaemon(
     await usageService.dispose().catch(() => undefined);
     apiEndpointService.dispose();
     apiEndpointRetiredModels.dispose();
+    providerAccountService.stop();
     await relayRuntime?.stop().catch(() => undefined);
     if (wsServer) {
       await wsServer.close();

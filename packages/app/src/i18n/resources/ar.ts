@@ -3987,6 +3987,7 @@ export const ar: TranslationResources = {
             apiEndpointsKeepWorking: "تواصل نقاط نهاية API العمل.",
             confirm: "إيقاف",
             listSeparator: "، ",
+            rotationStops: "سيتوقف تدوير الحسابات لـ {{providers}}.",
           },
         },
       },
@@ -4368,6 +4369,195 @@ export const ar: TranslationResources = {
           termsLink: "الأسئلة الشائعة لـ Antigravity",
         },
       },
+      accounts: {
+        title: "الحسابات",
+        rotate: {
+          title: "تدوير الحسابات",
+          hint: "ينطبق التبديل على الجلسات الجديدة فقط؛ تبقى الجلسات المفتوحة على حسابها.",
+          codexHint:
+            "تمر الطلبات عبر Osuna، لذا لا يستطيع Codex في الطرفية الاتصال ما دام Osuna لا يعمل.",
+          hintWithCodex: "{{hint}} {{codexHint}}",
+          claudeHint:
+            "لا ينطبق التبديل إلا على الجلسات الجديدة؛ وقد تنتقل جلسات Claude Code المفتوحة أيضًا إلى الحساب الجديد عندما ينتهي تسجيل دخولها.",
+          saveFailed: "تعذّر حفظ تدوير الحسابات: {{reason}}",
+        },
+        throughEndpoints:
+          "يعمل Claude Code الآن عبر «استخدام واجهات API الخارجية»؛ تُستخدم حسابات الاشتراك بعد إيقاف هذا المفتاح.",
+        cliSignInsOff: "«قراءة تسجيلات دخول CLI» متوقفة، لذا توقف تدوير الحسابات",
+        openPrivacySettings: "فتح الإعدادات",
+        loginUnsupported: "لا يستطيع Osuna تبديل تسجيل دخول {{name}} هذا: {{reason}}",
+        unsupportedReasons: {
+          ephemeral:
+            'يحفظ Codex تسجيل الدخول في الذاكرة فقط (cli_auth_credentials_store = "ephemeral")',
+          unknown_store: "يحفظ Codex تسجيل الدخول بطريقة لا يعرفها Osuna",
+          config_unparsable: "تعذّرت قراءة ملف config.toml الخاص بـ Codex",
+          keyring_unavailable: "لا يستطيع Osuna قراءة سلسلة مفاتيح النظام على هذه المنصة",
+          login_unparsable: "تعذّرت قراءة تسجيل الدخول المحفوظ",
+          account_unknown: "لم يسجّل Claude Code أي حساب مسجّل الدخول",
+        },
+        loadFailed: "تعذّر تحميل الحسابات: {{reason}}",
+        empty: "لا توجد حسابات بعد. عندما يسجّل {{name}} الدخول باشتراك، يصبح ذلك الحساب الأول.",
+        single: "أضف حسابًا آخر لبدء التدوير.",
+        add: "إضافة حساب",
+        alreadyAdded: "كان {{email}} في القائمة بالفعل، لذا تم تحديث تسجيل دخوله.",
+        needsSignInHint:
+          "رُفض تسجيل دخوله أو أُلغي، لذا لن يتم التبديل إليه حتى تسجّل الدخول مرة أخرى.",
+        signInAgain: "تسجيل الدخول مرة أخرى",
+        switching: "جارٍ تبديل CLI إلى هذا الحساب…",
+        removing: "جارٍ الإزالة…",
+        menu: {
+          label: "إجراءات {{email}}",
+          useNow: "استخدام الآن",
+          makeFirst: "جعله الأول",
+          moveUp: "نقل لأعلى",
+          moveDown: "نقل لأسفل",
+          moveToTop: "نقل إلى الأعلى",
+          moveToBottom: "نقل إلى الأسفل",
+          setLimits: "تعيين الحدود",
+          remove: "إزالة",
+        },
+        orderHint:
+          "اسحب لإعادة الترتيب: ينتقل التدوير أولًا إلى الحساب الأعلى. Alt+↑/↓ للنقل، والنقر بالزر الأيمن للقائمة.",
+        orderFailed: "تعذّر حفظ الترتيب: {{reason}}",
+        remove: {
+          title: "إزالة {{email}}؟",
+          message: "يحذف Osuna نسخته من هذا الحساب ({{email}}). لن يُسجَّل خروج CLI.",
+          confirm: "إزالة",
+        },
+        switchFailure: {
+          title: "تعذّر تبديل الحساب",
+          write_failed:
+            "تعذّر تبديل {{name}} إلى {{email}}: تعذّرت كتابة تسجيل الدخول. تحقّق من أن Osuna يستطيع كتابة تسجيل دخول {{name}}، ثم اختر «استخدام الآن» مرة أخرى.",
+          login_unsupported:
+            "تعذّر تبديل {{name}} إلى {{email}}: لا يستطيع Osuna تبديل تسجيل الدخول هذا.",
+          needs_sign_in:
+            "تعذّر تبديل {{name}} إلى {{email}}: يلزم تسجيل الدخول من جديد. اختر «تسجيل الدخول مرة أخرى» في صفه.",
+          no_account:
+            "الحساب المستخدم يحتاج إلى تسجيل الدخول من جديد ولا يوجد حساب آخر يحل محله. سجّل الدخول من جديد أو أضف حسابًا آخر.",
+          other: "تعذّر تبديل {{name}}: {{reason}}",
+        },
+        switches: {
+          title: "التبديلات الأخيرة",
+          fromTo: "{{from}} ← {{to}}",
+          toOnly: "تسجيل الدخول إلى {{to}}",
+          showAll: "عرض الكل ({{count}})",
+          showFewer: "عرض أقل",
+          reasons: {
+            use_now: "اخترت «استخدام الآن»",
+            lapsed: "توقّف تسجيل دخول {{from}} عن العمل",
+            used_up: "استخدم {{from}} ‏{{pct}}% من نافذة {{window}}",
+            limit: "بلغ {{from}} حدّك البالغ {{limit}}% في نافذة {{window}}",
+            held: "توقف ChatGPT عن السماح لـ {{from}} بالإرسال (نفد الاستخدام، ولا أرصدة)",
+            room_again: "أصبح لدى {{to}} هامش من جديد",
+            keep_signed_in: "اخترت البقاء مسجّلًا في {{to}}",
+            not_listed: "الحساب المسجّل دخوله ليس في القائمة",
+            other: "بدّله Osuna",
+          },
+        },
+        switchOnly: {
+          title: "تبديل تسجيل الدخول فقط",
+          hint: "عند الإيقاف تمرّ طلبات Codex عبر Osuna، والطلب الذي لا يستطيع الحساب الحالي الرد عليه يُنقل إلى الحساب التالي قبل أي رد. عند التشغيل يتصل Codex بـ OpenAI مباشرة ولا يُبدَّل إلا تسجيل الدخول.",
+          saveFailed: "تعذّر حفظ تبديل تسجيل الدخول فقط: {{reason}}",
+        },
+        keep: {
+          title: "البقاء مسجّلًا في",
+          hint: "ما دام حساب محدّدًا، لا يبدّل Osuna تلقائيًا أبدًا، حتى عند نفاد الهامش.",
+          none: "عدم التثبيت",
+          saveFailed: "تعذّر حفظ البقاء مسجّلًا في: {{reason}}",
+        },
+        limits: {
+          title: "حدود {{email}}",
+          hint: "عندما تبلغ نافذة حدّها، ينتقل التدوير إلى الحساب التالي. اترك النافذة فارغة لاستخدام 98%.",
+          inputLabel: "حد {{window}}",
+          placeholder: "افتراضي 98",
+          invalid: "أدخل عددًا صحيحًا من 1 إلى 99",
+          noWindows: "يمكن تعيين الحدود بعد قراءة استخدام هذا الحساب.",
+          save: "حفظ",
+          saving: "جارٍ الحفظ…",
+          saveFailed: "تعذّر حفظ الحدود: {{reason}}",
+          onBar: "الحد {{pct}}%",
+        },
+        unknownEmail: "حساب غير معروف",
+        badges: {
+          temporarilyFirst: "الأول مؤقتًا",
+          firstWhenRoom: "يعود الأول عندما يتوفر له هامش",
+          inUse: "قيد الاستخدام",
+          first: "الأول",
+          needsSignIn: "يحتاج إلى تسجيل الدخول",
+        },
+        usage: {
+          reading: "جارٍ قراءة الاستخدام…",
+          failed: "تعذّرت قراءة الاستخدام: {{reason}}",
+          reasons: {
+            not_found: "استخدام الخطة لا يرى تسجيل الدخول هذا",
+            not_read_yet: "لم تتم القراءة بعد",
+            rejected: "رُفض تسجيل الدخول",
+          },
+        },
+        signIn: {
+          addTitle: "إضافة حساب {{name}}",
+          addFailedTitle: "تعذّرت إضافة هذا الحساب",
+          reSignInFailedTitle: "تعذّر تسجيل الدخول مرة أخرى",
+          reSignInTitle: "تسجيل الدخول مرة أخرى إلى {{email}}",
+          starting: "جارٍ تجهيز تسجيل الدخول…",
+          startFailed: "تعذّر بدء تسجيل الدخول: {{reason}}",
+          waitingTitle: "أكمل تسجيل الدخول في المتصفح",
+          waitingHint:
+            "سجّل الدخول بحساب ChatGPT الذي تريد إضافته. تُغلق هذه النافذة تلقائيًا عند الانتهاء.",
+          openPage: "فتح صفحة تسجيل الدخول",
+          copyLink: "نسخ الرابط",
+          linkLabel: "رابط تسجيل الدخول",
+          pasteLabel: "العنوان الذي انتهى إليه المتصفح",
+          pasteHint:
+            "هل تسجّل الدخول على جهاز آخر؟ ينتهي المتصفح على صفحة لا تُحمَّل. انسخ العنوان كاملًا من شريط العنوان والصقه هنا.",
+          pasteHintBlocked:
+            "المنفذ 1455 على المضيف مشغول، لذا لا يستطيع المتصفح الرجوع إلى Osuna. انسخ العنوان الكامل الذي ينتهي إليه المتصفح والصقه هنا.",
+          pasteSubmit: "إنهاء",
+          retry: "إعادة المحاولة",
+          canceled: "أُلغي تسجيل الدخول.",
+          failed: "لم يكتمل تسجيل الدخول: {{reason}}",
+          claude: {
+            waitingHint:
+              "سجّل الدخول بحساب Claude الذي تريد إضافته. تُغلق هذه النافذة تلقائيًا عند الانتهاء.",
+            pasteLabel: "الرمز من صفحة تسجيل الدخول",
+            pasteHint:
+              "هل تسجّل الدخول على جهاز آخر؟ افتح الرابط هناك. بعد تسجيل الدخول تعرض الصفحة رمزًا: انسخه والصقه هنا.",
+            pasteHintBlocked:
+              "لم يفتح Claude Code صفحة تعود إلى Osuna. بعد تسجيل الدخول تعرض الصفحة رمزًا: انسخه والصقه هنا.",
+          },
+          pasteErrors: {
+            paste_invalid: "الصق العنوان كاملًا بدءًا من http://",
+            paste_mismatch:
+              "هذا العنوان ليس من عملية تسجيل الدخول هذه. الصق عنوان علامة تبويب هذه العملية.",
+            not_waiting: "انتهت عملية تسجيل الدخول هذه. أعد المحاولة.",
+            code_invalid: "الصق الرمز الذي تعرضه صفحة تسجيل الدخول.",
+          },
+          failures: {
+            timed_out: "لم يكتمل تسجيل الدخول خلال 10 دقائق.",
+            refused: "رفضت صفحة تسجيل الدخول: {{reason}}",
+            exchange_failed: "لم يُكمل ChatGPT تسجيل الدخول ({{reason}}).",
+            no_account: "لم يذكر ChatGPT الحساب الذي سجّل الدخول.",
+            different_account: "هذا حساب مختلف. سجّل الدخول بهذا الحساب لإصلاحه.",
+            cli_sign_ins_off: "خيار «قراءة تسجيلات دخول CLI» متوقف، لذا لا يمكن إضافة حسابات.",
+            no_email: "لم يسجّل Claude Code البريد الإلكتروني للحساب، لذا لم تتم إضافته.",
+            login_failed: "لم يكتمل تسجيل دخول Claude Code: {{reason}}",
+          },
+        },
+        riskNotice: {
+          sheetTitle: "تشغيل تدوير الحسابات لـ {{name}}؟",
+          confirm: "فهمت، شغّل",
+          codexTitle: "قد يؤدي تدوير الحسابات إلى تقييد حساب ChatGPT أو حظره",
+          codexBody:
+            'يمنع البند 4 من شروط Sign in with ChatGPT من OpenAI تسهيل أو تشجيع "Creating multiple accounts, splitting usage, rotating accounts, or otherwise bypassing usage limits"؛ وينص البند 1 على "Do not impersonate OpenAI, another application, or another open-source project." يستخدم Osuna هوية Codex عند إضافة الحسابات وتجديد تسجيلات الدخول. كما قال أحد مشرفي Codex في OpenAI علنًا إنه لا ينبغي استخدام عدة حسابات للالتفاف على حدود الخطة (هذا قول موظف، وليس من الشروط).',
+          codexTermsLink: "شروط Sign in with ChatGPT",
+          codexMaintainerLink: "كلام المشرف",
+          claudeTitle: "قد يؤدي تدوير الحسابات إلى تقييد حساب Claude أو حظره",
+          claudeBody:
+            'تصنّف سياسة الاستخدام لدى Anthropic "create multiple accounts, to avoid detection, circumvent product guardrails" على أنه إساءة لاستخدام المنصة. وتذكر الصفحة القانونية لـ Claude Code أن الحدود المعلنة لـ Pro وMax تفترض "ordinary, individual usage"، وأن "developers may not collect, store, or intermediate Claude.ai credentials or session tokens". يحتفظ Osuna بتسجيلات دخول حساباتك الأخرى. لا تذكر Anthropic التدوير تحديدًا.',
+          claudePolicyLink: "سياسة الاستخدام",
+          claudeLegalLink: "الصفحة القانونية لـ Claude Code",
+        },
+      },
       actions: {
         menu: "{{name}} actions",
         remove: "Remove provider",
@@ -4722,6 +4912,7 @@ export const ar: TranslationResources = {
       refresh: "تحديث",
       allSources: "الكل",
       official: "الرسمي",
+      officialAccount: "الرسمي · {{email}}",
       deletedEndpoint: "(محذوف)",
       deletedEndpointName: "{{name}} (محذوف)",
       breakdown: {
@@ -4940,6 +5131,7 @@ export const ar: TranslationResources = {
         failed: "فشل",
         failedWith: "فشل ({{reason}})",
         switched: "تبديل {{count}}×",
+        switchedAccounts: "تبديل {{count}}×",
       },
       failures: {
         credit: "الرصيد نفد",

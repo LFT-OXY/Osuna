@@ -4109,6 +4109,7 @@ export const fr: TranslationResources = {
             apiEndpointsKeepWorking: "Les endpoints d'API continuent de fonctionner.",
             confirm: "Désactiver",
             listSeparator: ", ",
+            rotationStops: "La rotation des comptes pour {{providers}} s'arrêtera.",
           },
         },
       },
@@ -4504,6 +4505,201 @@ export const fr: TranslationResources = {
           termsLink: "FAQ Antigravity",
         },
       },
+      accounts: {
+        title: "Comptes",
+        rotate: {
+          title: "Rotation des comptes",
+          hint: "Le changement ne s'applique qu'aux nouvelles sessions ; les sessions ouvertes restent sur leur compte.",
+          codexHint:
+            "Les requêtes passent par Osuna : tant qu'Osuna ne tourne pas, Codex dans un terminal ne peut pas se connecter.",
+          hintWithCodex: "{{hint}} {{codexHint}}",
+          claudeHint:
+            "Le changement ne s'applique qu'aux nouvelles sessions ; les sessions Claude Code déjà ouvertes peuvent aussi passer au nouveau compte quand leur connexion expire.",
+          saveFailed: "Impossible d'enregistrer la rotation des comptes : {{reason}}",
+        },
+        throughEndpoints:
+          "Claude Code passe maintenant par « Utiliser les points d'accès API » ; vos comptes d'abonnement serviront une fois cet interrupteur désactivé.",
+        cliSignInsOff:
+          "« Lire les connexions des CLI » est désactivé, la rotation des comptes est donc arrêtée",
+        openPrivacySettings: "Ouvrir les réglages",
+        loginUnsupported: "Osuna ne peut pas changer cette connexion {{name}} : {{reason}}",
+        unsupportedReasons: {
+          ephemeral:
+            'Codex ne garde sa connexion qu\'en mémoire (cli_auth_credentials_store = "ephemeral")',
+          unknown_store: "Codex stocke sa connexion d'une façon qu'Osuna ne connaît pas",
+          config_unparsable: "le config.toml de Codex est illisible",
+          keyring_unavailable: "Osuna ne peut pas lire le trousseau système sur cette plateforme",
+          login_unparsable: "la connexion enregistrée est illisible",
+          account_unknown: "Claude Code n'a pas noté quel compte est connecté",
+        },
+        loadFailed: "Impossible de charger les comptes : {{reason}}",
+        empty:
+          "Aucun compte pour l'instant. Dès que {{name}} est connecté à un abonnement, ce compte devient le premier.",
+        single: "Ajoutez un autre compte pour lancer la rotation.",
+        add: "Ajouter un compte",
+        alreadyAdded: "{{email}} était déjà dans la liste, sa connexion a donc été mise à jour.",
+        needsSignInHint:
+          "Sa connexion a été refusée ou révoquée : la rotation ne passera plus par lui tant que vous ne vous reconnectez pas.",
+        signInAgain: "Se reconnecter",
+        switching: "Passage de la CLI à ce compte…",
+        removing: "Retrait…",
+        menu: {
+          label: "Actions de {{email}}",
+          useNow: "Utiliser maintenant",
+          makeFirst: "Mettre en premier",
+          moveUp: "Monter",
+          moveDown: "Descendre",
+          moveToTop: "Placer en premier",
+          moveToBottom: "Placer en dernier",
+          setLimits: "Définir les limites",
+          remove: "Retirer",
+        },
+        orderHint:
+          "Faites glisser pour réordonner : la rotation passe d'abord au compte le plus haut. Alt+↑/↓ pour déplacer, clic droit pour le menu.",
+        orderFailed: "Impossible d'enregistrer l'ordre : {{reason}}",
+        remove: {
+          title: "Retirer {{email}} ?",
+          message:
+            "Osuna supprime la copie de ce compte ({{email}}) qu'il conserve. La CLI ne sera pas déconnectée.",
+          confirm: "Retirer",
+        },
+        switchFailure: {
+          title: "Impossible de changer de compte",
+          write_failed:
+            "Impossible de passer {{name}} à {{email}} : sa connexion n'a pas pu être écrite. Vérifiez qu'Osuna peut écrire la connexion de {{name}}, puis choisissez à nouveau Utiliser maintenant.",
+          login_unsupported:
+            "Impossible de passer {{name}} à {{email}} : Osuna ne peut pas changer cette connexion.",
+          needs_sign_in:
+            "Impossible de passer {{name}} à {{email}} : il faut se reconnecter. Choisissez Se reconnecter sur sa ligne.",
+          no_account:
+            "Le compte utilisé doit se reconnecter et aucun autre compte ne peut prendre le relais. Reconnectez-vous ou ajoutez un autre compte.",
+          other: "Impossible de changer {{name}} : {{reason}}",
+        },
+        switches: {
+          title: "Changements récents",
+          fromTo: "{{from}} → {{to}}",
+          toOnly: "Connecté à {{to}}",
+          showAll: "Tout afficher ({{count}})",
+          showFewer: "Afficher moins",
+          reasons: {
+            use_now: "Vous avez choisi Utiliser maintenant",
+            lapsed: "La connexion de {{from}} ne fonctionne plus",
+            used_up: "{{from}} a utilisé {{pct}} % de sa fenêtre {{window}}",
+            limit: "{{from}} a atteint votre limite de {{limit}} % sur sa fenêtre {{window}}",
+            held: "ChatGPT ne laisse plus {{from}} envoyer (utilisation épuisée, aucun crédit)",
+            room_again: "{{to}} a de nouveau de la marge",
+            keep_signed_in: "Vous avez choisi Rester connecté à {{to}}",
+            not_listed: "Le compte connecté n'est pas dans la liste",
+            other: "Changé par Osuna",
+          },
+        },
+        switchOnly: {
+          title: "Changer seulement la connexion",
+          hint: "Désactivé : les requêtes de Codex passent par Osuna, et celle que le compte utilisé ne peut pas traiter passe au compte suivant avant toute réponse. Activé : Codex va directement chez OpenAI et seule la connexion change.",
+          saveFailed: "Impossible d'enregistrer Changer seulement la connexion : {{reason}}",
+        },
+        keep: {
+          title: "Rester connecté à",
+          hint: "Tant qu'un compte est choisi, Osuna ne change jamais tout seul, même sans marge.",
+          none: "Ne pas fixer",
+          saveFailed: "Impossible d'enregistrer Rester connecté à : {{reason}}",
+        },
+        limits: {
+          title: "Limites de {{email}}",
+          hint: "Quand une fenêtre atteint sa limite, la rotation passe au compte suivant. Laissez une fenêtre vide pour utiliser 98 %.",
+          inputLabel: "Limite de {{window}}",
+          placeholder: "Défaut 98",
+          invalid: "Saisissez un nombre entier de 1 à 99",
+          noWindows: "Vous pourrez définir des limites une fois l'utilisation de ce compte lue.",
+          save: "Enregistrer",
+          saving: "Enregistrement…",
+          saveFailed: "Impossible d'enregistrer les limites : {{reason}}",
+          onBar: "limite {{pct}} %",
+        },
+        unknownEmail: "Compte inconnu",
+        badges: {
+          temporarilyFirst: "Premier pour l'instant",
+          firstWhenRoom: "Redevient premier quand il a de la marge",
+          inUse: "Utilisé",
+          first: "Premier",
+          needsSignIn: "Reconnexion requise",
+        },
+        usage: {
+          reading: "Lecture de l'utilisation…",
+          failed: "Impossible de lire l'utilisation : {{reason}}",
+          reasons: {
+            not_found: "l'utilisation du forfait ne voit pas cette connexion",
+            not_read_yet: "pas encore lue",
+            rejected: "la connexion a été refusée",
+          },
+        },
+        signIn: {
+          addTitle: "Ajouter un compte {{name}}",
+          addFailedTitle: "Impossible d’ajouter ce compte",
+          reSignInFailedTitle: "Impossible de se reconnecter",
+          reSignInTitle: "Se reconnecter à {{email}}",
+          starting: "Préparation de la connexion…",
+          startFailed: "Impossible de lancer la connexion : {{reason}}",
+          waitingTitle: "Terminez la connexion dans votre navigateur",
+          waitingHint:
+            "Connectez-vous avec le compte ChatGPT à ajouter. Cette fenêtre se ferme toute seule une fois terminé.",
+          openPage: "Ouvrir la page de connexion",
+          copyLink: "Copier le lien",
+          linkLabel: "Lien de connexion",
+          pasteLabel: "Adresse sur laquelle le navigateur s’est arrêté",
+          pasteHint:
+            "Vous vous connectez sur un autre appareil ? Le navigateur s’arrête sur une page qui ne se charge pas. Copiez l’adresse complète de la barre d’adresse et collez-la ici.",
+          pasteHintBlocked:
+            "Le port 1455 de l’hôte est occupé : le navigateur ne peut pas revenir vers Osuna. Copiez l’adresse complète sur laquelle le navigateur s’arrête et collez-la ici.",
+          pasteSubmit: "Terminer",
+          retry: "Réessayer",
+          canceled: "La connexion a été annulée.",
+          failed: "La connexion n’a pas abouti : {{reason}}",
+          claude: {
+            waitingHint:
+              "Connectez-vous avec le compte Claude à ajouter. Cette fenêtre se ferme toute seule une fois terminé.",
+            pasteLabel: "Code de la page de connexion",
+            pasteHint:
+              "Vous vous connectez sur un autre appareil ? Ouvrez-y le lien. Après la connexion, la page affiche un code : copiez-le et collez-le ici.",
+            pasteHintBlocked:
+              "Claude Code n'a pas ouvert de page qui revient à Osuna. Après la connexion, la page affiche un code : copiez-le et collez-le ici.",
+          },
+          pasteErrors: {
+            paste_invalid: "Collez l’adresse complète, commençant par http://",
+            paste_mismatch:
+              "Cette adresse ne vient pas de cette connexion. Collez celle de l’onglet de cette connexion.",
+            not_waiting: "Cette connexion est terminée. Réessayez.",
+            code_invalid: "Collez le code affiché par la page de connexion.",
+          },
+          failures: {
+            timed_out: "La connexion n’a pas été terminée en 10 minutes.",
+            refused: "La page de connexion a refusé : {{reason}}",
+            exchange_failed: "ChatGPT n’a pas terminé la connexion ({{reason}}).",
+            no_account: "ChatGPT n’a pas indiqué quel compte s’est connecté.",
+            different_account:
+              "C’est un autre compte. Connectez-vous avec ce compte pour le réparer.",
+            cli_sign_ins_off:
+              "« Lire les connexions des CLI » est désactivé : impossible d’ajouter des comptes.",
+            no_email:
+              "Claude Code n'a pas enregistré l'e-mail du compte, il n'a donc pas été ajouté.",
+            login_failed: "La connexion de Claude Code n'a pas abouti : {{reason}}",
+          },
+        },
+        riskNotice: {
+          sheetTitle: "Activer la rotation des comptes pour {{name}} ?",
+          confirm: "J'ai compris, activer",
+          codexTitle: "La rotation des comptes peut faire limiter ou bannir votre compte ChatGPT",
+          codexBody:
+            "La section 4 des conditions Sign in with ChatGPT d'OpenAI interdit de faciliter ou d'encourager \"Creating multiple accounts, splitting usage, rotating accounts, or otherwise bypassing usage limits\" ; la section 1 indique \"Do not impersonate OpenAI, another application, or another open-source project.\" Osuna utilise l'identité de Codex pour ajouter des comptes et renouveler les connexions. Un mainteneur de Codex chez OpenAI a aussi dit publiquement qu'il ne faut pas utiliser plusieurs comptes pour contourner les limites d'un forfait (propos d'un employé, pas les conditions).",
+          codexTermsLink: "Conditions Sign in with ChatGPT",
+          codexMaintainerLink: "Les propos du mainteneur",
+          claudeTitle: "La rotation des comptes peut faire limiter ou bannir votre compte Claude",
+          claudeBody:
+            'La politique d\'utilisation d\'Anthropic range "create multiple accounts, to avoid detection, circumvent product guardrails" parmi les abus de la plateforme. La page juridique de Claude Code indique que les limites publiées pour Pro et Max supposent "ordinary, individual usage", et que "developers may not collect, store, or intermediate Claude.ai credentials or session tokens". Osuna garde les connexions de vos autres comptes. Anthropic ne parle pas spécifiquement de rotation.',
+          claudePolicyLink: "Politique d'utilisation",
+          claudeLegalLink: "Page juridique de Claude Code",
+        },
+      },
       actions: {
         menu: "Actions de {{name}}",
         remove: "Supprimer le fournisseur",
@@ -4863,6 +5059,7 @@ export const fr: TranslationResources = {
       refresh: "Actualiser",
       allSources: "Tout",
       official: "Officiel",
+      officialAccount: "Officiel · {{email}}",
       deletedEndpoint: "(supprimé)",
       deletedEndpointName: "{{name}} (supprimé)",
       breakdown: {
@@ -5083,6 +5280,7 @@ export const fr: TranslationResources = {
         failed: "Échouée",
         failedWith: "Échouée ({{reason}})",
         switched: "Basculée {{count}}×",
+        switchedAccounts: "Basculée {{count}}×",
       },
       failures: {
         credit: "crédit épuisé",

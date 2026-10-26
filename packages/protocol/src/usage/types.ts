@@ -374,6 +374,8 @@ export const UsageRequestAttemptSchema = z.object({
   reason: z.string().nullable(),
   cooldownUntil: z.string().nullable(),
   reasked: z.boolean(),
+  // Official 的这次问的是 Codex 的哪个 ChatGPT 号（多号自动轮换）；旧 daemon 不发。
+  accountEmail: z.string().optional(),
 });
 export type UsageRequestAttempt = z.infer<typeof UsageRequestAttemptSchema>;
 
@@ -403,6 +405,8 @@ export const UsageRequestRowSchema = z.object({
   status: z.enum(["ok", "failed", "cancelled"]),
   error: z.string().nullable(),
   attempts: z.array(UsageRequestAttemptSchema),
+  // Official 答话的是 Codex 的哪个 ChatGPT 号（多号自动轮换），列表写「Official · 邮箱」；旧 daemon 不发。
+  accountEmail: z.string().optional(),
   replyId: z.string().nullable(),
   sessionId: z.string().nullable(),
   project: UsageProjectRefSchema.nullable(),

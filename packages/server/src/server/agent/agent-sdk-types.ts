@@ -699,6 +699,8 @@ export interface AgentUsageSession {
   model?: string;
   env: Record<string, string>;
   sessionKey: string;
+  // CLI 进程启动（读进登录）的时刻；多号自动轮换据此认出 Agent 用的是哪个号。
+  launchedAt?: number;
 }
 
 export interface AgentSession {

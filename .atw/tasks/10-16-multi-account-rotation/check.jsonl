@@ -1,0 +1,23 @@
+{"file": ".atw/tasks/10-16-multi-account-rotation/research/decisions.md", "reason": "六轮访谈 Q1–Q26 的决定，判断实现是否照决定、是否越界（续期与加号照 magpie、三处身份例外）"}
+{"file": ".atw/tasks/10-16-multi-account-rotation/research/magpie-rotation.md", "reason": "magpie 两层换号、阈值、换号步骤、第二层错误清单与粘性、Claude 私有目录的出处"}
+{"file": ".atw/tasks/10-16-multi-account-rotation/research/cli-login-mechanics.md", "reason": "Codex 与 Claude Code 登录的存法、续期、单次 refresh token、运行中进程是否重读"}
+{"file": ".atw/tasks/10-16-multi-account-rotation/research/osuna-current-state.md", "reason": "现有套餐用量来源、子任务 8 闸门、子任务 2 的 Codex 接法与中转站 ChatGPT 转发"}
+{"file": ".atw/tasks/10-16-magpie-osuna-gaps/prd.md", "reason": "总任务跨子任务规矩：身份如实第 15 条及其例外、协议、登录相关测试约束"}
+{"file": ".atw/tasks/10-16-magpie-osuna-gaps/research/subscription-ban-risk.md", "reason": "风险提示引文的原文出处 [W1]、[W3]、[W26]"}
+{"file": "docs/adr/0004-api-endpoint-rewrites-cli-config.md", "reason": "被推翻的 auth.json 规则；CLI 配置与登录写入要守的改写规则"}
+{"file": "docs/adr/0010-codex-wiring-and-gateway-caller-recognition.md", "reason": "Codex 的 openai_base_url 接法、中转站怎么认 ChatGPT 请求"}
+{"file": "docs/adr/0012-cli-config-rewrite-follows-the-cli.md", "reason": "Claude 保留 claude.ai 登录时中转站不转发；配置改写与还原"}
+{"file": "docs/adr/0008-gateway-reshapes-rejected-requests-and-fails-over-refusals.md", "reason": "中转站换家与扣住回复开头的规则，第二层换号建在其上"}
+{"file": "docs/adr/0014-gateway-ledger-merges-with-cli-logs.md", "reason": "账本记答话的号，用量仍归官方"}
+{"file": "docs/protocol-compatibility.md", "reason": "新字段可选、features 能力位、旧客户端照常"}
+{"file": "docs/rpc-namespacing.md", "reason": "新 RPC 的带点命名"}
+{"file": "docs/permissions.md", "reason": "daemon.read / daemon.manage"}
+{"file": "docs/data-model.md", "reason": "账号存储的原子写与目录约定"}
+{"file": "docs/usage.md", "reason": "Outbound requests 要写全新增请求"}
+{"file": "docs/glossary.md", "reason": "Account、Rotate accounts、Limit、Keep signed in to、Only switch the sign-in、Read CLI sign-ins 等名词"}
+{"file": ".atw/spec/server/backend/index.md", "reason": "daemon 侧规范入口"}
+{"file": ".atw/spec/server/backend/rpc-and-protocol.md", "reason": "RPC 与能力位写法"}
+{"file": ".atw/spec/server/backend/persistence.md", "reason": "账号存储落盘"}
+{"file": ".atw/spec/server/backend/testing.md", "reason": "daemon 端到端测试、可替换适配器、假上游"}
+{"file": ".atw/spec/app/frontend/index.md", "reason": "提供方页、对话框、列表的界面规范"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "浏览器测试与失败状态的测法"}

@@ -4058,6 +4058,7 @@ export const ja: TranslationResources = {
             apiEndpointsKeepWorking: "API エンドポイントは引き続き動作します。",
             confirm: "オフにする",
             listSeparator: "、",
+            rotationStops: "{{providers}} のアカウントの自動切り替えは停止します。",
           },
         },
       },
@@ -4445,6 +4446,202 @@ export const ja: TranslationResources = {
           termsLink: "Antigravity FAQ",
         },
       },
+      accounts: {
+        title: "アカウント",
+        rotate: {
+          title: "アカウントの自動切り替え",
+          hint: "切り替えは新しいセッションにだけ適用され、開いているセッションは元のアカウントのままです。",
+          codexHint:
+            "リクエストは Osuna を経由するため、Osuna が動いていないとターミナルの Codex は接続できません。",
+          hintWithCodex: "{{hint}}{{codexHint}}",
+          claudeHint:
+            "切り替えは新しいセッションにだけ適用されます。開いている Claude Code も、ログインの期限が切れたときに新しいアカウントへ移ることがあります。",
+          saveFailed: "「アカウントの自動切り替え」を保存できませんでした: {{reason}}",
+        },
+        throughEndpoints:
+          "Claude Code は今「サードパーティ API を使う」経由です。サブスクリプションのアカウントはこのスイッチをオフにすると使われます。",
+        cliSignInsOff:
+          "「CLI のログイン情報を読み取る」がオフのため、アカウントの自動切り替えは停止しています",
+        openPrivacySettings: "設定を開く",
+        loginUnsupported: "Osuna はこの {{name}} のログインを切り替えられません：{{reason}}",
+        unsupportedReasons: {
+          ephemeral:
+            'Codex はログインをメモリにだけ保存しています（cli_auth_credentials_store = "ephemeral"）',
+          unknown_store: "Codex のログインの保存方法を Osuna が認識できません",
+          config_unparsable: "Codex の config.toml を読み取れません",
+          keyring_unavailable: "このシステムでは Osuna がキーチェーンを読み取れません",
+          login_unparsable: "保存されたログインを読み取れません",
+          account_unknown: "Claude Code がどのアカウントでログインしているか記録していません",
+        },
+        loadFailed: "アカウントを読み込めません：{{reason}}",
+        empty:
+          "まだアカウントがありません。{{name}} がサブスクリプションにログインすると、そのアカウントが最初のアカウントになります。",
+        single: "切り替えるにはもう 1 つアカウントを追加してください。",
+        add: "アカウントを追加",
+        alreadyAdded: "{{email}} はすでに一覧にあるため、サインインを更新しました。",
+        needsSignInHint:
+          "サインインが拒否または取り消されました。もう一度サインインするまで切り替え先になりません。",
+        signInAgain: "もう一度サインイン",
+        switching: "CLI をこのアカウントに切り替えています…",
+        removing: "削除しています…",
+        menu: {
+          label: "{{email}} の操作",
+          useNow: "今すぐ使う",
+          makeFirst: "最初にする",
+          moveUp: "上へ移動",
+          moveDown: "下へ移動",
+          moveToTop: "先頭へ移動",
+          moveToBottom: "末尾へ移動",
+          setLimits: "上限を設定",
+          remove: "削除",
+        },
+        orderHint:
+          "ドラッグで並べ替え：ローテーションは上のアカウントから切り替えます。Alt+↑/↓ で移動、右クリックでメニュー。",
+        orderFailed: "順序を保存できませんでした：{{reason}}",
+        remove: {
+          title: "{{email}} を削除しますか？",
+          message:
+            "Osuna が保存しているこのアカウント（{{email}}）のコピーを削除します。CLI はサインアウトされません。",
+          confirm: "削除",
+        },
+        switchFailure: {
+          title: "アカウントを切り替えられませんでした",
+          write_failed:
+            "{{name}} を {{email}} に切り替えられませんでした：サインインを書き込めません。Osuna が {{name}} のサインインを書き込めるか確認して、もう一度「今すぐ使う」を選んでください。",
+          login_unsupported:
+            "{{name}} を {{email}} に切り替えられませんでした：Osuna はこのサインインを切り替えられません。",
+          needs_sign_in:
+            "{{name}} を {{email}} に切り替えられませんでした：もう一度サインインが必要です。その行の「もう一度サインイン」を選んでください。",
+          no_account:
+            "使用中のアカウントは再サインインが必要で、代わりに使えるアカウントがありません。再サインインするか、別のアカウントを追加してください。",
+          other: "{{name}} を切り替えられませんでした：{{reason}}",
+        },
+        switches: {
+          title: "最近の切り替え",
+          fromTo: "{{from}} → {{to}}",
+          toOnly: "{{to}} にサインイン",
+          showAll: "{{count}} 件すべて表示",
+          showFewer: "折りたたむ",
+          reasons: {
+            use_now: "「今すぐ使う」を選びました",
+            lapsed: "{{from}} のサインインが使えなくなりました",
+            used_up: "{{from}} の {{window}} ウィンドウが {{pct}}% に達しました",
+            limit: "{{from}} の {{window}} ウィンドウが設定した上限 {{limit}}% に達しました",
+            held: "ChatGPT が {{from}} からの送信を止めました（使用量を使い切り、クレジットもありません）",
+            room_again: "{{to}} に余裕が戻りました",
+            keep_signed_in: "{{to}} にサインインを固定しました",
+            not_listed: "サインイン中のアカウントが一覧にありません",
+            other: "Osuna が切り替えました",
+          },
+        },
+        switchOnly: {
+          title: "サインインだけ切り替える",
+          hint: "オフのとき Codex のリクエストは Osuna を経由し、使用中のアカウントで受けられないリクエストは返答が始まる前に次のアカウントへ回します。オンにすると Codex は OpenAI に直接つなぎ、サインインだけを切り替えます。",
+          saveFailed: "「サインインだけ切り替える」を保存できませんでした: {{reason}}",
+        },
+        keep: {
+          title: "サインインを固定",
+          hint: "アカウントを選んでいる間、Osuna は自動で切り替えません。使い切っても切り替えません。",
+          none: "固定しない",
+          saveFailed: "サインインの固定を保存できませんでした: {{reason}}",
+        },
+        limits: {
+          title: "{{email}} の上限",
+          hint: "ウィンドウが上限に達すると、次のアカウントに切り替えます。空欄のウィンドウは 98% です。",
+          inputLabel: "{{window}} の上限",
+          placeholder: "既定 98",
+          invalid: "1 から 99 の整数を入力してください",
+          noWindows: "このアカウントの使用量を読み取ると上限を設定できます。",
+          save: "保存",
+          saving: "保存中…",
+          saveFailed: "上限を保存できませんでした: {{reason}}",
+          onBar: "上限 {{pct}}%",
+        },
+        unknownEmail: "不明なアカウント",
+        badges: {
+          temporarilyFirst: "一時的に優先",
+          firstWhenRoom: "余裕が戻ったら優先に戻る",
+          inUse: "使用中",
+          first: "優先",
+          needsSignIn: "要サインイン",
+        },
+        usage: {
+          reading: "使用量を読み取り中…",
+          failed: "使用量を読み取れません：{{reason}}",
+          reasons: {
+            not_found: "プランの使用量からこのログインが見えません",
+            not_read_yet: "まだ読み取っていません",
+            rejected: "サインインが拒否されました",
+          },
+        },
+        signIn: {
+          addTitle: "{{name}} アカウントを追加",
+          addFailedTitle: "このアカウントを追加できませんでした",
+          reSignInFailedTitle: "もう一度サインインできませんでした",
+          reSignInTitle: "{{email}} にもう一度サインイン",
+          starting: "サインインを準備しています…",
+          startFailed: "サインインを開始できませんでした：{{reason}}",
+          waitingTitle: "ブラウザでサインインを完了してください",
+          waitingHint:
+            "追加する ChatGPT アカウントでサインインしてください。完了するとこの画面は自動で閉じます。",
+          openPage: "サインインページを開く",
+          copyLink: "リンクをコピー",
+          linkLabel: "サインインのリンク",
+          pasteLabel: "ブラウザが最後に表示したアドレス",
+          pasteHint:
+            "別のデバイスでサインインすると、ブラウザは最後に読み込めないページで止まります。アドレスバーのアドレス全体をコピーしてここに貼り付けてください。",
+          pasteHintBlocked:
+            "ホストのポート 1455 が使用中のため、ブラウザが Osuna に戻れません。ブラウザが最後に表示したアドレス全体をコピーしてここに貼り付けてください。",
+          pasteSubmit: "完了",
+          retry: "再試行",
+          canceled: "サインインはキャンセルされました。",
+          failed: "サインインが完了しませんでした：{{reason}}",
+          claude: {
+            waitingHint:
+              "追加する Claude アカウントでサインインしてください。完了するとこの画面は自動で閉じます。",
+            pasteLabel: "サインインページに表示されたコード",
+            pasteHint:
+              "別のデバイスでサインインするときは、そのデバイスでリンクを開き、サインイン後にページに表示されるコードをコピーしてここに貼り付けてください。",
+            pasteHintBlocked:
+              "Claude Code が Osuna に戻るページを開きませんでした。サインイン後にページに表示されるコードをコピーしてここに貼り付けてください。",
+          },
+          pasteErrors: {
+            paste_invalid: "http:// で始まるアドレス全体を貼り付けてください",
+            paste_mismatch:
+              "このアドレスは今回のサインインのものではありません。今回のサインインのブラウザタブのアドレスを貼り付けてください。",
+            not_waiting: "このサインインは終了しています。もう一度お試しください。",
+            code_invalid: "サインインページに表示されたコードを貼り付けてください。",
+          },
+          failures: {
+            timed_out: "10 分以内にサインインが完了しませんでした。",
+            refused: "サインインページが拒否しました：{{reason}}",
+            exchange_failed: "ChatGPT がサインインを完了しませんでした（{{reason}}）。",
+            no_account: "ChatGPT がどのアカウントでサインインしたかを返しませんでした。",
+            different_account: "別のアカウントです。このアカウントでサインインしてください。",
+            cli_sign_ins_off:
+              "「CLI のサインイン情報を読む」がオフのため、アカウントを追加できません。",
+            no_email:
+              "Claude Code がアカウントのメールアドレスを記録しなかったため、追加されませんでした。",
+            login_failed: "Claude Code のサインインが完了しませんでした：{{reason}}",
+          },
+        },
+        riskNotice: {
+          sheetTitle: "{{name}} のアカウントの自動切り替えをオンにしますか？",
+          confirm: "理解しました。オンにする",
+          codexTitle:
+            "アカウントの自動切り替えにより ChatGPT アカウントが制限・停止される可能性があります",
+          codexBody:
+            'OpenAI の Sign in with ChatGPT 規約の第 4 条は、"Creating multiple accounts, splitting usage, rotating accounts, or otherwise bypassing usage limits" を助長・奨励してはならないとし、第 1 条は "Do not impersonate OpenAI, another application, or another open-source project." と定めています。Osuna はアカウントの追加と更新に Codex の身元を使います。OpenAI の Codex メンテナーも、複数のアカウントでプランの上限を回避すべきではないと公言しています（社員の発言であり、規約ではありません）。',
+          codexTermsLink: "Sign in with ChatGPT 規約",
+          codexMaintainerLink: "メンテナーの発言",
+          claudeTitle:
+            "アカウントの自動切り替えにより Claude アカウントが制限・停止される可能性があります",
+          claudeBody:
+            'Anthropic の利用ポリシーは "create multiple accounts, to avoid detection, circumvent product guardrails" をプラットフォームの悪用としています。Claude Code の法的情報ページは、Pro と Max の公表された上限が "ordinary, individual usage" を前提とすること、そして "developers may not collect, store, or intermediate Claude.ai credentials or session tokens" と明記しています。Osuna はほかのアカウントのログインを保存します。Anthropic は切り替えについて特に言及していません。',
+          claudePolicyLink: "利用ポリシー",
+          claudeLegalLink: "Claude Code の法的情報ページ",
+        },
+      },
       actions: {
         menu: "{{name}} actions",
         remove: "Remove provider",
@@ -4800,6 +4997,7 @@ export const ja: TranslationResources = {
       refresh: "更新",
       allSources: "すべて",
       official: "公式",
+      officialAccount: "公式 · {{email}}",
       deletedEndpoint: "（削除済み）",
       deletedEndpointName: "{{name}}（削除済み）",
       breakdown: {
@@ -5018,6 +5216,7 @@ export const ja: TranslationResources = {
         failed: "失敗",
         failedWith: "失敗（{{reason}}）",
         switched: "{{count}} 回切り替え",
+        switchedAccounts: "{{count}} 回切り替え",
       },
       failures: {
         credit: "残高不足",

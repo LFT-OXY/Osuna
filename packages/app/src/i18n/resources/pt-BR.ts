@@ -4066,6 +4066,7 @@ export const ptBR: TranslationResources = {
             apiEndpointsKeepWorking: "Os endpoints de API continuam funcionando.",
             confirm: "Desligar",
             listSeparator: ", ",
+            rotationStops: "O rodízio de contas para {{providers}} vai parar.",
           },
         },
       },
@@ -4456,6 +4457,199 @@ export const ptBR: TranslationResources = {
           termsLink: "Perguntas frequentes do Antigravity",
         },
       },
+      accounts: {
+        title: "Contas",
+        rotate: {
+          title: "Rodízio de contas",
+          hint: "A troca só vale para sessões novas; sessões abertas continuam na conta delas.",
+          codexHint:
+            "As requisições passam pelo Osuna, então, enquanto o Osuna não estiver rodando, o Codex no terminal não consegue se conectar.",
+          hintWithCodex: "{{hint}} {{codexHint}}",
+          claudeHint:
+            "A troca só vale para sessões novas; sessões do Claude Code já abertas também podem passar para a nova conta quando o login delas expirar.",
+          saveFailed: "Não foi possível salvar o rodízio de contas: {{reason}}",
+        },
+        throughEndpoints:
+          "O Claude Code está passando por “Usar endpoints de API” agora; suas contas de assinatura serão usadas quando você desligar essa opção.",
+        cliSignInsOff: "“Ler logins das CLIs” está desligado, então o rodízio de contas parou",
+        openPrivacySettings: "Abrir configurações",
+        loginUnsupported: "O Osuna não consegue trocar este login do {{name}}: {{reason}}",
+        unsupportedReasons: {
+          ephemeral:
+            'o Codex guarda o login só na memória (cli_auth_credentials_store = "ephemeral")',
+          unknown_store: "o Codex guarda o login de um jeito que o Osuna não conhece",
+          config_unparsable: "não é possível ler o config.toml do Codex",
+          keyring_unavailable: "o Osuna não consegue ler as chaves do sistema nesta plataforma",
+          login_unparsable: "não é possível ler o login salvo",
+          account_unknown: "o Claude Code não registrou qual conta está conectada",
+        },
+        loadFailed: "Não foi possível carregar as contas: {{reason}}",
+        empty:
+          "Ainda não há contas. Quando o {{name}} entrar em uma assinatura, essa conta vira a primeira.",
+        single: "Adicione outra conta para começar o rodízio.",
+        add: "Adicionar conta",
+        alreadyAdded: "{{email}} já estava na lista, então o login dela foi atualizado.",
+        needsSignInHint:
+          "O login foi recusado ou revogado, então o rodízio não passa para ela até você entrar de novo.",
+        signInAgain: "Entrar de novo",
+        switching: "Trocando a CLI para esta conta…",
+        removing: "Removendo…",
+        menu: {
+          label: "Ações de {{email}}",
+          useNow: "Usar agora",
+          makeFirst: "Tornar primeira",
+          moveUp: "Mover para cima",
+          moveDown: "Mover para baixo",
+          moveToTop: "Mover para o topo",
+          moveToBottom: "Mover para o final",
+          setLimits: "Definir limites",
+          remove: "Remover",
+        },
+        orderHint:
+          "Arraste para reordenar: a rotação passa primeiro para a conta mais acima. Alt+↑/↓ para mover, clique direito para o menu.",
+        orderFailed: "Não foi possível salvar a ordem: {{reason}}",
+        remove: {
+          title: "Remover {{email}}?",
+          message:
+            "O Osuna apaga a cópia desta conta ({{email}}) que guarda. A CLI não será desconectada.",
+          confirm: "Remover",
+        },
+        switchFailure: {
+          title: "Não foi possível trocar de conta",
+          write_failed:
+            "Não foi possível trocar {{name}} para {{email}}: o login não pôde ser gravado. Verifique se o Osuna consegue gravar o login do {{name}} e escolha Usar agora de novo.",
+          login_unsupported:
+            "Não foi possível trocar {{name}} para {{email}}: o Osuna não consegue trocar este login.",
+          needs_sign_in:
+            "Não foi possível trocar {{name}} para {{email}}: é preciso entrar de novo. Escolha Entrar de novo na linha dela.",
+          no_account:
+            "A conta em uso precisa entrar de novo e nenhuma outra conta pode assumir. Entre de novo ou adicione outra conta.",
+          other: "Não foi possível trocar {{name}}: {{reason}}",
+        },
+        switches: {
+          title: "Trocas recentes",
+          fromTo: "{{from}} → {{to}}",
+          toOnly: "Login em {{to}}",
+          showAll: "Mostrar todas as {{count}}",
+          showFewer: "Mostrar menos",
+          reasons: {
+            use_now: "Você escolheu Usar agora",
+            lapsed: "O login de {{from}} parou de funcionar",
+            used_up: "{{from}} usou {{pct}}% da janela {{window}}",
+            limit: "{{from}} atingiu seu limite de {{limit}}% na janela {{window}}",
+            held: "O ChatGPT parou de deixar {{from}} enviar (uso esgotado, sem créditos)",
+            room_again: "{{to}} tem folga de novo",
+            keep_signed_in: "Você escolheu Manter login em {{to}}",
+            not_listed: "A conta conectada não está na lista",
+            other: "Trocada pelo Osuna",
+          },
+        },
+        switchOnly: {
+          title: "Só trocar o login",
+          hint: "Desligado: as requisições do Codex passam pelo Osuna, e a que a conta em uso não consegue atender vai para a próxima conta antes de qualquer resposta. Ligado: o Codex vai direto à OpenAI e só o login é trocado.",
+          saveFailed: "Não foi possível salvar Só trocar o login: {{reason}}",
+        },
+        keep: {
+          title: "Manter login em",
+          hint: "Enquanto uma conta estiver escolhida, o Osuna nunca troca sozinho, mesmo sem folga.",
+          none: "Não manter",
+          saveFailed: "Não foi possível salvar Manter login em: {{reason}}",
+        },
+        limits: {
+          title: "Limites de {{email}}",
+          hint: "Quando uma janela atinge o limite, a rotação passa para a próxima conta. Deixe uma janela vazia para usar 98%.",
+          inputLabel: "Limite de {{window}}",
+          placeholder: "Padrão 98",
+          invalid: "Digite um número inteiro de 1 a 99",
+          noWindows: "Os limites podem ser definidos depois que o uso desta conta for lido.",
+          save: "Salvar",
+          saving: "Salvando…",
+          saveFailed: "Não foi possível salvar os limites: {{reason}}",
+          onBar: "limite {{pct}}%",
+        },
+        unknownEmail: "Conta desconhecida",
+        badges: {
+          temporarilyFirst: "Primeira por enquanto",
+          firstWhenRoom: "Volta a ser a primeira quando tiver folga",
+          inUse: "Em uso",
+          first: "Primeira",
+          needsSignIn: "Precisa entrar",
+        },
+        usage: {
+          reading: "Lendo o uso…",
+          failed: "Não foi possível ler o uso: {{reason}}",
+          reasons: {
+            not_found: "o uso do plano não vê este login",
+            not_read_yet: "ainda não lido",
+            rejected: "o login foi recusado",
+          },
+        },
+        signIn: {
+          addTitle: "Adicionar uma conta do {{name}}",
+          addFailedTitle: "Não foi possível adicionar esta conta",
+          reSignInFailedTitle: "Não foi possível entrar de novo",
+          reSignInTitle: "Entrar de novo em {{email}}",
+          starting: "Preparando o login…",
+          startFailed: "Não foi possível começar o login: {{reason}}",
+          waitingTitle: "Termine o login no navegador",
+          waitingHint:
+            "Entre com a conta do ChatGPT que você quer adicionar. Isto fecha sozinho quando você terminar.",
+          openPage: "Abrir página de login",
+          copyLink: "Copiar link",
+          linkLabel: "Link de login",
+          pasteLabel: "Endereço em que o navegador parou",
+          pasteHint:
+            "Entrando em outro dispositivo? O navegador para numa página que não carrega. Copie o endereço inteiro da barra de endereços e cole aqui.",
+          pasteHintBlocked:
+            "A porta 1455 do host está ocupada, então o navegador não consegue voltar ao Osuna. Copie o endereço inteiro em que o navegador parar e cole aqui.",
+          pasteSubmit: "Concluir",
+          retry: "Tentar de novo",
+          canceled: "O login foi cancelado.",
+          failed: "O login não terminou: {{reason}}",
+          claude: {
+            waitingHint:
+              "Entre com a conta do Claude que você quer adicionar. Isto fecha sozinho quando você terminar.",
+            pasteLabel: "Código da página de login",
+            pasteHint:
+              "Entrando em outro dispositivo? Abra o link nele. Depois de entrar, a página mostra um código: copie e cole aqui.",
+            pasteHintBlocked:
+              "O Claude Code não abriu uma página que volte ao Osuna. Depois de entrar, a página mostra um código: copie e cole aqui.",
+          },
+          pasteErrors: {
+            paste_invalid: "Cole o endereço inteiro, começando com http://",
+            paste_mismatch:
+              "Esse endereço não é deste login. Cole o da aba do navegador deste login.",
+            not_waiting: "Este login terminou. Tente de novo.",
+            code_invalid: "Cole o código que a página de login mostra.",
+          },
+          failures: {
+            timed_out: "O login não terminou em 10 minutos.",
+            refused: "A página de login recusou: {{reason}}",
+            exchange_failed: "O ChatGPT não concluiu o login ({{reason}}).",
+            no_account: "O ChatGPT não informou qual conta entrou.",
+            different_account: "É outra conta. Entre com esta conta para corrigi-la.",
+            cli_sign_ins_off:
+              "“Ler logins das CLIs” está desativado, então não dá para adicionar contas.",
+            no_email:
+              "O Claude Code não registrou o e-mail da conta, então ela não foi adicionada.",
+            login_failed: "O login do Claude Code não terminou: {{reason}}",
+          },
+        },
+        riskNotice: {
+          sheetTitle: "Ligar o rodízio de contas para o {{name}}?",
+          confirm: "Entendi, ligar",
+          codexTitle: "O rodízio de contas pode fazer sua conta do ChatGPT ser limitada ou banida",
+          codexBody:
+            'A seção 4 dos termos do Sign in with ChatGPT da OpenAI proíbe facilitar ou incentivar "Creating multiple accounts, splitting usage, rotating accounts, or otherwise bypassing usage limits"; a seção 1 diz "Do not impersonate OpenAI, another application, or another open-source project." O Osuna usa a identidade do Codex ao adicionar contas e renovar logins. Um mantenedor do Codex na OpenAI também disse publicamente que não se deve usar várias contas para contornar os limites de um plano (fala de um funcionário, não dos termos).',
+          codexTermsLink: "Termos do Sign in with ChatGPT",
+          codexMaintainerLink: "As palavras do mantenedor",
+          claudeTitle: "O rodízio de contas pode fazer sua conta do Claude ser limitada ou banida",
+          claudeBody:
+            'A política de uso da Anthropic classifica "create multiple accounts, to avoid detection, circumvent product guardrails" como abuso da plataforma. A página jurídica do Claude Code diz que os limites publicados para Pro e Max pressupõem "ordinary, individual usage", e que "developers may not collect, store, or intermediate Claude.ai credentials or session tokens". O Osuna guarda os logins das suas outras contas. A Anthropic não fala especificamente de rodízio.',
+          claudePolicyLink: "Política de uso",
+          claudeLegalLink: "Página jurídica do Claude Code",
+        },
+      },
       actions: {
         menu: "{{name}} actions",
         remove: "Remove provider",
@@ -4811,6 +5005,7 @@ export const ptBR: TranslationResources = {
       refresh: "Atualizar",
       allSources: "Tudo",
       official: "Oficial",
+      officialAccount: "Oficial · {{email}}",
       deletedEndpoint: "(excluído)",
       deletedEndpointName: "{{name}} (excluído)",
       breakdown: {
@@ -5029,6 +5224,7 @@ export const ptBR: TranslationResources = {
         failed: "Falhou",
         failedWith: "Falhou ({{reason}})",
         switched: "Trocou {{count}}×",
+        switchedAccounts: "Trocou {{count}}×",
       },
       failures: {
         credit: "sem créditos",

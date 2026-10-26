@@ -2249,3 +2249,378 @@ if (!runtime.readsCliSignIns()) {
   return;
 }
 ```
+
+## Scenario: the Accounts section and Rotate accounts switch (multi-account-rotation ticket 02, `accountRotation`)
+
+### 1. Scope / Trigger
+- New session RPCs, a push event, a feature flag and a new `$PASEO_HOME` store that reads the CLIs' own logins (Codex `auth.json` / keyring, Claude Code keychain / `.credentials.json` + `.claude.json`).
+
+### 2. Signatures
+- Protocol `packages/protocol/src/provider-account/rpc-schemas.ts`: `ACCOUNT_ROTATION_PROVIDERS = ["codex","claude"]`, `isAccountRotationProvider()`; wire `provider` stays `z.string()`.
+- `provider.account.list.request {provider}` → `.response {requestId, provider, settings{rotationEnabled, riskNoticeSeen}, accounts[{id, email?, plan?, signedIn, usage}], blocked: {kind:"cli_sign_ins_off"} | {kind:"login_unsupported", code, reason} | null, error: {code, message} | null}` (`daemon.read`).
+- `provider.account.set_rotation.request {provider, enabled, acknowledgeRiskNotice?}` → `.response` same payload (`daemon.manage`).
+- Push `provider.account.changed` (no payload; subscribe-only event, `daemon.read`). Flag `server_info.features.accountRotation`, set only when the daemon has a `ProviderAccountService`.
+- Server: `ProviderAccountService.list(provider)`, `.setRotation(SetRotationInput)`; built by `createProviderAccountService({paseoHome, logger, cliSignIns, planUsage, onChanged, overrides})`; `overrides: ProviderAccountOverrides {env, homeDir, platform, keychain: CliKeychain, usage: AccountUsageReader}` via `PaseoDaemonConfig.providerAccounts`.
+
+### 3. Contracts
+- Store `$PASEO_HOME/accounts/accounts.json` (`LastGoodFile`, dir 0700, file 0600): `{accounts: [{id, provider, identity, email?, plan?, usage?}], settings: {codex?: {rotationEnabled?, riskNoticeSeen?}, claude?: …}}`. No token is ever stored for the signed-in account. Later tickets add their own optional fields (pin, only-switch-sign-in, switch log).
+- `identity` = the Plan usage report key: Codex ChatGPT account id, Claude `accountUuid.organizationUuid`. The signed-in account's usage is read through the usage-source registry by report id `codex:<id>` / `claude:<uuid.org>`; when the registry hasn't discovered it, one global discovery runs (same requests as opening the usage page). Read in the background, 5-minute TTL, `changed` pushed when done; the list answers `{status:"reading"}` meanwhile.
+- Plan names are capitalised (`plus` → `Plus`).
+- Codex store: `cli_auth_credentials_store` via `readCodexCredentialsStore()`; keyring item `Codex Auth` / `cli|<sha256(realpath CODEX_HOME)[0..16]>`.
+
+### 4. Validation & Error Matrix
+| Condition | Result |
+|---|---|
+| provider not codex/claude | `error.code = unsupported_provider` |
+| Read CLI sign-ins off, list | `blocked: cli_sign_ins_off`, no login read, stored accounts listed with `signedIn: false` |
+| off, set_rotation enabled | `error.code = cli_sign_ins_off`; turning off is always allowed |
+| first enable for this provider without `acknowledgeRiskNotice` | `error.code = risk_notice_required`, switch unchanged |
+| `ephemeral` / unknown store / unreadable config or login / keyring unavailable / Claude without `oauthAccount` | list `blocked: login_unsupported` with `code`; enable → `error.code = login_unsupported` |
+| enabled, CLI signed out | allowed, empty list; a later list after the CLI signs in registers it as the first account |
+
+### 5. Good/Base/Bad Cases
+- Good: enable with acknowledgement → riskNoticeSeen stored on the host; toggling off/on never asks again; Claude still asks once.
+- Base: no accounts file → rotation off, nothing seen.
+- Bad: copying the CLI's tokens into `accounts.json` for the signed-in account (two holders of a single-use refresh token).
+
+### 6. Tests Required
+- `daemon-e2e/provider-accounts.e2e.test.ts`: risk notice per host and provider across restart; file and keyring Codex; ephemeral refused; Claude keychain + `.claude.json`; off reads nothing; store has no token, 0600/0700.
+- `app/e2e/browser/settings-provider-accounts.spec.ts`: cancel/confirm, refused save, view-only, empty and one account, off notice.
+
+### 7. Wrong vs Correct
+#### Wrong
+```ts
+const keychain = createSystemKeychain(); // a Playwright daemon would run the real `security`
+```
+#### Correct
+```ts
+// e2e seal installs Symbol.for("paseo.e2e.cliKeychain"), backed by PASEO_E2E_KEYCHAIN_PATH;
+// createSystemKeychain() returns it before touching `security`. Vitest daemons pass FakeCliKeychain.
+```
+
+## Scenario: Codex add account, saved-account renewal and usage (multi-account-rotation ticket 03, `accountRotation`)
+
+### 1. Scope / Trigger
+- Osuna runs Codex's own OAuth (ADR 0015 identity exceptions 1–2), keeps the tokens of saved accounts in `accounts.json`, renews them, and reads their usage with their own token. New RPCs, a localhost HTTP callback server, a cross-process lock and a new plugin input route.
+
+### 2. Signatures
+- Protocol (`provider-account/rpc-schemas.ts`): `provider.account.sign_in.{start,get,cancel,submit}.request` → matching `.response {requestId, signIn: ProviderAccountSignIn | null, error}`; all `daemon.manage`. `start {provider, accountId?}` (accountId = Sign in again), `get|cancel {signInId}`, `submit {signInId, callbackUrl}` (waits ≤60 s for the exchange; client timeout 60 s).
+- `ProviderAccountSignIn` = `{id, provider, accountId?, authUrl, callbackBlocked}` + `status: waiting | done{result{accountId, email?, alreadyAdded}} | failed{error{code,message}} | canceled`. `ProviderAccount.needsSignIn?: {reason, code?}`.
+- Server: `ProviderAccountService.startSignIn / signIn / cancelSignIn / submitSignIn / start() / stop()`; `CodexSignIn` (`codex-sign-in.ts`); `exchangeCodexCode`, `refreshCodexLogin`, `CodexTokenRequestError{refused, code, detail}` (`codex-oauth.ts`); `withFileLock(path, run)` (`file-lock.ts`); `UsageSourceRegistry.fetchInput(sourceId, input)` → `PluginManager.fetchUsageInput`.
+- Overrides (`ProviderAccountOverrides`): `codexSignIn {endpoints{authorizeUrl, tokenUrl}, callbackPort, timeoutMs}`, `checks {firstDelayMs, intervalMs}`, `now`.
+
+### 3. Contracts
+- Store fields: `login` (whole auth.json-shaped object, only for saved accounts), `needsSignIn`, `renewedAt`. The account the CLI holds never has `login`; re-adding it through sign-in drops the new tokens **and** clears any old `login` (single holder).
+- Duplicate = same `identity` (`chatgpt_account_id` from the id_token): updates that account, `alreadyAdded: true`, clears `needsSignIn`. Sign in again that lands on another account → `failed different_account`, nothing written.
+- Callback `127.0.0.1:1455/auth/callback`; redirect_uri `http://localhost:<port>/auth/callback`. Port taken (EADDRINUSE/EACCES): GET `/cancel` once (asks a waiting `codex login` to stop, as Codex/magpie do), 10 tries × 200 ms, then `callbackBlocked: true` (paste only). Browser and paste race through one `claimed` flag; the code is traded once. 10-minute timeout. The gate is asked again right before trading the code.
+- Renewal (`renew.lock` in `accounts/`, plus an in-process per-account queue): re-read inside the lock; if the refresh token differs from the one seen before queueing, adopt it; renew only when `force` or access-token `exp` ≤ 5 min away. Refused = HTTP 400/401 or `invalid_grant|refresh_token_reused|token_revoked` (magpie's `refreshFailed`) → `needsSignIn`. The refresh is not tied to any caller; its only limit is its own 30 s (as magpie).
+- Usage of a saved account: renew-if-expiring → plugin input `{route:{store:"token", accessToken, accountId?}}` through the same `fetchUsage` (same headers, browser UA); `rejected` (401/403) → force renew once and re-read. Lapsed accounts are not read.
+- Checks: 1 min after start, then every 5 min: keep-alive (renew saved Codex accounts whose `max(renewedAt, last_refresh)` ≥ 24 h) always; stale saved-account usage only for providers with rotation on. Gate off → nothing.
+- Every state change broadcasts `provider.account.changed`; the client re-`get`s the sign-in it shows.
+
+### 4. Validation & Error Matrix
+| Condition | Result |
+|---|---|
+| start with Read CLI sign-ins off | `error.code = cli_sign_ins_off` |
+| start for `claude` | `error.code = unsupported_provider` (ticket 07) |
+| start/get/cancel unknown id or removed account | `error.code = not_found` |
+| paste not an http URL with code/error | `error.code = paste_invalid`, sign-in still waiting |
+| paste with another port/path/state | `error.code = paste_mismatch`, still waiting |
+| paste after it ended | `error.code = not_waiting` |
+| OAuth page `?error=` | `failed refused` (message = page's description) |
+| token endpoint non-200 / unreachable | `failed exchange_failed`, message = detail only (`HTTP 400: invalid_grant`) |
+| gate turned off mid sign-in | `failed cli_sign_ins_off`, no token request |
+
+### 5. Good/Base/Bad Cases
+- Good: two daemons on one `$PASEO_HOME` renewing the same account spend its refresh token once.
+- Base: a freshly added account is not renewed by the keep-alive until 24 h later.
+- Bad: storing a second copy of the CLI-held account's tokens; renewing outside `renew.lock`.
+
+### 6. Tests Required
+- `daemon-e2e/provider-account-sign-in.e2e.test.ts` with `test-utils/fake-openai-auth.ts` (local token endpoint that rotates refresh tokens and answers `refresh_token_reused`): callback, paste, port taken, timeout, cancel, OAuth refusal, duplicate, CLI-held, renew-before-read, refused renewal + Sign in again, two daemons, keep-alive with a shifted clock, gate off.
+- `plugins/codex-usage-source/server/usage.test.ts`: the token route sends the same headers as the CLI route.
+- `app/e2e/browser/settings-provider-account-sign-in.spec.ts`: the authorize page is intercepted by `context.route` and 302s to the daemon callback.
+
+### 7. Wrong vs Correct
+#### Wrong
+```ts
+const tokens = await exchangeCodexCode(...); // then check the gate when saving
+```
+#### Correct
+```ts
+if (!this.options.allowed()) { this.finish({ status: "failed", error: { code: "cli_sign_ins_off", ... } }); }
+// the test daemon closes the seams: codexSignIn.endpoints → 127.0.0.1:9, callbackPort 0;
+// the browser seal sets Symbol.for("paseo.e2e.codexCallbackPort") = 0 and fakes https://auth.openai.com/.
+```
+
+## Scenario: Codex Use now, Remove, order, switch log and renewing the account in use (multi-account-rotation ticket 04, `accountRotation`)
+
+### 1. Scope / Trigger
+- Osuna now **writes** the CLI's own login (ADR 0015): `auth.json` or the keychain item, swapping in a saved account. New RPCs, new store fields, a keychain write path, and a usage-registry hook so an agent's card keeps the account it was launched on.
+
+### 2. Signatures
+- Protocol (`provider-account/rpc-schemas.ts`), all `daemon.manage`, all answer the same state payload as `list` (`{requestId, provider, settings, accounts, blocked, error, switches?, switchFailure?}`):
+  - `provider.account.use.request {provider, accountId}`
+  - `provider.account.remove.request {provider, accountId}`
+  - `provider.account.set_order.request {provider, accountIds: string[]}` (every account of the provider, new order)
+- `ProviderAccountSwitch {at, from?: {accountId, email?}, to: {accountId, email?}, reason: string}` (`use_now` | `lapsed`, later tickets add more); `ProviderAccountSwitchFailure {at, to?, code, message}`; both optional on the payload (newest first, ≤ 50).
+- Server: `ProviderAccountService.useAccount / removeAccount / setOrder`, `savedAccountLogins: SavedAccountLogins`; `readCodexCliLogin(location)` → `CodexCliLogin` (`signed_in{where,text,login,profile}` | `signed_out{where,text?}` | unsupported); `writeCodexCliLogin({location, where, expected, login})` throws `CodexLoginChangedError`; `CliKeychain.write(service, account, value)` throws `KeychainWriteError`; `AgentUsageSession.launchedAt?`; `UsageSourceRegistry.useSavedAccounts(hooks)`.
+
+### 3. Contracts
+- **Switch** (magpie `switchSavedLogin`): renew the target if its access token is ≤ 5 min from expiry (own lock) → inside `renew.lock`: re-read CLI login → take the CLI's login back into its own record (an account not listed is appended) → write the target's login where the CLI read from (`file`: `writeConfigFileGuarded`, pretty JSON + `\n`, mode kept / 0600 new; `keyring`/`auto` item: one-line JSON via `security add-generic-password -U`) → clear the target's `login` → record the switch, clear `switchFailure`. A write failure undoes the take-back, so every refresh token is in exactly one place before and after.
+- Write-before-reread (ADR 0004): the write compares with the text read at the start (`expected`; `null` when signed out); a different file or item → `CodexLoginChangedError`, nothing written.
+- `switchFailure` is recorded for `needs_sign_in`, `write_failed` (message = `Codex's login couldn't be written (<errno or one line>)`, never the temp path), `login_unsupported`, and `no_account` (the account in use lapsed, nothing to move to).
+- **Account in use renewal** runs only while Codex rotation is on (story 3: an upgrade changes nothing until the user turns it on): each check renews when `exp` ≤ 5 min; a usage read of the signed-in account answering `rejected` (401/403 — the plugin doesn't expose `token_expired`) forces one renewal and one re-read. Renewed tokens go only to the CLI. Refused → that account gets `needsSignIn` (added to the list if it wasn't there) and, rotation on, Osuna switches to the first listed account with a login and no `needsSignIn` (`reason: "lapsed"`; ticket 05 refines the target rules).
+- **Remove** deletes the stored record (and its token); the CLI is never touched. **Order** must be a permutation of this provider's ids.
+- **Agent card**: the Codex app-server records `launchedAt` when it spawns. `accountAt({provider, at, env})` = `from` of the first switch after `at`, unless that account is the latest `to` again, has been removed, or the agent's `CODEX_HOME` (or `$HOME/.codex`) isn't the one Osuna switches. The registry then maps the agent to report `codex:<identity>` labelled with its email, read through `usageInput` (renew-if-expiring, token route).
+
+### 4. Validation & Error Matrix
+| Condition | Result |
+|---|---|
+| Read CLI sign-ins off, use | `error.code = cli_sign_ins_off`, nothing read or written |
+| use for `claude` | `unsupported_provider` (ticket 08) |
+| unknown / other provider's account | `not_found` (use, remove) |
+| target `needsSignIn`, or its renewal refused | `needs_sign_in` + `switchFailure` |
+| `ephemeral` / unknown store / unreadable | `login_unsupported` + `switchFailure` |
+| CLI signed in with an API key only (`signed_out` with text) | `login_unsupported`, the file is left alone |
+| CLI dir not writable / file changed meanwhile / keychain refuses | `write_failed` + `switchFailure`, take-back undone |
+| target already in use | success, no log entry; a stray stored `login` for it is cleared |
+| set_order ids ≠ the host's ids | `order_mismatch`, order unchanged |
+
+### 5. Good/Base/Bad Cases
+- Good: Use now and back again — each refresh token appears in exactly one of `auth.json` / `accounts.json` after each step; the log survives a restart and keeps 50.
+- Base: rotation off → no renewal of the account in use, even when it's about to expire.
+- Bad: writing the target's login before taking the CLI's back (the old token would be lost); renewing the account in use outside `renew.lock`; replacing an API-key `auth.json`.
+
+### 6. Tests Required
+- `daemon-e2e/provider-account-switch.e2e.test.ts`: file and keyring Use now with single-holder assertions and file mode; ephemeral refused; API key left alone; unwritable dir → `write_failed` (message `(EACCES)`), tokens unchanged, cleared on the next success; lapsed target; gate off; 50-entry log across restart; remove in-use / saved / twice; order + `order_mismatch`; renewal before expiry and on rejected usage; lapsed account in use → switch with `reason: "lapsed"` (listed and unlisted), `no_account`.
+- `plugins/usage-sources/index.test.ts`: an agent launched before a switch keeps the launch account's report, read through the saved login; back on the CLI route after switching back.
+- `app/e2e/browser/settings-provider-account-switch.spec.ts`: Use now success / failure notice, Remove confirm and failure, menu + drag order, failed order rolls back, log 5 → all, view-only, 390 sheet.
+
+### 7. Wrong vs Correct
+#### Wrong
+```ts
+await writeCodexCliLogin({ ..., login: target.login }); // then take the CLI's login back
+```
+#### Correct
+```ts
+const takenBack = cli.kind === "signed_in" ? this.takeBack(cli) : null;
+try { await writeCodexCliLogin({ location, where: cli.where, expected: cli.text, login: target.login }); }
+catch (error) { takenBack?.undo(); throw this.switchFailed({ target, code: "write_failed", ... }); }
+this.store.updateAccount(target.id, { login: undefined });
+```
+
+## Scenario: Codex automatic rotation, limits and Keep signed in to (multi-account-rotation ticket 05, `accountRotation`)
+
+### 1. Scope / Trigger
+- The check now switches the CLI on its own: new RPCs, new optional state fields, a new optional field on the plan usage report, new store fields, and a rule module that ticket 08 (Claude Code) reuses unchanged.
+
+### 2. Signatures
+- Protocol (`provider-account/rpc-schemas.ts`), both `daemon.manage`, both answer the `list` state payload:
+  - `provider.account.set_limits.request {provider, accountId, limits: Record<windowId, number>}` — whole replacement; `{}` clears.
+  - `provider.account.set_keep_signed_in.request {provider, accountId: string | null}` — `null` = don't keep.
+- Optional additions: `ProviderAccount.limits?`, `ProviderAccount.standing?: "first_when_room" | "temporarily_first" | string`, `settings.keepSignedInTo?: string | null`, `ProviderAccountSwitch.window?: {id, label, usedPct, limitPct?}`, `ProviderAccountUsage(read).held?`, `UsageReport(available).held?` (`messages.ts`). New switch reasons: `used_up`, `limit`, `held`, `room_again`, `keep_signed_in`, `not_listed`.
+- Shared helpers: `ACCOUNT_LIMIT_MIN = 1`, `ACCOUNT_LIMIT_MAX = 99`, `isWholeAccountWindow(window)` (protocol; app and daemon both use them). Rules: `nextMove`, `pickTarget`, `outOfRoom`, `returningAfter`, `SwitchReason` in `server/provider-accounts/rotation-rules.ts` (pure, no I/O). Plugin: `codexHeld(usage)` in `plugins/codex-usage-source/server/usage.ts`.
+- Daemon client: `providerAccountSetLimits`, `providerAccountSetKeepSignedIn`.
+
+### 3. Contracts
+- **No room** (share 98): a whole-account window (id without `:`) at ≥ 98% or ≥ its limit, or `held`. A window whose `resetsAt` has passed counts as started again whatever it reads (magpie `usedPast`/`resetPassed`). `usedPct: null` never counts.
+- **Target**: first in order that is not in use, not `needsSignIn`, has a saved `login`, a `status: "read"` reading this check, and room. None → stay. The account in use with no known reading → stay.
+- **Back** (share 90): only while `settings.returning.to` is the account in use; the frontmost account ahead of it with room at 90 → `room_again`. `returning` is written by `returningAfter` in the same locked step as the switch record: `used_up | limit | held | lapsed` keep the earliest `back`; `room_again` clears it once at or ahead of `back`; `use_now | keep_signed_in | not_listed` clear it. `standing` is projected only while `returning.to` is the account in use.
+- **Keep signed in to**: when set (and the account still listed and switchable), the only move is onto it; nothing else, `moveOffLapsed` included. Setting it clears `returning` and requests a check at once.
+- **Not listed**: CLI signed in to an account not in the list → move to `pickTarget`, reason `not_listed`.
+- **Cadence**: `start()` → first after `checks.firstDelayMs` (60 s), then every `intervalMs` (5 min); `requestCheck()` after Use now and after a *Sign in again* (not a plain add). Checks never overlap; a request during one runs one more after it. Usage older than 5 min is re-read and awaited before deciding.
+- **Stale decision guard**: `switchTo({ onlyFrom })` re-reads the CLI login inside `renew.lock`; if it no longer is `onlyFrom` (the user switched while usage was being read) the move is dropped silently.
+- **held** (plugin): `rate_limit.allowed === false` and no `credits.has_credits`/`unlimited`, unless a workspace plan (magpie's list, minus `team` / `self_serve_business_prolite`) with `overage_limit_reached === false`, no `spend_control.reached`, and `rate_limit_reached_type` absent or `rate_limit_reached`.
+- Store: account `limits?`; settings `keepSignedInTo?`, `returning?: {back, to}`. Removing the kept account clears `keepSignedInTo`; a `returning` naming a removed account is ignored.
+
+### 4. Validation & Error Matrix
+| Condition | Result |
+|---|---|
+| a limit not an integer in 1–99 | `error.code = invalid_limit`, nothing saved |
+| set_limits / set_keep_signed_in on an unknown or other provider's account | `not_found` |
+| Read CLI sign-ins off | checks read nothing and switch nothing |
+| rotation off for the provider | no automatic switch (keep-alive still runs) |
+| switch fails during a check | `switchFailure` recorded, retried next check |
+
+### 5. Good/Base/Bad Cases
+- Good: ONE at 98% → TWO (`used_up`, window recorded), ONE `first_when_room`, TWO `temporarily_first`; ONE at 89% next check → back (`room_again`), standings gone.
+- Base: Use now to a lower account with the first at 10% → stays there (no `returning`).
+- Bad: deciding from a reading cached from before a reset as "used up"; switching on a decision made before the user's Use now landed.
+
+### 6. Tests Required
+- `daemon-e2e/provider-account-rotation.e2e.test.ts` (fake usage reader keyed by account, `now` offset; each check round advances the clock 6 min so the 5-min usage cache expires): 98% / limit / held switch; limit validation; 90% back (91% stays); no room stays; unread / error / lapsed never targets; reset passed and `code_review:*` windows don't count; Keep signed in to never moves off, unpin moves; pinning another switches at once; Use now followed by a check; hand-picked account not switched back; removed in-use → `not_listed`; lapsed → re-sign-in → `room_again`; gate off reads nothing.
+- `plugins/codex-usage-source/server/usage.test.ts`: `held` true / false cases.
+- `app/e2e/browser/settings-provider-account-rotation.spec.ts`: Set limits success, invalid, failure kept in dialog, marker on the bar; Keep signed in to success and failure; standing badges; 390 dialog.
+
+### 7. Wrong vs Correct
+#### Wrong
+```ts
+const move = nextMove(...);            // decided from usage read over the network
+await this.switchTo({ target, reason }); // may undo a Use now that landed meanwhile
+```
+#### Correct
+```ts
+await this.switchTo({ target, reason: move.reason, onlyFrom: login.identity });
+// switchLocked: if (input.onlyFrom !== undefined && signedInNow !== input.onlyFrom) return null;
+```
+
+## Scenario: Codex second layer — moving ChatGPT requests between accounts through the gateway (multi-account-rotation ticket 06, `accountRotation`)
+
+### 1. Scope / Trigger
+- The gateway now picks which ChatGPT account signs a Codex request, Osuna writes Codex's `openai_base_url` without **Use API endpoints**, a new RPC and new optional fields on three wire schemas and the ledger.
+
+### 2. Signatures
+- Protocol, `daemon.manage`, answers the `list` state payload: `provider.account.set_switch_only.request {provider, enabled}` (Codex only; other providers → `unsupported_provider`). Optional additions: `settings.switchOnly?` (sent for Codex), `ProviderAccountUsage(read).onCredits?`, `UsageReport(available).onCredits?`, `UsageRequestRow.accountEmail?`, `UsageRequestAttempt.accountEmail?`.
+- Gateway (`api-endpoints/gateway/chatgpt-accounts.ts`): `interface ChatGptAccounts { forRequest(): Promise<ChatGptAccount[] | null> }` (null = layer off → relay as before); `ChatGptAccount {id, email?, identity, hasRoom, onCredits, signIn(): Promise<{accessToken, accountId?} | null>}`; `relayOnAccounts(AccountRelayInput)`. `createApiEndpointGateway({ chatGptAccounts? })`.
+- Accounts service: `chatGptAccounts` (the source above), `gatewayWanted(): boolean`, `setSwitchOnly({provider, enabled})`. API endpoint service: option `accountsGateway?: () => boolean`, `syncAccountsGateway(): Promise<void>`; takeover file `takeover-codex.json` gains `accountsGateway?: {original, written, fileCreated?}` (only while `takeover` is null). Pure helpers `applyCodexAccountsGateway` / `restoreCodexAccountsGateway` in `codex-config-patch.ts`.
+- Ledger row and attempt (`usage/ledger.ts`): `accountId?`, `accountEmail?`; `LedgerCall.officialAttempt({…, account?})`, `answeredByOfficial(reply, account?)`.
+
+### 3. Contracts
+- **Layer on** (`gatewayWanted`): rotation on, `switchOnly` off, at least two listed Codex accounts without `needsSignIn`. `forRequest` also needs the Read CLI sign-ins gate open; gate off → null (relay as Codex signed it) but `openai_base_url` is left as written.
+- **Which requests**: POST `/responses` and `/responses/compact` with a bare model, not signed in with an API key. Compaction moves between accounts too but is not ledgered (same as the plain relay).
+- **Seats**: the request's own account (matched by `ChatGPT-Account-Id`, may be unlisted) first, sent exactly as Codex sent it; then the listed accounts in user order; accounts without room (98% / limit / held; a credits holder counts only its user limits) moved last, not dropped. Then `ConversationSticks.order` (separate instance from the endpoints'), keyed `account:<id>`, resting = no room.
+- **Headers to another account**: replace `authorization` and `chatgpt-account-id`; drop `x-oai-attestation`, `x-openai-codex-luna-reserve`, `x-codex-turn-state` (magpie `codexHeader`). Every seat drops `accept-encoding` so errors and openings can be read (magpie leaves it to the transport). Body bytes unchanged unless rewritten below (then `content-encoding` dropped).
+- **Per seat**: 429 classed `quota` on a credits holder → asked once more; 400/404 naming an item or `invalid_encrypted_content`/`could not be verified` on `/responses` → that item (or all `reasoning` items) removed and the same seat asked again, ≤3 times (magpie `withoutUnreadable`). Move to the next seat only when `retryable(status, text) && !readsTooLong`. Hold until first content via `openUpstream` (`reads: "openai_responses"` for turns, `null` for compaction).
+- **All fail**: the last upstream HTTP error goes back raw (status, headers, body, `content-length` recomputed); an in-stream error or a gateway-made failure goes out via `sendAgentError`.
+- **Config ownership of `openai_base_url`**: endpoints takeover present → the takeover owns it, sync does nothing. Takeover null → `syncAccountsGateway` writes it (records the original, first-write backup) or puts it back (only if it still holds what was written). Endpoints switch turning on restores the accounts value first inside the same write so the takeover records the user's original; turning off (and its preview) goes through `codexSwitchOffPlan`, handing the key to the accounts record when the layer is wanted. Daemon start (`attachGateway`) follows the current port. CC Switch mirror tables are not pointed at the gateway by the accounts layer alone (not done).
+
+### 4. Validation & Error Matrix
+| Condition | Result |
+|---|---|
+| set_switch_only for claude | `unsupported_provider` |
+| seat's `signIn()` null (lapsed, removed, gate closed, CLI moved to another account) | seat skipped |
+| `context_length_exceeded` / too long | no move, error raw to Codex |
+| Codex leaves before opening | ledger cancelled, nothing else asked |
+| config.toml unparsable on sync | warn log, nothing written |
+
+### 5. Good/Base/Bad Cases
+- Good: ONE 429 `usage_limit_reached` → TWO answers; ledger row `accountEmail: two`, tries one(failed)/two(answered); next turn with ≥1024 cached tokens stays on TWO.
+- Base: one account left / rotation off / switch-only → `openai_base_url` back to the user's own bytes (comment kept), turns relayed untouched.
+- Bad: moving after content started; sending ONE's attestation with TWO's token; dropping the endpoints restore when the accounts write happens to change nothing.
+
+### 6. Tests Required
+- `daemon-e2e/provider-account-gateway.e2e.test.ts` (fake ChatGPT backend keyed by `ChatGPT-Account-Id`, `/v1` as endpoint): 429 → next account with header assertions; cut after first words; too long; credits re-ask; all fail raw 429 with `retry-after`; foreign reasoning stripped; stickiness within turn / cache / no cache / other thread; ledger account; `openai_base_url` written, switch-only and one-account restore, gate off, shared with Use API endpoints.
+- `codex-config-patch.test.ts`: comment kept, original kept across ports, external change left, created file deleted, unparsable refused.
+- `plugins/codex-usage-source/server/usage.test.ts`: `onCredits`. App: `usage-stats/requests.test.ts` (Official · email, switched accounts), browser `settings-provider-account-rotation.spec.ts` (switch-only success/failure), `usage-page-requests.spec.ts` (Official · email).
+
+### 7. Wrong vs Correct
+#### Wrong
+```ts
+const kept = accountsGatewayPlan({ text: textAfter(plan.change, text), … });
+return { change: kept.change, … }; // "keep" here throws away the endpoints restore
+```
+#### Correct
+```ts
+const change = kept.change.kind === "keep" ? plan.change : kept.change;
+```
+
+## Scenario: Claude Code add account and saved-account usage (multi-account-rotation ticket 07, `accountRotation`)
+
+### 1. Scope / Trigger
+- Claude Code accounts are added by running the real `claude auth login --claudeai` in a private `CLAUDE_CONFIG_DIR`; saved accounts' usage comes from the real `claude -p /usage` in that directory. Osuna never refreshes a Claude token and never calls Anthropic (magpie `claude_signin.go`, `claude_usage_cli.go`, `claude_dirs.go`).
+
+### 2. Signatures
+- Same `provider.account.sign_in.*` RPCs as ticket 03, now accepting `provider: "claude"`.
+- `ProviderAccountSignIn` gains optional `codeUrl` (the link Claude Code printed; its page shows a code). `callbackBlocked: true` also means Claude Code opened no page that returns to the host (then `authUrl === codeUrl`).
+- `submit {signInId, callbackUrl?, code?}`: both optional now. Codex reads `callbackUrl`; Claude reads `code` — either `code#state` (written to the login's stdin) or the localhost address a browser ended on (forwarded to the port in the opened link's `redirect_uri`).
+- Server modules: `provider-accounts/claude-sign-in.ts` (`ClaudeSignIn`, same surface as `CodexSignIn`: `id`, `waiting`, `view()`, `cancel()`, `submit(raw)`, `dispose()`), `claude-usage-cli.ts` (`readClaudeUsageCli`, `parseClaudeUsage`, `claudeResetTime`), `claude-cli.ts` (`claudeEnvFor`, `runClaudeCli`, `readClaudeAuthStatus`, `ClaudeCliNotFound`), `claude-login.ts` `removeClaudeConfigDir`. `CliKeychain` gains `delete(service, account)` (missing item is not an error).
+- Overrides: `ProviderAccountOverrides.claude {command?, signInTimeoutMs?, linkWaitMs?}`; the browser seal sets `Symbol.for("paseo.e2e.claudeCommand")`.
+
+### 3. Contracts
+- Private dir: `$PASEO_HOME/accounts/claude/<random>/`, created 0700 **at its final path before** `auth login` runs. On macOS Claude Code keys the keychain item by `sha256(dir)`, so the dir can never be moved or renamed.
+- `StoredAccount` gains optional `configDir` (absolute) and `oauthAccount` (the dir's `.claude.json` profile, for ticket 08's switch). A saved account is `login !== undefined || configDir !== undefined` (`isSaved`).
+- Keep after a successful login, inside the renew lock: read the CLI's login → same identity as the CLI: remove the new dir, keep only the profile (one holder); existing account (duplicate or Sign in again): point it at the new dir, remove the old dir, clear `needsSignIn`, `alreadyAdded: true`; else add.
+- Email/plan come from the dir (`readClaudeLogin`); when either is missing ask `claude auth status --json` (magpie `claudeSignedIn`). No email → refused.
+- Remove deletes the account's dir and keychain item.
+- Usage of a saved account: `/usage` args exactly `-p /usage --output-format json --tools "" --strict-mcp-config --setting-sources "" --no-session-persistence`, cwd a fresh temp dir, stdin ignored, env cleaned of `ANTHROPIC_*`, `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CONFIG_DIR`, `BROWSER`, outer-session vars, plus `DISABLE_TELEMETRY/ERROR_REPORTING/AUTOUPDATER=1`. Window IDs match `claude-usage-source`: `five_hour`, `weekly`, `weekly_model_<normalized name>`. `isWholeAccountWindow` excludes both `:` IDs and `weekly_model_*` (ticket 08, magpie `usedPast` skips `w.Model != ""`).
+- Command: Claude provider settings (`agentProviderSettings.claude`, same resolution as new sessions) unless overridden. The "browser" given to `auth login` is a script in the dir that writes the URL to `PASEO_CLAUDE_OPENED_URL`; on Windows it opens nothing, so only the printed link + code works there.
+
+### 4. Validation & Error Matrix
+| Condition | Result |
+|---|---|
+| Read CLI sign-ins off | start `cli_sign_ins_off`; no `claude` run (list, check, usage) |
+| `claude` not found | start `error.code = cli_not_found` |
+| no link within 30 s (`linkWaitMs`) / exits before a link | start error, message = its last line; dir removed |
+| exits non-zero after the link | `failed login_failed`, message = its last line |
+| pasted text neither `x#y` nor `http(s)://` | `code_invalid` (sign-in keeps waiting) |
+| pasted address for another port / no `code` | `paste_mismatch`; forwarding failed → `forward_failed` |
+| no email even after `auth status` | `failed no_email`, dir removed |
+| Sign in again lands on another account | `failed different_account`, nothing written |
+| `/usage` says not logged in / 401 / token expired or revoked / run /login | `needsSignIn {code: "signed_out"}`, usage `failed needs_sign_in` |
+| `/usage` hit-your-limit notice, or empty | usage `failed` (account not marked) |
+| cancel / 10-minute timeout | `canceled` / `failed timed_out`; process killed, dir removed after it exits |
+
+### 5. Good/Base/Bad Cases
+- Good: desktop on the host opens `authUrl`; the browser returns to Claude Code's own localhost port; done.
+- Base: remote device opens `codeUrl`, pastes `code#state`.
+- Bad: reusing the sign-in dir under a different name after login — the macOS keychain item is no longer found and the account looks signed out.
+
+### 6. Tests Required
+- `daemon-e2e/provider-account-claude.e2e.test.ts` with `test-utils/fake-claude-cli.ts` (answers `auth login`, `auth status --json`, `-p /usage`; logs every run): opened link + callback, pasted code, pasted address, no browser, cancel, timeout + retry, no link, failure, duplicate, CLI's own account, `auth status` email, no email, `/usage` windows and exact args, signed-out marking + Sign in again, different account, remove clears the dir, gate off runs nothing.
+- `provider-accounts/claude-usage-cli.test.ts`: reset-time year/zone/time-only inference with literal instants; full-shape readings.
+- Browser: `settings-provider-account-claude-sign-in.spec.ts` (remote paste, failure + retry, no email, Sign in again). The browser page is never the host, so the host's open-and-return path is covered only by the daemon E2E.
+
+### 7. Wrong vs Correct
+#### Wrong
+```ts
+const cli = await this.readLogin("claude");
+const heldByCli = cli.identity === reading.identity;
+await withFileLock(lock, async () => { /* keep or drop the dir */ });
+```
+#### Correct
+```ts
+await withFileLock(lock, async () => {
+  const cli = await this.readLogin("claude"); // re-read inside the lock: a switch may land in between
+  heldByCli = cli.kind === "signed_in" && cli.identity === reading.identity;
+});
+```
+
+## Scenario: Claude Code switching — Use now, automatic rules, API-endpoints notice (multi-account-rotation ticket 08, `accountRotation`)
+
+### 1. Scope / Trigger
+- Switching now rewrites Claude Code's own sign-in (keychain item or `.credentials.json`) and the `oauthAccount` key of `.claude.json`; the account state gains an optional field. Port of magpie `switchSavedLogin` + `putClaudeLogin` + `claudeSavedDir` (d5805372).
+
+### 2. Signatures
+- `provider.account.use` / `set_keep_signed_in` / automatic checks now accept `provider: "claude"` (no more `unsupported_provider`).
+- State payload gains optional `throughEndpoints?: boolean` (only ever `true`, only for Claude): Claude Code's "Use API endpoints" is on, so subscription accounts can't be used yet; rotation keeps running.
+- `claude-login.ts`: `readClaudeCliLogin(location) → ClaudeCliLogin` (`signed_in {where, text, identity, email?, plan?, oauthAccount}` | `signed_out {where, text?}` | `unsupported`), `writeClaudeCliLogin({location, where, expected, text|null}) → written text` (null text deletes), `writeClaudeOauthAccount({location, oauthAccount})`, `putClaudeConfigDir({configDir, text, oauthAccount})`, `ClaudeLoginChangedError`.
+- Service option `claudeThroughEndpoints: () => boolean`; bootstrap passes `apiEndpointService.activeEndpointId("claude") !== null` and broadcasts `provider.account.changed` from `onActiveEndpointChanged("claude")`.
+
+### 3. Contracts
+- Where the CLI's login is: keychain item `claudeKeychainService(CLAUDE_CONFIG_DIR)` / `$USER` if present (even an emptied one — Claude Code reads no file beside it), else `<configDir ?? ~/.claude>/.credentials.json`; neither → keychain on macOS, file elsewhere. Writes go back to the same place; keychain value on **one line** (multi-line comes back from `security -w` as hex, which Claude Code reads as signed out).
+- Switch, inside the renew lock, in this order: re-read CLI → `onlyFrom` guard (auto switch skips if the user switched meanwhile) → target already in use: drop its dir → read the target's dir login (missing → `needs_sign_in`) → take the CLI login back into a **new** `$PASEO_HOME/accounts/claude/<random>/` as `.credentials.json` + `.claude.json {oauthAccount, hasCompletedOnboarding}` (file even on macOS; Claude Code falls back to it), upsert the account (unlisted → appended) → write target text into the CLI store (expected = text read) → replace `oauthAccount` in `.claude.json` (JSONC edit of that key only, guarded write) → remove the target's dir + keychain item, clear `configDir` → record the switch.
+- `oauthAccount` written = the store's copy (magpie `Profile`), else the dir's.
+- Before locking, the target is put in `handingOver`: no new `/usage` starts in its dir; an in-flight one is awaited (a refresh there would spend the refresh token being handed over). In-process only; another daemon on the same home is not covered.
+- If removing the target's dir fails, `configDir` stays recorded and is cleaned up next time (in-use branch or take-back `staleDir`).
+- Plan-usage card: `savedAccountLogins.accountAt` returns null for Claude — an open Claude Code may follow the new sign-in on its next 401, so the card reads the current account.
+- The periodic check runs `rotate()` for Claude too; it reads usage only when the CLI is signed in.
+
+### 4. Validation & Error Matrix
+| Condition | Result |
+|---|---|
+| Read CLI sign-ins off | `use` → `cli_sign_ins_off`; checks read nothing |
+| CLI login unreadable / no `oauthAccount` | `login_unsupported` + `switchFailure` |
+| target dir has no usable sign-in | `needs_sign_in` + `switchFailure` |
+| CLI store or `.claude.json` can't be written / changed underneath | `write_failed` + `switchFailure`; credentials restored (`expected` = written text), take-back undone, target dir intact |
+| target never read / read failed | never a rotation target |
+| `weekly_model_*` at 100% | not "used up" |
+
+### 5. Good/Base/Bad Cases
+- Good: Linux file store — Use now; CLI file holds the target, old sign-in sits only in a new private dir, `.claude.json` keeps every other key.
+- Base: macOS keychain store — item rewritten on one line, no `.credentials.json` created beside it.
+- Bad: copying the target's dir login while `/usage` still runs there — the CLI gets a refresh token Claude Code just spent; the account signs out on its next refresh.
+
+### 6. Tests Required
+- `daemon-e2e/provider-account-claude-switch.e2e.test.ts`: Use now on file and keychain stores (each refresh token in exactly one file under the temp root, `.claude.json` other keys kept, switch back), unwritable config dir → everything restored, missing dir login → `needs_sign_in`, gate off, 98% away / 89% back (saved account usage via fake `/usage` text keyed by the **email in the dir's `.claude.json`** — take-back must write it), pinned, never-read target, model window ignored, `throughEndpoints` via `apiEndpointSetActive`.
+- Browser `settings-provider-account-claude-switch.spec.ts`: Use now, write failure + retry, notice row (route rewrite `throughEndpoints`), 390 row menu.
+
+### 7. Wrong vs Correct
+#### Wrong
+```ts
+await keychain.write(service, user, savedText); // pretty-printed JSON from the dir's file
+```
+#### Correct
+```ts
+await keychain.write(service, user, JSON.stringify(JSON.parse(savedText))); // one line, as Claude Code writes it
+```

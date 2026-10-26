@@ -169,7 +169,8 @@ export function toUsageRequestFilters(state: UsageRequestsFilterState): UsageReq
 export type UsageRequestStatus =
   | { kind: "ok" }
   | { kind: "failed"; failure: string | null }
-  | { kind: "switched"; count: number };
+  // accounts：每次都问的官方、在 Codex 的几个号之间换（多号自动轮换），不是换接口。
+  | { kind: "switched"; count: number; accounts: boolean };
 
 /**
  * A request the agent got an error for is failed, with the class of its last
@@ -180,7 +181,10 @@ export function usageRequestStatus(row: UsageRequestRow): UsageRequestStatus {
   if (row.status !== "ok") {
     return { kind: "failed", failure: row.attempts.at(-1)?.failure ?? null };
   }
-  if (row.attempts.length > 1) return { kind: "switched", count: row.attempts.length - 1 };
+  if (row.attempts.length > 1) {
+    const accounts = row.attempts.every((attempt) => attempt.accountEmail !== undefined);
+    return { kind: "switched", count: row.attempts.length - 1, accounts };
+  }
   return { kind: "ok" };
 }
 
@@ -218,12 +222,18 @@ export function usageRequestModelLabel(row: Pick<UsageRequestRow, "model" | "att
   return upstream && upstream !== row.model ? `${row.model} → ${upstream}` : row.model;
 }
 
-/** Official, the endpoint's name, or its name marked deleted in the language's own punctuation. */
+/**
+ * Official (with the Codex account that answered, when the gateway moved the request between
+ * accounts), the endpoint's name, or its name marked deleted in the language's own punctuation.
+ */
 export function usageRequestEndpointLabel(
-  endpoint: { name: string | null; deleted: boolean },
+  endpoint: { name: string | null; deleted: boolean; account?: string },
   t: (key: string, options?: Record<string, unknown>) => string,
 ): string {
-  if (endpoint.name === null) return t("usage.overview.official");
+  if (endpoint.name === null) {
+    if (endpoint.account) return t("usage.overview.officialAccount", { email: endpoint.account });
+    return t("usage.overview.official");
+  }
   if (endpoint.deleted) return t("usage.overview.deletedEndpointName", { name: endpoint.name });
   return endpoint.name;
 }

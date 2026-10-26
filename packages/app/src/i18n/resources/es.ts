@@ -4091,6 +4091,7 @@ export const es: TranslationResources = {
             apiEndpointsKeepWorking: "Los endpoints de API siguen funcionando.",
             confirm: "Desactivar",
             listSeparator: ", ",
+            rotationStops: "Rotar cuentas para {{providers}} se detendrá.",
           },
         },
       },
@@ -4484,6 +4485,199 @@ export const es: TranslationResources = {
           termsLink: "Preguntas frecuentes de Antigravity",
         },
       },
+      accounts: {
+        title: "Cuentas",
+        rotate: {
+          title: "Rotar cuentas",
+          hint: "El cambio solo se aplica a sesiones nuevas; las sesiones abiertas siguen en su cuenta.",
+          codexHint:
+            "Las solicitudes pasan por Osuna, así que mientras Osuna no esté en marcha, Codex en una terminal no podrá conectarse.",
+          hintWithCodex: "{{hint}} {{codexHint}}",
+          claudeHint:
+            "El cambio solo se aplica a las sesiones nuevas; las sesiones de Claude Code ya abiertas también pueden pasar a la nueva cuenta cuando caduque su inicio de sesión.",
+          saveFailed: "No se pudo guardar Rotar cuentas: {{reason}}",
+        },
+        throughEndpoints:
+          "Claude Code va ahora por «Usar endpoints de API»; tus cuentas de suscripción se usarán cuando desactives ese interruptor.",
+        cliSignInsOff:
+          "«Leer inicios de sesión de CLI» está desactivado, así que Rotar cuentas se ha detenido",
+        openPrivacySettings: "Abrir ajustes",
+        loginUnsupported: "Osuna no puede cambiar este inicio de sesión de {{name}}: {{reason}}",
+        unsupportedReasons: {
+          ephemeral:
+            'Codex guarda su inicio de sesión solo en memoria (cli_auth_credentials_store = "ephemeral")',
+          unknown_store: "Codex guarda su inicio de sesión de una forma que Osuna no conoce",
+          config_unparsable: "no se puede leer el config.toml de Codex",
+          keyring_unavailable: "Osuna no puede leer el llavero del sistema en esta plataforma",
+          login_unparsable: "no se puede leer el inicio de sesión guardado",
+          account_unknown: "Claude Code no ha registrado qué cuenta inició sesión",
+        },
+        loadFailed: "No se pudieron cargar las cuentas: {{reason}}",
+        empty:
+          "Aún no hay cuentas. Cuando {{name}} inicie sesión con una suscripción, esa cuenta será la primera.",
+        single: "Añade otra cuenta para empezar a rotar.",
+        add: "Añadir cuenta",
+        alreadyAdded: "{{email}} ya estaba en la lista, así que se actualizó su inicio de sesión.",
+        needsSignInHint:
+          "Su inicio de sesión fue rechazado o revocado, así que no se rotará a ella hasta que vuelvas a iniciar sesión.",
+        signInAgain: "Volver a iniciar sesión",
+        switching: "Cambiando la CLI a esta cuenta…",
+        removing: "Quitando…",
+        menu: {
+          label: "Acciones de {{email}}",
+          useNow: "Usar ahora",
+          makeFirst: "Poner primera",
+          moveUp: "Subir",
+          moveDown: "Bajar",
+          moveToTop: "Mover al principio",
+          moveToBottom: "Mover al final",
+          setLimits: "Fijar límites",
+          remove: "Quitar",
+        },
+        orderHint:
+          "Arrastra para reordenar: la rotación pasa primero a la cuenta de más arriba. Alt+↑/↓ para mover, clic derecho para el menú.",
+        orderFailed: "No se pudo guardar el orden: {{reason}}",
+        remove: {
+          title: "¿Quitar {{email}}?",
+          message:
+            "Osuna borra la copia de esta cuenta ({{email}}) que guarda. La CLI no cerrará sesión.",
+          confirm: "Quitar",
+        },
+        switchFailure: {
+          title: "No se pudo cambiar de cuenta",
+          write_failed:
+            "No se pudo cambiar {{name}} a {{email}}: no se pudo escribir su inicio de sesión. Comprueba que Osuna puede escribir el inicio de sesión de {{name}} y vuelve a elegir Usar ahora.",
+          login_unsupported:
+            "No se pudo cambiar {{name}} a {{email}}: Osuna no puede cambiar este inicio de sesión.",
+          needs_sign_in:
+            "No se pudo cambiar {{name}} a {{email}}: hay que volver a iniciar sesión. Elige Volver a iniciar sesión en su fila.",
+          no_account:
+            "La cuenta en uso necesita volver a iniciar sesión y ninguna otra cuenta puede sustituirla. Vuelve a iniciar sesión o añade otra cuenta.",
+          other: "No se pudo cambiar {{name}}: {{reason}}",
+        },
+        switches: {
+          title: "Cambios recientes",
+          fromTo: "{{from}} → {{to}}",
+          toOnly: "Sesión iniciada en {{to}}",
+          showAll: "Mostrar los {{count}}",
+          showFewer: "Mostrar menos",
+          reasons: {
+            use_now: "Elegiste Usar ahora",
+            lapsed: "El inicio de sesión de {{from}} dejó de funcionar",
+            used_up: "{{from}} usó el {{pct}} % de su ventana {{window}}",
+            limit: "{{from}} llegó a tu límite del {{limit}} % en su ventana {{window}}",
+            held: "ChatGPT dejó de permitir enviar a {{from}} (uso agotado, sin créditos)",
+            room_again: "{{to}} vuelve a tener margen",
+            keep_signed_in: "Elegiste Mantener sesión en {{to}}",
+            not_listed: "La cuenta con sesión iniciada no está en la lista",
+            other: "Cambiada por Osuna",
+          },
+        },
+        switchOnly: {
+          title: "Solo cambiar el inicio de sesión",
+          hint: "Desactivado: las solicitudes de Codex pasan por Osuna, y la que la cuenta en uso no puede atender pasa a la siguiente cuenta antes de cualquier respuesta. Activado: Codex va directo a OpenAI y solo se cambia el inicio de sesión.",
+          saveFailed: "No se pudo guardar Solo cambiar el inicio de sesión: {{reason}}",
+        },
+        keep: {
+          title: "Mantener sesión en",
+          hint: "Mientras haya una cuenta elegida, Osuna nunca cambia solo, ni siquiera cuando se queda sin margen.",
+          none: "No mantener",
+          saveFailed: "No se pudo guardar Mantener sesión en: {{reason}}",
+        },
+        limits: {
+          title: "Límites de {{email}}",
+          hint: "Cuando una ventana llega a su límite, la rotación pasa a la siguiente cuenta. Deja una ventana vacía para usar el 98 %.",
+          inputLabel: "Límite de {{window}}",
+          placeholder: "Predet. 98",
+          invalid: "Escribe un número entero del 1 al 99",
+          noWindows: "Podrás fijar límites cuando se haya leído el uso de esta cuenta.",
+          save: "Guardar",
+          saving: "Guardando…",
+          saveFailed: "No se pudieron guardar los límites: {{reason}}",
+          onBar: "límite {{pct}} %",
+        },
+        unknownEmail: "Cuenta desconocida",
+        badges: {
+          temporarilyFirst: "Primera por ahora",
+          firstWhenRoom: "Vuelve a ser la primera cuando tenga margen",
+          inUse: "En uso",
+          first: "Primera",
+          needsSignIn: "Requiere iniciar sesión",
+        },
+        usage: {
+          reading: "Leyendo el uso…",
+          failed: "No se pudo leer el uso: {{reason}}",
+          reasons: {
+            not_found: "el uso del plan no ve este inicio de sesión",
+            not_read_yet: "aún no leído",
+            rejected: "se rechazó el inicio de sesión",
+          },
+        },
+        signIn: {
+          addTitle: "Añadir una cuenta de {{name}}",
+          addFailedTitle: "No se pudo añadir esta cuenta",
+          reSignInFailedTitle: "No se pudo volver a iniciar sesión",
+          reSignInTitle: "Volver a iniciar sesión en {{email}}",
+          starting: "Preparando el inicio de sesión…",
+          startFailed: "No se pudo iniciar sesión: {{reason}}",
+          waitingTitle: "Termina de iniciar sesión en el navegador",
+          waitingHint:
+            "Inicia sesión con la cuenta de ChatGPT que quieres añadir. Esto se cierra solo cuando termines.",
+          openPage: "Abrir página de inicio de sesión",
+          copyLink: "Copiar enlace",
+          linkLabel: "Enlace de inicio de sesión",
+          pasteLabel: "Dirección en la que terminó el navegador",
+          pasteHint:
+            "¿Inicias sesión en otro dispositivo? El navegador termina en una página que no carga. Copia la dirección completa de la barra de direcciones y pégala aquí.",
+          pasteHintBlocked:
+            "El puerto 1455 del host está ocupado, así que el navegador no puede volver a Osuna. Copia la dirección completa en la que termina el navegador y pégala aquí.",
+          pasteSubmit: "Terminar",
+          retry: "Reintentar",
+          canceled: "Se canceló el inicio de sesión.",
+          failed: "El inicio de sesión no terminó: {{reason}}",
+          claude: {
+            waitingHint:
+              "Inicia sesión con la cuenta de Claude que quieres añadir. Esto se cierra solo cuando termines.",
+            pasteLabel: "Código de la página de inicio de sesión",
+            pasteHint:
+              "¿Inicias sesión en otro dispositivo? Abre el enlace allí. Después de iniciar sesión, la página muestra un código: cópialo y pégalo aquí.",
+            pasteHintBlocked:
+              "Claude Code no abrió una página que vuelva a Osuna. Después de iniciar sesión, la página muestra un código: cópialo y pégalo aquí.",
+          },
+          pasteErrors: {
+            paste_invalid: "Pega la dirección completa, empezando por http://",
+            paste_mismatch:
+              "Esa dirección no es de este inicio de sesión. Pega la de la pestaña de este inicio de sesión.",
+            not_waiting: "Este inicio de sesión terminó. Vuelve a intentarlo.",
+            code_invalid: "Pega el código que muestra la página de inicio de sesión.",
+          },
+          failures: {
+            timed_out: "El inicio de sesión no terminó en 10 minutos.",
+            refused: "La página de inicio de sesión lo rechazó: {{reason}}",
+            exchange_failed: "ChatGPT no completó el inicio de sesión ({{reason}}).",
+            no_account: "ChatGPT no indicó qué cuenta inició sesión.",
+            different_account: "Es otra cuenta. Inicia sesión con esta cuenta para arreglarla.",
+            cli_sign_ins_off:
+              "«Leer inicios de sesión de las CLI» está desactivado, así que no se pueden añadir cuentas.",
+            no_email: "Claude Code no registró el correo de la cuenta, así que no se añadió.",
+            login_failed: "El inicio de sesión de Claude Code no terminó: {{reason}}",
+          },
+        },
+        riskNotice: {
+          sheetTitle: "¿Activar Rotar cuentas para {{name}}?",
+          confirm: "Entendido, activar",
+          codexTitle: "Rotar cuentas puede hacer que tu cuenta de ChatGPT sea limitada o bloqueada",
+          codexBody:
+            'La sección 4 de los términos de Sign in with ChatGPT de OpenAI prohíbe facilitar o fomentar "Creating multiple accounts, splitting usage, rotating accounts, or otherwise bypassing usage limits"; la sección 1 dice "Do not impersonate OpenAI, another application, or another open-source project." Osuna usa la identidad de Codex al añadir cuentas y renovar inicios de sesión. Un mantenedor de Codex en OpenAI también ha dicho públicamente que no se deben usar varias cuentas para eludir los límites de un plan (es la opinión de un empleado, no los términos).',
+          codexTermsLink: "Términos de Sign in with ChatGPT",
+          codexMaintainerLink: "Las palabras del mantenedor",
+          claudeTitle: "Rotar cuentas puede hacer que tu cuenta de Claude sea limitada o bloqueada",
+          claudeBody:
+            'La política de uso de Anthropic considera "create multiple accounts, to avoid detection, circumvent product guardrails" un abuso de la plataforma. La página legal de Claude Code dice que los límites publicados para Pro y Max suponen "ordinary, individual usage", y que "developers may not collect, store, or intermediate Claude.ai credentials or session tokens". Osuna guarda los inicios de sesión de tus otras cuentas. Anthropic no menciona la rotación en concreto.',
+          claudePolicyLink: "Política de uso",
+          claudeLegalLink: "Página legal de Claude Code",
+        },
+      },
       actions: {
         menu: "{{name}} actions",
         remove: "Remove provider",
@@ -4840,6 +5034,7 @@ export const es: TranslationResources = {
       refresh: "Actualizar",
       allSources: "Todas",
       official: "Oficial",
+      officialAccount: "Oficial · {{email}}",
       deletedEndpoint: "(eliminado)",
       deletedEndpointName: "{{name}} (eliminado)",
       breakdown: {
@@ -5059,6 +5254,7 @@ export const es: TranslationResources = {
         failed: "Fallida",
         failedWith: "Fallida ({{reason}})",
         switched: "Cambió {{count}}×",
+        switchedAccounts: "Cambió {{count}}×",
       },
       failures: {
         credit: "sin saldo",

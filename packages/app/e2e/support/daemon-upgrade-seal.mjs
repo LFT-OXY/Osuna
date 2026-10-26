@@ -29,11 +29,22 @@
  *    （读余额、保存后拉模型清单都是）。PASEO_E2E_FAKE_SITES_PATH 里写了这个网址的，回那里写的回复（JSON）；
  *    没写的当作连不上。厂商表加了新厂商，这里跟着加。
  *
+ * 9. 不读本机真实的钥匙串：多号自动轮换读 CLI 登录用的钥匙串（provider-accounts/keychain.ts）换成这里装上的假的，
+ *    内容读写 PASEO_E2E_KEYCHAIN_PATH 文件（{ "服务名\u0000账号": 内容 }，没设或没有这个文件就是空的；
+ *    没设时写进内存），绝不跑 `security`。
+ *
+ * 10. Codex 加号不占本机的 1455、不连 OpenAI：回调端口换成随便一个空端口（provider-accounts/service.ts 的
+ *     SEALED_CODEX_CALLBACK_PORT），换 token 与续期（https://auth.openai.com/oauth/token）由上面第 8 条的假外网回答。
+ *
+ * 11. 不运行真的 Claude Code：Claude Code 加号（`claude auth login`）与读存着的号的额度（`claude -p /usage`）
+ *     只运行 PASEO_E2E_CLAUDE_COMMAND 指的假程序（provider-accounts/service.ts 的 SEALED_CLAUDE_COMMAND），
+ *     没设就是一个不存在的路径，运行不了。
+ *
  * 2026-10-18 一条浏览器用例点中了升级按钮，测试 daemon 真的跑了 `brew upgrade --cask claude-code@latest`
  * 又被中途杀掉，弄坏了开发者本机的 Claude Code。
  */
 import childProcess from "node:child_process";
-import { appendFileSync, existsSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
 import path from "node:path";
 
@@ -74,6 +85,8 @@ const SEALED_VENDOR_ORIGINS = [
   "https://tokenhub.tencentmaas.com/",
   // Codex 的套餐用量与重置卡（plugins/codex-usage-source）：测试的 CODEX_HOME 是空的不会去问，这里兜底。
   "https://chatgpt.com/",
+  // Codex 加号换 token、存着的号续期（provider-accounts/codex-oauth.ts）。
+  "https://auth.openai.com/",
   // 人民币显示用的汇率（usage/exchange-rate.ts）：价格表自动更新开着又选了人民币才会去问，这里兜底。
   "https://open.er-api.com/",
 ];
@@ -199,6 +212,37 @@ globalThis[Symbol.for("paseo.e2e.hostProcesses")] = {
   },
   readSystemProxy: async () => readFakeSystemProxy(),
 };
+
+globalThis[Symbol.for("paseo.e2e.codexCallbackPort")] = 0;
+
+const memoryKeychain = {};
+
+function readFakeKeychain() {
+  const file = process.env.PASEO_E2E_KEYCHAIN_PATH;
+  if (!file) return memoryKeychain;
+  return existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {};
+}
+
+globalThis[Symbol.for("paseo.e2e.cliKeychain")] = {
+  available: true,
+  read: async (service, account) => readFakeKeychain()[`${service}\u0000${account}`] ?? null,
+  write: async (service, account, value) => {
+    const items = readFakeKeychain();
+    items[`${service}\u0000${account}`] = value;
+    const file = process.env.PASEO_E2E_KEYCHAIN_PATH;
+    if (file) writeFileSync(file, JSON.stringify(items));
+  },
+  delete: async (service, account) => {
+    const items = readFakeKeychain();
+    delete items[`${service}\u0000${account}`];
+    const file = process.env.PASEO_E2E_KEYCHAIN_PATH;
+    if (file) writeFileSync(file, JSON.stringify(items));
+  },
+};
+
+// 第 11 条：Claude Code 加号、读存着的号的额度只运行用例给的假 claude；没给就是一个不存在的路径（运行不了）。
+globalThis[Symbol.for("paseo.e2e.claudeCommand")] =
+  process.env.PASEO_E2E_CLAUDE_COMMAND || "/nonexistent/paseo-e2e-sealed-claude";
 
 function readFakeSites() {
   const file = process.env.PASEO_E2E_FAKE_SITES_PATH;

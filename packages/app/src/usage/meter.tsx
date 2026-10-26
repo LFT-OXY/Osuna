@@ -25,11 +25,14 @@ export function UsageMeter({
   percent,
   tone,
   quiet = false,
+  markerPct,
   style,
 }: {
   percent: number;
   tone: UsageTone;
   quiet?: boolean;
+  /** Osuna：在条上这个百分比处画一道竖线（账号窗口的上限）。 */
+  markerPct?: number;
   style?: StyleProp<ViewStyle>;
 }) {
   const fillWidth = clampPct(percent);
@@ -37,6 +40,21 @@ export function UsageMeter({
     () => [styles.fill, quiet ? styles.fillQuiet : fillToneStyle(tone), { width: `${fillWidth}%` }],
     [fillWidth, quiet, tone],
   );
+  const markerStyle = useMemo<StyleProp<ViewStyle>>(
+    () => (markerPct === undefined ? null : [styles.marker, { left: `${clampPct(markerPct)}%` }]),
+    [markerPct],
+  );
+  if (markerStyle) {
+    // 竖线比条高，画在条外面一层，不被条的 overflow 裁掉。
+    return (
+      <View style={[styles.markerFrame, style]}>
+        <View style={styles.track}>
+          <View style={fillStyle} />
+        </View>
+        <View style={markerStyle} testID="usage-meter-marker" />
+      </View>
+    );
+  }
   return (
     <View style={[styles.track, style]}>
       <View style={fillStyle} />
@@ -70,5 +88,18 @@ const styles = StyleSheet.create((theme) => ({
   },
   fillDanger: {
     backgroundColor: theme.colors.statusDanger,
+  },
+  markerFrame: {
+    position: "relative",
+    justifyContent: "center",
+  },
+  marker: {
+    position: "absolute",
+    top: -3,
+    bottom: -3,
+    width: 2,
+    marginLeft: -1,
+    borderRadius: 1,
+    backgroundColor: theme.colors.foreground,
   },
 }));

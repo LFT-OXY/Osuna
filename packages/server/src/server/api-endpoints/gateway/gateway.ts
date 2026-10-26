@@ -45,6 +45,7 @@ import {
   DEFAULT_OPENAI_API_BASE_URL,
   chatgptBackendRest,
   codexIdentityHeaders,
+  isForOpenAiApi,
   noWebSearchReply,
   relayToChatGpt,
   relayedHeaders,
@@ -119,6 +120,12 @@ import {
 import type { GatewayLedger } from "../../usage/ledger.js";
 import { LedgerCall, type LedgerAttemptEnd } from "./ledger-call.js";
 import { ChatGptLedgerWatch } from "./chatgpt-ledger.js";
+import {
+  ACCOUNT_ROUTED_PATHS,
+  relayOnAccounts,
+  type ChatGptAccount,
+  type ChatGptAccounts,
+} from "./chatgpt-accounts.js";
 import {
   asksAnthropicWebSearch,
   asksWebSearch,
@@ -208,6 +215,8 @@ export function createApiEndpointGateway(options: {
   noteCliVersion: (headers: IncomingHttpHeaders) => void;
   // 中转站账本：每个 CLI 请求结束时记一行，用量服务把它与 CLI 会话记录合并（ADR 0014）。
   ledger: GatewayLedger;
+  // Codex 的几个 ChatGPT 号（多号自动轮换的第二层）；没有就只按 Codex 自己的登录原样转发。
+  chatGptAccounts?: ChatGptAccounts;
   overrides?: ApiEndpointGatewayOverrides;
 }): RequestHandler {
   const logger = options.logger.child({ module: "api-endpoint-gateway" });
@@ -239,6 +248,9 @@ export function createApiEndpointGateway(options: {
     },
     listing: options.chatGptListing,
     modelsWaitMs: options.overrides?.gatewayChatGptModelsWaitMs ?? CHATGPT_MODELS_WAIT_MS,
+    accounts: options.chatGptAccounts ?? null,
+    // 号之间的粘性与接口的分开记：候选的标识不同，互不影响。
+    accountSticks: new ConversationSticks(),
   };
 
   return (req, res) => {
@@ -341,6 +353,8 @@ interface ChatGptBackend {
   bases: ChatGptBases;
   listing: () => ChatGptModelsListing;
   modelsWaitMs: number;
+  accounts: ChatGptAccounts | null;
+  accountSticks: ConversationSticks;
 }
 
 // 要先看模型名再决定转给 ChatGPT 还是接口的路径。
@@ -407,11 +421,31 @@ async function serveChatGptBackend(input: {
       return;
     }
     const isShaped = text !== sentText;
-    relayChatGpt({
-      ...input,
-      sent: chatgptBodyFor({ rest, raw: raw.body, text, isShaped }),
-      watch: chatgptWatch({ ...input, since, model, text }),
-    });
+    const sent = chatgptBodyFor({ rest, raw: raw.body, text, isShaped });
+    const accounts = await accountsFor(input);
+    if (accounts !== null) {
+      const rewritten = sent.kind === "rewritten";
+      // 对话记账；压缩不记（同原样转发）。
+      const isTurn = rest === "/responses";
+      await relayOnAccounts({
+        req,
+        res,
+        rest,
+        body: sent.body,
+        rewritten,
+        // 解开后的请求体：改过的就是发出去的那份。
+        text: rewritten ? sent.body.toString("utf8") : text,
+        model,
+        accounts,
+        bases: chatgpt.bases,
+        sticks: chatgpt.accountSticks,
+        headerTimeoutMs: input.failover.headerTimeoutMs,
+        logger,
+        ledger: isTurn ? chatgptLedgerCall({ ...input, since, model }) : null,
+      });
+      return;
+    }
+    relayChatGpt({ ...input, sent, watch: chatgptWatch({ ...input, since, model, text }) });
     return;
   }
   if (rest === "/responses" && hasSealedAgentTask(parseJson(text))) {
@@ -487,12 +521,39 @@ function chatgptBodyFor(input: {
   raw: Buffer;
   text: string;
   isShaped?: boolean;
-}): ChatGptBody {
+}): NonNullable<ChatGptBody> {
   if (input.rest !== "/responses") return { kind: "raw", body: input.raw };
   const restored = codexCompactionInput({ text: input.text, isEndpointModel: false });
   if (restored.kind === "changed") return { kind: "rewritten", body: Buffer.from(restored.body) };
   if (input.isShaped === true) return { kind: "rewritten", body: Buffer.from(input.text) };
   return { kind: "raw", body: input.raw };
+}
+
+/** 第二层开着、这条路径照 magpie 换号、Codex 不是用 API key 登录时，这次请求能换的号；否则 null（原样转发）。 */
+async function accountsFor(input: {
+  req: Request;
+  rest: string;
+  chatgpt: ChatGptBackend;
+}): Promise<ChatGptAccount[] | null> {
+  const { req, rest, chatgpt } = input;
+  if (chatgpt.accounts === null || !ACCOUNT_ROUTED_PATHS.has(rest)) return null;
+  if (isForOpenAiApi({ url: req.url, authorization: req.headers.authorization })) return null;
+  return chatgpt.accounts.forRequest();
+}
+
+function chatgptLedgerCall(input: {
+  req: Request;
+  failover: Failover;
+  since: number;
+  model: string;
+}): LedgerCall {
+  return new LedgerCall({
+    ledger: input.failover.ledger,
+    agent: "codex",
+    sessionId: sessionHeaderOf(input.req.headers),
+    model: input.model,
+    since: input.since,
+  });
 }
 
 /**
@@ -508,13 +569,7 @@ function chatgptWatch(input: {
 }): ChatGptLedgerWatch | undefined {
   if (input.rest !== "/responses") return undefined;
   const parsed = parseJson(input.text);
-  const call = new LedgerCall({
-    ledger: input.failover.ledger,
-    agent: "codex",
-    sessionId: sessionHeaderOf(input.req.headers),
-    model: input.model,
-    since: input.since,
-  });
+  const call = chatgptLedgerCall(input);
   const streams = isRecord(parsed) && parsed.stream === true;
   return new ChatGptLedgerWatch({ call, model: input.model, since: input.since, streams });
 }

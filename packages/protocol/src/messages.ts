@@ -88,6 +88,33 @@ import {
   UsageExchangeRateGetRequestSchema,
   UsageExchangeRateGetResponseSchema,
 } from "./usage/rpc-schemas.js";
+import {
+  ProviderAccountChangedMessageSchema,
+  ProviderAccountListRequestSchema,
+  ProviderAccountListResponseSchema,
+  ProviderAccountRemoveRequestSchema,
+  ProviderAccountRemoveResponseSchema,
+  ProviderAccountSetKeepSignedInRequestSchema,
+  ProviderAccountSetKeepSignedInResponseSchema,
+  ProviderAccountSetSwitchOnlyRequestSchema,
+  ProviderAccountSetSwitchOnlyResponseSchema,
+  ProviderAccountSetLimitsRequestSchema,
+  ProviderAccountSetLimitsResponseSchema,
+  ProviderAccountSetOrderRequestSchema,
+  ProviderAccountSetOrderResponseSchema,
+  ProviderAccountSetRotationRequestSchema,
+  ProviderAccountSetRotationResponseSchema,
+  ProviderAccountSignInCancelRequestSchema,
+  ProviderAccountSignInCancelResponseSchema,
+  ProviderAccountSignInGetRequestSchema,
+  ProviderAccountSignInGetResponseSchema,
+  ProviderAccountSignInStartRequestSchema,
+  ProviderAccountSignInStartResponseSchema,
+  ProviderAccountSignInSubmitRequestSchema,
+  ProviderAccountSignInSubmitResponseSchema,
+  ProviderAccountUseRequestSchema,
+  ProviderAccountUseResponseSchema,
+} from "./provider-account/rpc-schemas.js";
 import { UsagePricingOverrideSchema } from "./usage/types.js";
 import {
   ApiEndpointCancelRequestSchema,
@@ -3549,6 +3576,9 @@ export const SessionEventSubscriptionSchema = z.enum([
   // COMPAT(logicMap): added in v0.17.0, remove gate after 2027-04-19. A client only
   // asks for it once `features.logicMap` is advertised.
   "workspace.logic_map.changed",
+  // COMPAT(accountRotation): added in v0.17.0, remove gate after 2027-04-25. A client only
+  // asks for it once `features.accountRotation` is advertised.
+  "provider.account.changed",
 ]);
 export type SessionEventSubscription = z.infer<typeof SessionEventSubscriptionSchema>;
 export const SessionEventsSetSubscriptionRequestSchema = z.object({
@@ -3584,6 +3614,18 @@ export const SubscriptionReleaseResponseSchema = z.object({
 });
 
 export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
+  ProviderAccountListRequestSchema,
+  ProviderAccountSetRotationRequestSchema,
+  ProviderAccountSignInStartRequestSchema,
+  ProviderAccountSignInGetRequestSchema,
+  ProviderAccountSignInCancelRequestSchema,
+  ProviderAccountSignInSubmitRequestSchema,
+  ProviderAccountUseRequestSchema,
+  ProviderAccountRemoveRequestSchema,
+  ProviderAccountSetOrderRequestSchema,
+  ProviderAccountSetLimitsRequestSchema,
+  ProviderAccountSetKeepSignedInRequestSchema,
+  ProviderAccountSetSwitchOnlyRequestSchema,
   BrowserHostRegisterRequestSchema,
   SubscriptionReleaseRequestSchema,
   SessionEventsSetSubscriptionRequestSchema,
@@ -4263,6 +4305,12 @@ export const ServerInfoStatusPayloadSchema = z
         // COMPAT(checkoutDiffFilesOnly): added in v0.17.0, remove gate after 2027-04-19.
         // daemon 理解 checkout diff compare 的 filesOnly，只发文件清单。
         checkoutDiffFilesOnly: z.boolean().optional(),
+        // COMPAT(accountRotation): added in v0.17.0, remove gate after 2027-04-25.
+        // 任务 10-16-multi-account-rotation：provider.account.list / set_rotation、加号的 provider.account.sign_in.*、
+        // 换号的 provider.account.use / remove / set_order、自动换号的 set_limits / set_keep_signed_in、
+        // Codex 第二层的 set_switch_only 与 provider.account.changed 事件
+        // （Codex、Claude Code 设置页的「账号」一节与「多号自动轮换」）。
+        accountRotation: z.boolean().optional(),
       })
       .optional(),
   })
@@ -6886,6 +6934,12 @@ export const UsageReportSchema = z.discriminatedUnion("status", [
     details: z.array(ProviderUsageDetailSchema).optional(),
     // 账号还有几次重置（Codex 的 ChatGPT 账号），形状同接口读数的 resets；老 daemon 与没有重置的来源不发。
     resets: ApiEndpointBalanceResetsSchema.optional(),
+    // Codex 应用不让这个号发送（额度用完且没有 credits，照 magpie 的 codexHeld）；多号自动轮换据此换走。
+    // 老 daemon 与别的来源不发。
+    held: z.boolean().optional(),
+    // 这个号窗口用完后改花 credits（Codex 的 has_credits 或 unlimited）；多号自动轮换的第二层据此再问一次。
+    // 老 daemon 与别的来源不发。
+    onCredits: z.boolean().optional(),
   }),
   z.object({ status: z.literal("unavailable"), problem: UsageProblemSchema }),
   z.object({ status: z.literal("error"), error: z.string() }),
@@ -7451,6 +7505,19 @@ export const AgentSkillsImportLegacySelectionResponseSchema = z.object({
 });
 
 export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
+  ProviderAccountListResponseSchema,
+  ProviderAccountSetRotationResponseSchema,
+  ProviderAccountSignInStartResponseSchema,
+  ProviderAccountSignInGetResponseSchema,
+  ProviderAccountSignInCancelResponseSchema,
+  ProviderAccountSignInSubmitResponseSchema,
+  ProviderAccountUseResponseSchema,
+  ProviderAccountRemoveResponseSchema,
+  ProviderAccountSetOrderResponseSchema,
+  ProviderAccountSetLimitsResponseSchema,
+  ProviderAccountSetKeepSignedInResponseSchema,
+  ProviderAccountSetSwitchOnlyResponseSchema,
+  ProviderAccountChangedMessageSchema,
   BrowserHostRegisterResponseSchema,
   SubscriptionReleaseResponseSchema,
   SessionEventsSetSubscriptionResponseSchema,

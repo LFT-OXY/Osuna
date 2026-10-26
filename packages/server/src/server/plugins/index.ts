@@ -31,6 +31,7 @@ import { readPluginProviderIcon } from "./provider-icon.js";
 import {
   type AgentUsageLookup,
   type ListUsageReportsOptions,
+  type SavedAccountLogins,
   UsageSourceRegistry,
 } from "./usage-sources/index.js";
 import type { PluginUsageSourceMetadata } from "./plugin-process-protocol.js";
@@ -170,6 +171,15 @@ export class PluginService {
 
   listUsageReports(options?: ListUsageReportsOptions) {
     return this.usageSources.listReports(options);
+  }
+
+  /** 多号自动轮换的账号服务建好后接上：换号后 Agent 的套餐用量卡片仍是它启动时的号。 */
+  useSavedAccounts(savedAccounts: SavedAccountLogins): void {
+    this.usageSources.useSavedAccounts(savedAccounts);
+  }
+
+  fetchUsageInput(sourceId: string, input: unknown) {
+    return this.usageSources.fetchInput(sourceId, input);
   }
 
   consumeUsageReset(reportId: string) {

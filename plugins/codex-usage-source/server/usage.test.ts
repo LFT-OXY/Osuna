@@ -1,3 +1,4 @@
+// held 的用例照 magpie（MIT，THIRD_PARTY_NOTICES）internal/provider/subscription_usage.go 的 codexHeld。
 import { UsageSourceRegistry } from "../../../packages/server/src/server/plugins/usage-sources/index.js";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -72,6 +73,31 @@ test("explicit route reads Codex auth and preserves the usage request", async ()
   }
 });
 
+test("a saved account's own token reads usage with the same request as the CLI login", async () => {
+  const seen: { url: string; headers: Headers }[] = [];
+  const record = (url: unknown, init?: RequestInit) => {
+    seen.push({ url: String(url), headers: new Headers(init?.headers) });
+    return response(init?.headers ?? {}, "account-saved");
+  };
+  await writeAuth("fixture-cli", "account-saved");
+  await fetchUsage(authInput(fixtureHome), record);
+  const report = await fetchUsage(
+    { route: { store: "token", accessToken: "fixture-saved", accountId: "account-saved" } },
+    record,
+  );
+  expect(report).toMatchObject({
+    status: "available",
+    windows: [{ id: "five_hour", usedPct: 30 }],
+  });
+  const [cli, saved] = seen;
+  expect(saved?.url).toBe(cli?.url);
+  expect(saved?.headers.get("Authorization")).toBe("Bearer fixture-saved");
+  // 除了登录本身，请求头与读 CLI 登录的那次一模一样（同一个浏览器 User-Agent）。
+  cli?.headers.delete("Authorization");
+  saved?.headers.delete("Authorization");
+  expect(Object.fromEntries(saved?.headers ?? [])).toEqual(Object.fromEntries(cli?.headers ?? []));
+});
+
 test("discovery input requires a route and rejects raw credentials", () => {
   for (const input of [
     { codexHome: "/unused" },
@@ -115,6 +141,63 @@ test("coerces credit balance and marks a 96 percent window dangerous", async () 
   expect(report.balances).toEqual([
     expect.objectContaining({ remaining: 0, unit: "credits", tone: "danger" }),
   ]);
+});
+
+function heldReading(body: Record<string, unknown>) {
+  return fetchUsage(
+    authInput(fixtureHome),
+    async () => new Response(JSON.stringify(body), { status: 200 }),
+  );
+}
+
+test("an account not allowed to send with no credits is held, as the Codex app holds it", async () => {
+  const notAllowed = { primary_window: { used_percent: 100, limit_window_seconds: 18000 } };
+  expect(
+    await heldReading({ plan_type: "plus", rate_limit: { ...notAllowed, allowed: false } }),
+  ).toMatchObject({ status: "available", held: true });
+  // credits carry every turn on: not held, whatever the windows read
+  expect(
+    await heldReading({
+      plan_type: "pro",
+      rate_limit: { ...notAllowed, allowed: false },
+      credits: { has_credits: true, balance: "12" },
+    }),
+  ).not.toHaveProperty("held");
+  // a workspace still within its overage isn't held
+  expect(
+    await heldReading({
+      plan_type: "business",
+      rate_limit: { ...notAllowed, allowed: false },
+      credits: { has_credits: false, overage_limit_reached: false },
+    }),
+  ).not.toHaveProperty("held");
+  // ...unless a spend cap holds it
+  expect(
+    await heldReading({
+      plan_type: "business",
+      rate_limit: { ...notAllowed, allowed: false },
+      credits: { has_credits: false, overage_limit_reached: false },
+      spend_control: { reached: true },
+    }),
+  ).toMatchObject({ held: true });
+  // allowed, or not said: not held
+  expect(await heldReading({ rate_limit: { ...notAllowed, allowed: true } })).not.toHaveProperty(
+    "held",
+  );
+  expect(await heldReading({ rate_limit: notAllowed })).not.toHaveProperty("held");
+});
+
+test("an account holding credits says so, so the gateway asks it again on its 429 (magpie OnCredits)", async () => {
+  const used = { primary_window: { used_percent: 100, limit_window_seconds: 18000 } };
+  expect(
+    await heldReading({ plan_type: "pro", rate_limit: used, credits: { has_credits: true } }),
+  ).toMatchObject({ status: "available", onCredits: true });
+  expect(
+    await heldReading({ plan_type: "pro", rate_limit: used, credits: { unlimited: true } }),
+  ).toMatchObject({ onCredits: true });
+  expect(
+    await heldReading({ plan_type: "plus", rate_limit: used, credits: { has_credits: false } }),
+  ).not.toHaveProperty("onCredits");
 });
 
 test("summarizes the session and weekly windows by default, not code review", async () => {

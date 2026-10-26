@@ -42,19 +42,28 @@ function planUsageStops({
   return t(`${TURN_OFF_KEY}.planUsageStops`, { accounts });
 }
 
-/** 关「读取 CLI 登录凭证」之前先问：按名字列出会停止显示套餐用量的账号。打开时不问。 */
+/**
+ * 关「读取 CLI 登录凭证」之前先问：按名字列出会停止显示套餐用量的账号，以及开着多号自动轮换、会跟着停的提供方。
+ * 打开时不问。
+ */
 export function CliSignInsTurnOffSheet(props: {
   accountNames: readonly string[];
+  // 开着「多号自动轮换」的提供方名字（Codex、Claude Code）；没有就不提这件事。
+  rotatingProviders: readonly string[];
   onConfirm: () => void;
   onClose: () => void;
 }) {
-  const { accountNames, onConfirm, onClose } = props;
+  const { accountNames, rotatingProviders, onConfirm, onClose } = props;
   const { t } = useTranslation();
-  // 关掉后会停的事，一件一句。现在只有套餐用量；多号自动轮换（子任务 9）在这里加一项。
-  const stopped = useMemo(
-    () => [{ id: "planUsage", text: planUsageStops({ t, accountNames }) }],
-    [accountNames, t],
-  );
+  // 关掉后会停的事，一件一句。
+  const stopped = useMemo(() => {
+    const things = [{ id: "planUsage", text: planUsageStops({ t, accountNames }) }];
+    if (rotatingProviders.length > 0) {
+      const providers = rotatingProviders.join(t(`${TURN_OFF_KEY}.listSeparator`));
+      things.push({ id: "rotation", text: t(`${TURN_OFF_KEY}.rotationStops`, { providers }) });
+    }
+    return things;
+  }, [accountNames, rotatingProviders, t]);
   const { height: windowHeight } = useWindowDimensions();
   const { bottom: safeAreaBottom } = useSafeAreaInsets();
   const [bodyHeight, setBodyHeight] = useState<number | null>(null);

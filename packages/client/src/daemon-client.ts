@@ -728,6 +728,18 @@ type ApiEndpointForgetCatalogPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.forget_catalog.response" }
 >["payload"];
+type ProviderAccountListPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.account.list.response" }
+>["payload"];
+type ProviderAccountSetRotationPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.account.set_rotation.response" }
+>["payload"];
+type ProviderAccountSignInPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.account.sign_in.start.response" }
+>["payload"];
 type ApiEndpointVendorStatusPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.vendor_status.response" }
@@ -6780,6 +6792,144 @@ export class DaemonClient {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId,
       message: { type: "provider.api_endpoint.forget_catalog.request", endpointId },
+    });
+  }
+
+  /** 「账号」一节：这家的号、轮换设置与这一节为什么停着。只有声明了 accountRotation 的 daemon 认。 */
+  async providerAccountList(
+    options: { provider: string },
+    requestId?: string,
+  ): Promise<ProviderAccountListPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.account.list.request", ...options },
+    });
+  }
+
+  /**
+   * 打开或关掉这家的多号自动轮换；第一次打开要带 acknowledgeRiskNotice，否则回 risk_notice_required。
+   * 只有声明了 accountRotation 的 daemon 认。
+   */
+  async providerAccountSetRotation(
+    options: { provider: string; enabled: boolean; acknowledgeRiskNotice?: boolean },
+    requestId?: string,
+  ): Promise<ProviderAccountSetRotationPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.account.set_rotation.request", ...options },
+    });
+  }
+
+  /** 「立即使用」：把 CLI 的登录换成这个号。只有声明了 accountRotation 的 daemon 认。 */
+  async providerAccountUse(
+    options: { provider: string; accountId: string },
+    requestId?: string,
+  ): Promise<ProviderAccountListPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.account.use.request", ...options },
+    });
+  }
+
+  /** 「移除」：只删 Osuna 存的这个号，不登出 CLI。只有声明了 accountRotation 的 daemon 认。 */
+  async providerAccountRemove(
+    options: { provider: string; accountId: string },
+    requestId?: string,
+  ): Promise<ProviderAccountListPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.account.remove.request", ...options },
+    });
+  }
+
+  /** 号的新先后（这家所有号的 ID）。只有声明了 accountRotation 的 daemon 认。 */
+  async providerAccountSetOrder(
+    options: { provider: string; accountIds: string[] },
+    requestId?: string,
+  ): Promise<ProviderAccountListPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.account.set_order.request", ...options },
+    });
+  }
+
+  /** 「设上限」：这个号各窗口的上限（窗口 ID → 1–99），整份替换。只有声明了 accountRotation 的 daemon 认。 */
+  async providerAccountSetLimits(
+    options: { provider: string; accountId: string; limits: Record<string, number> },
+    requestId?: string,
+  ): Promise<ProviderAccountListPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.account.set_limits.request", ...options },
+    });
+  }
+
+  /** 「固定登录到」这个号；null 是不固定。只有声明了 accountRotation 的 daemon 认。 */
+  async providerAccountSetKeepSignedIn(
+    options: { provider: string; accountId: string | null },
+    requestId?: string,
+  ): Promise<ProviderAccountListPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.account.set_keep_signed_in.request", ...options },
+    });
+  }
+
+  /** Codex 的「只换登录」：打开时不经过中转站换号。只有声明了 accountRotation 的 daemon 认。 */
+  async providerAccountSetSwitchOnly(
+    options: { provider: string; enabled: boolean },
+    requestId?: string,
+  ): Promise<ProviderAccountListPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.account.set_switch_only.request", ...options },
+    });
+  }
+
+  /** 开始加号；带 accountId 是给这个号重新登录。只有声明了 accountRotation 的 daemon 认。 */
+  async providerAccountSignInStart(
+    options: { provider: string; accountId?: string },
+    requestId?: string,
+  ): Promise<ProviderAccountSignInPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.account.sign_in.start.request", ...options },
+    });
+  }
+
+  /** 这次加号现在的样子；收到 provider.account.changed 后重读。 */
+  async providerAccountSignInGet(
+    options: { signInId: string },
+    requestId?: string,
+  ): Promise<ProviderAccountSignInPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.account.sign_in.get.request", ...options },
+    });
+  }
+
+  async providerAccountSignInCancel(
+    options: { signInId: string },
+    requestId?: string,
+  ): Promise<ProviderAccountSignInPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.account.sign_in.cancel.request", ...options },
+    });
+  }
+
+  /**
+   * 用粘贴的内容完成加号：Codex 是浏览器最后跳到的地址（callbackUrl），Claude Code 是登录页显示的代码或回不到主机的
+   * 那个地址（code）。daemon 等登录结束才回，最多等一分钟。
+   */
+  async providerAccountSignInSubmit(
+    options: { signInId: string; callbackUrl?: string; code?: string },
+    requestId?: string,
+  ): Promise<ProviderAccountSignInPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.account.sign_in.submit.request", ...options },
+      timeout: 60_000,
     });
   }
 

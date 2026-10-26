@@ -3632,6 +3632,8 @@ export class CodexAppServerAgentSession implements AgentSession {
 
   private readonly usageSessionKey = randomUUID();
   private readonly harnessEnvironment: Record<string, string>;
+  // app-server 启动、读进登录的时刻：换号后 Agent 的套餐用量卡片仍是这时的号。
+  private launchedAt: number | undefined;
 
   usageSession() {
     if (this.closed) return null;
@@ -3640,6 +3642,7 @@ export class CodexAppServerAgentSession implements AgentSession {
       model: this.config.model,
       env: this.harnessEnvironment,
       sessionKey: this.usageSessionKey,
+      ...(this.launchedAt !== undefined ? { launchedAt: this.launchedAt } : {}),
     };
   }
 
@@ -3729,6 +3732,7 @@ export class CodexAppServerAgentSession implements AgentSession {
       this.connectionState = "history-ready";
       return;
     }
+    this.launchedAt = Date.now();
     const child = await this.spawnAppServer();
     const client = new CodexAppServerClient(child, this.logger, () => this.traceContext());
     if (this.closed) {

@@ -376,6 +376,63 @@ test("session discovery reuses accounts, separates launches, and retains live ag
   await expect(registry.listReports({ agentId: "one", reportIds: [] })).rejects.toThrow("agentId");
 });
 
+test("an agent started before the CLI switched accounts keeps showing the account it started on", async () => {
+  // CLI 的登录：先是 one，Agent 启动后换成了 two（多号自动轮换）。
+  let cliAccount = "one";
+  let switchedAt: number | null = null;
+  const registry = new UsageSourceRegistry({
+    agents: {
+      hasAgent: () => true,
+      usageSession: () => ({ provider: "codex", env: {}, sessionKey: "launch", launchedAt: 1_000 }),
+    },
+  });
+  registry.useSavedAccounts({
+    accountAt: ({ at }) =>
+      switchedAt !== null && switchedAt > at && cliAccount !== "one"
+        ? { key: "one", label: "one@example.com" }
+        : null,
+    usageInput: async ({ key }) => ({ token: `saved-${key}` }),
+  });
+  registry.register(
+    source({
+      id: "codex",
+      discover: async () => [
+        { key: cliAccount, label: `${cliAccount}@example.com`, input: { token: "cli" } },
+      ],
+      fetch: async (input) => ({
+        status: "available",
+        windows: [
+          {
+            id: "who",
+            label: (input as { token: string }).token === "cli" ? cliAccount : "saved",
+          },
+        ],
+      }),
+    }),
+  );
+  const before = await registry.listReports({ agentId: "agent" });
+  expect(before.map((entry) => [entry.id, entry.account.label])).toEqual([
+    ["codex:one", "one@example.com"],
+  ]);
+
+  cliAccount = "two";
+  switchedAt = 2_000;
+  const after = await registry.listReports({ agentId: "agent", forceRefresh: true });
+  expect(after.map((entry) => [entry.id, entry.account.label])).toEqual([
+    ["codex:one", "one@example.com"],
+  ]);
+  // 读的是 one 自己存着的登录，不是 CLI 现在的 two。
+  expect(after[0]?.report.status === "available" && after[0].report.windows[0]?.label).toBe(
+    "saved",
+  );
+
+  // 换回 one 之后，又照 CLI 的登录读。
+  cliAccount = "one";
+  const back = await registry.listReports({ agentId: "agent", forceRefresh: true });
+  expect(back.map((entry) => entry.id)).toEqual(["codex:one"]);
+  expect(back[0]?.report.status === "available" && back[0].report.windows[0]?.label).toBe("one");
+});
+
 test("reports arrive independently and a hung fetch settles as an error before completion", async () => {
   const registry = new UsageSourceRegistry({ deadlineMs: 25 });
   let finishSlow!: (value: unknown) => void;

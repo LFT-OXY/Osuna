@@ -4130,6 +4130,7 @@ export const en = {
             apiEndpointsKeepWorking: "API endpoints keep working.",
             confirm: "Turn off",
             listSeparator: ", ",
+            rotationStops: "Rotate accounts for {{providers}} will stop.",
           },
         },
       },
@@ -4514,6 +4515,197 @@ export const en = {
           termsLink: "Antigravity FAQ",
         },
       },
+      accounts: {
+        title: "Accounts",
+        rotate: {
+          title: "Rotate accounts",
+          hint: "Switching only applies to new sessions; open sessions stay on their account.",
+          codexHint:
+            "Requests go through Osuna, so while Osuna isn't running, Codex in a terminal can't connect.",
+          hintWithCodex: "{{hint}} {{codexHint}}",
+          claudeHint:
+            "Switching only applies to new sessions; Claude Code sessions already open may also move to the new account when their sign-in expires.",
+          saveFailed: "Couldn't save Rotate accounts: {{reason}}",
+        },
+        throughEndpoints:
+          "Claude Code is going through “Use API endpoints” now; your subscription accounts are used once you turn that switch off.",
+        cliSignInsOff: "“Read CLI sign-ins” is off, so Rotate accounts has stopped",
+        openPrivacySettings: "Open settings",
+        loginUnsupported: "Osuna can't switch this {{name}} sign-in: {{reason}}",
+        unsupportedReasons: {
+          ephemeral:
+            'Codex keeps its sign-in in memory only (cli_auth_credentials_store = "ephemeral")',
+          unknown_store: "Codex stores its sign-in in a way Osuna doesn't know",
+          config_unparsable: "Codex's config.toml can't be read",
+          keyring_unavailable: "Osuna can't read the system keychain on this platform",
+          login_unparsable: "the saved sign-in can't be read",
+          account_unknown: "Claude Code hasn't recorded which account is signed in",
+        },
+        loadFailed: "Couldn't load accounts: {{reason}}",
+        empty:
+          "No accounts yet. Once {{name}} is signed in to a subscription, that account becomes the first one.",
+        single: "Add another account to start rotating.",
+        add: "Add account",
+        alreadyAdded: "{{email}} was already in the list, so its sign-in was updated.",
+        needsSignInHint:
+          "Its sign-in was refused or revoked, so it won't be rotated to until you sign in again.",
+        signInAgain: "Sign in again",
+        switching: "Switching the CLI to this account…",
+        removing: "Removing…",
+        menu: {
+          label: "{{email}} actions",
+          useNow: "Use now",
+          makeFirst: "Make first",
+          moveUp: "Move up",
+          moveDown: "Move down",
+          moveToTop: "Move to top",
+          moveToBottom: "Move to bottom",
+          setLimits: "Set limits",
+          remove: "Remove",
+        },
+        orderHint:
+          "Drag to reorder: rotation moves to the higher account first. Alt+↑/↓ to move, right-click for the menu.",
+        orderFailed: "Couldn't save the order: {{reason}}",
+        remove: {
+          title: "Remove {{email}}?",
+          message:
+            "Osuna deletes the copy of this account ({{email}}) it keeps. The CLI won't be signed out.",
+          confirm: "Remove",
+        },
+        switchFailure: {
+          title: "Couldn't switch accounts",
+          write_failed:
+            "{{name}} couldn't be switched to {{email}}: its sign-in couldn't be written. Check that Osuna can write {{name}}'s sign-in, then choose Use now again.",
+          login_unsupported:
+            "{{name}} couldn't be switched to {{email}}: Osuna can't switch this sign-in.",
+          needs_sign_in:
+            "{{name}} couldn't be switched to {{email}}: it needs signing in again. Choose Sign in again on its row.",
+          no_account:
+            "The account in use needs signing in again and no other account can take over. Sign in again, or add another account.",
+          other: "{{name}} couldn't be switched: {{reason}}",
+        },
+        switches: {
+          title: "Recent switches",
+          fromTo: "{{from}} → {{to}}",
+          toOnly: "Signed in to {{to}}",
+          showAll: "Show all {{count}}",
+          showFewer: "Show fewer",
+          reasons: {
+            use_now: "You chose Use now",
+            lapsed: "{{from}}'s sign-in stopped working",
+            used_up: "{{from}} used {{pct}}% of its {{window}} window",
+            limit: "{{from}} reached your {{limit}}% limit on its {{window}} window",
+            held: "ChatGPT stopped letting {{from}} send (usage used up, no credits)",
+            room_again: "{{to}} has room again",
+            keep_signed_in: "You chose Keep signed in to {{to}}",
+            not_listed: "The signed-in account isn't in the list",
+            other: "Switched by Osuna",
+          },
+        },
+        switchOnly: {
+          title: "Only switch the sign-in",
+          hint: "Off: Codex's requests go through Osuna, and one the account in use can't answer goes to the next account before any reply. On: Codex goes straight to OpenAI and only the sign-in is switched.",
+          saveFailed: "Couldn't save Only switch the sign-in: {{reason}}",
+        },
+        keep: {
+          title: "Keep signed in to",
+          hint: "While an account is chosen, Osuna never switches automatically, even when it has no room.",
+          none: "Don't keep",
+          saveFailed: "Couldn't save Keep signed in to: {{reason}}",
+        },
+        limits: {
+          title: "Limits for {{email}}",
+          hint: "When a window reaches its limit, rotation moves on to the next account. Leave a window empty to use 98%.",
+          inputLabel: "Limit for {{window}}",
+          placeholder: "Default 98",
+          invalid: "Enter a whole number from 1 to 99",
+          noWindows: "Limits can be set once this account's usage has been read.",
+          save: "Save",
+          saving: "Saving…",
+          saveFailed: "Couldn't save the limits: {{reason}}",
+          onBar: "limit {{pct}}%",
+        },
+        unknownEmail: "Unknown account",
+        badges: {
+          temporarilyFirst: "Temporarily first",
+          firstWhenRoom: "First again when it has room",
+          inUse: "In use",
+          first: "First",
+          needsSignIn: "Needs sign-in",
+        },
+        usage: {
+          reading: "Reading usage…",
+          failed: "Couldn't read usage: {{reason}}",
+          reasons: {
+            not_found: "plan usage doesn't see this sign-in",
+            not_read_yet: "not read yet",
+            rejected: "the sign-in was rejected",
+          },
+        },
+        signIn: {
+          addTitle: "Add a {{name}} account",
+          addFailedTitle: "Couldn't add this account",
+          reSignInFailedTitle: "Couldn't sign in again",
+          reSignInTitle: "Sign in again to {{email}}",
+          starting: "Preparing the sign-in…",
+          startFailed: "Couldn't start the sign-in: {{reason}}",
+          waitingTitle: "Finish signing in in your browser",
+          waitingHint:
+            "Sign in with the ChatGPT account you want to add. This closes on its own when you're done.",
+          openPage: "Open sign-in page",
+          copyLink: "Copy link",
+          linkLabel: "Sign-in link",
+          pasteLabel: "Address the browser ended on",
+          pasteHint:
+            "Signing in on another device? The browser ends on a page that won't load. Copy the whole address from its address bar and paste it here.",
+          pasteHintBlocked:
+            "Port 1455 on the host is taken, so the browser can't come back to Osuna. Copy the whole address the browser ends on and paste it here.",
+          pasteSubmit: "Finish",
+          retry: "Try again",
+          canceled: "The sign-in was canceled.",
+          failed: "The sign-in didn't finish: {{reason}}",
+          claude: {
+            waitingHint:
+              "Sign in with the Claude account you want to add. This closes on its own when you're done.",
+            pasteLabel: "Code from the sign-in page",
+            pasteHint:
+              "Signing in on another device? Open the link there. After you sign in, the page shows a code: copy it and paste it here.",
+            pasteHintBlocked:
+              "Claude Code didn't open a page that comes back to Osuna. After you sign in, the page shows a code: copy it and paste it here.",
+          },
+          pasteErrors: {
+            paste_invalid: "Paste the whole address, starting with http://",
+            paste_mismatch:
+              "That address isn't from this sign-in. Paste the one from this sign-in's browser tab.",
+            not_waiting: "This sign-in is over. Try again.",
+            code_invalid: "Paste the code the sign-in page shows.",
+          },
+          failures: {
+            timed_out: "The sign-in wasn't finished within 10 minutes.",
+            refused: "The sign-in page refused: {{reason}}",
+            exchange_failed: "ChatGPT didn't complete the sign-in ({{reason}}).",
+            no_account: "ChatGPT didn't say which account signed in.",
+            different_account: "That's a different account. Sign in with this account to fix it.",
+            cli_sign_ins_off: "“Read CLI sign-ins” is off, so accounts can't be added.",
+            no_email: "Claude Code didn't record the account's email, so it wasn't added.",
+            login_failed: "Claude Code's sign-in didn't finish: {{reason}}",
+          },
+        },
+        riskNotice: {
+          sheetTitle: "Turn on Rotate accounts for {{name}}?",
+          confirm: "I understand, turn on",
+          codexTitle: "Rotating accounts may get your ChatGPT account limited or banned",
+          codexBody:
+            "Section 4 of OpenAI's Sign in with ChatGPT terms says you may not facilitate or encourage \"Creating multiple accounts, splitting usage, rotating accounts, or otherwise bypassing usage limits\"; section 1 says \"Do not impersonate OpenAI, another application, or another open-source project.\" Osuna uses Codex's identity when it adds accounts and renews sign-ins for you. An OpenAI Codex maintainer has also said publicly that you shouldn't use multiple accounts to get around a plan's limits (an employee's statement, not the terms).",
+          codexTermsLink: "Sign in with ChatGPT terms",
+          codexMaintainerLink: "The maintainer's words",
+          claudeTitle: "Rotating accounts may get your Claude account limited or banned",
+          claudeBody:
+            'Anthropic\'s usage policy lists "create multiple accounts, to avoid detection, circumvent product guardrails" as platform abuse. The Claude Code legal page says the usage limits published for Pro and Max assume "ordinary, individual usage", and that "developers may not collect, store, or intermediate Claude.ai credentials or session tokens". Osuna keeps the sign-ins of your other accounts. Anthropic doesn\'t mention rotation specifically.',
+          claudePolicyLink: "Usage policy",
+          claudeLegalLink: "Claude Code legal page",
+        },
+      },
       actions: {
         menu: "{{name}} actions",
         remove: "Remove provider",
@@ -4869,6 +5061,7 @@ export const en = {
       refresh: "Refresh",
       allSources: "All",
       official: "Official",
+      officialAccount: "Official · {{email}}",
       deletedEndpoint: "(deleted)",
       deletedEndpointName: "{{name}} (deleted)",
       breakdown: {
@@ -5087,6 +5280,7 @@ export const en = {
         failed: "Failed",
         failedWith: "Failed ({{reason}})",
         switched: "Switched {{count}}×",
+        switchedAccounts: "Switched {{count}}×",
       },
       failures: {
         credit: "out of credit",

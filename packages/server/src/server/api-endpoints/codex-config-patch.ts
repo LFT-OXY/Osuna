@@ -760,6 +760,76 @@ export function restoreCodexOfficial(input: {
 }
 
 /**
+ * 多号自动轮换的第二层单独写下的顶层 openai_base_url（「使用第三方接口」关着时）：接管前的写法与写入的地址。
+ * fileCreated：写之前文件不存在，还原后什么都不剩就把文件删掉。
+ */
+export const CodexAccountsGatewaySchema = z.object({
+  original: CodexOriginalValueSchema,
+  written: z.string(),
+  fileCreated: z.boolean().optional(),
+});
+export type CodexAccountsGateway = z.infer<typeof CodexAccountsGatewaySchema>;
+
+export type CodexAccountsGatewayResult =
+  | { kind: "patched"; text: string; record: CodexAccountsGateway }
+  | Unparsable;
+
+/**
+ * 第二层让 Codex 经过中转站（照 magpie 有两个以上的号就写 openai_base_url）：只写这一个顶层键，原值记在 record 里；
+ * 已经记过就沿用记下的原值。`text` 为 null 表示文件不存在。
+ */
+export function applyCodexAccountsGateway(input: {
+  text: string | null;
+  url: string;
+  record: CodexAccountsGateway | null;
+}): CodexAccountsGatewayResult {
+  const [bom, baseText] = splitBom(input.text ?? "");
+  const parsed = parseConfig(baseText);
+  if (parsed.kind === "unparsable") return parsed;
+  const node = findTopLevelKeyValue(parsed.program, "openai_base_url");
+  const inFile: CodexOriginalValue = node
+    ? { present: true, raw: sliceNode(baseText, node.value) }
+    : { present: false };
+  const raw = tomlString(input.url);
+  const text = setTopLevelValue({
+    text: baseText,
+    key: "openai_base_url",
+    raw,
+    eol: detectEol(baseText),
+  });
+  const failure = verify(text, (value) => value.openai_base_url === input.url);
+  if (failure) return failure;
+  const record: CodexAccountsGateway = {
+    original: input.record?.original ?? inFile,
+    written: input.url,
+    ...((input.record?.fileCreated ?? input.text === null) ? { fileCreated: true } : {}),
+  };
+  return { kind: "patched", text: bom + text, record };
+}
+
+/**
+ * 第二层不要了：openai_base_url 还是写入的地址就放回原值；已被别人改过就留着现在的样子（ADR 0004）。
+ * 写之前文件不存在、放回后什么都不剩时删掉文件。
+ */
+export function restoreCodexAccountsGateway(input: {
+  text: string | null;
+  record: CodexAccountsGateway;
+}): CodexConfigRestoreResult {
+  if (input.text === null) return { kind: "missing" };
+  const [bom, baseText] = splitBom(input.text);
+  const parsed = parseConfig(baseText);
+  if (parsed.kind === "unparsable") return parsed;
+  if (parsed.value.openai_base_url !== input.record.written) {
+    return { kind: "patched", text: input.text };
+  }
+  const text = putBack(baseText, "openai_base_url", input.record.original, detectEol(baseText));
+  const failure = verify(text, () => true);
+  if (failure) return failure;
+  if (text.trim() === "" && input.record.fileCreated) return { kind: "delete" };
+  return { kind: "patched", text: bom + text };
+}
+
+/**
  * 官方模式下留着的专用表改指现在的中转站地址与口令，放到文件末尾；旧版本（v0.15）留下的 auth.command 表一并换掉。
  * 文件里没有这张表就什么都不写。
  */
@@ -834,6 +904,24 @@ export function readCodexCatalogPath(text: string | null): string | null {
   if (parsed.kind === "unparsable") return null;
   const catalogPath = parsed.value.model_catalog_json;
   return typeof catalogPath === "string" ? catalogPath : null;
+}
+
+/** Codex 把登录存在哪（`cli_auth_credentials_store`）；没设是 file（Codex 的缺省）。 */
+export type CodexCredentialsStore =
+  | { kind: "file" | "keyring" | "auto" | "ephemeral" }
+  | { kind: "unknown"; value: string }
+  | Unparsable;
+
+/** 顶层的 cli_auth_credentials_store；多号自动轮换据此读写 Codex 的登录。没有文件按没设算。 */
+export function readCodexCredentialsStore(text: string | null): CodexCredentialsStore {
+  if (text === null) return { kind: "file" };
+  const parsed = parseConfig(splitBom(text)[1]);
+  if (parsed.kind === "unparsable") return parsed;
+  const store = parsed.value.cli_auth_credentials_store;
+  if (store === undefined) return { kind: "file" };
+  if (store === "file" || store === "keyring" || store === "auto" || store === "ephemeral")
+    return { kind: store };
+  return { kind: "unknown", value: String(store) };
 }
 
 /** Codex 自己的 multi_agent_v2：开着、没开，或文件读不懂（不当作没开）。 */

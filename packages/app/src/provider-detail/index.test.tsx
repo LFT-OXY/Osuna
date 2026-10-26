@@ -86,6 +86,10 @@ function renderInstallGuide(guide: ProviderInstallGuide, cliLabel: string) {
   );
 }
 
+function renderAccounts() {
+  return null;
+}
+
 function renderApiEndpoints(providerLabel: string) {
   return <div data-testid="api-endpoints-slot">{providerLabel}</div>;
 }
@@ -166,6 +170,7 @@ function detailElement(overrides: Partial<ProviderDetailSurfaceProps>) {
       onAddCustomModel={resolved}
       renderInstallGuide={renderInstallGuide}
       renderApiEndpoints={renderApiEndpoints}
+      renderAccounts={renderAccounts}
       renderVersion={renderVersion}
       {...overrides}
     />

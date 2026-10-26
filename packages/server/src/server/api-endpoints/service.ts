@@ -116,6 +116,7 @@ import {
   type ClaudeSettingsTakeover,
 } from "./claude-settings-patch.js";
 import {
+  applyCodexAccountsGateway,
   applyCodexApiEndpoint,
   CODEX_API_ENDPOINT_PROVIDER_ID,
   forgetCodexEffortOriginal,
@@ -131,7 +132,10 @@ import {
   readCodexRespectsSystemProxy,
   readCodexReasoningEffort,
   refreshCodexProviderTable,
+  restoreCodexAccountsGateway,
   restoreCodexOfficial,
+  type CodexAccountsGateway,
+  type CodexConfigRestoreResult,
   type CodexConfigTakeover,
   type CodexSubagentWiring,
 } from "./codex-config-patch.js";
@@ -291,6 +295,7 @@ import {
   type ApiEndpointState,
   type CliConfigAgent,
   type CliConfigProvider,
+  type CodexTakeoverFile,
   type EndpointSnapshot,
   type GatewayTokens,
   type PiModelsTakeoverFile,
@@ -862,6 +867,8 @@ export interface ApiEndpointServiceOptions {
   sightings: GatewaySightings;
   // 「读取 CLI 登录凭证」：关着时不问 Codex 怎么登录，导入不读 OpenCode 的 auth.json。
   cliSignIns: CliSignInAccess;
+  // 多号自动轮换的第二层要 Codex 经过中转站（账号服务的 gatewayWanted）；缺省不要。
+  accountsGateway?: () => boolean;
   // 读 CLI 自己的记录（history.jsonl、Codex 的日志库）；缺省读 CLI 目录下的真实文件，测试指到临时目录或换成假的。
   readCliUse?: ReadCliUse;
   // 定位 CLI 配置文件用；缺省取 daemon 自己的环境，测试注入临时目录。
@@ -1231,6 +1238,7 @@ export class ApiEndpointService {
   private readonly lastBalances: LastBalanceReadings;
   private readonly readCodexSignIn: ReadCodexSignIn;
   private readonly cliSignIns: CliSignInAccess;
+  private readonly accountsGateway: (() => boolean) | undefined;
   // 最近一次判断出的 Codex 登录方式；还没判断过、或一直判断不出时为 null，按接管记录现在的接法。
   private codexSignIn: CodexSignIn | null = null;
   private codexSignInCheck: Promise<void> | null = null;
@@ -1332,6 +1340,7 @@ export class ApiEndpointService {
     this.reachesUnasked = options.reachesUnasked ?? reachesAnyAddress;
     this.readCodexSignIn = options.readCodexSignIn ?? defaultCodexSignInReader(options);
     this.cliSignIns = options.cliSignIns;
+    this.accountsGateway = options.accountsGateway;
     const isModelsDevAutoUpdate = options.isModelsDevAutoUpdate ?? (() => false);
     this.isAutoUpdate = isModelsDevAutoUpdate;
     this.importSourcePaths = options.importSourcePaths;
@@ -1662,6 +1671,8 @@ export class ApiEndpointService {
         }
       }
       this.staleCodexModels(state);
+      // 端口可能变了：第二层单独写的 openai_base_url 跟上。
+      this.followCodexAccountsGateway();
     });
     // 先按上次的接法对账，不让启动等 Codex；登录方式变了再在后台改写。
     void this.followCodexSignIn();
@@ -2814,7 +2825,13 @@ export class ApiEndpointService {
     if (!takeover) return null;
     const filePath = this.resolveCodexConfigPath();
     const before = readOptionalFile(filePath)?.toString("utf8") ?? null;
-    const plan = codexRestorePlan({ filePath, text: before, takeover, defaultModelId });
+    const plan = codexSwitchOffPlan({
+      filePath,
+      text: before,
+      takeover,
+      defaultModelId,
+      accountsUrl: this.wantedAccountsGatewayUrl(),
+    });
     return switchOffFileChange({
       path: filePath,
       homeDir: this.homeDir,
@@ -5561,7 +5578,13 @@ export class ApiEndpointService {
     let createdBackup: string | null = null;
     this.writeConfigFile<{ takeover: CodexConfigTakeover; current: Buffer | null }>({
       filePath: configPath,
-      compute: (text, current) => {
+      compute: (fileText, current) => {
+        // 第二层单独写过 openai_base_url：先放回原值，这一键改由接管记录管，原值才记得对。
+        const text = withoutAccountsGateway({
+          filePath: configPath,
+          text: fileText,
+          record: record.accountsGateway ?? null,
+        });
         const result = applyCodexApiEndpoint({
           text,
           wiring: {
@@ -5671,15 +5694,93 @@ export class ApiEndpointService {
     const { takeover } = record;
     if (!takeover) return;
     const configPath = this.resolveCodexConfigPath();
+    // 多号自动轮换的第二层还要 Codex 经过中转站：openai_base_url 改由它单独管，指向中转站，原值照记。
+    const accountsUrl = this.wantedAccountsGatewayUrl();
     this.writeConfigFile({
       filePath: configPath,
-      compute: (text) => codexRestorePlan({ filePath: configPath, text, takeover, defaultModelId }),
+      compute: (text) =>
+        codexSwitchOffPlan({ filePath: configPath, text, takeover, defaultModelId, accountsUrl }),
       commit: (value) =>
-        this.store.writeCodexTakeover({ ...record, takeover: null, reconnect: value.reconnect }),
+        this.store.writeCodexTakeover({
+          ...record,
+          takeover: null,
+          reconnect: value.reconnect,
+          ...(value.accounts ? { accountsGateway: value.accounts } : {}),
+        }),
       rollback: () => this.store.writeCodexTakeover(record),
     });
     this.store.removeLegacyCodexKeyFile();
     this.logger.info({ configPath }, "Codex config restored to Official");
+  }
+
+  /**
+   * 多号自动轮换的第二层要不要 Codex 经过中转站（ADR 0015）：账号服务的号或设置一变就调用。
+   * 「使用第三方接口」接管着 Codex 时这一键归接管记录（两边共用，不重复写、不互相还原）；
+   * 否则在这里单独写或放回原值。关掉「读取 CLI 登录凭证」不动它。
+   */
+  syncAccountsGateway(): Promise<void> {
+    return this.exclusive(() => this.followCodexAccountsGateway());
+  }
+
+  private followCodexAccountsGateway(): void {
+    try {
+      this.writeCodexAccountsGateway();
+    } catch (error) {
+      this.logger.warn({ err: error }, "Failed to follow account rotation in Codex's config");
+    }
+  }
+
+  /** 第二层要 Codex 经过中转站时，写进 openai_base_url 的中转站 ChatGPT 后端地址；不要（或没绑端口）为 null。 */
+  private wantedAccountsGatewayUrl(): string | null {
+    if (this.gateway.kind !== "bound" || this.accountsGateway?.() !== true) return null;
+    return `${this.gateway.url}${CHATGPT_BACKEND_PATH}`;
+  }
+
+  private writeCodexAccountsGateway(): void {
+    const record = this.store.readCodexTakeover();
+    if (record.takeover) return;
+    const url = this.wantedAccountsGatewayUrl();
+    const recorded = record.accountsGateway ?? null;
+    if (url === null ? recorded === null : recorded?.written === url) return;
+    const configPath = this.resolveCodexConfigPath();
+    let createdBackup: string | null = null;
+    this.writeConfigFile<{ accounts: CodexAccountsGateway | null; current: Buffer | null }>({
+      filePath: configPath,
+      compute: (text, current) => {
+        if (url !== null) {
+          const plan = accountsGatewayPlan({ filePath: configPath, text, url, record: recorded });
+          return { change: plan.change, value: { accounts: plan.value, current } };
+        }
+        const restored = recorded
+          ? restoreCodexAccountsGateway({ text, record: recorded })
+          : { kind: "missing" as const };
+        if (restored.kind === "unparsable") {
+          throw unparsable({ filePath: configPath, detail: restored.message });
+        }
+        return { change: restoreChange(restored), value: { accounts: null, current } };
+      },
+      commit: ({ accounts, current }) => {
+        if (!record.backup && accounts) {
+          createdBackup = this.store.writeCodexConfigBackup(current, this.now());
+        }
+        const next: CodexTakeoverFile = {
+          ...record,
+          backup: record.backup ?? (accounts ? { path: createdBackup } : null),
+        };
+        delete next.accountsGateway;
+        if (accounts) next.accountsGateway = accounts;
+        this.store.writeCodexTakeover(next);
+      },
+      rollback: () => {
+        this.store.writeCodexTakeover(record);
+        if (createdBackup) this.store.discardBackup(createdBackup);
+        createdBackup = null;
+      },
+    });
+    this.logger.info(
+      { configPath, through: url !== null },
+      "Codex config followed account rotation",
+    );
   }
 
   /**
@@ -6614,6 +6715,66 @@ function claudeRestorePlan(
   }
   if (result.kind === "delete") change = { kind: "delete" };
   return { change, value: reconnectRecord(input.defaultModelId, left) };
+}
+
+/** 第二层把 openai_base_url 指到中转站（原值记在返回的记录里）；读不懂时抛 config_unparsable。 */
+function accountsGatewayPlan(input: {
+  filePath: string;
+  text: string | null;
+  url: string;
+  record: CodexAccountsGateway | null;
+}): ConfigFilePlan<CodexAccountsGateway> {
+  const result = applyCodexAccountsGateway(input);
+  if (result.kind === "unparsable") {
+    throw unparsable({ filePath: input.filePath, detail: result.message });
+  }
+  const change: ConfigFileChange =
+    result.text === input.text ? { kind: "keep" } : { kind: "write", text: result.text };
+  return { change, value: result.record };
+}
+
+/**
+ * 关掉「使用第三方接口」时 config.toml 怎么改（关开关与关前预览共用）：照接管记录改回；多号自动轮换的第二层
+ * 还要 Codex 经过中转站时（accountsUrl），openai_base_url 改由它单独管，指向中转站，原值记在 accounts 里。
+ */
+function codexSwitchOffPlan(
+  input: RestorePlanInput<CodexConfigTakeover> & { accountsUrl: string | null },
+): ConfigFilePlan<ReconnectRecord & { accounts: CodexAccountsGateway | null }> {
+  const { filePath, text, accountsUrl } = input;
+  const plan = codexRestorePlan(input);
+  if (accountsUrl === null) return { ...plan, value: { ...plan.value, accounts: null } };
+  const restored = textAfter(plan.change, text);
+  const kept = accountsGatewayPlan({ filePath, text: restored, url: accountsUrl, record: null });
+  const change = kept.change.kind === "keep" ? plan.change : kept.change;
+  return { change, value: { ...plan.value, accounts: kept.value } };
+}
+
+/** 改完之后文件的文字：删掉的为 null。 */
+function textAfter(change: ConfigFileChange, text: string | null): string | null {
+  if (change.kind === "write") return change.text;
+  return change.kind === "keep" ? text : null;
+}
+
+/** 放回原值的结果要怎么改文件。 */
+function restoreChange(restored: CodexConfigRestoreResult): ConfigFileChange {
+  if (restored.kind === "patched") return { kind: "write", text: restored.text };
+  if (restored.kind === "delete") return { kind: "delete" };
+  return { kind: "keep" };
+}
+
+/** 第二层单独写的 openai_base_url 放回原值后的文字（被别人改过就照现在的）；没写过原样返回。 */
+function withoutAccountsGateway(input: {
+  filePath: string;
+  text: string | null;
+  record: CodexAccountsGateway | null;
+}): string | null {
+  if (input.record === null) return input.text;
+  const restored = restoreCodexAccountsGateway({ text: input.text, record: input.record });
+  if (restored.kind === "unparsable") {
+    throw unparsable({ filePath: input.filePath, detail: restored.message });
+  }
+  if (restored.kind === "patched") return restored.text;
+  return restored.kind === "delete" ? null : input.text;
 }
 
 /** 关掉时 config.toml 怎么改回（关开关与关前预览共用）；读不懂时抛 config_unparsable。 */

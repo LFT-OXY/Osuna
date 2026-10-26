@@ -733,14 +733,19 @@ function useRequestCells({
       : t("usage.requests.statusCell.failed");
   } else if (status.kind === "switched") {
     statusColor = "statusWarning";
-    fullStatus = t("usage.requests.statusCell.switched", { count: status.count });
+    const key = status.accounts ? "switchedAccounts" : "switched";
+    fullStatus = t(`usage.requests.statusCell.${key}`, { count: status.count });
   } else {
     statusColor = "foregroundMuted";
     fullStatus = t("usage.requests.statusCell.ok");
   }
   const endpointName = row.endpointId === null ? null : (row.endpointName ?? row.endpointId);
   const endpoint = usageRequestEndpointLabel(
-    { name: endpointName, deleted: row.endpointDeleted },
+    {
+      name: endpointName,
+      deleted: row.endpointDeleted,
+      ...(row.accountEmail ? { account: row.accountEmail } : {}),
+    },
     t,
   );
   const endpointColor = row.endpointId === null ? "foregroundMuted" : "foreground";
@@ -822,10 +827,14 @@ function AttemptLine({
   timezone: string;
 }) {
   const { t } = useTranslation();
-  const name =
-    attempt.endpointId === null
-      ? t("usage.overview.official")
-      : (attempt.endpointName ?? attempt.endpointId);
+  const name = usageRequestEndpointLabel(
+    {
+      name: attempt.endpointId === null ? null : (attempt.endpointName ?? attempt.endpointId),
+      deleted: false,
+      ...(attempt.accountEmail ? { account: attempt.accountEmail } : {}),
+    },
+    t,
+  );
   const isFailure = attempt.result !== "answered";
   // 只有结果与失败原因用状态色，其余是说明。
   const outcome = [t(`usage.requests.result.${attempt.result}`)];

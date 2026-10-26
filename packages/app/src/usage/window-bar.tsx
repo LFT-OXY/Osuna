@@ -28,9 +28,12 @@ export function UsageWindowBar({
   pinTestID,
   count,
   pace,
+  limit,
   layout = "inline",
 }: {
   window: UsageWindow;
+  /** Osuna：用户给这个窗口设的上限，条上画出位置，数字后写出 label（如「上限 70%」）。 */
+  limit?: { pct: number; label: string };
   displayAs: UsageDisplayAs;
   /** Osuna：百分比前写出的用量，如「$15.00 / $20.00」（接口余额的限额窗口）。 */
   count?: string;
@@ -61,7 +64,8 @@ export function UsageWindowBar({
   const trailing = runsOut ?? formatResetLabel(window.resetsAt);
 
   const percent = shownPct != null ? formatDisplayPct(shownPct, displayAs) : "—";
-  const value = count ? `${count} · ${percent}` : percent;
+  const counted = count ? `${count} · ${percent}` : percent;
+  const value = limit ? `${counted} · ${limit.label}` : counted;
   const accessibilityState = useMemo(() => ({ checked: pinned }), [pinned]);
   const content = {
     label: window.label,
@@ -73,6 +77,7 @@ export function UsageWindowBar({
     percent: shownPct ?? 0,
     tone,
     pinned,
+    markerPct: limit ? markerPctOf(limit.pct, displayAs) : undefined,
   };
 
   // Same padding as the pinnable row, so bars line up in both modes.
@@ -119,6 +124,7 @@ function WindowRowContent({
   tone,
   pinnable,
   pinned,
+  markerPct,
 }: {
   highlight: StyleProp<ViewStyle>;
   label: string;
@@ -131,6 +137,7 @@ function WindowRowContent({
   tone: UsageTone;
   pinnable: boolean;
   pinned: boolean;
+  markerPct: number | undefined;
 }) {
   return (
     <>
@@ -151,7 +158,7 @@ function WindowRowContent({
               ) : null}
             </Text>
           </View>
-          <UsageMeter percent={percent} tone={tone} />
+          <UsageMeter percent={percent} tone={tone} markerPct={markerPct} />
         </View>
         {pinnable ? <UsagePinGlyph pinned={pinned} /> : null}
       </View>
@@ -160,6 +167,11 @@ function WindowRowContent({
 }
 
 export type UsageWindowBarLayout = "inline" | "wrap" | "stack";
+
+/** 条是「已用」时上限画在那个百分比处；显示「剩余」时换算成剩余。 */
+function markerPctOf(pct: number, displayAs: UsageDisplayAs): number {
+  return displayAs === "used" ? pct : 100 - pct;
+}
 
 const ThemedPin = withUnistyles(Pin);
 

@@ -4070,6 +4070,7 @@ export const ru: TranslationResources = {
             apiEndpointsKeepWorking: "API-эндпоинты продолжают работать.",
             confirm: "Выключить",
             listSeparator: ", ",
+            rotationStops: "Автосмена аккаунтов для {{providers}} остановится.",
           },
         },
       },
@@ -4461,6 +4462,195 @@ export const ru: TranslationResources = {
           termsLink: "FAQ Antigravity",
         },
       },
+      accounts: {
+        title: "Аккаунты",
+        rotate: {
+          title: "Автосмена аккаунтов",
+          hint: "Смена действует только для новых сессий; открытые сессии остаются на прежнем аккаунте.",
+          codexHint:
+            "Запросы идут через Osuna, поэтому, пока Osuna не запущена, Codex в терминале не подключится.",
+          hintWithCodex: "{{hint}} {{codexHint}}",
+          claudeHint:
+            "Смена действует только для новых сессий; уже открытые сессии Claude Code тоже могут перейти на новый аккаунт, когда истечёт их вход.",
+          saveFailed: "Не удалось сохранить «Автосмена аккаунтов»: {{reason}}",
+        },
+        throughEndpoints:
+          "Claude Code сейчас работает через «Использовать сторонние API»; аккаунты подписки будут использоваться, когда вы выключите этот переключатель.",
+        cliSignInsOff: "«Читать входы CLI» выключено, поэтому автосмена аккаунтов остановлена",
+        openPrivacySettings: "Открыть настройки",
+        loginUnsupported: "Osuna не может сменить этот вход {{name}}: {{reason}}",
+        unsupportedReasons: {
+          ephemeral: 'Codex хранит вход только в памяти (cli_auth_credentials_store = "ephemeral")',
+          unknown_store: "Codex хранит вход способом, который Osuna не знает",
+          config_unparsable: "не удаётся прочитать config.toml Codex",
+          keyring_unavailable: "на этой системе Osuna не может читать связку ключей",
+          login_unparsable: "не удаётся прочитать сохранённый вход",
+          account_unknown: "Claude Code не записал, какой аккаунт выполнил вход",
+        },
+        loadFailed: "Не удалось загрузить аккаунты: {{reason}}",
+        empty: "Аккаунтов пока нет. Когда {{name}} войдёт в подписку, этот аккаунт станет первым.",
+        single: "Добавьте ещё один аккаунт, чтобы началась смена.",
+        add: "Добавить аккаунт",
+        alreadyAdded: "{{email}} уже был в списке, поэтому его вход обновлён.",
+        needsSignInHint:
+          "Вход отклонён или отозван: смена не перейдёт на этот аккаунт, пока вы не войдёте снова.",
+        signInAgain: "Войти снова",
+        switching: "Переключаем CLI на этот аккаунт…",
+        removing: "Удаляем…",
+        menu: {
+          label: "Действия для {{email}}",
+          useNow: "Использовать сейчас",
+          makeFirst: "Сделать первым",
+          moveUp: "Переместить вверх",
+          moveDown: "Переместить вниз",
+          moveToTop: "Переместить в начало",
+          moveToBottom: "Переместить в конец",
+          setLimits: "Задать пределы",
+          remove: "Удалить",
+        },
+        orderHint:
+          "Перетащите, чтобы изменить порядок: ротация сначала переходит к аккаунту выше. Alt+↑/↓ — сдвинуть, правый клик — меню.",
+        orderFailed: "Не удалось сохранить порядок: {{reason}}",
+        remove: {
+          title: "Удалить {{email}}?",
+          message: "Osuna удалит свою копию этого аккаунта ({{email}}). Из CLI вы не выйдете.",
+          confirm: "Удалить",
+        },
+        switchFailure: {
+          title: "Не удалось сменить аккаунт",
+          write_failed:
+            "Не удалось переключить {{name}} на {{email}}: не удалось записать вход. Проверьте, что Osuna может записывать вход {{name}}, и снова выберите «Использовать сейчас».",
+          login_unsupported:
+            "Не удалось переключить {{name}} на {{email}}: Osuna не умеет переключать такой вход.",
+          needs_sign_in:
+            "Не удалось переключить {{name}} на {{email}}: нужно войти заново. Выберите «Войти снова» в его строке.",
+          no_account:
+            "Текущему аккаунту нужно войти заново, а заменить его некем. Войдите заново или добавьте ещё один аккаунт.",
+          other: "Не удалось переключить {{name}}: {{reason}}",
+        },
+        switches: {
+          title: "Последние переключения",
+          fromTo: "{{from}} → {{to}}",
+          toOnly: "Вход в {{to}}",
+          showAll: "Показать все ({{count}})",
+          showFewer: "Свернуть",
+          reasons: {
+            use_now: "Вы выбрали «Использовать сейчас»",
+            lapsed: "Вход {{from}} перестал работать",
+            used_up: "{{from}} использовал {{pct}}% окна {{window}}",
+            limit: "{{from}} дошёл до вашего предела {{limit}}% в окне {{window}}",
+            held: "ChatGPT больше не даёт {{from}} отправлять (использование исчерпано, кредитов нет)",
+            room_again: "У {{to}} снова есть запас",
+            keep_signed_in: "Вы выбрали «Оставаться в аккаунте» {{to}}",
+            not_listed: "Аккаунта, в который выполнен вход, нет в списке",
+            other: "Переключено Osuna",
+          },
+        },
+        switchOnly: {
+          title: "Только менять вход",
+          hint: "Выключено: запросы Codex идут через Osuna, и запрос, на который текущий аккаунт не может ответить, до начала ответа передаётся следующему аккаунту. Включено: Codex обращается к OpenAI напрямую, меняется только вход.",
+          saveFailed: "Не удалось сохранить «Только менять вход»: {{reason}}",
+        },
+        keep: {
+          title: "Оставаться в аккаунте",
+          hint: "Пока выбран аккаунт, Osuna никогда не переключает сам, даже когда запас исчерпан.",
+          none: "Не закреплять",
+          saveFailed: "Не удалось сохранить «Оставаться в аккаунте»: {{reason}}",
+        },
+        limits: {
+          title: "Пределы для {{email}}",
+          hint: "Когда окно доходит до предела, ротация переходит к следующему аккаунту. Пустое окно — 98%.",
+          inputLabel: "Предел для {{window}}",
+          placeholder: "По умолч. 98",
+          invalid: "Введите целое число от 1 до 99",
+          noWindows: "Пределы можно задать после того, как прочитано использование этого аккаунта.",
+          save: "Сохранить",
+          saving: "Сохранение…",
+          saveFailed: "Не удалось сохранить пределы: {{reason}}",
+          onBar: "предел {{pct}}%",
+        },
+        unknownEmail: "Неизвестный аккаунт",
+        badges: {
+          temporarilyFirst: "Временно первый",
+          firstWhenRoom: "Снова первый, когда появится запас",
+          inUse: "Используется",
+          first: "Первый",
+          needsSignIn: "Нужен вход",
+        },
+        usage: {
+          reading: "Читаем использование…",
+          failed: "Не удалось прочитать использование: {{reason}}",
+          reasons: {
+            not_found: "использование тарифа не видит этот вход",
+            not_read_yet: "ещё не прочитано",
+            rejected: "вход отклонён",
+          },
+        },
+        signIn: {
+          addTitle: "Добавить аккаунт {{name}}",
+          addFailedTitle: "Не удалось добавить аккаунт",
+          reSignInFailedTitle: "Не удалось войти снова",
+          reSignInTitle: "Войти снова в {{email}}",
+          starting: "Готовим вход…",
+          startFailed: "Не удалось начать вход: {{reason}}",
+          waitingTitle: "Завершите вход в браузере",
+          waitingHint:
+            "Войдите в аккаунт ChatGPT, который хотите добавить. Окно закроется само, когда вы закончите.",
+          openPage: "Открыть страницу входа",
+          copyLink: "Копировать ссылку",
+          linkLabel: "Ссылка для входа",
+          pasteLabel: "Адрес, на котором остановился браузер",
+          pasteHint:
+            "Входите с другого устройства? Браузер остановится на странице, которая не открывается. Скопируйте весь адрес из адресной строки и вставьте сюда.",
+          pasteHintBlocked:
+            "Порт 1455 на хосте занят, поэтому браузер не может вернуться в Osuna. Скопируйте весь адрес, на котором остановится браузер, и вставьте сюда.",
+          pasteSubmit: "Готово",
+          retry: "Повторить",
+          canceled: "Вход отменён.",
+          failed: "Вход не завершён: {{reason}}",
+          claude: {
+            waitingHint:
+              "Войдите в аккаунт Claude, который хотите добавить. Окно закроется само, когда вы закончите.",
+            pasteLabel: "Код со страницы входа",
+            pasteHint:
+              "Входите с другого устройства? Откройте ссылку там. После входа страница покажет код: скопируйте его и вставьте сюда.",
+            pasteHintBlocked:
+              "Claude Code не открыл страницу, которая возвращает в Osuna. После входа страница покажет код: скопируйте его и вставьте сюда.",
+          },
+          pasteErrors: {
+            paste_invalid: "Вставьте весь адрес, начиная с http://",
+            paste_mismatch: "Этот адрес не от этого входа. Вставьте адрес из вкладки этого входа.",
+            not_waiting: "Этот вход уже завершён. Попробуйте снова.",
+            code_invalid: "Вставьте код, который показывает страница входа.",
+          },
+          failures: {
+            timed_out: "Вход не был завершён за 10 минут.",
+            refused: "Страница входа отказала: {{reason}}",
+            exchange_failed: "ChatGPT не завершил вход ({{reason}}).",
+            no_account: "ChatGPT не сообщил, какой аккаунт вошёл.",
+            different_account: "Это другой аккаунт. Войдите в этот аккаунт, чтобы исправить его.",
+            cli_sign_ins_off: "«Читать входы CLI» выключено, поэтому аккаунты нельзя добавить.",
+            no_email: "Claude Code не записал адрес почты аккаунта, поэтому он не добавлен.",
+            login_failed: "Вход в Claude Code не завершился: {{reason}}",
+          },
+        },
+        riskNotice: {
+          sheetTitle: "Включить автосмену аккаунтов для {{name}}?",
+          confirm: "Понятно, включить",
+          codexTitle:
+            "Автосмена аккаунтов может привести к ограничению или блокировке аккаунта ChatGPT",
+          codexBody:
+            'Раздел 4 условий Sign in with ChatGPT от OpenAI запрещает содействовать или поощрять "Creating multiple accounts, splitting usage, rotating accounts, or otherwise bypassing usage limits"; раздел 1 гласит: "Do not impersonate OpenAI, another application, or another open-source project." Добавляя аккаунты и продлевая входы, Osuna использует идентификацию Codex. Мейнтейнер Codex из OpenAI также публично сказал, что не стоит использовать несколько аккаунтов, чтобы обходить лимиты тарифа (это слова сотрудника, а не условия).',
+          codexTermsLink: "Условия Sign in with ChatGPT",
+          codexMaintainerLink: "Слова мейнтейнера",
+          claudeTitle:
+            "Автосмена аккаунтов может привести к ограничению или блокировке аккаунта Claude",
+          claudeBody:
+            'Политика использования Anthropic относит "create multiple accounts, to avoid detection, circumvent product guardrails" к злоупотреблению платформой. Юридическая страница Claude Code говорит, что опубликованные лимиты Pro и Max рассчитаны на "ordinary, individual usage", и что "developers may not collect, store, or intermediate Claude.ai credentials or session tokens". Osuna хранит входы ваших других аккаунтов. О смене аккаунтов Anthropic отдельно не пишет.',
+          claudePolicyLink: "Политика использования",
+          claudeLegalLink: "Юридическая страница Claude Code",
+        },
+      },
       actions: {
         menu: "Действия с {{name}}",
         remove: "Удалить провайдера",
@@ -4818,6 +5008,7 @@ export const ru: TranslationResources = {
       refresh: "Обновить",
       allSources: "Все",
       official: "Официальный",
+      officialAccount: "Официальный · {{email}}",
       deletedEndpoint: "(удалён)",
       deletedEndpointName: "{{name}} (удалён)",
       breakdown: {
@@ -5036,6 +5227,7 @@ export const ru: TranslationResources = {
         failed: "Ошибка",
         failedWith: "Ошибка ({{reason}})",
         switched: "Смена ×{{count}}",
+        switchedAccounts: "Смена ×{{count}}",
       },
       failures: {
         credit: "нет средств",
