@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { RowActionsMenuTrigger } from "@/components/ui/row-actions-menu-trigger";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { useIsCompactFormFactor } from "@/constants/layout";
 import { settingsStyles } from "@/styles/settings";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { UsageWindowBar } from "@/usage/window-bar";
@@ -64,6 +65,19 @@ export function AccountRow(props: AccountRowProps) {
   const { onSignInAgain } = props;
   const signInAgain = useCallback(() => onSignInAgain(account), [account, onSignInAgain]);
   const first = row.index === 0;
+  // 窄窗口里标签放到邮箱下面、与套餐同一行，邮箱不被两个标签挤断。
+  const isCompact = useIsCompactFormFactor();
+  const badges = (
+    <View style={styles.badges}>
+      {account.signedIn ? (
+        <StatusBadge size="xs" variant="success" label={t(`${KEY}.badges.inUse`)} />
+      ) : null}
+      {standingBadge(t, { account, first })}
+      {account.needsSignIn ? (
+        <StatusBadge size="xs" variant="error" label={t(`${KEY}.badges.needsSignIn`)} />
+      ) : null}
+    </View>
+  );
   return (
     <View
       style={[
@@ -88,17 +102,14 @@ export function AccountRow(props: AccountRowProps) {
             <Text style={settingsStyles.rowTitle} numberOfLines={1}>
               {account.email ?? t(`${KEY}.unknownEmail`)}
             </Text>
-            {account.plan ? <Text style={settingsStyles.rowHint}>{account.plan}</Text> : null}
-          </View>
-          <View style={styles.badges}>
-            {account.signedIn ? (
-              <StatusBadge size="xs" variant="success" label={t(`${KEY}.badges.inUse`)} />
-            ) : null}
-            {standingBadge(t, { account, first })}
-            {account.needsSignIn ? (
-              <StatusBadge size="xs" variant="error" label={t(`${KEY}.badges.needsSignIn`)} />
+            {account.plan || isCompact ? (
+              <View style={styles.planLine}>
+                {account.plan ? <Text style={settingsStyles.rowHint}>{account.plan}</Text> : null}
+                {isCompact ? badges : null}
+              </View>
             ) : null}
           </View>
+          {isCompact ? null : badges}
           {canManage ? <AccountRowMenu {...props} first={first} /> : null}
         </View>
         {activity ? (
@@ -362,6 +373,12 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     minWidth: 0,
     gap: 2,
+  },
+  planLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: theme.spacing[2],
   },
   badges: {
     flexDirection: "row",

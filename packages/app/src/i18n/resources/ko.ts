@@ -4419,9 +4419,10 @@ export const ko: TranslationResources = {
           hint: "전환은 새 세션에만 적용되며, 열려 있는 세션은 원래 계정에 남습니다.",
           codexHint:
             "요청이 Osuna를 거치므로 Osuna가 실행 중이 아니면 터미널의 Codex가 연결되지 않습니다.",
+          hintWithCodex: "{{hint}} {{codexHint}}",
           claudeHint:
             "전환은 새 세션에만 적용됩니다. 이미 열려 있는 Claude Code도 로그인이 만료될 때 새 계정으로 옮겨갈 수 있습니다.",
-          saveFailed: "계정 자동 전환을 변경할 수 없습니다: {{reason}}",
+          saveFailed: "계정 자동 전환을 저장하지 못했습니다: {{reason}}",
         },
         throughEndpoints:
           "Claude Code가 지금 '서드파티 API 사용'을 거치고 있습니다. 구독 계정은 이 스위치를 끄면 사용됩니다.",
@@ -4560,7 +4561,7 @@ export const ko: TranslationResources = {
           canceled: "로그인이 취소되었습니다.",
           failed: "로그인을 완료하지 못했습니다: {{reason}}",
           claude: {
-            waitingHint: "추가할 Claude 계정으로 로그인하세요. 완료되면 자동으로 닫힙니다.",
+            waitingHint: "추가할 Claude 계정으로 로그인하세요. 완료되면 이 창은 자동으로 닫힙니다.",
             pasteLabel: "로그인 페이지에 표시된 코드",
             pasteHint:
               "다른 기기에서 로그인하나요? 그 기기에서 링크를 열고, 로그인 후 페이지에 표시되는 코드를 복사해 여기에 붙여넣으세요.",

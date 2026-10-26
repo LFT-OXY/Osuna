@@ -4492,9 +4492,10 @@ export const es: TranslationResources = {
           hint: "El cambio solo se aplica a sesiones nuevas; las sesiones abiertas siguen en su cuenta.",
           codexHint:
             "Las solicitudes pasan por Osuna, así que mientras Osuna no esté en marcha, Codex en una terminal no podrá conectarse.",
+          hintWithCodex: "{{hint}} {{codexHint}}",
           claudeHint:
             "El cambio solo se aplica a las sesiones nuevas; las sesiones de Claude Code ya abiertas también pueden pasar a la nueva cuenta cuando caduque su inicio de sesión.",
-          saveFailed: "No se pudo cambiar Rotar cuentas: {{reason}}",
+          saveFailed: "No se pudo guardar Rotar cuentas: {{reason}}",
         },
         throughEndpoints:
           "Claude Code va ahora por «Usar endpoints de API»; tus cuentas de suscripción se usarán cuando desactives ese interruptor.",

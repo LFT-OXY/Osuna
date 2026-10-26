@@ -178,7 +178,7 @@ test.describe("Provider page Accounts section", () => {
     await rotateSwitch(page).click();
     await riskNotice(page).getByTestId("provider-accounts-risk-confirm").click();
     const error = page.getByTestId("provider-accounts-rotate-error").filter({ visible: true });
-    await expect(error).toHaveText("Couldn't change Rotate accounts: daemon is busy");
+    await expect(error).toHaveText("Couldn't save Rotate accounts: daemon is busy");
     await expectRotateSwitch(page, { checked: false, disabled: false });
     expect(await rotationOnDaemon("codex")).toBe(false);
 

@@ -370,7 +370,7 @@ function rotateHint(input: {
   if (input.provider === "claude") return t(`${KEY}.rotate.claudeHint`);
   const hint = t(`${KEY}.rotate.hint`);
   if (input.provider !== "codex" || input.switchOnly) return hint;
-  return `${hint} ${t(`${KEY}.rotate.codexHint`)}`;
+  return t(`${KEY}.rotate.hintWithCodex`, { hint, codexHint: t(`${KEY}.rotate.codexHint`) });
 }
 
 const UNSUPPORTED_CODES = new Set([

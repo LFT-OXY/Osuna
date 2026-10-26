@@ -4363,8 +4363,9 @@ export const zhCN: TranslationResources = {
           title: "多号自动轮换",
           hint: "换号只对新会话生效，开着的会话仍在原来的号上。",
           codexHint: "请求会经过 Osuna，Osuna 没在运行时终端里的 Codex 连不上。",
+          hintWithCodex: "{{hint}}{{codexHint}}",
           claudeHint: "换号只对新会话生效；开着的 Claude Code 可能在登录过期时也跟着换到新号。",
-          saveFailed: "改不了多号自动轮换：{{reason}}",
+          saveFailed: "没能保存「多号自动轮换」：{{reason}}",
         },
         throughEndpoints:
           "Claude Code 现在走第三方接口，订阅号要等你关掉「使用第三方接口」才用得上。",
@@ -4427,7 +4428,7 @@ export const zhCN: TranslationResources = {
             lapsed: "{{from}} 的登录失效",
             used_up: "{{from}} 的 {{window}} 窗口用到了 {{pct}}%",
             limit: "{{from}} 的 {{window}} 窗口到了你设的上限 {{limit}}%",
-            held: "ChatGPT 不再让 {{from}} 发送（额度用完，也没有 credits）",
+            held: "ChatGPT 不再让 {{from}} 发送（额度用完，也没有积分）",
             room_again: "{{to}} 有余量了",
             keep_signed_in: "你设了固定登录到 {{to}}",
             not_listed: "CLI 登录的号不在列表里",
@@ -4496,10 +4497,10 @@ export const zhCN: TranslationResources = {
           canceled: "登录已取消。",
           failed: "登录没有完成：{{reason}}",
           claude: {
-            waitingHint: "用要添加的 Claude 账号登录。登录完成后这里会自动关闭。",
+            waitingHint: "用要添加的 Claude 账号登录，完成后这个窗口会自动关闭。",
             pasteLabel: "登录页显示的代码",
             pasteHint:
-              "在别的设备上登录？在那台设备上打开链接，登录后页面会显示一段代码，复制下来粘贴到这里。",
+              "在别的设备上登录时，在那台设备上打开链接，登录后页面会显示一段代码，复制下来粘贴到这里。",
             pasteHintBlocked:
               "Claude Code 没有打开能回到 Osuna 的页面。登录后页面会显示一段代码，复制下来粘贴到这里。",
           },

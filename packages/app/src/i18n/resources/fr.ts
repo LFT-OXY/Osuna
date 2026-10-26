@@ -4512,9 +4512,10 @@ export const fr: TranslationResources = {
           hint: "Le changement ne s'applique qu'aux nouvelles sessions ; les sessions ouvertes restent sur leur compte.",
           codexHint:
             "Les requêtes passent par Osuna : tant qu'Osuna ne tourne pas, Codex dans un terminal ne peut pas se connecter.",
+          hintWithCodex: "{{hint}} {{codexHint}}",
           claudeHint:
             "Le changement ne s'applique qu'aux nouvelles sessions ; les sessions Claude Code déjà ouvertes peuvent aussi passer au nouveau compte quand leur connexion expire.",
-          saveFailed: "Impossible de modifier la rotation des comptes : {{reason}}",
+          saveFailed: "Impossible d'enregistrer la rotation des comptes : {{reason}}",
         },
         throughEndpoints:
           "Claude Code passe maintenant par « Utiliser les points d'accès API » ; vos comptes d'abonnement serviront une fois cet interrupteur désactivé.",
@@ -4656,7 +4657,7 @@ export const fr: TranslationResources = {
           failed: "La connexion n’a pas abouti : {{reason}}",
           claude: {
             waitingHint:
-              "Connectez-vous avec le compte Claude à ajouter. Cette fenêtre se ferme d'elle-même une fois terminé.",
+              "Connectez-vous avec le compte Claude à ajouter. Cette fenêtre se ferme toute seule une fois terminé.",
             pasteLabel: "Code de la page de connexion",
             pasteHint:
               "Vous vous connectez sur un autre appareil ? Ouvrez-y le lien. Après la connexion, la page affiche un code : copiez-le et collez-le ici.",

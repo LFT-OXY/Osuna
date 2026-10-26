@@ -28,7 +28,8 @@ const UNMEASURED_SNAP_POINTS = ["50%"];
 const COMPACT_SHEET_CHROME_HEIGHT = 192;
 const MAX_SNAP_PERCENT = 90;
 // 普通对象：FormTextInput 拆样式时要读得到值。
-const INPUT_STYLE = { width: 96 };
+// 窄窗口 md 尺寸下也装得下各语言的「默认 98」（最长是俄文）。
+const INPUT_STYLE = { width: 128 };
 
 export interface ProviderAccountLimitsSheetProps {
   account: ProviderAccount;

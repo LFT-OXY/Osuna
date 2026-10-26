@@ -4464,9 +4464,10 @@ export const ptBR: TranslationResources = {
           hint: "A troca só vale para sessões novas; sessões abertas continuam na conta delas.",
           codexHint:
             "As requisições passam pelo Osuna, então, enquanto o Osuna não estiver rodando, o Codex no terminal não consegue se conectar.",
+          hintWithCodex: "{{hint}} {{codexHint}}",
           claudeHint:
             "A troca só vale para sessões novas; sessões do Claude Code já abertas também podem passar para a nova conta quando o login delas expirar.",
-          saveFailed: "Não foi possível alterar o rodízio de contas: {{reason}}",
+          saveFailed: "Não foi possível salvar o rodízio de contas: {{reason}}",
         },
         throughEndpoints:
           "O Claude Code está passando por “Usar endpoints de API” agora; suas contas de assinatura serão usadas quando você desligar essa opção.",
