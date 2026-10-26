@@ -7,6 +7,8 @@
 | Rule | Enforced by | Where | From | Expires |
 | ---- | ----------- | ----- | ---- | ------- |
 | Navigation hooks (`useIsFocused`, `useFocusEffect`, `useNavigation`) come from `expo-router/react-navigation`, never `@react-navigation/native`: since Expo 57 the context lives in expo-router's copy and the other package throws "Couldn't find a navigation object" on web | lint `no-restricted-imports` | `.oxlintrc.json`, the `packages/app/src/**` block | merge-upstream-v0.13.0 ticket 06 (usage page crashed on open) | — |
+| Workspace tab chips paint hover / selected with `surfaceTabHover` / `surfaceTabActive` on both rails, Explorer included; upstream's `surfaceSidebarHover` / `surfaceSidebarSelected` ladder stays out ([Styling](./styling.md) "Workspace tab chips") | test | `screens/workspace/workspace-tab-layout.test.ts`, `e2e/browser/explorer-sidebar.spec.ts` "draws its tabs as workspace tab chips" | merge-upstream-v0.13.0 ticket 07 | — |
+| A panel that opens a main-pane tab from inside the Explorer reveals it with `revealWorkspaceTab`, not a bare `focusTab`, so the compact layout switches back to Agent ([State management](./state-management.md) "Workspace tab kinds") | test | `session-history/internal/open-terminal-tab.test.ts` | merge-upstream-v0.13.0 ticket 07 | — |
 
 ## Checks reviewers run
 

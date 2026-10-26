@@ -132,6 +132,22 @@ describe("Explorer sidebar", () => {
     ).toBe("session_history");
   });
 
+  it("seeds Session history among the default Explorer tabs on desktop and compact", () => {
+    for (const isCompact of [false, true]) {
+      const workspaceKey = `${WORKSPACE_KEY}-${isCompact ? "compact" : "desktop"}`;
+      openExplorerSidebarView({ isCompact, workspaceKey, view: "changes" });
+
+      const state = useWorkspaceLayoutStore.getState();
+      const layout = state.layoutByWorkspace[workspaceKey];
+      const pane = findPaneById(layout.root, selectExplorerSidebarPaneId(state, workspaceKey)!);
+      expect(
+        collectAllTabs(layout.root)
+          .filter((tab) => pane?.tabIds.includes(tab.tabId))
+          .map((tab) => tab.target.kind),
+      ).toEqual(["files", "changes_tree", "session_history"]);
+    }
+  });
+
   it("toggles the compact Explorer without changing its selected view", () => {
     const input = {
       isCompact: true,

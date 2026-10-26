@@ -17,7 +17,7 @@ panel type for another. Tab moves reject unsupported destinations, and placement
 a compatible pane.
 
 Files, Changes, and Session history are the Explorer defaults: every workspace is born with the
-three, Changes focused. Their panel manifests mark them as singletons, so a pane's + menu omits
+three on every layout, Changes focused. Their panel manifests mark them as singletons, so a pane's + menu omits
 each while that pane already contains it. Closing one makes its menu item available again. Session
 history arrived after layouts were already being saved, so a saved layout gets it once on load and
 `explorerSidebarSeededTabKindsByWorkspace` (`packages/app/src/stores/workspace-layout-storage.ts`)
@@ -26,11 +26,12 @@ Explorer.
 
 Logic map is an Explorer-only singleton but not a default: a workspace that never used logic maps
 has no such tab. The first time a conversation in the workspace turns its logic map switch on,
-`autoOpenLogicMapTab` (`packages/app/src/stores/workspace-layout-store.ts`) shows Explorer and
-selects the tab, and `logicMapTabAutoOpenedByWorkspace` records that, so a closed tab stays closed
-on later switch-ons and comes back only from the + menu. Like the defaults, it hides its close
-button. Other compatible tabs, including agents, terminals, files, and diffs, can move between
-Explorer and main panes.
+`autoOpenLogicMapTab` (`packages/app/src/stores/workspace-layout-store.ts`) shows the desktop dock
+and selects the tab. On compact layouts it only adds and selects the tab: the overlay stays closed
+so it does not cover the conversation the user is reading. `logicMapTabAutoOpenedByWorkspace`
+records that, so a closed tab stays closed on later switch-ons and comes back only from the + menu.
+Like the defaults, it hides its close button. Other compatible tabs, including agents, terminals,
+files, and diffs, can move between Explorer and main panes.
 Keep panel implementations independent of either shell. `WorkspacePanelHost` owns mounting and
 retention. The shared Explorer owns its tab rail; its shared frame owns visibility, activity and
 close-gesture lifetime. Platform adapters own resizing and inset geometry.
@@ -138,8 +139,9 @@ Discovery uses ordinary PR tabs and their existing once-per-workspace close opt-
 resume command as `command` and `args` (`packages/app/src/utils/provider-command-templates.ts`).
 Providers without a resume template never appear. The new terminal tab opens in the focused
 main pane through `openTerminalTabFromSessionHistory`; the Explorer pane never holds focus, so
-the same call serves the desktop panel and the compact overlay. Terminology is in
-[glossary.md](glossary.md) under **Provider session** and **Session history**.
+the same call serves the desktop dock and the compact overlay. It reveals the tab through
+`revealWorkspaceTab`, so a compact layout leaves the overlay for the Agent panel where the terminal
+is. Terminology is in [glossary.md](glossary.md) under **Provider session** and **Session history**.
 
 The listing is directory-backed, keyed by `(serverId, scope, cwds)`, not by workspace. The
 scope (`workspace` / `project` / `host`) is one per-device preference in

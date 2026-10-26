@@ -7,10 +7,9 @@ export type WorkspaceTabRailSurface = "surface" | "sidebar";
  * The fill of a tab chip, named as the surface token it paints so the chip style and everything
  * knocking out of it (the running-status ring, the trailing-action scrim) agree.
  *
- * Each rail climbs its own ladder: resting, filled (hovered, or active in an unfocused pane),
- * selected. The sidebar rail uses the sidebar hover/selected tokens rather than the plain surface
- * steps because light themes paint `surfaceSidebar` with `surface2`, so a `surface2` chip vanishes
- * on it.
+ * Both rails share the tab ladder (resting, filled: hovered or active in an unfocused pane, selected)
+ * so Explorer tabs and workspace tabs read as the same control; only the resting fill follows the
+ * rail.
  */
 export function resolveWorkspaceTabChipBackdrop({
   rail,
@@ -21,10 +20,8 @@ export function resolveWorkspaceTabChipBackdrop({
   isActiveFocused: boolean;
   isFilled: boolean;
 }): SurfaceBackdrop {
-  if (rail === "sidebar") {
-    if (isActiveFocused) return "surfaceSidebarSelected";
-    return isFilled ? "surfaceSidebarHover" : "surfaceSidebar";
-  }
-  if (isActiveFocused) return "surface2";
-  return isFilled ? "surface1" : "surface0";
+  // 不用上游侧栏的 surfaceSidebarHover/Selected：Explorer 标签要与工作区标签同一种选中态。
+  if (isActiveFocused) return "surfaceTabActive";
+  if (isFilled) return "surfaceTabHover";
+  return rail === "sidebar" ? "surfaceSidebar" : "surface0";
 }

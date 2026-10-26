@@ -8,6 +8,7 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
   },
 }));
 
+import { usePanelStore } from "@/stores/panel-store";
 import {
   collectAllTabs,
   findPaneById,
@@ -25,7 +26,9 @@ beforeEach(() => {
     explorerSidebarPaneIdByWorkspace: {},
     sidePaneIdByWorkspace: {},
     splitSizesByWorkspace: {},
+    layoutMode: "split-panes",
   });
+  usePanelStore.setState({ mobilePanel: { target: "agent", revision: 0 } });
 });
 
 describe("openTerminalTabFromSessionHistory", () => {
@@ -52,6 +55,26 @@ describe("openTerminalTabFromSessionHistory", () => {
     const explorerPane =
       layout && explorerPaneId ? findPaneById(layout.root, explorerPaneId) : null;
     expect(explorerPane?.tabIds).not.toContain(tabId);
+    const focusedPane = layout ? findPaneById(layout.root, layout.focusedPaneId) : null;
+    expect(focusedPane?.focusedTabId).toBe(tabId);
+  });
+
+  it("switches the compact layout back to the Agent panel so the terminal is visible", () => {
+    useWorkspaceLayoutStore.getState().setLayoutMode("compact");
+    openExplorerSidebarView({
+      isCompact: true,
+      workspaceKey: WORKSPACE_KEY,
+      view: "sessions",
+    });
+    expect(usePanelStore.getState().mobilePanel.target).toBe("file-explorer");
+
+    const tabId = openTerminalTabFromSessionHistory({
+      workspaceKey: WORKSPACE_KEY,
+      terminalId: "term-1",
+    });
+
+    expect(usePanelStore.getState().mobilePanel.target).toBe("agent");
+    const layout = useWorkspaceLayoutStore.getState().layoutByWorkspace[WORKSPACE_KEY];
     const focusedPane = layout ? findPaneById(layout.root, layout.focusedPaneId) : null;
     expect(focusedPane?.focusedTabId).toBe(tabId);
   });

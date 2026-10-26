@@ -263,6 +263,17 @@ describe("resolveWorkspaceTabChipBackdrop", () => {
     }
   });
 
+  it("paints hovered and selected chips with the tab tokens on both rails", () => {
+    for (const rail of ["surface", "sidebar"] as const) {
+      expect(resolveWorkspaceTabChipBackdrop({ rail, isActiveFocused: true, isFilled: true })).toBe(
+        "surfaceTabActive",
+      );
+      expect(
+        resolveWorkspaceTabChipBackdrop({ rail, isActiveFocused: false, isFilled: true }),
+      ).toBe("surfaceTabHover");
+    }
+  });
+
   it("rests on the rail surface when the chip is neither active nor hovered", () => {
     expect(
       resolveWorkspaceTabChipBackdrop({ rail: "sidebar", isActiveFocused: false, isFilled: false }),

@@ -17,6 +17,7 @@ vi.mock("@react-native-async-storage/async-storage", () => {
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import { usePanelStore } from "@/stores/panel-store";
 import { useSessionStore, type Agent } from "@/stores/session-store";
 import { setPanelInstanceAttributes } from "@/panels/panel-instance-attributes";
 import { createViewedTimelineSync } from "@/timeline/viewed-timeline-sync";
@@ -4597,6 +4598,27 @@ it("persists the once-only PR add after closing, and clears it when purging the 
   restored.getState().purgeWorkspace(workspaceKey);
   expect(restored.getState().pullRequestTabAutoOpenedByWorkspace[workspaceKey]).toBeUndefined();
   expect(restored.getState().autoOpenPullRequestTab(workspaceKey, placement)).toBe("pull_request");
+});
+
+it("adds the logic map tab to the compact Explorer the first time without opening the Explorer", async () => {
+  await AsyncStorage.removeItem("workspace-layout-state");
+  const store = createWorkspaceLayoutStore(workspaceLayoutIds);
+  await store.persist.rehydrate();
+  store.getState().setLayoutMode("compact");
+  usePanelStore.setState({ mobilePanel: { target: "agent", revision: 0 } });
+  const workspaceKey = "server-1:logic-map-compact";
+  store.getState().openTab({
+    workspaceKey,
+    target: { kind: "agent", agentId: "agent-a" },
+    intent: "reveal",
+  });
+
+  expect(store.getState().autoOpenLogicMapTab(workspaceKey)).toBe("logic_map");
+
+  const layout = store.getState().layoutByWorkspace[workspaceKey];
+  const explorer = findPaneById(layout.root, "explorer");
+  expect(explorer?.tabIds).toContain("logic_map");
+  expect(usePanelStore.getState().mobilePanel.target).toBe("agent");
 });
 
 it("adds and selects the logic map tab in Explorer the first time, never again once closed", async () => {
