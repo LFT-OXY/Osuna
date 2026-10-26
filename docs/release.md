@@ -335,11 +335,17 @@ git 不报冲突、结果却不对的：
   在那一行写注释说明；上游再改那一行时会再冲突一次。
 - 上游整份重译一种语言时（v0.11.0 的 `fr.ts`，57 个冲突块），冲突块先取上游，再把基点、
   Osuna、上游三份资源摊平成键值，按键做三方合并并逐键比对。合完查自动合并出来的重复键。
+- 上游新加一条带豁免名单的 lint 规则、名单注释写「只许移出」时（v0.12.0 的
+  `paseo/no-raw-pressable`），Osuna 自己报错的文件在 `.oxlintrc.json` 里另起一块豁免，注明加入
+  时机与迁移计划，不混进上游的名单：上游以后从名单里移出文件时不会撞上 Osuna 加的行。
 
 本机复核时：
 
 - 先挪开 `packages/app/.expo` 与 `packages/app/node_modules/.vite`。前者放宽类型检查，
   后者是旧的预构建缓存，都会掩盖 CI 上会挂的问题。
+- 这一段改了 `patches/` 下的依赖补丁，就先 `npm install` 再跑测试。本机装的还是旧补丁，
+  相关用例会假失败（v0.12.0 的 enriched-markdown 补丁：`renderer.test.ts` 的句末句点用例）。
+  `scripts/postinstall-patches.mjs` 遇到旧补丁会让安装失败并删掉那个包，再装一次即可。
 - `chat-find.spec.ts`、`pane-find.spec.ts` 各有一条涉及 Control+F 的用例在 macOS 本机
   会挂，以 CI（Linux）为准。
 - `plugins/antigravity-provider/server/provider.test.ts` 的「reports startup auth…」在 macOS

@@ -33,7 +33,7 @@ async function expectProviderArtwork(
     .locator("svg")
     .first();
   await expect(icon).toBeVisible();
-  // Osuna 的目录行：提供方图标 20px，PackagePlus 兜底 16px。
+  // Osuna 的目录行里提供方图标是 20px；没有图标时的 PackagePlus 是 16px，所以 20 说明画的是提供方图标。
   await expect.soft(icon).toHaveAttribute("width", "20");
   const expectedPaths = await page.evaluate((xml) => {
     const document = new DOMParser().parseFromString(xml, "image/svg+xml");
