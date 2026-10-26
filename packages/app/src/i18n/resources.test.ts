@@ -533,6 +533,16 @@ describe("translation resources", () => {
     ]);
   });
 
+  // Osuna：套餐用量与上游同义的句子只走 providerUsage.*；usage.planUsage 只留上游没有的句子（工单 08）。
+  it("keeps plan usage sentences that upstream already has out of usage.planUsage", () => {
+    const sentence = (value: string) => value.replace(/\{\{[^}]+\}\}/g, "{{}}");
+    const upstream = new Set(Object.values(flattenStrings(en.providerUsage)).map(sentence));
+    const duplicates = Object.entries(flattenStrings(en.usage.planUsage)).filter(([, value]) =>
+      upstream.has(sentence(value)),
+    );
+    expect(duplicates).toEqual([]);
+  });
+
   it("uses the API endpoint terms in zh-CN", () => {
     const apiEndpoints = zhCN.settings.apiEndpoints;
     expect(apiEndpoints.status.available).toBe("可用");

@@ -3,7 +3,6 @@ import { i18n } from "@/i18n/i18next";
 import {
   resolveUsageReport,
   displayPercent,
-  formatUsageFreshness,
   planUsageAccountNames,
   resolveAgentUsageView,
   replaceReport,
@@ -17,6 +16,7 @@ import {
   type UsageHost,
   type UsageQueryState,
 } from "./model";
+import { formatAgo } from "./format";
 import type { UsageReportEntry, UsageWindow } from "./types";
 
 function entry(input: {
@@ -76,7 +76,7 @@ describe("resolveUsageView", () => {
         supportsUsage: false,
         query: undefined,
       }),
-    ).toEqual({ kind: "unavailable", message: "Laptop에 연결하여 제공업체 사용량을 확인하세요" });
+    ).toEqual({ kind: "unavailable", message: "Laptop에 연결하면 플랜 사용량을 볼 수 있습니다" });
   });
 
   it("moves from loading to ready to error", () => {
@@ -229,20 +229,27 @@ describe("displayPercent", () => {
   });
 });
 
-describe("formatUsageFreshness", () => {
+// Osuna：卡片的更新时间（card.tsx 的 UsageFreshness）由上游的 formatAgo 与 timing.updated 拼成。
+describe("report freshness", () => {
+  const NOW = Date.parse("2026-10-01T12:00:00Z");
+  const freshness = (minutesAgo: number) =>
+    i18n.t("providerUsage.timing.updated", {
+      relativeTime: formatAgo(new Date(NOW - minutesAgo * 60_000).toISOString(), NOW),
+    });
+
   it("says when the report was fetched", () => {
-    expect(formatUsageFreshness("now")).toBe("Updated just now");
-    expect(formatUsageFreshness("3m")).toBe("Updated 3m ago");
-    expect(formatUsageFreshness("Jan 15")).toBe("Updated Jan 15");
+    expect(freshness(0)).toBe("Updated just now");
+    expect(freshness(3)).toBe("Updated 3m ago");
+    expect(freshness(60 * 24 * 30)).toBe("Updated 30d ago");
   });
 
   it("reads in the app's language", async () => {
     await i18n.changeLanguage("zh-CN");
     try {
-      expect(formatUsageFreshness("now")).toBe("刚刚更新");
-      expect(formatUsageFreshness("3m")).toBe("3 分钟前更新");
-      expect(formatUsageFreshness("2h")).toBe("2 小时前更新");
-      expect(formatUsageFreshness("4d")).toBe("4 天前更新");
+      expect(freshness(0)).toBe("刚刚更新");
+      expect(freshness(3)).toBe("3 分钟前更新");
+      expect(freshness(120)).toBe("2 小时前更新");
+      expect(freshness(60 * 24 * 4)).toBe("4 天前更新");
     } finally {
       await i18n.changeLanguage("en");
     }

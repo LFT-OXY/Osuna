@@ -40,6 +40,7 @@ import {
   togglePin,
   usageItem,
   usageModal,
+  usageOptionsSurface,
   closeUsage,
 } from "../support/helpers/usage-sidebar-item";
 
@@ -687,7 +688,7 @@ for (const theme of ["light", "dark"] as const) {
       const screen = page.getByTestId(`usage-host-${getServerId()}`);
       await expect(screen.getByText("Claude", { exact: true })).toBeVisible({ timeout: 30_000 });
       const settings = page.getByTestId("usage-options-menu");
-      // Osuna：订阅额度的界面都叫「套餐用量」，这个齿轮的名字是 usage.planUsage.options。
+      // Osuna：订阅额度的界面都叫「套餐用量」，这个齿轮的名字取 providerUsage.options 的 Osuna 译法。
       await expect(settings).toHaveAccessibleName("Plan usage options");
       await expect(page.getByTestId("usage-display-used")).toHaveCount(0);
       await captureSettingsState(page, testInfo, `${size}-${theme}-cog`);
@@ -879,8 +880,11 @@ test("usage percentages state their meaning and follow the selected language", a
     await openJapaneseUsage(page);
     await expect(page.getByText("70% 使用済み", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "すべて更新", exact: true })).toBeVisible();
-    await page.getByRole("button", { name: "設定", exact: true }).last().click();
-    await expect(page.getByText("割合", { exact: true })).toBeVisible();
+    await page
+      .getByRole("button", { name: "プラン使用量のオプション", exact: true })
+      .last()
+      .click();
+    await expect(usageOptionsSurface(page).getByText("表示", { exact: true })).toBeVisible();
     await expect(page.getByText("使用済み", { exact: true })).toBeVisible();
     await expect(page.getByText("残り", { exact: true })).toBeVisible();
   } finally {

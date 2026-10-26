@@ -143,10 +143,10 @@ function describeReset(iso: string | null | undefined, now: number): UsageText |
   if (!iso) return null;
   const remaining = new Date(iso).getTime() - now;
   if (!Number.isFinite(remaining)) return null;
-  if (remaining <= 0) return { key: "usage.planUsage.resettingNow" };
+  if (remaining <= 0) return { key: "providerUsage.timing.resettingNow" };
   const duration = formatShortDuration(iso, now);
   if (!duration) return null;
-  return { key: "usage.planUsage.resets", params: { duration } };
+  return { key: "providerUsage.timing.resetsIn", params: { duration } };
 }
 
 /**
@@ -157,7 +157,10 @@ function resolveFullTrailing(window: UsageWindow, now: number): PlanUsageStripTr
   if (window.runsOutAt != null && window.shortfallPct != null) {
     const duration = formatShortDuration(window.runsOutAt, now);
     if (duration) {
-      return { text: { key: "usage.planUsage.runsOut", params: { duration } }, atRisk: true };
+      return {
+        text: { key: "providerUsage.timing.runsOutIn", params: { duration } },
+        atRisk: true,
+      };
     }
   }
   const reset = describeReset(window.resetsAt, now);

@@ -44,12 +44,6 @@ export function planUsageAccountNames(reports: readonly UsageReportEntry[]): str
   return [...new Set(names)];
 }
 
-/** When a report was fetched, from its compact relative time: "Updated 3m ago". */
-export function formatUsageFreshness(compactTimeAgo: string, retained = false): string {
-  const ago = usageCopy.ago(compactTimeAgo);
-  return retained ? usageCopy.lastUpdated(ago) : usageCopy.updated(ago);
-}
-
 /** A user-requested refresh of one report. The previous report stays on screen throughout. */
 export type UsageRefresh = "idle" | "pending" | "failed";
 

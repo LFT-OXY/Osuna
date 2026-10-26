@@ -41,7 +41,7 @@ describe("formatAmount", () => {
 
     await i18n.changeLanguage("ja");
     expect(formatResetLabel(twoHoursFromNow, false, NOW)).toBe("2時間後にリセット");
-    expect(formatRunsOutLabel(twoHoursFromNow, NOW)).toBe("2時間後に上限に到達");
+    expect(formatRunsOutLabel(twoHoursFromNow, NOW)).toBe("2時間後に上限");
     expect(formatAgo(threeDaysAgo, NOW)).toBe("3日前");
   });
 
@@ -55,8 +55,8 @@ describe("formatAmount", () => {
     const daysFromNow = new Date(NOW + days * 24 * 60 * 60 * 1000).toISOString();
     const daysAgo = new Date(NOW - days * 24 * 60 * 60 * 1000).toISOString();
 
-    expect(formatResetLabel(daysFromNow, false, NOW)).toBe("se réinitialise dans 1\u202f234 j");
-    expect(formatRunsOutLabel(daysFromNow, NOW)).toBe("s’épuise dans 1\u202f234 j");
+    expect(formatResetLabel(daysFromNow, false, NOW)).toBe("réinitialisation dans 1\u202f234 j");
+    expect(formatRunsOutLabel(daysFromNow, NOW)).toBe("épuisé dans 1\u202f234 j");
     expect(formatAgo(daysAgo, NOW)).toBe("il y a 1\u202f234 j");
   });
 
@@ -66,9 +66,9 @@ describe("formatAmount", () => {
     const threeHoursFromNow = new Date(NOW + 3 * 60 * 60 * 1000).toISOString();
     const twoDaysAgo = new Date(NOW - 2 * 24 * 60 * 60 * 1000).toISOString();
 
-    expect(formatResetLabel(twoHoursFromNow, false, NOW)).toBe("تتم إعادة التعيين خلال ساعتين");
-    expect(formatRunsOutLabel(threeHoursFromNow, NOW)).toBe("ينفد خلال 3 ساعات");
-    expect(formatAgo(twoDaysAgo, NOW)).toBe("قبل يومين");
+    expect(formatResetLabel(twoHoursFromNow, false, NOW)).toBe("إعادة التعيين بعد ساعتين");
+    expect(formatRunsOutLabel(threeHoursFromNow, NOW)).toBe("ينفد بعد 3 ساعات");
+    expect(formatAgo(twoDaysAgo, NOW)).toBe("قبل 2 ي");
   });
 
   it("uses locale-aware compact notation for token balances", () => {

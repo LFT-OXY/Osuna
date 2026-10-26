@@ -56,7 +56,7 @@ export function ContextWindowDetails({
 }: ContextWindowDetailsProps) {
   const { t } = useTranslation();
   const renderPlanUsageHeader = useCallback(
-    () => <SectionTitle>{t("usage.planUsage.title")}</SectionTitle>,
+    () => <SectionTitle>{t("providerUsage.title")}</SectionTitle>,
     [t],
   );
   return (
