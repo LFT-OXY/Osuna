@@ -10,4 +10,4 @@
 
 - [x] `bootstrap.ts` 转小写后不含 `claude`、`codex` 等任何 `AGENT_HOOK_PROVIDERS` 的 ID；上面那条测试本机通过。
 - [x] Claude Code「使用第三方接口」开关一动账号一节顶上的说明跟着变、Claude 运行设置照旧传进账号服务：原有覆盖这两处的测试仍通过。
-- [ ] 推送后 PR #32 的 server-tests 两项通过（playwright 若只挂上面那条已知偶发，重跑失败项）。
+- [x] 推送后 PR #32 的 server-tests 两项通过（playwright 若只挂上面那条已知偶发，重跑失败项）。

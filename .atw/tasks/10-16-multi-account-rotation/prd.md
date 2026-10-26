@@ -432,7 +432,7 @@ Codex、Claude Code 的提供方设置页各多一节「账号」（**Account**�
 - [x] `docs/usage.md` 的「Outbound requests」写全新增的每一类请求；`docs/glossary.md`、`docs/data-model.md`、`THIRD_PARTY_NOTICES` 已更新。
 - [x] 协议：新字段都可选，新 RPC 用带点命名空间，功能挂在 `server_info.features.accountRotation` 上；用官方 Paseo 手机 App 连新 daemon，聊天、提供方设置、套餐用量照常。（官方手机 App 连接一项属原生端，按约定免实机验收）
 - [x] 9 种界面语言的 i18n 测试通过：键齐全，中文没有残留英文。（用量窗口名沿用上游英文，同上）
-- [ ] typecheck、lint 通过；PR 的 CI 通过（已知常红的 Nix 两项除外）。
+- [x] typecheck、lint 通过；PR 的 CI 通过（已知常红的 Nix 两项除外）。
 - [x] 用真实账号的验收（Codex 两个 ChatGPT 号、Claude Code 两个订阅号）由用户确认。（2026-10-26 用户决定免做，未实际验证，见工单 11）
 
 ## Further Notes
