@@ -2179,16 +2179,6 @@ export const zhCN: TranslationResources = {
       tooLargeToDisplay: "此文件过大，无法显示",
       failedToLoad: "加载文件失败",
       failedToLoadPreview: "加载文件预览失败",
-      markdownAlerts: {
-        note: "注意",
-        tip: "提示",
-        important: "重要",
-        warning: "警告",
-        caution: "小心",
-      },
-      markdownCodeBlock: {
-        wrapLines: "自动换行",
-      },
       editor: {
         fileSize: "文件大小 {{size}}",
         lines: "{{count}} 行",

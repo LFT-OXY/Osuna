@@ -22,7 +22,6 @@ Ship it.
         { key: "allowed-tools", value: "Bash, Read" },
       ],
       body: "# Release beta\n\nShip it.\n",
-      bodyStartLine: 8,
     });
   });
 
@@ -38,7 +37,6 @@ Body
     ).toEqual({
       frontMatter: [{ key: "metadata", value: "audience: maintainers\nstable: true" }],
       body: "Body\n",
-      bodyStartLine: 6,
     });
   });
 
@@ -52,7 +50,6 @@ Body
     expect(parseMarkdownPreviewDocument(source)).toEqual({
       frontMatter: [],
       body: source,
-      bodyStartLine: 1,
     });
   });
 
@@ -68,7 +65,6 @@ Body
     expect(parseMarkdownPreviewDocument(source)).toEqual({
       frontMatter: [],
       body: source,
-      bodyStartLine: 1,
     });
   });
 
@@ -83,7 +79,6 @@ Body
     expect(parseMarkdownPreviewDocument(source)).toEqual({
       frontMatter: [],
       body: source,
-      bodyStartLine: 1,
     });
   });
 });

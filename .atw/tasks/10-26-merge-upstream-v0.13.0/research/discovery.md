@@ -71,6 +71,8 @@
     chip、缺图占位、磁盘变更刷新）不在上游渲染器上补回；逻辑图带行号的节点改为打开源码视图定位。
     `file-pane/markdown-preview/` 的 `document.test.ts`、`resource.test.ts`、`source-line.browser.test.tsx` 随代码删除，
     是「Osuna 原有的测试不删除」的例外，PR 正文写明。想要哪项以后单开工单。
+    （工单 05 实施时修正：`document.test.ts` 是上游文件，还原成上游而非删除；另删 `file-editing.spec.ts` 里 3 个只测 DOM 预览的 e2e 用例。
+    两项维护者 2026-10-26 同意，以 prd「Markdown」为准。）
 16. ADR 0001 标为被 [ADR 0016](../../../../docs/adr/0016-markdown-file-preview-follows-upstream.md) 取代，原因：跟着上游走，
     减少以后合并的冲突。已写（2026-10-26）。
 

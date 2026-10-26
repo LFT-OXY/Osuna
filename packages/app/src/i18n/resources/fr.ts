@@ -2238,16 +2238,6 @@ export const fr: TranslationResources = {
       tooLargeToDisplay: "Ce fichier est trop volumineux pour être affiché",
       failedToLoad: "Impossible de charger le fichier",
       failedToLoadPreview: "Impossible de charger l’aperçu du fichier",
-      markdownAlerts: {
-        note: "Remarque",
-        tip: "Astuce",
-        important: "Important",
-        warning: "Avertissement",
-        caution: "Attention",
-      },
-      markdownCodeBlock: {
-        wrapLines: "Retour à la ligne",
-      },
       editor: {
         fileSize: "Taille du fichier : {{size}}",
         lines: "{{count}} lignes",

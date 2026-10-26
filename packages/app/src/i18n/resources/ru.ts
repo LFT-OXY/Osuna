@@ -2220,16 +2220,6 @@ export const ru: TranslationResources = {
       tooLargeToDisplay: "Этот файл слишком велик для отображения",
       failedToLoad: "Не удалось загрузить файл",
       failedToLoadPreview: "Не удалось загрузить предварительный просмотр файла.",
-      markdownAlerts: {
-        note: "Примечание",
-        tip: "Совет",
-        important: "Важно",
-        warning: "Предупреждение",
-        caution: "Осторожно",
-      },
-      markdownCodeBlock: {
-        wrapLines: "Переносить строки",
-      },
       editor: {
         fileSize: "Размер файла {{size}}",
         lines: "Строк: {{count}}",

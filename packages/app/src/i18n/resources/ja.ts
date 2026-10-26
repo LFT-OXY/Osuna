@@ -2208,16 +2208,6 @@ export const ja: TranslationResources = {
       tooLargeToDisplay: "このファイルは大きすぎて表示できません",
       failedToLoad: "ファイルの読み込みに失敗しました",
       failedToLoadPreview: "ファイルプレビューの読み込みに失敗しました",
-      markdownAlerts: {
-        note: "注記",
-        tip: "ヒント",
-        important: "重要",
-        warning: "警告",
-        caution: "注意",
-      },
-      markdownCodeBlock: {
-        wrapLines: "行を折り返す",
-      },
       editor: {
         fileSize: "ファイルサイズ {{size}}",
         lines: "{{count}} 行",

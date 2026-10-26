@@ -2224,16 +2224,6 @@ export const ptBR: TranslationResources = {
       tooLargeToDisplay: "Este arquivo é grande demais para exibir",
       failedToLoad: "Falha ao carregar arquivo",
       failedToLoadPreview: "Falha ao carregar prévia do arquivo",
-      markdownAlerts: {
-        note: "Observação",
-        tip: "Dica",
-        important: "Importante",
-        warning: "Aviso",
-        caution: "Cuidado",
-      },
-      markdownCodeBlock: {
-        wrapLines: "Quebrar linhas",
-      },
       editor: {
         fileSize: "Tamanho {{size}}",
         lines: "{{count}} linhas",

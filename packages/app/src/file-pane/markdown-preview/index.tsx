@@ -4,22 +4,6 @@ import { useMemo } from "react";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { parseMarkdownPreviewDocument } from "./document";
-import type { MarkdownPreviewResources } from "./resource";
-
-/** 原生版的 RN 渲染器没有块的行号，带行号打开 Markdown 时文件标签退回源码视图定位。 */
-export const MARKDOWN_PREVIEW_SCROLLS_TO_LINE = false;
-
-interface FileMarkdownPreviewProps {
-  source: string;
-  // 滚到指定行只在 Web 版支持；原生版用上游的渲染器，签名与 Web 版保持一致。
-  resources: MarkdownPreviewResources;
-  lineStart?: number;
-  navigationRevision: number;
-  filePath: string;
-  workspaceRoot?: string;
-  client?: DaemonClient | null;
-  serverId?: string;
-}
 
 export function FileMarkdownPreview({
   source,
@@ -27,7 +11,13 @@ export function FileMarkdownPreview({
   workspaceRoot,
   client,
   serverId,
-}: FileMarkdownPreviewProps) {
+}: {
+  source: string;
+  filePath: string;
+  workspaceRoot?: string;
+  client?: DaemonClient | null;
+  serverId?: string;
+}) {
   const document = useMemo(() => parseMarkdownPreviewDocument(source), [source]);
 
   return (

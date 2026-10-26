@@ -44,42 +44,23 @@ describe("filePreviewRenderKind", () => {
 });
 
 describe("filePreviewRenderKindForLocation", () => {
-  const scrolls = { markdownPreviewScrollsToLine: true };
-
   it("renders a file opened without a line", () => {
-    expect(filePreviewRenderKindForLocation({ location: { path: "spec.md" }, ...scrolls })).toBe(
-      "markdown",
-    );
+    expect(filePreviewRenderKindForLocation({ path: "spec.md" })).toBe("markdown");
   });
 
   it("shows a plain line target in the source view", () => {
+    expect(filePreviewRenderKindForLocation({ path: "spec.md", lineStart: 42 })).toBeNull();
+  });
+
+  it("shows a Markdown line target marked for the preview, such as a node doc, in the source view", () => {
     expect(
-      filePreviewRenderKindForLocation({
-        location: { path: "spec.md", lineStart: 42 },
-        ...scrolls,
-      }),
+      filePreviewRenderKindForLocation({ path: "spec.md", lineStart: 42, lineView: "preview" }),
     ).toBeNull();
   });
 
-  it("renders a Markdown line target marked for the preview, such as a node doc", () => {
+  it("shows an HTML line target marked for the preview in the source view", () => {
     expect(
-      filePreviewRenderKindForLocation({
-        location: { path: "spec.md", lineStart: 42, lineView: "preview" },
-        ...scrolls,
-      }),
-    ).toBe("markdown");
-  });
-
-  it("falls back to source where the preview cannot scroll to a line", () => {
-    const location = { path: "spec.md", lineStart: 42, lineView: "preview" } as const;
-    expect(
-      filePreviewRenderKindForLocation({ location, markdownPreviewScrollsToLine: false }),
-    ).toBeNull();
-    expect(
-      filePreviewRenderKindForLocation({
-        location: { path: "plan.html", lineStart: 2, lineView: "preview" },
-        ...scrolls,
-      }),
+      filePreviewRenderKindForLocation({ path: "plan.html", lineStart: 2, lineView: "preview" }),
     ).toBeNull();
   });
 });

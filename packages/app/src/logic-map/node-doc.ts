@@ -20,7 +20,7 @@ export function nodeDocLocation(input: {
   const path = nodeDocPath(input.mapName, input.doc);
   if (input.doc.kind === "own" || input.content === null) return { path };
   const lineStart = findMarkdownHeadingLine(input.content, input.doc.heading);
-  // 节点文档是拿来读的：停在渲染预览里滚到那一节，不像其他带行号的打开那样进源码视图。
+  // 标成想在预览里读；Markdown 预览目前滚不到指定行，所以实际打开源码视图停在这一行。
   return lineStart === null ? { path } : { path, lineStart, lineView: "preview" };
 }
 

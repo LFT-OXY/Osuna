@@ -2213,16 +2213,6 @@ export const en = {
       tooLargeToDisplay: "This file is too large to display",
       failedToLoad: "Failed to load file",
       failedToLoadPreview: "Failed to load file preview",
-      markdownAlerts: {
-        note: "Note",
-        tip: "Tip",
-        important: "Important",
-        warning: "Warning",
-        caution: "Caution",
-      },
-      markdownCodeBlock: {
-        wrapLines: "Wrap lines",
-      },
       editor: {
         fileSize: "File size {{size}}",
         lines: "{{count}} lines",

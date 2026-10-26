@@ -56,7 +56,7 @@ const LANGUAGE_ALIASES: Record<string, string> = {
   elixir: "ex",
 };
 
-export function fenceLanguageToExtension(info: string | null | undefined): string | null {
+function fenceLanguageToExtension(info: string | null | undefined): string | null {
   if (!info) return null;
   const first = info.trim().split(/\s+/)[0]?.toLowerCase();
   if (!first) return null;

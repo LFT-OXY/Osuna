@@ -19,19 +19,11 @@ export function filePreviewRenderKind(filePath: string): FilePreviewRenderKind |
 }
 
 /**
- * 打开一个位置时渲染预览还是源码视图。带行号打开说明要落到那一行，默认退回带高亮的源码视图；
- * 只有标了 lineView: "preview" 的 Markdown（逻辑图的节点文档），在预览能滚到指定行的平台上留在预览。
+ * 打开一个位置时渲染预览还是源码视图。带行号打开说明要落到那一行，而 Markdown 预览在哪个平台都
+ * 滚不到指定行，所以一律退回带高亮的源码视图；标了 lineView: "preview" 的逻辑图节点文档也一样。
  */
-export function filePreviewRenderKindForLocation(input: {
-  location: WorkspaceFileLocation;
-  /** 这个平台的 Markdown 预览能不能滚到指定行（Web 能，原生不能）。 */
-  markdownPreviewScrollsToLine: boolean;
-}): FilePreviewRenderKind | null {
-  const renderKind = filePreviewRenderKind(input.location.path);
-  if (!input.location.lineStart) return renderKind;
-  const staysInPreview =
-    renderKind === "markdown" &&
-    input.location.lineView === "preview" &&
-    input.markdownPreviewScrollsToLine;
-  return staysInPreview ? renderKind : null;
+export function filePreviewRenderKindForLocation(
+  location: WorkspaceFileLocation,
+): FilePreviewRenderKind | null {
+  return location.lineStart ? null : filePreviewRenderKind(location.path);
 }

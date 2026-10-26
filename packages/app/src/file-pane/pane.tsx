@@ -14,11 +14,14 @@ import { StyleSheet, UnistylesRuntime, withUnistyles } from "react-native-unisty
 import { useTranslation } from "react-i18next";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useSessionStore, type ExplorerFile } from "@/stores/session-store";
-import { filePreviewRenderKindForLocation } from "@/components/file-pane-render-mode";
+import {
+  filePreviewRenderKind,
+  filePreviewRenderKindForLocation,
+} from "@/components/file-pane-render-mode";
 import { useAttachmentPreviewUrl } from "@/attachments/use-attachment-preview-url";
 import { getFileNameFromPath } from "@/attachments/utils";
 import { resolveFilePreviewReadTarget } from "@/file-explorer/preview-target";
-import type { WorkspaceFileLocation, WorkspaceFileOpenRequest } from "@/workspace/file-open";
+import type { WorkspaceFileLocation } from "@/workspace/file-open";
 import { useRetainedPanelActive } from "@/components/retained-panel";
 import { useAppActivelyVisible } from "@/hooks/use-app-visible";
 import { isFileQueryEnabled } from "@/components/file-pane-enabled";
@@ -29,8 +32,7 @@ import { useFilePreview } from "./preview-lifecycle/hook";
 import { resolveFilePreviewLifecycle } from "./preview-lifecycle/model";
 import { FilePanelBar } from "./bar";
 import { FileHtmlPreview } from "./html-preview";
-import { FileMarkdownPreview, MARKDOWN_PREVIEW_SCROLLS_TO_LINE } from "./markdown-preview";
-import type { MarkdownPreviewResources } from "./markdown-preview/resource";
+import { FileMarkdownPreview } from "./markdown-preview";
 import { FileEditorModel, getFileConflictCallout, type FileConflictCallout } from "./editor/model";
 import { createFileObservationSource } from "./editor/observation-source";
 import { FileEditorView } from "./editor/view";
@@ -55,7 +57,6 @@ interface FilePreviewBodyProps {
   location: WorkspaceFileLocation;
   navigationRevision: number;
   imagePreviewUri: string | null;
-  markdownResources: MarkdownPreviewResources;
   workspaceRoot: string;
   client: DaemonClient | null;
   serverId: string;
@@ -140,7 +141,6 @@ function FilePreviewBody({
   location,
   navigationRevision,
   imagePreviewUri,
-  markdownResources,
   workspaceRoot,
   client,
   serverId,
@@ -150,7 +150,9 @@ function FilePreviewBody({
   // A line target means the caller wants to land on that line, so fall back to
   // the highlighted source view even for renderable files.
   const renderKind =
-    preview?.kind === "text" && mode !== "source" ? previewRenderKindForLocation(location) : null;
+    preview?.kind === "text" && mode !== "source"
+      ? filePreviewRenderKindForLocation(location)
+      : null;
 
   const previewScrollRef = useRef<RNScrollView>(null);
 
@@ -191,9 +193,6 @@ function FilePreviewBody({
           >
             <FileMarkdownPreview
               source={preview.content ?? ""}
-              resources={markdownResources}
-              lineStart={location.lineStart}
-              navigationRevision={navigationRevision}
               filePath={filePath}
               workspaceRoot={workspaceRoot}
               client={client}
@@ -240,13 +239,11 @@ export function FilePane({
   workspaceRoot,
   location,
   navigationRevision,
-  onOpenWorkspaceFile,
 }: {
   serverId: string;
   workspaceRoot: string;
   location: WorkspaceFileLocation;
   navigationRevision: number;
-  onOpenWorkspaceFile: (request: WorkspaceFileOpenRequest) => void;
 }) {
   const { t } = useTranslation();
   const isMobile = useIsCompactFormFactor();
@@ -296,38 +293,14 @@ export function FilePane({
 
   useEffect(() => setPreviewMode("preview"), [targetKey]);
 
-  const openLinkedWorkspaceFile = useCallback(
-    (linkedLocation: WorkspaceFileLocation) =>
-      onOpenWorkspaceFile({ location: linkedLocation, disposition: "main" }),
-    [onOpenWorkspaceFile],
-  );
-  const markdownResources = useMemo<MarkdownPreviewResources>(
-    () => ({
-      client,
-      workspaceRoot: normalizedWorkspaceRoot,
-      documentPath: location.path,
-      enabled,
-      liveUpdates: supportsEditing,
-      openWorkspaceFile: openLinkedWorkspaceFile,
-    }),
-    [
-      client,
-      enabled,
-      location.path,
-      normalizedWorkspaceRoot,
-      openLinkedWorkspaceFile,
-      supportsEditing,
-    ],
-  );
-
   const { file: preview, imageAttachment } = resolveFilePreviewLifecycle(previewLifecycle);
   const imagePreviewUri = useAttachmentPreviewUrl(imageAttachment);
-  const isRenderable = preview?.kind === "text" && previewRenderKindForLocation(location) !== null;
+  const isRenderable = isRenderablePreview(preview, location.path);
   const editable = isEditableTextFile({
     preview,
     supportsEditing,
   });
-  const canTogglePreviewMode = isRenderable;
+  const canTogglePreviewMode = isRenderable && !location.lineStart;
   const lineCount =
     preview?.kind === "text" ? (preview.content ?? "").split("\n").length : undefined;
   const errorMessage = previewLifecycle.status === "error" ? previewLifecycle.message : null;
@@ -359,18 +332,12 @@ export function FilePane({
       location={location}
       navigationRevision={navigationRevision}
       imagePreviewUri={imagePreviewUri}
-      markdownResources={markdownResources}
     />
   );
 }
 
-// Only a line target marked lineView: "preview" (logic map node docs) stays in the
-// Markdown preview, and only where that preview can scroll to the line.
-function previewRenderKindForLocation(location: WorkspaceFileLocation) {
-  return filePreviewRenderKindForLocation({
-    location,
-    markdownPreviewScrollsToLine: MARKDOWN_PREVIEW_SCROLLS_TO_LINE,
-  });
+function isRenderablePreview(preview: ExplorerFile | null, path: string): boolean {
+  return preview?.kind === "text" && filePreviewRenderKind(path) !== null;
 }
 
 function isEditableTextFile(input: {
@@ -407,7 +374,6 @@ function FilePanePresentation({
   location,
   navigationRevision,
   imagePreviewUri,
-  markdownResources,
 }: {
   serverId: string;
   workspaceRoot: string;
@@ -430,7 +396,6 @@ function FilePanePresentation({
   location: WorkspaceFileLocation;
   navigationRevision: number;
   imagePreviewUri: string | null;
-  markdownResources: MarkdownPreviewResources;
 }) {
   if (!client && readTarget) {
     return (
@@ -462,7 +427,6 @@ function FilePanePresentation({
         isMobile={isMobile}
         location={location}
         navigationRevision={navigationRevision}
-        markdownResources={markdownResources}
       />
     );
   }
@@ -505,7 +469,6 @@ function FilePanePresentation({
         location={location}
         navigationRevision={navigationRevision}
         imagePreviewUri={imagePreviewUri}
-        markdownResources={markdownResources}
         workspaceRoot={workspaceRoot}
         client={client}
         serverId={serverId}
@@ -531,7 +494,6 @@ function EditableFilePane({
   isMobile,
   location,
   navigationRevision,
-  markdownResources,
 }: {
   serverId: string;
   workspaceRoot: string;
@@ -549,7 +511,6 @@ function EditableFilePane({
   isMobile: boolean;
   location: WorkspaceFileLocation;
   navigationRevision: number;
-  markdownResources: MarkdownPreviewResources;
 }) {
   const { settings } = useAppSettings();
   const { t } = useTranslation();
@@ -688,7 +649,6 @@ function EditableFilePane({
           location={location}
           navigationRevision={navigationRevision}
           imagePreviewUri={null}
-          markdownResources={markdownResources}
           workspaceRoot={workspaceRoot}
           client={client}
           serverId={serverId}
