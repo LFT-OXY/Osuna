@@ -1,4 +1,4 @@
-import { useIsFocused } from "@react-navigation/native";
+import { useIsFocused } from "expo-router/react-navigation";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo } from "react";
 import { useIsCompactFormFactor } from "@/constants/layout";
