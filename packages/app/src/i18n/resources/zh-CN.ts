@@ -1913,6 +1913,7 @@ export const zhCN: TranslationResources = {
     },
     errors: {
       unableToInstall: "无法安装提供方",
+      hostUpdateRequired: "请先更新主机，再添加 {{provider}}。",
     },
     groups: {
       acpCatalog: "ACP 目录",

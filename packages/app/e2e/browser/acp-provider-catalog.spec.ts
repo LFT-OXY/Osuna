@@ -124,8 +124,9 @@ for (const theme of ["light", "dark"] as const) {
       await openProviderCatalog(page);
       await findAcpCatalogProvider(page, "Hoplite");
       await page.screenshot({ path: testInfo.outputPath(`hoplite-catalog-${theme}.png`) });
+      // Osuna 添加成功后进新提供方的详情页（与 MiniMax Code 的用例一致）。
       await installAcpCatalogProvider(page, "Hoplite");
-      await expectProviderInstalledInSettings(page, "Hoplite");
+      await expectProviderDetail(page, getServerId(), "hoplite");
       await page.screenshot({ path: testInfo.outputPath(`hoplite-installed-${theme}.png`) });
       expect((await client.getDaemonConfig()).config.providers?.hoplite).toEqual({ enabled: true });
       await writeFile(
@@ -133,6 +134,7 @@ for (const theme of ["light", "dark"] as const) {
         JSON.stringify(await client.getProvidersSnapshot(), null, 2),
       );
       await removeHoplite(page);
+      await expectProvidersList(page, getServerId());
       await expect(
         page.getByRole("button", { name: "Hoplite provider details", exact: true }),
       ).toHaveCount(0);
@@ -148,6 +150,8 @@ for (const theme of ["light", "dark"] as const) {
       await findAcpCatalogProvider(page, "Hoplite");
       await page.screenshot({ path: testInfo.outputPath(`hoplite-removed-${theme}.png`) });
       await installAcpCatalogProvider(page, "Hoplite");
+      await expectProviderDetail(page, getServerId(), "hoplite");
+      await returnToProvidersList(page);
       await expectProviderInstalledInSettings(page, "Hoplite");
     } finally {
       await client.patchDaemonConfig({ removeProviders: ["hoplite"] }).catch(() => undefined);
@@ -157,11 +161,12 @@ for (const theme of ["light", "dark"] as const) {
 }
 
 async function removeHoplite(page: import("@playwright/test").Page): Promise<void> {
-  await page.getByTestId("provider-actions-hoplite").click();
+  // 删除在详情页头部的 ⋯ 菜单里。
+  await page.getByTestId("provider-actions-hoplite").filter({ visible: true }).click();
   page.once("dialog", (dialog) => {
     void dialog.accept();
   });
-  await page.getByTestId("provider-remove-hoplite").click();
+  await page.getByTestId("provider-remove-hoplite").filter({ visible: true }).click();
 }
 
 test("unsupported host asks for an update without writing Hoplite config", async ({
@@ -182,10 +187,13 @@ test("unsupported host asks for an update without writing Hoplite config", async
     await openSettingsHost(page, outdatedDaemon.serverId);
     await openSettingsHostSection(page, outdatedDaemon.serverId, "providers");
     await openProviderCatalog(page);
-    await page.getByRole("button", { name: "Add Hoplite", exact: true }).click();
-    const errorToast = page.getByTestId("app-toast-message");
-    await expect(errorToast).toHaveText("Update the host to add Hoplite.");
-    await expect(errorToast).toBeInViewport();
+    // Osuna 的添加失败显示在弹窗里（行内错误），不是 toast。
+    await findAcpCatalogProvider(page, "Hoplite");
+    await page.getByRole("button", { name: "Add", exact: true }).filter({ visible: true }).click();
+    const error = page
+      .getByTestId("provider-catalog-error")
+      .getByText("Update the host to add Hoplite.", { exact: true });
+    await expect(error).toBeInViewport();
     expect((await client.getDaemonConfig()).config).toEqual(before.config);
     await expect(
       page.getByRole("button", { name: "Hoplite provider details", exact: true }),

@@ -24,3 +24,7 @@
 - [ ] typecheck 和 lint 通过；本段冲突文件对应的测试文件、以及本段新增或改动过的测试文件逐个单独跑过并通过（不跑整套）。
 - [ ] 合并分支包含 `d34d17a90`；`759532509` 与 `d34d17a90` 都是合并分支的祖先。
 - [ ] dev 桌面端快速冒烟：侧栏、输入框、终端（粘贴一张图片）、Providers 页、第三方接口页、用量页、逻辑图、关于页打开正常，无报错。
+
+## Comments
+
+- 从工单 03 挪来：上游 #7611「元数据生成只用所选模型」（`457414231`）在第 6 段进来。合完照收逻辑（`structured-generation-providers.ts`、`git-metadata-generator.ts`），文案键 `fallbackHint` 换成 `modelHint` 后，九种语言里的 “Paseo” 改 “Osuna”（main 的 `fallbackHint` 已是），`metadata-generation-page.tsx` 不放回 paseo.sh 文档链接（feature-overlap 3.2 第 5 条）。

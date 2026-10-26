@@ -246,6 +246,7 @@ const migratedSourceLiterals = {
     "Restart acknowledged: ",
     "Expected installed version ",
     "Package installed; replacement worker version was not confirmed. ",
+    "Update the host to add Hoplite.",
   ],
   addProjectAndHostPicker: [
     "Add project: ",

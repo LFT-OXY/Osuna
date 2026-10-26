@@ -1942,6 +1942,7 @@ export const en = {
     },
     errors: {
       unableToInstall: "Unable to install provider",
+      hostUpdateRequired: "Update the host to add {{provider}}.",
     },
     groups: {
       acpCatalog: "ACP catalog",

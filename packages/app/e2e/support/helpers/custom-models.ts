@@ -1,23 +1,22 @@
 import { expect, type Page } from "@playwright/test";
 import { gotoAppShell, openSettings } from "./app";
-import { openSettingsHostSection } from "./settings";
+import { clickProviderRow, openSettingsHostSection } from "./settings";
 import { getServerId } from "./server-id";
 
 export async function openCustomModels(page: Page): Promise<void> {
   await gotoAppShell(page);
   await openSettings(page);
   await openSettingsHostSection(page, getServerId(), "providers");
-  await page.getByRole("button", { name: "Claude provider details", exact: true }).click();
+  // 点行的左上角：行中央可能是「Upgrade to …」，会让测试 daemon 真的去升级 CLI。
+  await clickProviderRow(page, "claude");
   await expect(page.getByRole("textbox", { name: "Search models" })).toBeVisible();
 }
 
 export async function addCustomModel(page: Page, id: string): Promise<void> {
   await page.getByRole("button", { name: "Add model", exact: true }).click();
   await page.getByPlaceholder("e.g. openai/gpt-5").fill(id);
-  await page
-    .getByTestId("add-custom-model-sheet")
-    .getByRole("button", { name: "Add", exact: true })
-    .click();
+  // Osuna 的添加行就地展开在模型卡片里，不是单独的 sheet。
+  await page.getByTestId("provider-add-model-submit").click();
   await expect(page.getByRole("button", { name: `Remove ${id}`, exact: true })).toHaveCount(1);
 }
 

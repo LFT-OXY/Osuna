@@ -5,6 +5,7 @@ import { SvgXml } from "react-native-svg";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { ExternalLink, PackagePlus } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
+import { rankProviderCatalog } from "@/components/provider-catalog-search";
 import {
   useAcpProviderCatalog,
   type AcpProviderCatalogItem,
@@ -16,7 +17,7 @@ import { openExternalUrl } from "@/utils/open-external-url";
 
 interface ProviderCatalogListProps {
   serverId: string;
-  // 搜索框在弹窗头部，列表只按它的查询过滤。
+  // 搜索框在弹窗头部，列表按它的查询过滤并排序。
   query: string;
   installingProviderId: string | null;
   onInstall: (entry: AcpProviderCatalogItem) => Promise<void> | void;
@@ -32,14 +33,6 @@ const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foregrou
 const foregroundMutedColorMapping = (theme: Theme) => ({
   color: theme.colors.foregroundMuted,
 });
-
-function matchesSearch(entry: AcpProviderCatalogItem, query: string): boolean {
-  const normalized = query.trim().toLowerCase();
-  if (!normalized) return true;
-  return [entry.title, entry.id, entry.description].some((value) =>
-    value.toLowerCase().includes(normalized),
-  );
-}
 
 interface CatalogRowProps {
   entry: AcpProviderCatalogItem;
@@ -133,9 +126,10 @@ export function ProviderCatalogList({
 
   const availableEntries = useMemo(
     () =>
-      catalogEntries
-        .filter((entry) => !installedIds.has(entry.id))
-        .filter((entry) => matchesSearch(entry, query)),
+      rankProviderCatalog(
+        catalogEntries.filter((entry) => !installedIds.has(entry.id)),
+        query,
+      ),
     [catalogEntries, installedIds, query],
   );
 

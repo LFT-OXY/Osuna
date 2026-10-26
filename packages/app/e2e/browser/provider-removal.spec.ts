@@ -59,6 +59,11 @@ async function expectProviderSource(
     .toBe(source);
 }
 
+async function hasProvider(client: ProviderRemovalDaemonClient, id: string): Promise<boolean> {
+  const snapshot = await client.getProvidersSnapshot();
+  return snapshot.entries.some((entry) => entry.provider === id);
+}
+
 function visibleByTestId(page: Page, testId: string) {
   return page.getByTestId(testId).filter({ visible: true });
 }
@@ -146,17 +151,24 @@ test.describe("provider removal", () => {
         await openSettingsHost(page, getServerId());
         await openSettingsHostSection(page, getServerId(), "providers");
 
-        const pluginProviderRow = page.getByRole("button", {
-          name: `${PLUGIN_PROVIDER.name} provider details`,
-          exact: true,
-        });
-        await expect(pluginProviderRow).toBeVisible();
-        await expect(page.getByTestId(`provider-actions-${PLUGIN_PROVIDER.id}`)).toHaveCount(0);
+        // Osuna 的 ⋯ 菜单在详情页头部：插件注册的提供方只有「诊断」，没有删除。
+        await clickProviderRow(page, PLUGIN_PROVIDER.id);
+        await expectProviderDetail(page, getServerId(), PLUGIN_PROVIDER.id);
+        await openDetailMenu(page, PLUGIN_PROVIDER.id);
+        await expect(visibleByTestId(page, `provider-remove-${PLUGIN_PROVIDER.id}`)).toHaveCount(0);
+        await page.keyboard.press("Escape");
 
         // The provider survives a removeProviders patch pointed at it: the
         // plugin, not config.json, owns the definition.
         await client.patchDaemonConfig({ removeProviders: [PLUGIN_PROVIDER.id] });
-        await expect(pluginProviderRow).toBeVisible();
+        await expect.poll(() => hasProvider(client, PLUGIN_PROVIDER.id)).toBe(true);
+        await returnToProvidersList(page);
+        await expect(
+          page.getByRole("button", {
+            name: `${PLUGIN_PROVIDER.name} provider details`,
+            exact: true,
+          }),
+        ).toBeVisible();
       } finally {
         await client.removePlugin(PLUGIN_PROVIDER.pluginId).catch(() => undefined);
         await client

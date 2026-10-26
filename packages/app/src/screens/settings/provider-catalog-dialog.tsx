@@ -12,6 +12,7 @@ import {
 } from "@/hooks/use-acp-provider-catalog";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
+import { useHostFeature } from "@/runtime/host-features";
 
 export interface ProviderCatalogDialogProps {
   serverId: string;
@@ -56,6 +57,7 @@ export function ProviderCatalogDialog({
   const { t } = useTranslation();
   const { entries, refresh } = useProvidersSnapshot(serverId);
   const { patchConfig } = useDaemonConfig(serverId);
+  const supportsHopliteProvider = useHostFeature(serverId, "hopliteProvider");
   const [query, setQuery] = useState("");
   const [addState, dispatch] = useReducer(addReducer, IDLE);
   // 关掉弹窗就放弃这次添加的结果：不再导航，也不把错误留给下次打开。
@@ -87,7 +89,7 @@ export function ProviderCatalogDialog({
       attemptRef.current = attempt;
       dispatch({ type: "started", providerId: entry.id });
       try {
-        await patchConfig(buildAcpProviderConfigPatch(entry));
+        await patchConfig(buildAcpProviderConfigPatch(entry, supportsHopliteProvider));
       } catch (error) {
         if (attempt.signal.aborted) return;
         attemptRef.current = null;
@@ -106,7 +108,7 @@ export function ProviderCatalogDialog({
         .catch(() => undefined)
         .then(() => finishAttempt(attempt, entry.id));
     },
-    [finishAttempt, patchConfig, refresh],
+    [finishAttempt, patchConfig, refresh, supportsHopliteProvider],
   );
 
   const awaitingProviderId =

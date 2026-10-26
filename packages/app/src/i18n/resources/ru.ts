@@ -1946,6 +1946,7 @@ export const ru: TranslationResources = {
     },
     errors: {
       unableToInstall: "Не удалось установить провайдера",
+      hostUpdateRequired: "Обновите хост, чтобы добавить {{provider}}.",
     },
     groups: {
       acpCatalog: "Каталог ACP",

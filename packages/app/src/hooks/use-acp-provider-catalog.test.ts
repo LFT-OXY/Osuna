@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { ACP_PROVIDER_CATALOG } from "@/data/acp-provider-catalog";
-import { buildAcpProviderConfigPatch, getAcpProviderCatalog } from "./use-acp-provider-catalog";
+import {
+  buildAcpProviderConfigPatch,
+  getAcpProviderCatalog,
+  isConfigOwnedProvider,
+} from "./use-acp-provider-catalog";
 
 function findProvider(id: string) {
   const entry = getAcpProviderCatalog().find((provider) => provider.id === id);
@@ -121,5 +125,32 @@ describe("ACP provider catalog", () => {
     expect(droidPatch.providers?.["factory-droid"]?.params).toEqual({
       supportsMcpServers: false,
     });
+  });
+});
+
+describe("isConfigOwnedProvider", () => {
+  const config = {
+    providers: {
+      junie: { extends: "acp", command: ["junie", "acp"] },
+      hoplite: { enabled: true },
+      claude: { enabled: false },
+    },
+  };
+
+  it("owns a provider that config.json defines with extends", () => {
+    expect(isConfigOwnedProvider(config, "junie")).toBe(true);
+  });
+
+  it("owns a bundled catalog provider that config.json opted into", () => {
+    expect(isConfigOwnedProvider(config, "hoplite")).toBe(true);
+  });
+
+  it("does not own a built-in provider that config.json only overrides", () => {
+    expect(isConfigOwnedProvider(config, "claude")).toBe(false);
+  });
+
+  it("does not own a plugin-registered provider absent from config.json", () => {
+    expect(isConfigOwnedProvider(config, "direct-example")).toBe(false);
+    expect(isConfigOwnedProvider(null, "junie")).toBe(false);
   });
 });

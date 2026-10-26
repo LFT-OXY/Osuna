@@ -93,7 +93,7 @@ const reports: UsageReportEntry[] = [
   },
 ];
 
-function host(entries = reports, supported = true) {
+function host(entries = reports, supported = true, cliSignInsOff = false) {
   const requests: Array<Parameters<NonNullable<Parameters<typeof runUsageCommand>[2]>>[0]> = [];
   const queries: Array<
     { agentId?: string; forceRefresh?: boolean; reportIds?: string[] } | undefined
@@ -114,6 +114,7 @@ function host(entries = reports, supported = true) {
           const selected = query?.reportIds
             ? entries.filter((entry) => query.reportIds!.includes(entry.id))
             : entries;
+          if (cliSignInsOff) return { requestId: "request", reports: [], cliSignInsOff: true };
           return { requestId: "request", reports: selected };
         },
         close: async () => {
@@ -224,6 +225,31 @@ it("returns an empty array in JSON and explains empty discovery in human output"
   expect(render(result, { format: "json" })).toBe("[]");
   expect(render(result)).toBe("No usage reports returned");
   expect(render(result, { quiet: true })).toBe("");
+});
+
+it("explains that the host turned off reading CLI sign-ins instead of an empty list", async () => {
+  const result = await runUsageCommand(
+    options,
+    { kind: "list" },
+    host(reports, true, true).connect,
+  );
+  expect(render(result, { format: "json" })).toBe("[]");
+  expect(render(result)).toBe(
+    '"Read CLI sign-ins" is off on this host, so no usage was read. Turn it on in the host\'s Privacy settings.',
+  );
+  expect(render(result, { quiet: true })).toBe("");
+});
+
+it("gives the same reason when inspecting a report while reading CLI sign-ins is off", async () => {
+  const daemon = host(reports, true, true);
+  await expect(
+    runUsageCommand(options, { kind: "inspect", id: reports[0]!.id }, daemon.connect),
+  ).rejects.toEqual({
+    code: "CLI_SIGN_INS_OFF",
+    message:
+      '"Read CLI sign-ins" is off on this host, so no usage was read. Turn it on in the host\'s Privacy settings.',
+  });
+  expect(daemon.closed).toBe(1);
 });
 
 it("rejects unknown IDs and prefixes and closes the client", async () => {

@@ -135,3 +135,12 @@ export const usageSchema: OutputSchema<UsageReportEntry> = {
     return renderTable<SummaryRow>({ type: "list", data: rows, schema: summarySchema }, options);
   },
 };
+
+// 主机关掉了「读取 CLI 登录凭证」：daemon 回空列表并带 cliSignInsOff，这里说明原因而不是只说没有报告。
+export const CLI_SIGN_INS_OFF_MESSAGE =
+  '"Read CLI sign-ins" is off on this host, so no usage was read. Turn it on in the host\'s Privacy settings.';
+
+export const cliSignInsOffUsageSchema: OutputSchema<UsageReportEntry> = {
+  ...usageSchema,
+  renderHuman: () => CLI_SIGN_INS_OFF_MESSAGE,
+};

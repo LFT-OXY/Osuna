@@ -10,6 +10,7 @@ import {
 } from "@/components/provider-diagnostic-models";
 import { useProviderGlyph } from "@/components/provider-icons";
 import { useToast } from "@/contexts/toast-context";
+import { isConfigOwnedProvider } from "@/hooks/use-acp-provider-catalog";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import type { ProviderInstallGuide } from "@/provider-install-guide";
@@ -312,7 +313,7 @@ export function useProviderDetailHeader(
 ) {
   const { t } = useTranslation();
   const { entries, isRefreshing } = useProvidersSnapshot(serverId);
-  const { patchConfig } = useDaemonConfig(serverId);
+  const { config, patchConfig } = useDaemonConfig(serverId);
   const supportsProviderRemoval = useHostFeature(serverId, "providerRemoval");
   const removal = useProviderRemoval(serverId, provider);
   const providerEntry = useMemo(
@@ -337,6 +338,7 @@ export function useProviderDetailHeader(
     checksVersions: options.checksVersions,
   });
   const providerSource = providerEntry?.source;
+  const configOwned = isConfigOwnedProvider(config, provider);
   const isRemoving = removal.status === "removing";
 
   // 删除成功后提供方从快照里消失，设置页由地址修正回到第一个提供方或列表；弹窗经 onRemoved 关闭。
@@ -366,6 +368,7 @@ export function useProviderDetailHeader(
     isRefreshing: isProviderRefreshing,
     onRefresh: handleRefresh,
     providerSource,
+    configOwned,
     hostSupportsRemoval: supportsProviderRemoval,
     isRemoving,
     onRemove: handleRemove,
@@ -399,6 +402,7 @@ export function ProviderDetailActions({
         provider={provider}
         providerLabel={header.label}
         providerSource={header.providerSource}
+        configOwned={header.configOwned}
         hostSupportsRemoval={header.hostSupportsRemoval}
         isRemoving={header.isRemoving}
         onDiagnose={diagnose}

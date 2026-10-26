@@ -1917,6 +1917,7 @@ export const ar: TranslationResources = {
     },
     errors: {
       unableToInstall: "غير قادر على تثبيت الموفر",
+      hostUpdateRequired: "حدّث المضيف لإضافة {{provider}}.",
     },
     groups: {
       acpCatalog: "كتالوج ACP",

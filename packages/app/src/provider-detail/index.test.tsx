@@ -1228,6 +1228,7 @@ function renderMenu(overrides: Partial<ProviderDetailMenuProps> = {}) {
       provider="work-claude"
       providerLabel="Work Claude"
       providerSource="custom"
+      configOwned
       hostSupportsRemoval
       isRemoving={false}
       onDiagnose={onDiagnose}
@@ -1259,6 +1260,7 @@ describe("ProviderDetailMenu", () => {
     ["a built-in provider", { providerSource: "builtin" as const }],
     ["a provider without a source", { providerSource: undefined }],
     ["a custom provider on a host that cannot remove providers", { hostSupportsRemoval: false }],
+    ["a plugin-registered provider that config.json does not define", { configOwned: false }],
   ])("offers no removal for %s", (_name, overrides) => {
     renderMenu(overrides);
 

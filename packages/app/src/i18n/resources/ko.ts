@@ -1929,6 +1929,7 @@ export const ko: TranslationResources = {
     },
     errors: {
       unableToInstall: "프로바이더를 설치할 수 없습니다",
+      hostUpdateRequired: "{{provider}}을(를) 추가하려면 호스트를 업데이트하세요.",
     },
     groups: {
       acpCatalog: "ACP 카탈로그",

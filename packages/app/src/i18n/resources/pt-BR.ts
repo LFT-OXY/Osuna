@@ -1951,6 +1951,7 @@ export const ptBR: TranslationResources = {
     },
     errors: {
       unableToInstall: "Não foi possível instalar provedor",
+      hostUpdateRequired: "Atualize o host para adicionar {{provider}}.",
     },
     groups: {
       acpCatalog: "Catálogo ACP",

@@ -1935,6 +1935,7 @@ export const ja: TranslationResources = {
     },
     errors: {
       unableToInstall: "プロバイダーをインストールできません",
+      hostUpdateRequired: "{{provider}} を追加するにはホストを更新してください。",
     },
     groups: {
       acpCatalog: "ACP カタログ",

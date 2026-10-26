@@ -4,7 +4,7 @@ import type { UsageReportEntry } from "@getpaseo/protocol/messages";
 import { connectToDaemon, type ConnectOptions } from "../../utils/client.js";
 import { addJsonAndDaemonHostOptions } from "../../utils/command-options.js";
 import { withOutput, type CommandOptions, type CommandResult } from "../../output/index.js";
-import { usageSchema } from "./presentation.js";
+import { CLI_SIGN_INS_OFF_MESSAGE, cliSignInsOffUsageSchema, usageSchema } from "./presentation.js";
 
 interface UsageOptions extends CommandOptions {
   agent?: string;
@@ -38,14 +38,16 @@ export async function runUsageCommand(
       throw { code: "UNSUPPORTED_HOST", message: "Update the host to use usage reports." };
     }
     if (selection.kind === "list") {
-      const { reports } = await client.listUsageReports({
+      const { reports, cliSignInsOff } = await client.listUsageReports({
         agentId: options.agent,
         forceRefresh: options.refresh,
       });
-      return { type: "list", data: reports, schema: usageSchema };
+      const schema = cliSignInsOff ? cliSignInsOffUsageSchema : usageSchema;
+      return { type: "list", data: reports, schema };
     }
     // Report-ID queries only select known accounts. Discover before selecting, including on cold hosts.
-    const { reports } = await client.listUsageReports();
+    const { reports, cliSignInsOff } = await client.listUsageReports();
+    if (cliSignInsOff) throw { code: "CLI_SIGN_INS_OFF", message: CLI_SIGN_INS_OFF_MESSAGE };
     let entry = reports.find((report) => report.id === selection.id);
     if (entry && options.refresh) {
       const refreshed = await client.listUsageReports({

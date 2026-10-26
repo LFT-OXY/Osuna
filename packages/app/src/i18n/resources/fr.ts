@@ -1965,6 +1965,7 @@ export const fr: TranslationResources = {
     },
     errors: {
       unableToInstall: "Impossible d’installer le fournisseur",
+      hostUpdateRequired: "Mettez à jour l’hôte pour ajouter {{provider}}.",
     },
     groups: {
       acpCatalog: "Catalogue ACP",
