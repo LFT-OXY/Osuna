@@ -4,7 +4,7 @@
 
 **Blocked by:** 06
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 会话历史标签在桌面与手机的默认标签里，有测试。
 - [ ] 手机上从会话历史开终端后切回 Agent，有测试。
