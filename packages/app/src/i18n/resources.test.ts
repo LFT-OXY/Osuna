@@ -114,6 +114,8 @@ const zhCNEnglishAllowlist = {
     "providerUsage.duration.days",
     "providerUsage.duration.hours",
     "providerUsage.duration.minutes",
+    "panels.file.filePanels.builtin.markdown",
+    "panels.file.filePanels.builtin.html",
   ],
   brands: [
     "sidebar.help.appName",
@@ -123,8 +125,6 @@ const zhCNEnglishAllowlist = {
     "settings.apiEndpoints.formats.openai_responses",
     "settings.apiEndpoints.formats.gemini",
     "panels.file.filePanels.builtin.owner",
-    "panels.file.filePanels.builtin.markdown",
-    "panels.file.filePanels.builtin.html",
   ],
   // 提供方自己定的功能名（Claude Code 的 Ultra Code）。
   providerFeatures: ["settings.apiEndpoints.agent.ultraCode"],

@@ -199,6 +199,13 @@ main 上；v0.11.2（`759532509`，3 个提交）在从 v0.11.1 分出的补丁�
 上游在某一段里没有改外部依赖时，解完的 `package.json` 与 `package-lock.json` 与合并前
 逐字节相同，拿这一点自检。
 
+上游升了依赖时，在合并前的锁上跑 `npm install --package-lock-only` 会报「已是最新」，却把与
+`package.json` 不符的版本原样留着（v0.13.0-beta.1 的 Expo 57 留在 54），本机装好的
+`node_modules` 骗过了它。改在只放各 `package.json` 的临时目录里重做：以上游那个发布点的锁为底，
+补上 Osuna 独有的顶层包条目（沿用合并前锁里的版本），跑一次 `npm install --package-lock-only`
+规整，再跑一次结果不变才算好。用 `npm ls --package-lock-only --all` 对比上游自己的锁，不能多出
+invalid。
+
 #### 冲突裁决
 
 按顺序适用，前一条优先：
@@ -291,6 +298,9 @@ git 不报冲突、结果却不对的：
   用它的测试只有跑了才挂；上游的新用例调用 Osuna 改过签名的函数也一样。每段合完，把这一段
   新增或改动过的测试文件逐个跑一遍：
   `git diff <合并前> --name-only --diff-filter=AM -- 'packages/**/*.test.ts' 'packages/**/*.test.tsx'`。
+- 上游改了 `storage/validated-persist-storage.ts` 这类共用模块后，Osuna 用它的测试会因时序挂。
+  v0.13.0-beta.1 起存储读取期间的写入被丢掉，Osuna「新建 store 立刻写入、再新建一个读回」的用例要先
+  `await store.persist.rehydrate()`。`rg -l <模块名> packages/app/src` 找出用到它的 Osuna 测试逐个跑。
 - 上游给某个提供方的客户端套了一层新的包装时，Osuna 加在 `AgentClient` 上的可选方法
   （`discoverCommands`、`resolveInstalledVersion`、`resolveCliLaunch`）不转交也不报类型
   错，功能只是静默消失。对照接口逐个补上（`opencode/runtime-client.ts`）。
@@ -354,6 +364,10 @@ git 不报冲突、结果却不对的：
   要 `TMPDIR="$(cd "$TMPDIR" && pwd -P)"`：`/var` 是 `/private/var` 的软链接。
 - `packages/server/src/server/daemon-client.e2e.test.ts` 会启动本机真实的提供方，也不在 CI 的
   测试脚本里。不要整份跑。
+- 上游新增的 `*.e2e.test.ts` 不一定在 CI 的测试脚本里（看 `packages/server/package.json` 的
+  `test:integration`）。本机挂了先在纯上游代码上复现：`git archive <发布点> | tar -x -C <临时目录>`，
+  在那里 `npm ci --ignore-scripts`、`npm run build:server` 后跑同一个文件。同样挂就是上游自己的
+  问题（v0.13.0-beta.1 的 `mcp-parity.e2e.test.ts` 4 条结束通知用例）。
 - 测试跑法因目录而异，按错的方式跑会报「No test files found」或「No test suite found」，
   不是失败：`packages/cli/tests/*.test.ts` 是脚本，用 `npx tsx tests/<文件>` 跑；
   `packages/app` 的 `*.browser.test.ts(x)` 要 `--project browser`，其余用 `--project unit`。

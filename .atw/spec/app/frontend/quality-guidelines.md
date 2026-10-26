@@ -2,6 +2,12 @@
 
 `docs/coding-standards.md` is the rulebook and `docs/design.md` is the visual rulebook. This file is the app-specific checklist and the commands that prove it.
 
+## Rule table
+
+| Rule | Enforced by | Where | From | Expires |
+| ---- | ----------- | ----- | ---- | ------- |
+| Navigation hooks (`useIsFocused`, `useFocusEffect`, `useNavigation`) come from `expo-router/react-navigation`, never `@react-navigation/native`: since Expo 57 the context lives in expo-router's copy and the other package throws "Couldn't find a navigation object" on web | lint `no-restricted-imports` | `.oxlintrc.json`, the `packages/app/src/**` block | merge-upstream-v0.13.0 ticket 06 (usage page crashed on open) | — |
+
 ## Checks reviewers run
 
 - **`docs/coding-standards.md` §Density is checked line by line on every `+` line.** The shapes review kept catching: a ternary whose branch is a call or object (`:59`, use `if`); an `a && b` / `a || b` guard mixing two concerns (`:60`, name each condition or return early twice); a call, lookup or comparison in an object-literal property (`:61`, compute a local first — this includes `foo({ x: bar(y) })`); `new Set(xs.filter().map())` (`:62`). Sweep the whole diff for them before asking for review, not one at a time.

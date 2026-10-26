@@ -1,3 +1,4 @@
+import type { WorkspaceFileLocation } from "@/workspace/file-open";
 import { asksForFilePanel, type FilePanelCandidate, type FilePanelResolution } from "../resolve";
 
 /** What the file tab currently resolves; `resolution` is null until the file has been read. */
@@ -39,6 +40,17 @@ export interface FilePanelChoiceDeps {
   remember(selectorKey: string, panelId: string | null): void;
   /** The panel a line target opens: Source, the panel that shows lines. */
   linePanelId: string;
+}
+
+/**
+ * Osuna：带行号打开时这次打开要不要落到行上，也就是选不选 Source。逻辑图节点文档标了
+ * `lineView: "preview"`，但预览在哪个平台都滚不到指定行，同样开 Source 落到那一行。
+ */
+export function filePanelLineNavigation(
+  location: Pick<WorkspaceFileLocation, "lineStart" | "lineView">,
+  navigationRevision: number,
+): number | null {
+  return location.lineStart ? navigationRevision : null;
 }
 
 /** The tab choice that applies to `targetKey`; a choice never outlives its open. */

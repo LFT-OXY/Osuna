@@ -5,6 +5,7 @@ export {
   useFilePanelChoiceSnapshot,
   type FilePanelChoice,
 } from "./choice/hook";
+export { filePanelLineNavigation } from "./choice/model";
 export { FilePanelPicker } from "./choice/picker";
 export { FilePanelSwitcher } from "./choice/switcher";
 export {

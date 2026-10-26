@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { filePanelCatalog, sourceFilePanel } from "../catalog";
 import { resolveFilePanel, type FilePanelCandidate } from "../resolve";
-import { chosenPanelFor, FilePanelChoiceModel } from "./model";
+import { chosenPanelFor, FilePanelChoiceModel, filePanelLineNavigation } from "./model";
 
 const rich: FilePanelCandidate = {
   id: "plugin:notes/rich",
@@ -159,28 +159,34 @@ describe("FilePanelChoiceModel", () => {
   });
 
   // Osuna 的逻辑图节点文档带行号（lineView: "preview"），也要落到那一行：预览滚不到行，一律开 Source。
-  // 原在 components/file-pane-render-mode.test.ts，随上游删掉那个模块挪到这里。
+  // 原在 components/file-pane-render-mode.test.ts，随上游删掉那个模块挪到这里；位置先经文件标签的
+  // filePanelLineNavigation 换成这次打开的行导航，再交给选择模型。
+  const openLocation = (
+    location: Parameters<typeof filePanelLineNavigation>[0] & { path: string },
+  ) =>
+    openTab({}, [...filePanelCatalog([])], {
+      path: location.path,
+      lineNavigation: filePanelLineNavigation(location, 1),
+    });
+
   it("renders a Markdown file opened without a line in its preview", () => {
-    expect(openTab({}, [...filePanelCatalog([])], { path: "spec.md" }).panel()).toBe(markdown);
+    expect(openLocation({ path: "spec.md" }).panel()).toBe(markdown);
   });
 
   it("shows a plain line target in the source view", () => {
-    const tab = openTab({}, [...filePanelCatalog([])], { path: "spec.md", lineNavigation: 1 });
-    expect(tab.panel()).toBe(source);
+    expect(openLocation({ path: "spec.md", lineStart: 42 }).panel()).toBe(source);
   });
 
-  it("shows a Markdown line target, such as a logic-map node doc, in the source view", () => {
-    const tab = openTab({}, [...filePanelCatalog([])], {
-      path: "spec/login.md",
-      lineNavigation: 1,
-    });
+  it("shows a Markdown line target marked for the preview, such as a node doc, in the source view", () => {
+    const tab = openLocation({ path: "spec/login.md", lineStart: 42, lineView: "preview" });
     expect(tab.panel()).toBe(source);
     expect(tab.picker()).toBeNull();
   });
 
-  it("shows an HTML line target in the source view", () => {
-    const tab = openTab({}, [...filePanelCatalog([])], { path: "plan.html", lineNavigation: 1 });
-    expect(tab.panel()).toBe(source);
+  it("shows an HTML line target marked for the preview in the source view", () => {
+    expect(openLocation({ path: "plan.html", lineStart: 2, lineView: "preview" }).panel()).toBe(
+      source,
+    );
   });
 
   it("starts a new open when the tab is retargeted", () => {

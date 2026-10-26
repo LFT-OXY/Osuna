@@ -7,7 +7,13 @@ import { Button } from "@/components/ui/button";
 import { useRetainedPanelActive } from "@/components/retained-panel";
 import { useFileHandle, useFileHandleSnapshot } from "@/file-panels/file";
 import { FilePanelLoading } from "@/file-panels/loading";
-import { FilePanelPicker, FilePanelView, useFilePanelChoice, type FilePanel } from "@/file-panels";
+import {
+  FilePanelPicker,
+  FilePanelView,
+  filePanelLineNavigation,
+  useFilePanelChoice,
+  type FilePanel,
+} from "@/file-panels";
 import { resolveFilePreviewReadTarget } from "@/file-explorer/preview-target";
 import { useAppActivelyVisible } from "@/hooks/use-app-visible";
 import { usePublishPanelInstanceAttributes } from "@/panels/panel-instance-attributes";
@@ -62,7 +68,7 @@ export function FilePane({
     path,
     fileKind: snapshot.status === "ready" ? snapshot.kind : null,
     presentable: isActive,
-    lineNavigation: location.lineStart ? navigationRevision : null,
+    lineNavigation: filePanelLineNavigation(location, navigationRevision),
   });
   const [modified, setModified] = useState(false);
   usePublishPanelInstanceAttributes({ modified, suspendPendingSave: handle?.holdWrites });
