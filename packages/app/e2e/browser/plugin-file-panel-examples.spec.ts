@@ -193,11 +193,11 @@ test("directory examples mount the PDF frame and write Markdown through the file
     });
 
     await openFile(page, "notes.md");
-    await expect(page.getByRole("radio", { name: "Markdown — Paseo", exact: true })).toBeChecked();
+    await expect(page.getByRole("radio", { name: "Markdown — Osuna", exact: true })).toBeChecked();
     await expect(
       page.getByRole("radio", { name: "Rich Markdown — markdown-panel", exact: true }),
     ).toBeVisible();
-    await expect(page.getByRole("radio", { name: "Source — Paseo", exact: true })).toBeVisible();
+    await expect(page.getByRole("radio", { name: "Source — Osuna", exact: true })).toBeVisible();
     await captureWideAndCompact(page, testInfo, "markdown-example-picker", async () => {
       // The previous layout's picker animates out (the sheet slides down, the dialog fades), so
       // both pickers are mounted for a moment after a resize.

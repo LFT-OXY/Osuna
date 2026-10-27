@@ -9,9 +9,10 @@ import { expectFileTabOpen, openFileFromExplorer } from "./file-explorer";
 /** A directory plugin whose "Rich Markdown" file panel claims `.md`, next to the built-in. */
 export const MARKDOWN_PANEL_PLUGIN_ID = "file-panel-picker-e2e";
 export const MARKDOWN_PANEL_ID = `plugin:${MARKDOWN_PANEL_PLUGIN_ID}/rich-markdown`;
-export const BUILTIN_MARKDOWN_OPTION = "Markdown — Paseo";
+// 内置面板的提供者名按 Osuna 的显示身份写（panels.file.filePanels.builtin.owner，ADR 0002）。
+export const BUILTIN_MARKDOWN_OPTION = "Markdown — Osuna";
 export const PLUGIN_MARKDOWN_OPTION = `Rich Markdown — ${MARKDOWN_PANEL_PLUGIN_ID}`;
-export const SOURCE_OPTION = "Source — Paseo";
+export const SOURCE_OPTION = "Source — Osuna";
 
 const SOURCE = `import React from "react";
 import { Text, View } from "react-native";
