@@ -144,6 +144,7 @@ ADR 0003（取指令列表不启动进程）：七段都没有改到指令发现
 
 其余：
 
+- `website/e2e/i18n.spec.ts`「shows the changelog in Chinese」：`CHANGELOG.zh-CN.md` 是上游原样、Osuna 不写中文条目（维护者 2026-10-26 决定），Osuna 的版本整条以英文显示并带「尚未翻译」提示。上游断言 `getByRole("note")` 个数为 0 在 CI 上数到 13 条；改为断言能看到这条提示，「新增」小标题的断言不变（维护者 2026-10-27 同意，工单 14）。
 - `website/src/data/sponsors.test.ts`：改为断言 README 里没有赞助表（README 归 Osuna、外链只指向本仓库，工单 01）。
 - `i18n/resources.test.ts`：允许清单加 `providerCatalog.types.acp`（协议名 ACP，工单 01）；内置面板提供者名加进 `brands`、`builtin.markdown`/`builtin.html` 加进 `abbreviations`（工单 06）。
 - `agent-stream/model.test.ts`、`timeline/turn-time.test.ts`：期望值补 Osuna 的 `turnId` / `userMessageId: null`（工单 01）。
@@ -203,7 +204,6 @@ components/usage/usage-segmented-control.tsx
 
 - `server/src/server/agent/mcp-parity.e2e.test.ts` 4 条失败在纯上游 `3fa625701` 上同样失败，是上游自己的缺陷，不在 CI 清单，不修（工单 06）。
 - `e2e/browser/explorer-sidebar.spec.ts` 的 :341、:407、:472 三条「切换外观时保持 Explorer 挂载」本机挂，换回工单 07 改动前同样挂，不是这次引入（工单 07）。
-- 官网 e2e `i18n.spec.ts`「shows the changelog in Chinese」在 Osuna 没有中文条目时可能挂，未本机验证，看 CI（工单 12）。
 - Explorer 标签行放不下时不跟随选中标签滚动，英文下更明显（工单 13）。launcher 的「编辑配置」没有图标位、「+」静止色对比度约 2.35:1（工单 07，上游原样）。
 - 其余没传 `cancelLabel` 的原生确认框取消按钮在中文下仍是「Cancel」，main 上相同（工单 13）。
 - zh-CN `editor.source`「源代码」与 `viewSource`「查看源码」两种说法，上游译文（工单 12 留给 13，工单 13 的记录里没有结论）。

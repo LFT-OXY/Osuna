@@ -181,5 +181,12 @@ test("shows the changelog in Chinese", async ({ page }) => {
   await page.goto("/zh-CN/changelog");
 
   await expect(page.getByRole("heading", { name: "新增" }).first()).toBeVisible();
-  await expect(page.getByRole("note")).toHaveCount(0);
+  // Osuna：CHANGELOG.zh-CN.md 是上游原样，Osuna 不写中文条目（docs/release.md「发版」），
+  // 所以 Osuna 的版本整条以英文显示并带提示，上游断言的「没有提示」在 fork 下不成立。
+  await expect(
+    page
+      .getByRole("note")
+      .filter({ hasText: "此版本的发布说明尚未翻译，因此以英文显示。" })
+      .first(),
+  ).toBeVisible();
 });

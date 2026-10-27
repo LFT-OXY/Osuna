@@ -102,7 +102,8 @@ release push as the changelog and version commit.
 先在 `CHANGELOG.md` 顶部加本次版本的条目，格式是 `## X.Y.Z - YYYY-MM-DD`——`npm version`
 的生命周期钩子会跑 F-Droid changelog 同步，查不到条目就直接中断。`CHANGELOG.zh-CN.md` 是从上游
 原样收下的，只为官网代码能编译，Osuna 不往里写条目：[Changelog translations](#changelog-translations)
-与发版清单里提交中文条目的要求在 fork 下不适用。再把 `npm run format`、
+与发版清单里提交中文条目的要求在 fork 下不适用；官网 e2e `i18n.spec.ts`「shows the changelog in Chinese」
+因此改为断言 Osuna 的版本带「尚未翻译」提示，上游再改这条用例时会冲突。再把 `npm run format`、
 `npm run lint`、`npm run typecheck` 跑绿并提交——`version:all:*` 底下是 `npm version`，
 工作区不干净同样会中断。major 不在这条路径里：按本文「Release
 version decision」，agent 不自选 major，需要时手工改版本号再走 `npm run release:push`。
