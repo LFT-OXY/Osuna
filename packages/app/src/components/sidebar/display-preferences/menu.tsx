@@ -35,6 +35,7 @@ import {
   MenuTrigger,
   type MenuPageDefinition,
 } from "@/components/ui/menu";
+import { Switch } from "@/components/ui/switch";
 import { HostStatusDot } from "@/components/host-status-dot";
 import { isWeb } from "@/constants/platform";
 import { useHosts } from "@/runtime/host-runtime";
@@ -172,6 +173,25 @@ export function SidebarDisplayPreferencesMenu(): ReactElement {
   const [managerOpen, setManagerOpen] = useState(false);
   const openManager = useCallback(() => setManagerOpen(true), []);
   const closeManager = useCallback(() => setManagerOpen(false), []);
+  const { showBackground, toggleBackground } = preferences;
+  // 开关按值设置：行与开关各自切换，只在值真的变了时才取反。
+  const setShowBackground = useCallback(
+    (next: boolean) => {
+      if (next !== showBackground) toggleBackground();
+    },
+    [showBackground, toggleBackground],
+  );
+  const backgroundSwitch = useMemo(
+    () => (
+      <Switch
+        value={showBackground}
+        onValueChange={setShowBackground}
+        accessibilityLabel={t("sidebar.display.showBackground")}
+        testID="sidebar-display-show-background-switch"
+      />
+    ),
+    [setShowBackground, showBackground, t],
+  );
 
   const triggerStyle = useCallback(
     ({ hovered = false }: PressableStateCallbackType & { hovered?: boolean }) => [
@@ -383,10 +403,12 @@ export function SidebarDisplayPreferencesMenu(): ReactElement {
             </>
           ) : null}
           <MenuSeparator />
+          {/* Osuna：单独的开关项照 docs/menus.md 用行尾 Switch，不打勾。 */}
           <MenuItem
-            selected={preferences.showBackground}
+            trailing={backgroundSwitch}
             closeOnSelect={false}
-            onSelect={preferences.toggleBackground}
+            onSelect={toggleBackground}
+            testID="sidebar-display-show-background"
           >
             {t("sidebar.display.showBackground")}
           </MenuItem>

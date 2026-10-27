@@ -38,6 +38,10 @@ test.describe("Sidebar project filter", () => {
         "Project",
         "Show background",
       ]);
+      // Osuna：单独的开关项用行尾 Switch，不打勾（docs/menus.md）。
+      await expect(
+        page.getByRole("switch", { name: "Show background", exact: true }),
+      ).not.toBeChecked();
       await closeSidebarDisplayPreferences(page);
 
       await openSidebarProjectFilter(page);

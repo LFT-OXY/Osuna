@@ -350,6 +350,7 @@ export function useProviderDetailHeader(
           title: t("settings.providers.remove.confirmTitle", { name: label }),
           message: t("settings.providers.remove.confirmMessage"),
           confirmLabel: t("settings.providers.remove.confirm"),
+          cancelLabel: t("common.actions.cancel"),
           destructive: true,
         }),
       remove: async () => {

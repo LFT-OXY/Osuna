@@ -179,7 +179,9 @@ Independent toggles stay on their page as a checkmark list. A pick-one group can
 below a `MenuSeparator`; make selecting the checked row clear it, so "none" doesn't need a row of
 its own. A lone on/off preference, a setting rather than one item of a list, is a row with a
 trailing `Switch` and `closeOnSelect={false}`, toggled from the row or the switch: the Usage page's
-options menu (`packages/app/src/components/usage/usage-options-menu.tsx`) is the example.
+options menu (`packages/app/src/components/usage/usage-options-menu.tsx`) is the example. The switch's
+`accessibilityLabel` joins the row's accessible name ("Show background Show background"), so tests find
+such a row by `testID`; the switch also makes it taller than the plain rows around it.
 
 ## Gotchas
 

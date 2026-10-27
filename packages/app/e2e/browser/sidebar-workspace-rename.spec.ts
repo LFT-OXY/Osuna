@@ -77,7 +77,8 @@ test.describe("Sidebar workspace rename", () => {
 
 async function toggleBackgroundWorkspaces(page: Page): Promise<void> {
   await page.getByLabel("Display preferences", { exact: true }).click();
-  await page.getByRole("menuitem", { name: "Show background", exact: true }).click();
+  // Osuna：这一行带行尾开关，读屏名里含开关的名字，按 testID 找行（docs/menus.md）。
+  await page.getByTestId("sidebar-display-show-background").click();
   await page.keyboard.press("Escape");
 }
 
