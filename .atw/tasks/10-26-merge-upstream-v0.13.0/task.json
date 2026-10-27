@@ -3,7 +3,7 @@
   "name": "merge-upstream-v0.13.0",
   "title": "合并上游 Paseo v0.12.0 – v0.13.0",
   "description": "从同步点 v0.11.2 起，按上游 7 个发布点分段 merge 到 v0.13.0（d34d17a90）",
-  "status": "implement",
+  "status": "accept",
   "dev_type": null,
   "scope": null,
   "package": "app",

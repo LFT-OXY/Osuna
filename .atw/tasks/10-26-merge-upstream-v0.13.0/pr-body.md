@@ -329,7 +329,7 @@ package.json  tsconfig.json
 
 ### CI
 
-<!-- CI 待填 -->
+第三轮（`a4972f6c3`）22 项全绿：`server-integration (windows-latest)` 的 `connected-hosts/hosts.e2e.test.ts`「remote agent reports, local CLI sends and automatic completion share the recipient batch」等待超时一次，前两轮在 Windows 上都通过，只重跑这一个作业后通过。前两轮的失败与处理见上面「首轮 CI 之后的修正」。Nix 与 Nix Update Hash 不在本仓库的 PR 检查里。
 
 ### 平台
 
