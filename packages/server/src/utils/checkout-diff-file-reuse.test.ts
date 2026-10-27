@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getCheckoutDiff, type CheckoutDiffCompare } from "./checkout-git.js";
 import { CheckoutDiffFileReuse, type CheckoutDiffReuseRun } from "./checkout-diff-file-reuse.js";
+import type { ParsedDiffFile } from "../server/utils/diff-highlighter.js";
 import { startGitCommandMetrics, stopGitCommandMetrics } from "./run-git-command.js";
 
 function git(cwd: string, ...args: string[]): string {
@@ -139,7 +140,18 @@ describe("per-file checkout diff reuse", () => {
     const patchCommands = metrics.commands
       .map((command) => command.args)
       .filter((args) => args[0] === "diff" && args.includes("--"));
-    expect(patchCommands).toEqual([["diff", "HEAD", "--", ":(literal)alpha.ts"]]);
+    expect(patchCommands).toEqual([
+      [
+        "diff",
+        "--no-ext-diff",
+        "--no-color",
+        "--src-prefix=a/",
+        "--dst-prefix=b/",
+        "HEAD",
+        "--",
+        ":(literal)alpha.ts",
+      ],
+    ]);
   });
 
   it("uses watcher paths to catch a change that kept size and mtime", async () => {
@@ -197,6 +209,125 @@ describe("per-file checkout diff reuse", () => {
     git(repoDir, "checkout", "-q", "feature");
     git(repoDir, "merge", "-q", "--no-edit", "main");
     await expectSameAsFresh(reuse, compare);
+  });
+
+  const allChanges = { mode: "all", baseRef: "main", includeStructured: true } as const;
+  const allChangesFilesOnly = { ...allChanges, filesOnly: true } as const;
+
+  // 分支上删掉 gamma.ts 又在磁盘放回：真实 index 里它是未跟踪，私有 index 里恢复成跟踪文件
+  function prepareAllChangesCheckout(): void {
+    git(repoDir, "checkout", "-q", "-b", "feature");
+    writeFileSync(join(repoDir, "alpha.ts"), moduleSource("alpha", "committed"));
+    git(repoDir, "rm", "-q", "gamma.ts");
+    git(repoDir, "commit", "-qam", "feature");
+    writeFileSync(join(repoDir, "gamma.ts"), moduleSource("gamma", "restored"));
+    writeFileSync(join(repoDir, "beta.ts"), moduleSource("beta", "working"));
+    writeFileSync(join(repoDir, "notes.ts"), moduleSource("notes"));
+  }
+
+  function diffedPaths(commands: Array<{ args: string[] }>): string[] {
+    return commands
+      .map((command) => command.args)
+      .filter((args) => args[0] === "diff" && args.includes("--"))
+      .flatMap((args) => args.slice(args.indexOf("--") + 1))
+      .map((path) => path.replace(":(literal)", ""))
+      .sort();
+  }
+
+  function fileListFields(files: ParsedDiffFile[] | undefined) {
+    return files?.map(({ path, additions, deletions, generated }) => ({
+      path,
+      additions,
+      deletions,
+      generated,
+    }));
+  }
+
+  it("matches a full recomputation in All changes mode as restored, untracked and committed files change", async () => {
+    prepareAllChangesCheckout();
+    const reuse = new CheckoutDiffFileReuse();
+    const listReuse = new CheckoutDiffFileReuse();
+    const initial = await getCheckoutDiff(repoDir, allChanges);
+    expect(
+      initial.structured?.map(({ path, isNew, isDeleted }) => ({ path, isNew, isDeleted })),
+    ).toEqual([
+      { path: "alpha.ts", isNew: false, isDeleted: false },
+      { path: "beta.ts", isNew: false, isDeleted: false },
+      { path: "gamma.ts", isNew: false, isDeleted: false },
+      { path: "notes.ts", isNew: true, isDeleted: false },
+    ]);
+    await expectSameAsFresh(reuse, allChanges);
+    await expectSameAsFresh(listReuse, allChangesFilesOnly);
+
+    const steps: Array<() => void> = [
+      () => writeFileSync(join(repoDir, "gamma.ts"), moduleSource("gamma", "again")),
+      // 放回的内容与 base 相同：从改动里消失
+      () => writeFileSync(join(repoDir, "gamma.ts"), moduleSource("gamma")),
+      () => writeFileSync(join(repoDir, "gamma.ts"), moduleSource("gamma", "third")),
+      () => git(repoDir, "add", "gamma.ts"),
+      () => writeFileSync(join(repoDir, "notes.ts"), moduleSource("notes", "two")),
+      () => git(repoDir, "add", "notes.ts"),
+      () => git(repoDir, "commit", "-qm", "working"),
+      () => unlinkSync(join(repoDir, "gamma.ts")),
+      () => writeFileSync(join(repoDir, "alpha.ts"), moduleSource("alpha")),
+    ];
+    for (const step of steps) {
+      step();
+      await expectSameAsFresh(reuse, allChanges);
+      await expectSameAsFresh(listReuse, allChangesFilesOnly);
+    }
+    const final = await getCheckoutDiff(repoDir, allChanges, { diffFileReuse: reuse });
+    expect(
+      final.structured?.map(({ path, isNew, isDeleted }) => ({ path, isNew, isDeleted })),
+    ).toEqual([
+      { path: "beta.ts", isNew: false, isDeleted: false },
+      { path: "gamma.ts", isNew: false, isDeleted: true },
+      { path: "notes.ts", isNew: true, isDeleted: false },
+    ]);
+  });
+
+  it("only diffs the file that changed in All changes mode, restored base files included", async () => {
+    prepareAllChangesCheckout();
+    const reuse = new CheckoutDiffFileReuse();
+    await getCheckoutDiff(repoDir, allChanges, { diffFileReuse: reuse });
+
+    writeFileSync(join(repoDir, "beta.ts"), moduleSource("beta", "again"));
+    startGitCommandMetrics();
+    await getCheckoutDiff(repoDir, allChanges, { diffFileReuse: reuse });
+    expect(diffedPaths(stopGitCommandMetrics().commands)).toEqual(["beta.ts"]);
+
+    writeFileSync(join(repoDir, "gamma.ts"), moduleSource("gamma", "again"));
+    startGitCommandMetrics();
+    await getCheckoutDiff(repoDir, allChanges, { diffFileReuse: reuse });
+    expect(diffedPaths(stopGitCommandMetrics().commands)).toEqual(["gamma.ts"]);
+
+    writeFileSync(join(repoDir, "notes.ts"), moduleSource("notes", "again"));
+    startGitCommandMetrics();
+    await getCheckoutDiff(repoDir, allChanges, { diffFileReuse: reuse });
+    expect(diffedPaths(stopGitCommandMetrics().commands)).toEqual(["notes.ts"]);
+  });
+
+  it("lists All changes files without reading contents and keeps generated marks", async () => {
+    prepareAllChangesCheckout();
+    writeFileSync(join(repoDir, ".gitattributes"), "gamma.ts linguist-generated\n");
+    startGitCommandMetrics();
+    const full = await getCheckoutDiff(repoDir, allChanges);
+    const fullCommands = stopGitCommandMetrics().commands.map((command) => command.args[0]);
+    startGitCommandMetrics();
+    const list = await getCheckoutDiff(repoDir, allChangesFilesOnly);
+    const commands = stopGitCommandMetrics().commands.map((command) => command.args[0]);
+
+    // 完整订阅会读全文，清单订阅一次也不读
+    expect(fullCommands).toContain("cat-file");
+    expect(commands).not.toContain("cat-file");
+    expect(commands).not.toContain("show");
+    expect(list.structured?.map((file) => [file.path, file.hunks])).toEqual(
+      list.structured?.map((file) => [file.path, []]),
+    );
+    expect(fileListFields(list.structured)).toEqual(fileListFields(full.structured));
+    expect(list.structured?.filter((file) => file.generated).map((file) => file.path)).toEqual([
+      "gamma.ts",
+    ]);
   });
 
   it("keeps full-file highlighting when a change hint lands mid-run", async () => {

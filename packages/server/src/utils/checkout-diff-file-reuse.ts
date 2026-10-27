@@ -270,7 +270,10 @@ interface BlobIds {
   isGitlink: boolean;
 }
 
-/** `git diff --raw` 给出每个路径两侧的 blob id；改名按新路径记。 */
+/**
+ * `git diff --raw` 给出每个路径两侧的 blob id；改名按新路径记。
+ * All changes 不带私有 index 也对：私有 index 恢复的路径在真实 index 下报为 D，旧侧 blob 相同。
+ */
 async function readBlobIdsByPath(
   cwd: string,
   refs: CheckoutDiffReuseRefs,
