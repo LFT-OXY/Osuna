@@ -309,12 +309,12 @@ function BalanceWindows({
     () => [
       {
         value: "used",
-        label: t("usage.planUsage.displayUsed"),
+        label: t("providerUsage.displayUsed"),
         testID: "api-endpoint-balance-display-used",
       },
       {
         value: "remaining",
-        label: t("usage.planUsage.displayRemaining"),
+        label: t("providerUsage.displayRemaining"),
         testID: "api-endpoint-balance-display-remaining",
       },
     ],

@@ -7,8 +7,8 @@ export interface WorkspaceFileLocation {
   lineStart?: number;
   lineEnd?: number;
   /**
-   * 带行号时怎么落到那一行：不填是源码视图里高亮那几行；preview 是 Markdown 渲染预览滚到那一行所在的块
-   * （逻辑图打开节点文档时用，原生端和 HTML 仍是源码视图）。
+   * 带行号时想怎么落到那一行：不填是源码视图里高亮那几行；preview 表示想在 Markdown 渲染预览里读
+   * （逻辑图打开节点文档时用）。预览目前在哪个平台都滚不到指定行，两种都打开源码视图。
    */
   lineView?: "preview";
 }

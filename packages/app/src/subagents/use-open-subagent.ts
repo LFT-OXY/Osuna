@@ -1,20 +1,20 @@
+import type { AgentAddress } from "@getpaseo/protocol/addresses";
 import { useCallback } from "react";
-import { supportsDesktopPaneSplits, useIsCompactFormFactor } from "@/constants/layout";
 import { useSettings } from "@/hooks/use-settings";
 import { usePaneContext } from "@/panels/pane-context";
 import { useSessionStore } from "@/stores/session-store";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
-import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
+import { buildWorkspaceTabPersistenceKey, type WorkspaceTabTarget } from "@/workspace-tabs/model";
 import { openPreferredWorkspaceTarget } from "@/workspace-tabs/open-beside";
 
 export interface OpenSubagentHandlers {
-  openSubagent: (subagentId: string) => void;
+  openSubagent: (address: AgentAddress) => void;
   openProviderSubagent: (parentAgentId: string, subagentId: string) => void;
 }
 
 /**
- * 打开子智能体：Subagents track 与时间线派发组共用。桌面按"在侧栏打开"偏好，
- * 手机整页导航；别的工作区里的子智能体导航过去。
+ * 打开子智能体：Subagents track 与时间线派发组共用。按"在侧栏打开"偏好放进本工作区的标签
+ * （手机上由布局决定开成 sheet）；别的主机或别的工作区里的子智能体导航过去。
  */
 export function useOpenSubagent({
   serverId,
@@ -23,50 +23,42 @@ export function useOpenSubagent({
   serverId: string;
   workspaceId: string;
 }): OpenSubagentHandlers {
-  const { tabId, openTab } = usePaneContext();
-  const isCompact = useIsCompactFormFactor();
-  const canSplit = supportsDesktopPaneSplits() && !isCompact;
+  const { tabId } = usePaneContext();
   const openInSidePane = useSettings((settings) => settings.openInSidePane);
   const workspaceKey = buildWorkspaceTabPersistenceKey({ serverId, workspaceId });
-  const openSubagent = useCallback(
-    (subagentId: string) => {
-      const session = useSessionStore.getState().sessions[serverId];
-      const agent = session?.agents.get(subagentId) ?? session?.agentDetails.get(subagentId);
-      if (agent?.workspaceId && agent.workspaceId !== workspaceId) {
-        navigateToAgent({ serverId, agentId: subagentId });
-        return;
-      }
-      if (canSplit && workspaceKey) {
-        openPreferredWorkspaceTarget({
-          isCompact,
-          workspaceKey,
-          target: { kind: "agent", agentId: subagentId },
-          source: "subagents",
-          preferences: openInSidePane,
-          parentTabId: tabId,
-        });
-        return;
-      }
-      navigateToAgent({ serverId, agentId: subagentId });
+  const openSubagentTarget = useCallback(
+    (target: WorkspaceTabTarget) => {
+      openPreferredWorkspaceTarget({
+        workspaceKey,
+        target,
+        source: "subagents",
+        preferences: openInSidePane,
+        parentTabId: tabId,
+      });
     },
-    [canSplit, isCompact, openInSidePane, serverId, tabId, workspaceId, workspaceKey],
+    [openInSidePane, tabId, workspaceKey],
+  );
+  const openSubagent = useCallback(
+    ({ serverId: targetServerId, agentId: subagentId }: AgentAddress) => {
+      const session = useSessionStore.getState().sessions[targetServerId];
+      const agent = session?.agents.get(subagentId) ?? session?.agentDetails.get(subagentId);
+      // A subagent on another host or in another workspace lives in that workspace's tabs.
+      if (
+        targetServerId !== serverId ||
+        (agent?.workspaceId && agent.workspaceId !== workspaceId)
+      ) {
+        navigateToAgent({ serverId: targetServerId, agentId: subagentId });
+        return;
+      }
+      openSubagentTarget({ kind: "agent", agentId: subagentId });
+    },
+    [openSubagentTarget, serverId, workspaceId],
   );
   const openProviderSubagent = useCallback(
     (parentAgentId: string, subagentId: string) => {
-      if (canSplit && workspaceKey) {
-        openPreferredWorkspaceTarget({
-          isCompact,
-          workspaceKey,
-          target: { kind: "provider_subagent", parentAgentId, subagentId },
-          source: "subagents",
-          preferences: openInSidePane,
-          parentTabId: tabId,
-        });
-        return;
-      }
-      openTab({ kind: "provider_subagent", parentAgentId, subagentId });
+      openSubagentTarget({ kind: "provider_subagent", parentAgentId, subagentId });
     },
-    [canSplit, isCompact, openInSidePane, openTab, tabId, workspaceKey],
+    [openSubagentTarget],
   );
   return { openSubagent, openProviderSubagent };
 }

@@ -106,6 +106,15 @@ by `action` field, but the load-bearing fields are always under `detail`:
 - `detail.status` — short string used by long-running actions
   (`starting`, `running`, `flushing`, `done`).
 - `detail.action` — semantic label (e.g. `status` for thread heartbeats).
+- `detail.kind: "model"` (`detail.model`) — the model the tool says it runs
+  (claude `init`, codex `thread/start`, pi and omp `get_state` as `provider/id`).
+- `detail.kind: "token_usage"` (`detail.usage`) — codex token counts after
+  each model request (`total`, `last`, `modelContextWindow`); no money. pi
+  and omp: the session's `get_session_stats` tokens as `usage.total`, after each turn.
+- `detail.kind: "turn_cost"` (`detail.cost_usd`) — pi's or omp's dollars for
+  one finished turn (growth of the `get_session_stats` cost total);
+  `detail.unreported: true` marks the `0` reported for an interrupted turn
+  (the tool did not report that turn's cost).
 
 Progress events are **noisy** by design. `wait` ignores them unless you
 pass `--include-progress`. When you do want to see them, prefer:

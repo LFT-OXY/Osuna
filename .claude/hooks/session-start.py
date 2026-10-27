@@ -454,8 +454,10 @@ def _get_task_status(atw_dir: Path, input_data: dict, general: bool = False) -> 
             )
         return (
             "Status: NO ACTIVE TASK\n"
-            "Next-Action: Classify the current turn before creating any ATW task. "
-            "Simple conversation / small task asks only whether this turn should create an ATW task. "
+            "Next-Action: If the request is about a task that already exists — the user names it, or asks to continue or accept and only one open task fits — make it this session's task first, as the no-task breadcrumb says; do not ask whether to create a new one. "
+            "Otherwise classify the current turn before creating any ATW task. "
+            "Simple conversation / small task asks whether this turn should create an ATW task. "
+            "In that ask, say what each answer means: without a task there is no requirements document (`prd.md`) and no formal acceptance (each requirement checked with evidence, the user signs off); a task adds writing the requirements, the user confirming the spec, implementing against it, and that acceptance before archiving. "
             "Complex task asks whether task creation and planning are allowed."
         )
 

@@ -1,4 +1,14 @@
-import { test } from "../support/fixtures";
+import { seedAgentProfiles } from "../support/helpers/agent-profiles";
+import {
+  moreAgentsRow,
+  openProviderMenu,
+  providerMenuOption,
+} from "../support/helpers/provider-selector";
+import { expectComposerVisible } from "../support/helpers/composer";
+import { clickNewChat, gotoWorkspace } from "../support/helpers/launcher";
+import { seedWorkspace } from "../support/helpers/seed-client";
+import { writeFile } from "node:fs/promises";
+import { expect, test } from "../support/fixtures";
 import { gotoAppShell, openSettings } from "../support/helpers/app";
 import { connectDaemonClient } from "../support/helpers/daemon-client-loader";
 import { getServerId } from "../support/helpers/server-id";
@@ -7,12 +17,14 @@ import {
   expectProviderInstalledInSettings,
   expectProvidersList,
   goBackInSettings,
+  findAcpCatalogProvider,
   installAcpCatalogProvider,
   openCompactSettings,
   openProviderCatalog,
   openSettingsHost,
   openSettingsHostSection,
   returnToProvidersList,
+  seedSavedSettingsHosts,
 } from "../support/helpers/settings";
 import { buildOpenProjectRoute } from "@/utils/host-routes";
 
@@ -24,8 +36,13 @@ const ACP_PROVIDER = {
 };
 
 interface ProviderCatalogDaemonClient {
+  getLastServerInfoMessage(): {
+    features?: { hopliteProvider?: boolean; plugins?: boolean };
+  } | null;
   connect(): Promise<void>;
   close(): Promise<void>;
+  getDaemonConfig(): Promise<{ config: { providers?: Record<string, unknown> } }>;
+  getProvidersSnapshot(): Promise<{ entries: Array<{ provider: string }> }>;
   patchDaemonConfig(config: { removeProviders?: string[] }): Promise<unknown>;
 }
 
@@ -82,4 +99,136 @@ test.describe("ACP provider catalog on a phone", () => {
       await client.close().catch(() => undefined);
     }
   });
+});
+
+for (const theme of ["light", "dark"] as const) {
+  test(`adds Hoplite from the catalog in ${theme} theme`, async ({ page }, testInfo) => {
+    const client = await connectDaemonClient<ProviderCatalogDaemonClient>({
+      clientIdPrefix: "hoplite-catalog-e2e",
+    });
+    try {
+      expect(client.getLastServerInfoMessage()?.features?.hopliteProvider).toBe(true);
+      await client.patchDaemonConfig({ removeProviders: ["hoplite"] });
+      expect(
+        (await client.getProvidersSnapshot()).entries.some((entry) => entry.provider === "hoplite"),
+      ).toBe(false);
+      await page.addInitScript((value) => {
+        localStorage.setItem("@paseo:app-settings", JSON.stringify({ theme: value }));
+      }, theme);
+      await gotoAppShell(page);
+      await openSettings(page);
+      await openSettingsHost(page, getServerId());
+      await openSettingsHostSection(page, getServerId(), "providers");
+      await expect(
+        page.getByRole("button", { name: "Hoplite provider details", exact: true }),
+      ).toHaveCount(0);
+      await openProviderCatalog(page);
+      await findAcpCatalogProvider(page, "Hoplite");
+      await page.screenshot({ path: testInfo.outputPath(`hoplite-catalog-${theme}.png`) });
+      // Osuna 添加成功后进新提供方的详情页（与 MiniMax Code 的用例一致）。
+      await installAcpCatalogProvider(page, "Hoplite");
+      await expectProviderDetail(page, getServerId(), "hoplite");
+      await page.screenshot({ path: testInfo.outputPath(`hoplite-installed-${theme}.png`) });
+      expect((await client.getDaemonConfig()).config.providers?.hoplite).toEqual({ enabled: true });
+      await writeFile(
+        testInfo.outputPath(`hoplite-added-${theme}.json`),
+        JSON.stringify(await client.getProvidersSnapshot(), null, 2),
+      );
+      await removeHoplite(page);
+      await expectProvidersList(page, getServerId());
+      await expect(
+        page.getByRole("button", { name: "Hoplite provider details", exact: true }),
+      ).toHaveCount(0);
+      expect((await client.getDaemonConfig()).config.providers?.hoplite).toBeUndefined();
+      expect(
+        (await client.getProvidersSnapshot()).entries.some((entry) => entry.provider === "hoplite"),
+      ).toBe(false);
+      await writeFile(
+        testInfo.outputPath(`hoplite-removed-${theme}.json`),
+        JSON.stringify(await client.getProvidersSnapshot(), null, 2),
+      );
+      await openProviderCatalog(page);
+      await findAcpCatalogProvider(page, "Hoplite");
+      await page.screenshot({ path: testInfo.outputPath(`hoplite-removed-${theme}.png`) });
+      await installAcpCatalogProvider(page, "Hoplite");
+      await expectProviderDetail(page, getServerId(), "hoplite");
+      await returnToProvidersList(page);
+      await expectProviderInstalledInSettings(page, "Hoplite");
+    } finally {
+      await client.patchDaemonConfig({ removeProviders: ["hoplite"] }).catch(() => undefined);
+      await client.close().catch(() => undefined);
+    }
+  });
+}
+
+async function removeHoplite(page: import("@playwright/test").Page): Promise<void> {
+  // 删除在详情页头部的 ⋯ 菜单里。
+  await page.getByTestId("provider-actions-hoplite").filter({ visible: true }).click();
+  page.once("dialog", (dialog) => {
+    void dialog.accept();
+  });
+  await page.getByTestId("provider-remove-hoplite").filter({ visible: true }).click();
+}
+
+test("unsupported host asks for an update without writing Hoplite config", async ({
+  page,
+  outdatedDaemon,
+}, testInfo) => {
+  const client = await connectDaemonClient<ProviderCatalogDaemonClient>({
+    clientIdPrefix: "hoplite-unsupported",
+    port: Number(new URL(`http://${outdatedDaemon.endpoint}`).port),
+  });
+  try {
+    expect(client.getLastServerInfoMessage()?.features?.plugins).toBe(true);
+    expect(client.getLastServerInfoMessage()?.features?.hopliteProvider).toBe(false);
+    const before = await client.getDaemonConfig();
+    await seedSavedSettingsHosts(page, [outdatedDaemon]);
+    await page.reload();
+    await openSettings(page);
+    await openSettingsHost(page, outdatedDaemon.serverId);
+    await openSettingsHostSection(page, outdatedDaemon.serverId, "providers");
+    await openProviderCatalog(page);
+    // Osuna 的添加失败显示在弹窗里（行内错误），不是 toast。
+    await findAcpCatalogProvider(page, "Hoplite");
+    await page.getByRole("button", { name: "Add", exact: true }).filter({ visible: true }).click();
+    const error = page
+      .getByTestId("provider-catalog-error")
+      .getByText("Update the host to add Hoplite.", { exact: true });
+    await expect(error).toBeInViewport();
+    expect((await client.getDaemonConfig()).config).toEqual(before.config);
+    await expect(
+      page.getByRole("button", { name: "Hoplite provider details", exact: true }),
+    ).toHaveCount(0);
+    await page.screenshot({ path: testInfo.outputPath("hoplite-update-host.png") });
+  } finally {
+    await client.close();
+  }
+});
+
+test("model selector excludes Hoplite before opt-in", async ({ page }, testInfo) => {
+  const client = await connectDaemonClient<ProviderCatalogDaemonClient>({
+    clientIdPrefix: "hoplite-picker",
+  });
+  const profiles = await seedAgentProfiles([
+    { id: "hoplite-picker-anchor", name: "Picker anchor", provider: "mock" },
+  ]);
+  const workspace = await seedWorkspace({ repoPrefix: "hoplite-picker-" });
+  try {
+    await client.patchDaemonConfig({ removeProviders: ["hoplite"] });
+    await gotoWorkspace(page, workspace.workspaceId);
+    await clickNewChat(page);
+    await expectComposerVisible(page);
+    // Osuna 的模型菜单只列当前提供方，换提供方走提供方菜单；没启用的提供方收在「More agents」里
+    await openProviderMenu(page);
+    await expect(providerMenuOption(page, "mock")).toBeVisible();
+    if ((await moreAgentsRow(page).count()) > 0) await moreAgentsRow(page).click();
+    await expect(page.getByTestId("agent-provider-option-hoplite")).toHaveCount(0);
+    await page.screenshot({ path: testInfo.outputPath("hoplite-model-selector-absent.png") });
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("combobox-desktop-container")).toHaveCount(0);
+  } finally {
+    await workspace.cleanup();
+    await profiles.restore();
+    await client.close();
+  }
 });

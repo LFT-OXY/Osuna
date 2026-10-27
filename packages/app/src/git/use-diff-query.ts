@@ -1,6 +1,7 @@
 import { shareCheckoutDiff } from "./diff-sharing";
 import { hashKey, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef } from "react";
+import { useSessionStore } from "@/stores/session-store";
 import { useRetainedPanelActive } from "@/components/retained-panel";
 import { useAppVisible } from "@/hooks/use-app-visible";
 import { useReplicaQuery } from "@/data/query";
@@ -13,7 +14,7 @@ import { checkoutDiffQueryKey } from "@/git/query-keys";
 interface UseCheckoutDiffQueryOptions {
   serverId: string;
   cwd: string;
-  mode: "uncommitted" | "base";
+  mode: "uncommitted" | "base" | "all";
   baseRef?: string;
   ignoreWhitespace?: boolean;
   enabled?: boolean;
@@ -33,24 +34,24 @@ export type DiffLine = DiffHunk["lines"][number];
 export type HighlightToken = NonNullable<DiffLine["tokens"]>[number];
 
 function normalizeCheckoutDiffCompare(compare: {
-  mode: "uncommitted" | "base";
+  mode: "uncommitted" | "base" | "all";
   baseRef?: string;
   ignoreWhitespace?: boolean;
-}): { mode: "uncommitted" | "base"; baseRef?: string; ignoreWhitespace?: boolean } {
+}): { mode: "uncommitted" | "base" | "all"; baseRef?: string; ignoreWhitespace?: boolean } {
   const ignoreWhitespace = compare.ignoreWhitespace === true;
   if (compare.mode === "uncommitted") {
     return { mode: "uncommitted", ignoreWhitespace };
   }
   const trimmedBaseRef = compare.baseRef?.trim();
   return trimmedBaseRef
-    ? { mode: "base", baseRef: trimmedBaseRef, ignoreWhitespace }
-    : { mode: "base", ignoreWhitespace };
+    ? { mode: compare.mode, baseRef: trimmedBaseRef, ignoreWhitespace }
+    : { mode: compare.mode, ignoreWhitespace };
 }
 
 interface CheckoutDiffSubscriptionInput {
   serverId: string;
   cwd: string;
-  mode: "uncommitted" | "base";
+  mode: "uncommitted" | "base" | "all";
   baseRef?: string;
   ignoreWhitespace?: boolean;
   queryScope?: string;
@@ -145,6 +146,11 @@ export function useCheckoutDiffQuery({
   filesOnly = false,
   onFiles,
 }: UseCheckoutDiffQueryOptions) {
+  // COMPAT(checkoutDiffAll): added in v0.18.0, remove after 2027-04-21 once host floor includes All changes.
+  const allSupported = useSessionStore(
+    (state) => state.sessions[serverId]?.serverInfo?.features?.checkoutDiffAll === true,
+  );
+  const requiresUpdate = mode === "all" && !allSupported;
   const retainedPanelActive = useRetainedPanelActive();
   const appVisible = useAppVisible();
   const isConnected = useHostRuntimeIsConnected(serverId);
@@ -168,7 +174,7 @@ export function useCheckoutDiffQuery({
       serverId,
       cwd,
       subscription,
-      enabled,
+      enabled: enabled && !requiresUpdate,
       retainedPanelActive,
       appVisible,
       isConnected,
@@ -187,7 +193,16 @@ export function useCheckoutDiffQuery({
     );
   }, [listensForFiles, queryClient, queryKey]);
 
-  return deriveCheckoutDiffResult(query.data ?? null);
+  return deriveCheckoutDiffResult(
+    requiresUpdate && isConnected
+      ? {
+          requestId: "unsupported",
+          cwd,
+          files: [],
+          error: { code: "UNKNOWN", message: "Update the host to view All changes" },
+        }
+      : (query.data ?? null),
+  );
 }
 
 /** 订阅查询缓存里这个 diff 的文件清单：先交出已缓存的一份，之后每次更新再交一次。 */

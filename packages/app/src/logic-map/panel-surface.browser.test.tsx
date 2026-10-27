@@ -125,7 +125,10 @@ const noopOpenNodeDoc = () => {};
 /** 记下弹出的提示。 */
 function fakeToast(host: FakeHost): ToastApi {
   return {
-    show: (content) => host.toastMessages.push(content),
+    show: (content) => {
+      host.toastMessages.push(content);
+      return () => {};
+    },
     copied: () => {},
     error: (message) => host.toastErrors.push(message),
   };

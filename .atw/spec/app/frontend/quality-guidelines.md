@@ -2,6 +2,18 @@
 
 `docs/coding-standards.md` is the rulebook and `docs/design.md` is the visual rulebook. This file is the app-specific checklist and the commands that prove it.
 
+## Rule table
+
+| Rule | Enforced by | Where | From | Expires |
+| ---- | ----------- | ----- | ---- | ------- |
+| Navigation hooks (`useIsFocused`, `useFocusEffect`, `useNavigation`) come from `expo-router/react-navigation`, never `@react-navigation/native`: since Expo 57 the context lives in expo-router's copy and the other package throws "Couldn't find a navigation object" on web | lint `no-restricted-imports` | `.oxlintrc.json`, the `packages/app/src/**` block | merge-upstream-v0.13.0 ticket 06 (usage page crashed on open) | — |
+| Workspace tab chips paint hover / selected with `surfaceTabHover` / `surfaceTabActive` on both rails, Explorer included; upstream's `surfaceSidebarHover` / `surfaceSidebarSelected` ladder stays out ([Styling](./styling.md) "Workspace tab chips") | test | `screens/workspace/workspace-tab-layout.test.ts`, `e2e/browser/explorer-sidebar.spec.ts` "draws its tabs as workspace tab chips" | merge-upstream-v0.13.0 ticket 07 | — |
+| A panel that opens a main-pane tab from inside the Explorer reveals it with `revealWorkspaceTab`, not a bare `focusTab`, so the compact layout switches back to Agent ([State management](./state-management.md) "Workspace tab kinds") | test | `session-history/internal/open-terminal-tab.test.ts` | merge-upstream-v0.13.0 ticket 07 | — |
+| Upstream e2e that names a built-in file panel uses Osuna's owner name ("Markdown — Osuna"), not "— Paseo"; after each upstream merge `rg "— Paseo" packages/app/e2e` ([release.md](../../../../docs/release.md) "踩过的坑") | Playwright e2e (CI only) | `e2e/browser/plugin-file-panel*.spec.ts`, `e2e/support/helpers/markdown-file-panel-plugin.ts` | merge-upstream-v0.13.0 ticket 12 | — |
+| Plan usage sentences that upstream has use `providerUsage.*` (values in Osuna's wording); `usage.planUsage.*` keeps only Osuna-only sentences ([Component guidelines](./component-guidelines.md) "Plan usage copy") | test | `i18n/resources.test.ts` "keeps plan usage sentences that upstream already has out of usage.planUsage" | merge-upstream-v0.13.0 ticket 08 | — |
+| A `confirmDialog()` call passes `cancelLabel: t("common.actions.cancel")` along with `confirmLabel`; the defaults are English ([Component guidelines](./component-guidelines.md) the `confirmDialog()` warning) | Docs only | — | merge-upstream-v0.13.0 ticket 13 (Remove provider showed "Cancel" in Chinese) | — |
+| A menu row with a trailing `Switch` is located in tests by its `testID`, not by exact `menuitem` name: the row's accessible name repeats the switch's label ([docs/menus.md](../../../../docs/menus.md) "When a decision earns a submenu") | Docs only | `e2e/browser/sidebar-workspace-rename.spec.ts` uses `sidebar-display-show-background` | merge-upstream-v0.13.0 ticket 13 | — |
+
 ## Checks reviewers run
 
 - **`docs/coding-standards.md` §Density is checked line by line on every `+` line.** The shapes review kept catching: a ternary whose branch is a call or object (`:59`, use `if`); an `a && b` / `a || b` guard mixing two concerns (`:60`, name each condition or return early twice); a call, lookup or comparison in an object-literal property (`:61`, compute a local first — this includes `foo({ x: bar(y) })`); `new Set(xs.filter().map())` (`:62`). Sweep the whole diff for them before asking for review, not one at a time.

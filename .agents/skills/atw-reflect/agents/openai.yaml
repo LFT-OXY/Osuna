@@ -1,0 +1,5 @@
+interface:
+  display_name: "ATW Reflect"
+  short_description: "复盘这次对话，找出值得改进的地方，经你同意再写"
+policy:
+  allow_implicit_invocation: false

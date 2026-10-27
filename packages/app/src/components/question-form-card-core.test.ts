@@ -159,6 +159,31 @@ describe("question form card core", () => {
       Response: "custom",
     });
   });
+
+  test("keeps option previews so options can be compared", () => {
+    const questions = parseQuestionFormQuestions({
+      questions: [
+        {
+          question: "Which layout?",
+          header: "Layout",
+          options: [
+            {
+              label: "Tabs",
+              description: "One tab per section",
+              preview: "<Tabs>\n  <Tab />\n</Tabs>",
+            },
+            { label: "Single page" },
+          ],
+          multiSelect: false,
+        },
+      ],
+    });
+
+    expect(questions?.[0]?.options).toEqual([
+      { label: "Tabs", description: "One tab per section", preview: "<Tabs>\n  <Tab />\n</Tabs>" },
+      { label: "Single page", description: undefined, preview: undefined },
+    ]);
+  });
 });
 
 function parseOrThrow(input: unknown): QuestionFormQuestion[] {

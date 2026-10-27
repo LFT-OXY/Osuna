@@ -6,6 +6,9 @@ import {
   resolveActiveSendBehavior,
   resolveComposerSurfacePresentation,
   resolvePrimaryActions,
+  resolveComposerSurfaceText,
+  resolveGlyphRailOffset,
+  resolveRetainedSelection,
   runAlternateSendAction,
   runDefaultSendAction,
   runMessageInputKeyboardAction,
@@ -327,6 +330,7 @@ describe("queueComposerInput", () => {
   function queueContext(input: { value: string; hasExternalContent: boolean }) {
     const onQueue = vi.fn();
     const replaceText = vi.fn();
+    const exitFullscreen = vi.fn();
     queueComposerInput({
       value: input.value,
       attachments: [],
@@ -334,9 +338,17 @@ describe("queueComposerInput", () => {
       cwd: "/repo",
       onQueue,
       replaceText,
+      exitFullscreen,
     });
-    return { onQueue, replaceText };
+    return { onQueue, replaceText, exitFullscreen };
   }
+
+  it("leaves fullscreen only when something is queued", () => {
+    expect(queueContext({ value: "next", hasExternalContent: false }).exitFullscreen).toBeCalled();
+    expect(
+      queueContext({ value: "  ", hasExternalContent: false }).exitFullscreen,
+    ).not.toBeCalled();
+  });
 
   it("queues content held outside the text with an empty prompt", () => {
     const { onQueue, replaceText } = queueContext({ value: "  ", hasExternalContent: true });
@@ -389,5 +401,48 @@ describe("stopRealtimeVoice", () => {
     });
 
     expect(calls).toEqual(["cancel agent", "stop voice"]);
+  });
+});
+
+describe("composer surface text", () => {
+  it("measures a new nonempty replacement before it reaches the editing handle", () => {
+    const replacement = { kind: "replace" as const, key: "draft:2", text: "First\nSecond\nThird" };
+    expect(resolveComposerSurfaceText("Short draft", replacement, "draft:1")).toBe(
+      replacement.text,
+    );
+  });
+
+  it("keeps live typing once the replacement is applied", () => {
+    const replacement = { kind: "replace" as const, key: "draft:2", text: "First\nSecond\nThird" };
+    expect(resolveComposerSurfaceText("Edited live draft", replacement, "draft:2")).toBe(
+      "Edited live draft",
+    );
+  });
+
+  it("keeps the live buffer when the initial publication is already applied", () => {
+    const replacement = { kind: "initial" as const, key: "draft:0", text: "Stale publication" };
+    expect(resolveComposerSurfaceText("Live edited draft", replacement, "draft:0")).toBe(
+      "Live edited draft",
+    );
+  });
+});
+
+describe("retained selection", () => {
+  it("keeps a caret that fits and clamps one that no longer does", () => {
+    expect(resolveRetainedSelection({ start: 4, end: 17 }, 40)).toEqual({ start: 4, end: 17 });
+    expect(resolveRetainedSelection({ start: 4, end: 17 }, 10)).toEqual({ start: 4, end: 10 });
+    expect(resolveRetainedSelection({ start: 12, end: 17 }, 10)).toEqual({ start: 10, end: 10 });
+    expect(resolveRetainedSelection({ start: -1, end: 3 }, 10)).toEqual({ start: 0, end: 3 });
+  });
+});
+
+describe("fullscreen glyph rail", () => {
+  it("nudges 16px fullscreen glyphs onto the Send arrow's ink edge", () => {
+    expect(
+      resolveGlyphRailOffset({ controlSize: 28, sendIconSize: 16, glyphIconSize: 16 }),
+    ).toBeCloseTo(4 / 3);
+    expect(
+      resolveGlyphRailOffset({ controlSize: 28, sendIconSize: 20, glyphIconSize: 16 }),
+    ).toBeCloseTo(1 / 6);
   });
 });

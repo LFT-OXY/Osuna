@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { beforeAll, expect, test } from "vitest";
 import { i18n } from "@/i18n/i18next";
 import {
   DAEMON_LIFECYCLE_ERROR_KEYS,
@@ -7,6 +7,10 @@ import {
   restartDaemonFromSettings,
   updateDaemonFromSettings,
 } from "./daemon-lifecycle";
+
+beforeAll(async () => {
+  await i18n.loadLanguages("zh-CN");
+});
 
 async function failureText(request: Promise<unknown>, language = "en"): Promise<string> {
   try {

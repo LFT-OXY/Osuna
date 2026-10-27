@@ -14,8 +14,11 @@ export default async function paseoPlugin(input, options) {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const error = new Error(payload.error ?? `Paseo OpenCode bridge failed: ${response.status}`);
+      const detail = formatErrorDetail(payload.issues ?? payload.details);
+      const message = payload.error ?? `Paseo OpenCode bridge failed: ${response.status}`;
+      const error = new Error(detail ? `${message}: ${detail}` : message);
       error.status = response.status;
+      if (detail) error.details = detail;
       throw error;
     }
     return payload;
@@ -88,6 +91,17 @@ function toolCallIdHeader(callID) {
   return typeof callID === "string" && callID.trim()
     ? { [TOOL_CALL_ID_HEADER]: callID.trim() }
     : {};
+}
+
+function formatErrorDetail(details) {
+  if (!Array.isArray(details)) return typeof details === "string" ? details : "";
+  return details
+    .map((issue) => {
+      const path =
+        Array.isArray(issue?.path) && issue.path.length > 0 ? issue.path.join(".") : "input";
+      return `${path}: ${issue?.message ?? "Invalid value"}`;
+    })
+    .join("; ");
 }
 
 function logPluginError(stage, context, error) {

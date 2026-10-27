@@ -1,0 +1,5 @@
+interface:
+  display_name: "ATW Cross-Model Review"
+  short_description: "请另一家公司的模型复查这段改动，核实后分四档报告"
+policy:
+  allow_implicit_invocation: false

@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { i18n } from "@/i18n/i18next";
 import {
+  resolveUsageReport,
   displayPercent,
-  formatUsageFreshness,
   planUsageAccountNames,
   resolveAgentUsageView,
   replaceReport,
@@ -16,6 +16,7 @@ import {
   type UsageHost,
   type UsageQueryState,
 } from "./model";
+import { formatAgo } from "./format";
 import type { UsageReportEntry, UsageWindow } from "./types";
 
 function entry(input: {
@@ -66,6 +67,18 @@ describe("resolveUsageView", () => {
     ).toEqual({ kind: "unavailable", message: "Connect to Laptop to see plan usage" });
   });
 
+  it("localizes unavailable host messages while retaining the host name", async () => {
+    await i18n.changeLanguage("ko");
+    expect(
+      resolveUsageView({
+        hostLabel: "Laptop",
+        isConnected: false,
+        supportsUsage: false,
+        query: undefined,
+      }),
+    ).toEqual({ kind: "unavailable", message: "Laptop에 연결하면 플랜 사용량을 볼 수 있습니다" });
+  });
+
   it("moves from loading to ready to error", () => {
     const base = { hostLabel: "Laptop", isConnected: true, supportsUsage: true };
     expect(resolveUsageView({ ...base, query: undefined })).toEqual({ kind: "loading" });
@@ -105,6 +118,10 @@ describe("resolveUsageView", () => {
       }),
     ).toEqual({ kind: "ready", reports, isRefreshing: true });
   });
+});
+
+afterEach(async () => {
+  await i18n.changeLanguage("en");
 });
 
 const hosts: UsageHost[] = [
@@ -212,20 +229,27 @@ describe("displayPercent", () => {
   });
 });
 
-describe("formatUsageFreshness", () => {
+// Osuna：卡片的更新时间（card.tsx 的 UsageFreshness）由上游的 formatAgo 与 timing.updated 拼成。
+describe("report freshness", () => {
+  const NOW = Date.parse("2026-10-01T12:00:00Z");
+  const freshness = (minutesAgo: number) =>
+    i18n.t("providerUsage.timing.updated", {
+      relativeTime: formatAgo(new Date(NOW - minutesAgo * 60_000).toISOString(), NOW),
+    });
+
   it("says when the report was fetched", () => {
-    expect(formatUsageFreshness("now")).toBe("Updated just now");
-    expect(formatUsageFreshness("3m")).toBe("Updated 3m ago");
-    expect(formatUsageFreshness("Jan 15")).toBe("Updated Jan 15");
+    expect(freshness(0)).toBe("Updated just now");
+    expect(freshness(3)).toBe("Updated 3m ago");
+    expect(freshness(60 * 24 * 30)).toBe("Updated 30d ago");
   });
 
   it("reads in the app's language", async () => {
     await i18n.changeLanguage("zh-CN");
     try {
-      expect(formatUsageFreshness("now")).toBe("刚刚更新");
-      expect(formatUsageFreshness("3m")).toBe("3 分钟前更新");
-      expect(formatUsageFreshness("2h")).toBe("2 小时前更新");
-      expect(formatUsageFreshness("4d")).toBe("4 天前更新");
+      expect(freshness(0)).toBe("刚刚更新");
+      expect(freshness(3)).toBe("3 分钟前更新");
+      expect(freshness(120)).toBe("2 小时前更新");
+      expect(freshness(60 * 24 * 4)).toBe("4 天前更新");
     } finally {
       await i18n.changeLanguage("en");
     }
@@ -295,6 +319,22 @@ describe("settleReports", () => {
   it("keeps a report refreshed while the list streamed over its older copy in the list", () => {
     const refreshed = { ...alpha, planLabel: "Refreshed", fetchedAt: "2026-01-01T00:05:00.000Z" };
     expect(settleReports([refreshed, beta], [alpha, beta])).toEqual([refreshed, beta]);
+  });
+
+  it("keeps the displayed order when providers finish a refresh in reverse order", () => {
+    const refreshed = entry({ sourceId: "alpha", planLabel: "New" });
+    const streamed = upsertReport(upsertReport([alpha, beta], beta), refreshed);
+    expect(settleReports(streamed, [beta, refreshed])).toEqual([refreshed, beta]);
+  });
+
+  it("drops missing reports and appends new ones without moving surviving reports", () => {
+    const gamma = entry({ sourceId: "gamma" });
+    const delta = entry({ sourceId: "delta" });
+    expect(settleReports([alpha, beta, gamma], [delta, gamma, alpha])).toEqual([
+      alpha,
+      gamma,
+      delta,
+    ]);
   });
 
   it("takes the finished list as is when nothing was shown yet", () => {
@@ -405,4 +445,75 @@ describe("planUsageAccountNames", () => {
       await i18n.changeLanguage("en");
     }
   });
+});
+
+it("resolves retained usage and successful time without inventing old-daemon history", () => {
+  const success = entry({ windows: [{ id: "weekly", label: "Weekly", usedPct: 42 }] });
+  const failure: UsageReportEntry = {
+    ...success,
+    fetchedAt: "2026-01-01T00:06:00.000Z",
+    report: { status: "error", error: "Rate limited" },
+    lastSuccessful: {
+      fetchedAt: success.fetchedAt,
+      report: success.report as Extract<UsageReportEntry["report"], { status: "available" }>,
+    },
+  };
+  expect(resolveUsageReport(failure, i18n.t)).toEqual({
+    windows: success.report.status === "available" ? success.report.windows : [],
+    balances: [],
+    details: [],
+    planLabel: null,
+    successfulAt: success.fetchedAt,
+    retained: true,
+    messages: ["Rate limited"],
+  });
+  expect(resolveUsageReport({ ...failure, lastSuccessful: undefined }, i18n.t)).toEqual({
+    windows: [],
+    balances: [],
+    details: [],
+    planLabel: null,
+    successfulAt: null,
+    retained: false,
+    messages: ["Rate limited"],
+  });
+  expect(resolveUsageReport(success, i18n.t)).toEqual({
+    windows: success.report.status === "available" ? success.report.windows : [],
+    balances: [],
+    details: [],
+    planLabel: null,
+    successfulAt: success.fetchedAt,
+    retained: false,
+    messages: [],
+  });
+});
+
+it("orders failed polls by attempt time even when successful data is older", () => {
+  const success = entry({});
+  if (success.report.status !== "available") throw new Error("fixture must be available");
+  const failure: UsageReportEntry = {
+    ...success,
+    fetchedAt: "2026-01-01T00:06:00.000Z",
+    report: { status: "error", error: "Rate limited" },
+    lastSuccessful: { fetchedAt: success.fetchedAt, report: success.report },
+  };
+  expect(upsertReport([failure], success)).toEqual([failure]);
+  expect(settleReports([failure], [success])).toEqual([failure]);
+  expect(upsertReport([success], failure)).toEqual([failure]);
+});
+
+it("available and retained usage show the same successful completion time", () => {
+  const success: UsageReportEntry = { ...entry({}), successfulAt: "2026-01-01T00:00:15.000Z" };
+  if (success.report.status !== "available") throw new Error("fixture must be available");
+  expect(resolveUsageReport(success, i18n.t).successfulAt).toBe("2026-01-01T00:00:15.000Z");
+  const failure: UsageReportEntry = {
+    ...success,
+    successfulAt: undefined,
+    fetchedAt: "2026-01-01T00:06:00.000Z",
+    report: { status: "error", error: "Rate limited" },
+    lastSuccessful: { fetchedAt: success.successfulAt!, report: success.report },
+  };
+  expect(resolveUsageReport(failure, i18n.t).successfulAt).toBe(
+    resolveUsageReport(success, i18n.t).successfulAt,
+  );
+  expect(upsertReport([failure], success)).toEqual([failure]);
 });

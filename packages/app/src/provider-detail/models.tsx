@@ -74,16 +74,18 @@ function ModelRow({
   // 行末的操作，比如自定义模型的删除按钮。
   children?: React.ReactNode;
 }) {
+  // 有行末操作的行（自定义模型）让名字收缩，长模型名不把删除按钮挤出行外。
+  const shrinkText = children ? styles.shrinkText : null;
   return (
     <View style={[styles.modelRow, bordered ? settingsStyles.rowBorder : null]}>
-      <UiText style={styles.noShrink} numberOfLines={1}>
+      <UiText style={[styles.noShrink, shrinkText]} numberOfLines={1}>
         {label}
       </UiText>
       {label === id ? null : (
         <UiText
           variant="caption"
           color="foregroundMuted"
-          style={styles.monoHint}
+          style={[styles.monoHint, shrinkText]}
           numberOfLines={1}
           selectable
           dataSet={CODE_SURFACE_DATASET}
@@ -468,12 +470,17 @@ const styles = StyleSheet.create((theme) => ({
     fontFamily: theme.fontFamily.mono,
     flexShrink: 0,
   },
+  shrinkText: {
+    flexShrink: 1,
+    minWidth: 0,
+  },
   descriptionInline: {
     flex: 1,
   },
   iconButton: {
     width: 28,
     height: 28,
+    flexShrink: 0,
     marginVertical: -6,
     marginRight: -6,
     borderRadius: theme.borderRadius.full,

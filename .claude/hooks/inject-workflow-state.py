@@ -160,13 +160,13 @@ def _resolve_active_task(root: Path, input_data: dict):
 
 def get_active_task(
     root: Path, input_data: dict
-) -> tuple[str, str, str] | None:
+) -> tuple[str, str, str, Path] | None:
     """Return active task data, a task-record error, or no task pointer.
 
-    ``(task_id, "task_error", source)`` is distinct from ``None``: a session
-    pointer can exist even when its task record is missing or unreadable, and
-    that state needs a diagnostic breadcrumb rather than the normal ``no_task``
-    prompt.
+    ``(task_id, "task_error", source, task_dir)`` is distinct from ``None``: a
+    session pointer can exist even when its task record is missing or
+    unreadable, and that state needs a diagnostic breadcrumb rather than the
+    normal ``no_task`` prompt.
     """
     active = _resolve_active_task(root, input_data)
     if not active.task_path:
@@ -176,23 +176,23 @@ def get_active_task(
     if not task_dir.is_absolute():
         task_dir = root / task_dir
     if active.stale:
-        return task_dir.name, f"stale_{active.source_type}", active.source
+        return task_dir.name, f"stale_{active.source_type}", active.source, task_dir
 
     task_json = task_dir / "task.json"
     if not task_json.is_file():
-        return task_dir.name, "task_error", active.source
+        return task_dir.name, "task_error", active.source, task_dir
     try:
         data = json.loads(task_json.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
-        return task_dir.name, "task_error", active.source
+        return task_dir.name, "task_error", active.source, task_dir
     if not isinstance(data, dict):
-        return task_dir.name, "task_error", active.source
+        return task_dir.name, "task_error", active.source, task_dir
 
     task_id = data.get("id") or task_dir.name
     status = data.get("status", "")
     if not isinstance(status, str) or not status:
-        return task_dir.name, "task_error", active.source
-    return task_id, status, active.source
+        return task_dir.name, "task_error", active.source, task_dir
+    return task_id, status, active.source, task_dir
 
 
 # ---------------------------------------------------------------------------
@@ -359,12 +359,80 @@ def resolve_breadcrumb_key(
     return status
 
 
+# 决定日志提醒：pi、omp 扩展里的 DECISION_LOG_REMINDER 与这里逐字相同。
+DECISION_LOG_REMINDER = (
+    "This task has a decision log: keep recording it at key points with "
+    "`python3 ./.atw/scripts/decision_log.py`; in this conversation, the "
+    "start row (`decision_log.py start`) goes in just before the first row you "
+    "log — `add` and the other writing commands write it first when it is "
+    "missing, so a conversation with nothing to log writes none; read the last "
+    "rows they print, and when another conversation wrote in between they "
+    "write only the start row and stop: read it, then run the same command "
+    "again."
+)
+# accept 阶段另加归档那一行的提醒，接在「Once accepted, run task.py archive」之后；pi、omp 扩展同名常量逐字相同
+DECISION_LOG_ARCHIVE_REMINDER = (
+    "This task has a decision log: once accepted, after the acceptance row "
+    "and before `task.py archive`, log one row for the archive "
+    "(`decision_log.py add`); it goes into the archive commit with the task."
+)
+# 用户问进度、要汇报时怎么拼（prd L 节）：implement、accept 有日志时都出，紧挨在 DECISION_LOG_REMINDER 之前；pi、omp 扩展同名常量逐字相同
+DECISION_LOG_REPORT_REMINDER = (
+    "This task has a decision log: when the user asks how things stand or for "
+    "a report (汇报一下, 现在什么情况, what's the status, report), rebuild it "
+    "from the task directory in four blocks — "
+    "`python3 ./.atw/scripts/decision_log.py pending --report` prints the "
+    "draft; post it in plain words, keep the plain-words lines it carries "
+    "with noob mode on, and fill in what it marks. This is the task's report, "
+    "not `atw-what-happened`: that skill only the user starts, and it tells "
+    "what changed in this chat since their last message."
+)
+# 没绑任务时问进度、要汇报（工单 27）：.atw/tasks/ 下有任务带日志时出；pi、omp 扩展同名常量逐字相同
+DECISION_LOG_NO_TASK_REPORT_REMINDER = (
+    "No task is current, but some task under `.atw/tasks/` has a decision "
+    "log: when the user asks how things stand or for a report (汇报一下, "
+    "现在什么情况, what's the status, report), rebuild it from that task's "
+    "directory in four blocks — list the active tasks with "
+    "`python3 ./.atw/scripts/task.py list` and see which of their directories "
+    "hold a `decision-log.md` (if the user named the task or said enough to "
+    "tell which one, take that one; if not, only one, take it; several, ask "
+    "the user which), then `python3 ./.atw/scripts/decision_log.py pending "
+    "--report --task-dir <dir>` prints the draft; post it in plain words, "
+    "keep the plain-words lines it carries with noob mode on, and fill in what "
+    "it marks. This is the task's report, not `atw-what-happened`: that skill "
+    "only the user starts, and it tells what changed in this chat since their "
+    "last message."
+)
+DECISION_LOG_STATUSES = ("implement", "accept")
+
+
+def has_decision_log(status: str, task_dir: Path) -> bool:
+    """Whether the breadcrumb carries DECISION_LOG_REMINDER: an implement or
+    accept task whose directory holds ``decision-log.md``. Planning stages
+    never do — their decisions are the user's and live in prd.md and tickets.
+    """
+    return status in DECISION_LOG_STATUSES and (task_dir / "decision-log.md").is_file()
+
+
+def any_task_has_decision_log(root: Path) -> bool:
+    """Whether a task directly under ``.atw/tasks/`` holds a ``decision-log.md``
+    file. One level only, so archived tasks never count; cheap enough to run
+    every turn.
+    """
+    try:
+        return any((d / "decision-log.md").is_file() for d in (root / ".atw" / "tasks").iterdir())
+    except OSError:
+        return False
+
+
 def build_breadcrumb(
     task_id: Optional[str],
     status: str,
     templates: dict[str, str],
     source: str | None = None,
     breadcrumb_key: str | None = None,
+    task_has_log: bool = False,
+    repo_has_task_log: bool = False,
 ) -> str:
     """Build the <workflow-state>...</workflow-state> block.
 
@@ -372,6 +440,14 @@ def build_breadcrumb(
     - Unknown status (no tag, or workflow.md missing) → generic
       "Refer to workflow.md for current step." line
     - `no_task` pseudo-status (task_id is None) → header omits task info
+    - ``task_has_log`` (the current task carries its decision log, see
+      ``has_decision_log``) →
+      DECISION_LOG_REMINDER as the block's last line,
+      DECISION_LOG_REPORT_REMINDER just before it, and in accept
+      DECISION_LOG_ARCHIVE_REMINDER before that
+    - ``repo_has_task_log`` (no current task, but some task under
+      ``.atw/tasks/`` has a decision log) →
+      DECISION_LOG_NO_TASK_REPORT_REMINDER as the block's last line
     """
     lookup_key = breadcrumb_key or status
     body = templates.get(lookup_key)
@@ -379,8 +455,36 @@ def build_breadcrumb(
         body = templates.get(status)
     if body is None:
         body = "Refer to workflow.md for current step."
+    if repo_has_task_log:
+        body = f"{body}\n{DECISION_LOG_NO_TASK_REPORT_REMINDER}"
+    if task_has_log:
+        if status == "accept":
+            body = f"{body}\n{DECISION_LOG_ARCHIVE_REMINDER}"
+        body = f"{body}\n{DECISION_LOG_REPORT_REMINDER}\n{DECISION_LOG_REMINDER}"
     header = f"Status: {status}" if task_id is None else f"Task: {task_id} ({status})"
     return f"<workflow-state>\n{header}\n{body}\n</workflow-state>"
+
+
+def _select_platform_blocks(root: Path, body: str, platform: str | None, config: dict) -> str:
+    """Keep only this platform's `[Platform]` block in a breadcrumb body.
+
+    The accept breadcrumb gives the cross-model review input once per tool;
+    a host handed all of them has picked another tool's form. A platform
+    with no block of its own gets every line (each names its tool). An
+    install whose scripts predate the helper gets the body unchanged.
+    """
+    scripts_dir = root / ".atw" / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    try:
+        from common.workflow_phase import (  # type: ignore[import-not-found]
+            resolve_effective_platform,
+            select_platform_blocks,
+        )
+    except Exception:
+        return body
+    effective = resolve_effective_platform(platform, config) if platform else None
+    return select_platform_blocks(body, effective)
 
 
 def _is_general_project(root: Path) -> bool:
@@ -473,20 +577,33 @@ def main() -> int:
 
     templates = load_breadcrumbs(root)
     platform = _detect_platform(data)
+    templates = {
+        key: _select_platform_blocks(root, body, platform, config)
+        for key, body in templates.items()
+    }
     task = get_active_task(root, data)
     if task is None:
         # No active task — still emit a breadcrumb nudging AI toward
         # atw-brainstorm + task.py create when user describes real work.
         no_task_key = resolve_breadcrumb_key("no_task", platform, config)
         breadcrumb = build_breadcrumb(
-            None, "no_task", templates, breadcrumb_key=no_task_key
+            None,
+            "no_task",
+            templates,
+            breadcrumb_key=no_task_key,
+            repo_has_task_log=any_task_has_decision_log(root),
         )
     else:
-        task_id, status, source = task
+        task_id, status, source, task_dir = task
         status_key = resolve_breadcrumb_key(status, platform, config)
         source_for_breadcrumb = None if platform == "codex" else source
         breadcrumb = build_breadcrumb(
-            task_id, status, templates, source_for_breadcrumb, breadcrumb_key=status_key
+            task_id,
+            status,
+            templates,
+            source_for_breadcrumb,
+            breadcrumb_key=status_key,
+            task_has_log=has_decision_log(status, task_dir),
         )
     if platform == "codex":
         parts: list[str] = []

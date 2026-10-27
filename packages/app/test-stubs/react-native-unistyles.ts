@@ -1,8 +1,10 @@
 import { LOGIC_MAP_LIGHT_PALETTE } from "../src/styles/logic-map-palette";
+import { lightHighlightColors } from "@getpaseo/highlight";
 
 const testTheme = {
   colorScheme: "light",
   colors: {
+    syntax: lightHighlightColors,
     foreground: "#111111",
     foregroundMuted: "#666666",
     foregroundExtraMuted: "#a1a1aa",

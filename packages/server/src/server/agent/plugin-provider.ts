@@ -886,6 +886,7 @@ function createPluginProviderDefinition(
     label: registration.label,
     description: registration.description ?? `Plugin provider ${registration.label}`,
     iconSvg: registration.icon,
+    requiresConfiguration: registration.requiresConfiguration,
     defaultModeId: null,
     modes: [],
     supportsExactMcpPreapproval: true,
@@ -1175,6 +1176,9 @@ class PluginAgentSession implements AgentSession {
     prompt: AgentPromptInput,
     options: SteerActiveTurnOptions,
   ): Promise<SteerResult> {
+    if (!this.bridge.negotiatedCapabilities.includes("prompt.steer")) {
+      return { status: "unavailable" };
+    }
     const result = await this.bridge.prompt({
       clientMessageId: options.clientMessageId ?? randomUUID(),
       delivery: "steer",

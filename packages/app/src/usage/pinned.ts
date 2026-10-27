@@ -1,6 +1,6 @@
 import type { TFunction } from "i18next";
-import { usageCopy } from "./copy";
-import { formatPct } from "./format";
+import { i18n } from "@/i18n/i18next";
+import { formatPct, formatDisplayPct, formatProviderUsageLabel } from "./format";
 import { displayPercent } from "./model";
 import { effectiveUsagePins, type UsagePreferences } from "./preferences";
 import { windowTone } from "./tone";
@@ -70,7 +70,7 @@ function groupBySource(reports: readonly UsageReportEntry[]): UsageReportEntry[]
 export function resolvePinnedUsage(
   reports: readonly UsageReportEntry[],
   preferences: UsagePreferences,
-  t?: TFunction,
+  t: TFunction = i18n.t,
 ): PinnedUsageSource[] {
   const pins = effectiveUsagePins(preferences, reports);
   return groupBySource(reports).flatMap((entry) => {
@@ -86,15 +86,8 @@ export function resolvePinnedUsage(
         const percentText = formatPct(percent);
         return {
           key: `${entry.id}/${window.id}`,
-          label: usageCopy.summaryWindow(
-            {
-              name: describe(entry, window.label),
-              percent: percentText,
-              displayAs: preferences.displayAs,
-            },
-            t,
-          ),
-          shortLabel: window.shortLabel ?? window.label,
+          label: `${describe(entry, formatProviderUsageLabel(window.id, window.label, t))} ${formatDisplayPct(percent, preferences.displayAs, undefined, t)}`,
+          shortLabel: window.shortLabel ?? formatProviderUsageLabel(window.id, window.label, t),
           percent,
           percentText,
           tone: windowTone(window),

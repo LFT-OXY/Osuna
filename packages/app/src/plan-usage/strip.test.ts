@@ -121,7 +121,7 @@ describe("the plan usage gauge in the composer context strip", () => {
           params: {
             label: "Session",
             percent: "0%",
-            trailing: { key: "usage.planUsage.resets", params: { duration: "4h" } },
+            trailing: { key: "providerUsage.timing.resetsIn", params: { duration: "4h" } },
           },
         },
       },
@@ -138,7 +138,7 @@ describe("the plan usage gauge in the composer context strip", () => {
           params: {
             label: "Weekly",
             percent: "45%",
-            trailing: { key: "usage.planUsage.resets", params: { duration: "4d" } },
+            trailing: { key: "providerUsage.timing.resetsIn", params: { duration: "4d" } },
           },
         },
       },
@@ -155,7 +155,7 @@ describe("the plan usage gauge in the composer context strip", () => {
           params: {
             label: "Weekly · Fable",
             percent: "0%",
-            trailing: { key: "usage.planUsage.resets", params: { duration: "4d" } },
+            trailing: { key: "providerUsage.timing.resetsIn", params: { duration: "4d" } },
           },
         },
       },
@@ -335,7 +335,7 @@ describe("the plan usage gauge in the composer context strip", () => {
         params: {
           label: "Weekly",
           percent: "69%",
-          trailing: { key: "usage.planUsage.resets", params: { duration: "4d" } },
+          trailing: { key: "providerUsage.timing.resetsIn", params: { duration: "4d" } },
         },
       });
     });
@@ -360,7 +360,7 @@ describe("the plan usage gauge in the composer context strip", () => {
         params: {
           label: "Session",
           percent: "82%",
-          trailing: { key: "usage.planUsage.runsOut", params: { duration: "1h" } },
+          trailing: { key: "providerUsage.timing.runsOutIn", params: { duration: "1h" } },
         },
       });
     });
@@ -379,7 +379,7 @@ describe("the plan usage gauge in the composer context strip", () => {
     it("says the window is resetting once the reset time has passed", () => {
       const window = onlyWindow({ id: "weekly", label: "Weekly", resetsAt: at(-60_000) });
       expect(window?.trailing).toEqual({
-        text: { key: "usage.planUsage.resettingNow" },
+        text: { key: "providerUsage.timing.resettingNow" },
         atRisk: false,
       });
     });

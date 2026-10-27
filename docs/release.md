@@ -62,9 +62,10 @@ release. This applies to both beta and stable releases.
   the changelog. Retarget remaining PRs based on `next` to `main` and delete the integrated
   `next`. Create it fresh when needed again.
 
-**Setup still needed:** CI, Docker, and Nix PR checks currently target only `main`,
-and GitHub permits only squash merges. Enable checks and required-check protection
-for `next`, CI on its pushes, and merge commits for the integration PR. Handle PR
+**Setup still needed:** PR checks run for every base branch, but CI, Docker, and Nix
+push runs target only `main`, and GitHub permits only squash merges. Enable
+required-check protection for `next`, CI on its pushes, and merge commits for the
+integration PR. Handle PR
 base changes (`edited` events) so retargeting runs checks against the new base;
 GitHub's default PR events do not cover this. Deployment triggers stay unchanged.
 
@@ -99,7 +100,10 @@ release push as the changelog and version commit.
 ### 发版
 
 先在 `CHANGELOG.md` 顶部加本次版本的条目，格式是 `## X.Y.Z - YYYY-MM-DD`——`npm version`
-的生命周期钩子会跑 F-Droid changelog 同步，查不到条目就直接中断。再把 `npm run format`、
+的生命周期钩子会跑 F-Droid changelog 同步，查不到条目就直接中断。`CHANGELOG.zh-CN.md` 是从上游
+原样收下的，只为官网代码能编译，Osuna 不往里写条目：[Changelog translations](#changelog-translations)
+与发版清单里提交中文条目的要求在 fork 下不适用；官网 e2e `i18n.spec.ts`「shows the changelog in Chinese」
+因此改为断言 Osuna 的版本带「尚未翻译」提示，上游再改这条用例时会冲突。再把 `npm run format`、
 `npm run lint`、`npm run typecheck` 跑绿并提交——`version:all:*` 底下是 `npm version`，
 工作区不干净同样会中断。major 不在这条路径里：按本文「Release
 version decision」，agent 不自选 major，需要时手工改版本号再走 `npm run release:push`。
@@ -128,7 +132,7 @@ tag 并把 `publish` 设为 `false`，产物会留在 workflow artifacts 里。
 ### 从上游同步
 
 上游的新版本用 `git merge` 合进来，保留上游的提交历史，下一次从上一次的同步点接着合。
-当前已同步到上游 v0.11.2（`759532509`）。每次并入 main 后更新这一句，并在下表加一行；
+当前已同步到上游 v0.13.0（`d34d17a90`）。每次并入 main 后更新这一句，并在下表加一行；
 `git merge-base --is-ancestor <同步点> main` 应当成功。
 
 | 同步到  | 分段：上游发布点 → merge commit                                                                                                                                                                                                                                                                                           | 冲突裁决摘要                                       |
@@ -137,6 +141,7 @@ tag 并把 `publish` 设为 `false`，产物会留在 workflow artifacts 里。
 | v0.9.2  | v0.9.1 `818658520` → `2887a73f6`，v0.9.2 `c67b7158b` → `381896b91`                                                                                                                                                                                                                                                        | [PR #14](https://github.com/LFT-OXY/Osuna/pull/14) |
 | v0.10.3 | v0.10.0-beta.1 `52d345db7` → `0535af41b`，v0.10.0 `c481ecf3e` → `6cac3ad8b`，v0.10.1 `c5236c00d` → `260c79631`，v0.10.2 `919c737c1` → `a36ecb8de`，v0.10.3 `b4af508e2` → `e8738aa16`                                                                                                                                      | [PR #15](https://github.com/LFT-OXY/Osuna/pull/15) |
 | v0.11.2 | v0.11.0-beta.1 `4aa2f2817` → `9c56f066e`，v0.11.0-beta.2 `8498c7416` → `1fb78eb97`，v0.11.0-beta.3 `6166a7aca` → `64f2b95a3`，v0.11.0-beta.4 `6b00310f7` → `1d1dc7545`，v0.11.0-beta.5 `15d774d4a` → `5e5ea92c6`，v0.11.0 `22488d450` → `e57639e38`，v0.11.1 `ab10a6694` → `9ad8ac890`，v0.11.2 `759532509` → `d7800df9a` | [PR #16](https://github.com/LFT-OXY/Osuna/pull/16) |
+| v0.13.0 | v0.12.0-beta.1 `e2f4948f9` → `f65422084`，v0.12.0-beta.2 `c517d07d6` → `16d847b51`，v0.12.0-beta.3 `cc748dfe1` → `a5eb7c89a`，v0.12.0 `cafe4b01c` → `80515069f`，v0.13.0-beta.1 `3fa625701` → `f44be7529`，v0.13.0-beta.2 `30d8cb044` → `7e2a7ef83`，v0.13.0 `d34d17a90` → `c644c42f6`                                    | [PR #33](https://github.com/LFT-OXY/Osuna/pull/33) |
 
 #### 抓取与引用
 
@@ -152,20 +157,23 @@ tag 并把 `publish` 设为 `false`，产物会留在 workflow artifacts 里。
 
 上游的补丁版本有的在它的 main 上，有的不在，合之前逐个看：
 `git merge-base --is-ancestor <发布点> upstream/main`。v0.10.1 – v0.10.3 在从 v0.10.0 分出的
-`release/0.10.1`、`release/0.10.2`、`hotfix/0.10.3` 上；v0.11.1（`ab10a6694`）的发版提交在
-main 上；v0.11.2（`759532509`，3 个提交）在从 v0.11.1 分出的补丁分支上，上游只给它打了 tag。
-都照常按 SHA 合并。合过不在 main 上的补丁版本之后：
+`release/0.10.1`、`release/0.10.2`、`hotfix/0.10.3` 上；v0.11.2（`759532509`）、v0.11.3、v0.11.4 在从
+v0.11.1 分出的同一条补丁分支上，上游只给它们打了 tag；v0.13.0（`d34d17a90`）在 main 上。
+不在 main 上的补丁版本照常按 SHA 合并。合过之后：
 
-- `git merge-base main upstream/main` 给出的是分叉点 v0.11.1（`ab10a6694`），不是同步点。
+- `git merge-base main upstream/main` 给出的是分叉点，不是同步点。合 v0.13.0 之前它是 v0.11.1
+  （`ab10a6694`）；合完 v0.13.0 回到 `d34d17a90`，下一次合并没有分叉处要重解。
 - 下一次合上游主线的版本时，补丁分支与主线分叉的地方会再冲突一次。补丁分支上的修复在主线上
   有内容等价的提交，git 仍把它们当成两边各改了一遍。裁决固定：上游的部分取主线一侧，Osuna
   的改动保留。
 - 分叉处的重解都落在下一次合并的第一段。第一段合完，合并基点回到上游主线上，后面各段的基点
-  是上一段的发布点。模拟出的清单是上限：合 v0.11 时，上游自己的 v0.10.3 对 v0.11.0 模拟出
-  10 个文件，6 个在第一段报冲突，另外 4 个 git 自己合对了。
-- 截至 2026-10-13（上游 main 在 `b0f054de9`），合 v0.12 时没有要重解的文件。上游自己的 v0.11.2 对
-  上游 main 模拟合并没有冲突：v0.11.2 比 v0.11.1 多出的只有撤销 #5716 与发版提交，主线上的 #6445 删掉了
-  同一批文件。动手前用同一条命令对要合的版本重算：
+  是上一段的发布点。合 v0.13 时是 16 个文件，全在第一段：`CHANGELOG.md`、`package-lock.json`、
+  13 个 `package.json` 按[版本号与发版元数据](#版本号与发版元数据)处理，`scripts/postinstall-patches.mjs`
+  取主线一侧。
+- 主线已有等价提交的后续补丁版本不用单独合（v0.11.3、v0.11.4 随 v0.12.0-beta.1 进来）。用
+  `git cherry` 或比对 patch-id 确认每个修复在要合的发布点之前都有对应。
+- 模拟出的清单是上限：合 v0.11 时，上游自己的 v0.10.3 对 v0.11.0 模拟出 10 个文件，6 个在第一段
+  报冲突，另外 4 个 git 自己合对了。动手前对要合的版本重算：
   `git merge-tree --write-tree --name-only --no-messages <同步点> <上游发布点>`。
 
 #### 分段与并入
@@ -177,7 +185,8 @@ main 上；v0.11.2（`759532509`，3 个提交）在从 v0.11.1 分出的补丁�
   一次：[ADR 0006](adr/0006-usage-in-code-is-upstream-plan-usage.md)。
 - 每段的 merge commit 本身要通过 typecheck、lint 和该段冲突文件对应的测试。冲突之外
   的适配（文案、外观、`COMPAT` 标签）紧跟在后面单独提交，进入下一段之前做完。
-- 第一段合完就开草稿 PR，之后每段推送后看 CI。整套测试只在 CI 上跑。
+- 全部段在本机做完再开一个 PR，CI 只在开 PR 时跑一次。本机每段只跑改到的测试，整套测试只在
+  CI 上跑。往 PR 分支再推送会让整套 CI 重跑，偶发失败只重跑失败的作业。
 - 并入 main 用 merge commit。squash 和 rebase 都会丢掉上游的祖先关系，下一次合并会
   重新遇到已经解过的冲突。
 - 合并期间 main 有新提交，就把 main 合进合并分支，不对合并分支做 rebase，原因同上。
@@ -197,6 +206,13 @@ main 上；v0.11.2（`759532509`，3 个提交）在从 v0.11.1 分出的补丁�
 
 上游在某一段里没有改外部依赖时，解完的 `package.json` 与 `package-lock.json` 与合并前
 逐字节相同，拿这一点自检。
+
+上游升了依赖时，在合并前的锁上跑 `npm install --package-lock-only` 会报「已是最新」，却把与
+`package.json` 不符的版本原样留着（v0.13.0-beta.1 的 Expo 57 留在 54），本机装好的
+`node_modules` 骗过了它。改在只放各 `package.json` 的临时目录里重做：以上游那个发布点的锁为底，
+补上 Osuna 独有的顶层包条目（沿用合并前锁里的版本），跑一次 `npm install --package-lock-only`
+规整，再跑一次结果不变才算好。用 `npm ls --package-lock-only --all` 对比上游自己的锁，不能多出
+invalid。
 
 #### 冲突裁决
 
@@ -246,8 +262,10 @@ Osuna 原有的测试不删除、不跳过、不放宽断言。上游带来的�
 - **`COMPAT(...)` 标签**：上游新带进来的标签写的是上游的版本号，改写成合并后的首个
   Osuna 版本号，日期不动，清理兼容代码时才能按 Osuna 的版本线判断
   （[protocol-compatibility.md](protocol-compatibility.md#every-shim-is-tagged-and-dated)）。
-  用 `git diff <合并前> <merge commit> | rg '^\+.*COMPAT\('` 列出；标签名在合并前的
-  main 上不存在的才是上游新带来的，Osuna 已有的不动。v0.9.0 那次写的是 `v0.15.0`，
+  用 `git diff <合并前> <merge commit> | rg '^\+.*COMPAT\('` 列出；标签名在合并分支开出时的
+  main 上不存在的才是上游新带来的，Osuna 已有的不动。分段合并时也和那个 main 比，不和上一段的
+  分支头比：前一段改写过的名字，后一段还会带进新的出现处（v0.13.0-beta.2 的
+  `plugins/evaluate.ts`）。v0.9.0 那次写的是 `v0.15.0`，
   发版时版本号若不同，统一改掉。
 
 #### 踩过的坑
@@ -276,6 +294,9 @@ git 不报冲突、结果却不对的：
 - 上游的新用例拿会话级的 `listCommands()` 当「确保进程在」用，在 Osuna 里它不启动进程
   （[ADR 0003](adr/0003-command-list-never-spawns.md)），换成 `setModel(null)`。上游按顺序读订阅
   事件的用例会被 Osuna 在每个 init 之后发的 `commands_changed` 挤错位，让读事件的辅助函数略过它。
+- 上游的 e2e 按名字点内置文件面板，名字里带上游的应用名（“Markdown — Paseo”“Source — Paseo”）；
+  Osuna 的内置面板提供者是 Osuna，这些用例只在 CI 上挂。合完 `rg "— Paseo" packages/app/e2e`，
+  改成 Osuna 或 `markdown-file-panel-plugin.ts` 里的常量。
 - 上游的 e2e 写死上游主题的色值，差 1 也会挂。合并后 `rg toHaveCSS packages/app/e2e`，
   对照 `packages/app/src/styles/theme.ts` 重算。
 - 上游新增的设置界面里，说明文字与操作菜单按钮要对回 `settingsStyles` 和设置页已有的
@@ -290,6 +311,9 @@ git 不报冲突、结果却不对的：
   用它的测试只有跑了才挂；上游的新用例调用 Osuna 改过签名的函数也一样。每段合完，把这一段
   新增或改动过的测试文件逐个跑一遍：
   `git diff <合并前> --name-only --diff-filter=AM -- 'packages/**/*.test.ts' 'packages/**/*.test.tsx'`。
+- 上游改了 `storage/validated-persist-storage.ts` 这类共用模块后，Osuna 用它的测试会因时序挂。
+  v0.13.0-beta.1 起存储读取期间的写入被丢掉，Osuna「新建 store 立刻写入、再新建一个读回」的用例要先
+  `await store.persist.rehydrate()`。`rg -l <模块名> packages/app/src` 找出用到它的 Osuna 测试逐个跑。
 - 上游给某个提供方的客户端套了一层新的包装时，Osuna 加在 `AgentClient` 上的可选方法
   （`discoverCommands`、`resolveInstalledVersion`、`resolveCliLaunch`）不转交也不报类型
   错，功能只是静默消失。对照接口逐个补上（`opencode/runtime-client.ts`）。
@@ -312,6 +336,14 @@ git 不报冲突、结果却不对的：
 - 打包产物冲突时重新生成，不手工合并。
   `packages/app/src/terminal/webview/terminal-emulator-webview-html.ts` 在
   `packages/app` 下用 `npm run build:terminal-webview` 生成，再过一遍格式化。
+  不报冲突的生成产物也会过期：两边都给配置加了字段时，
+  `packages/website/public/schemas/paseo.config.v1.json` 要用
+  `npm run generate:config-schema --workspace=@getpaseo/server` 重新生成，
+  `persisted-config-json-schema.test.ts` 守着它。
+- 两边都留的冲突块，git 写进文件的块常比 diff3 视图短：两边相同的结尾几行在块外只出现一次。
+  用脚本拼「Osuna 段 + 上游段」时，这几行会被写两遍或被吃掉。v0.12.0-beta.1 时历史回放里
+  `historyEvents.push` 写了两遍，时间线每次刷新多出一份，typecheck 与 lint 都过，只有
+  `agent-manager.test.ts` 抓到。合完对冲突文件扫一遍新出现的相邻重复行，再跑对应测试。
 - Osuna 已删除、上游又改了的东西：上游的新代码需要它才恢复（`ExternalLink` 组件），
   否则保持删除（`publish-linux` 作业）。
 - 两边各做了一遍的功能，除了源码还要逐条对两边的测试。同一场景下两边用例结论相反时，
@@ -327,11 +359,25 @@ git 不报冲突、结果却不对的：
   在那一行写注释说明；上游再改那一行时会再冲突一次。
 - 上游整份重译一种语言时（v0.11.0 的 `fr.ts`，57 个冲突块），冲突块先取上游，再把基点、
   Osuna、上游三份资源摊平成键值，按键做三方合并并逐键比对。合完查自动合并出来的重复键。
+- 上游新加一条带豁免名单的 lint 规则、名单注释写「只许移出」时（v0.12.0 的
+  `paseo/no-raw-pressable`），Osuna 自己报错的文件在 `.oxlintrc.json` 里另起一块豁免，注明加入
+  时机与迁移计划，不混进上游的名单：上游以后从名单里移出文件时不会撞上 Osuna 加的行。
+
+- 上游改了一段共用文案，Osuna 自己断言旧文案的测试不在冲突文件里，也不在这一段改动的测试里，
+  只有整套 CI 才跑到（v0.13.0-beta.1 的「31%」→「31% used」，四个文件）。合完用旧文案
+  `rg` 一遍测试目录。上游改成按需加载翻译后，Osuna 断言中文的单元测试要先
+  `i18n.loadLanguages("zh-CN")`，单独跑也会挂，合完把断言中文的测试都跑一遍。
+- 上游的 Playwright 用例按上游界面写，Osuna 改过的界面（Tiptap 输入框、字体选择器、模型菜单只列
+  当前提供方、hunk 头、主题快捷键轮转）在本机每段只跑改动的测试时发现不了，首轮 CI 会集中挂一批。
+  全部段做完、开 PR 之前，在本机把这一期新增的浏览器用例跑一遍（提供方类除外）。
 
 本机复核时：
 
 - 先挪开 `packages/app/.expo` 与 `packages/app/node_modules/.vite`。前者放宽类型检查，
   后者是旧的预构建缓存，都会掩盖 CI 上会挂的问题。
+- 这一段改了 `patches/` 下的依赖补丁，就先 `npm install` 再跑测试。本机装的还是旧补丁，
+  相关用例会假失败（v0.12.0 的 enriched-markdown 补丁：`renderer.test.ts` 的句末句点用例）。
+  `scripts/postinstall-patches.mjs` 遇到旧补丁会让安装失败并删掉那个包，再装一次即可。
 - `chat-find.spec.ts`、`pane-find.spec.ts` 各有一条涉及 Control+F 的用例在 macOS 本机
   会挂，以 CI（Linux）为准。
 - `plugins/antigravity-provider/server/provider.test.ts` 的「reports startup auth…」在 macOS
@@ -339,6 +385,13 @@ git 不报冲突、结果却不对的：
   要 `TMPDIR="$(cd "$TMPDIR" && pwd -P)"`：`/var` 是 `/private/var` 的软链接。
 - `packages/server/src/server/daemon-client.e2e.test.ts` 会启动本机真实的提供方，也不在 CI 的
   测试脚本里。不要整份跑。
+- 上游新增的 `*.e2e.test.ts` 不一定在 CI 的测试脚本里（看 `packages/server/package.json` 的
+  `test:integration`）。本机挂了先在纯上游代码上复现：`git archive <发布点> | tar -x -C <临时目录>`，
+  在那里 `npm ci --ignore-scripts`、`npm run build:server` 后跑同一个文件。同样挂就是上游自己的
+  问题（v0.13.0-beta.1 的 `mcp-parity.e2e.test.ts` 4 条结束通知用例）。
+- 测试跑法因目录而异，按错的方式跑会报「No test files found」或「No test suite found」，
+  不是失败：`packages/cli/tests/*.test.ts` 是脚本，用 `npx tsx tests/<文件>` 跑；
+  `packages/app` 的 `*.browser.test.ts(x)` 要 `--project browser`，其余用 `--project unit`。
 - 官网包的 vitest 像 CI 一样从仓库根目录跑：`npx vitest run packages/website/src/...`。在
   `packages/website` 里跑会被 Cloudflare 的 Vite 插件挡住。
 - 上游新增的打包资源要核对进包。CI 只在 Linux 包上冒烟（Desktop Packages），macOS 包没有。v0.11.0 的内置插件（两个新提供方与全部
@@ -666,12 +719,14 @@ macOS 13 maps to Darwin 22. The two values use different version domains; do not
 iOS and Android store builds are not in `.github/workflows`. They are triggered by the EAS GitHub app the moment the `v*` tag is pushed:
 
 - **Android (Play Store)** — EAS builds with profile `production` and auto-submits to the Play Store via `eas submit` (EAS-managed credentials, no Fastlane).
-- **iOS (TestFlight + App Store)** — EAS builds with profile `production`, uploads to TestFlight, and a Fastlane lane submits the build for App Store review.
+- **iOS (TestFlight + App Store)** — EAS builds with profile `production`, uploads once through a `testflight` job, distributes the build to the `Paseo Beta` external group with Beta App Review submission, and a Fastlane lane submits that same build for App Store review.
 - **Android APK (GitHub Release asset)** — separate, via `.github/workflows/android-apk-release.yml`. This is the only Android-related workflow that lives in this repo.
 
 EAS uses the local app version source. `packages/app/app.config.js` derives the native version from the package version. Android `versionCode` is `major * 1_000_000 + minor * 1_000 + patch`. iOS reserves 1,000 build slots per app version: beta `N` uses slot `N`, and stable uses slot `999`. For example, `0.2.6-beta.2` appears in App Store Connect as version `0.2.6` build `2006002`; stable uses build `2006999`. Rebuilding the same tag produces the same native build number; if a store has already accepted a binary and you need a different binary, cut the next beta or patch instead of relying on EAS remote auto-increment.
 
-Beta tags run `Release iOS Beta`. The workflow uploads the build to TestFlight, distributes it to the persistent `Paseo Beta` external group, and submits it for Beta App Review. Testers and the group are managed once in App Store Connect; releases require no dashboard action.
+Stable tags run `Release Mobile`; beta tags run `Release iOS Beta`. Both distribute to the persistent `Paseo Beta` external group and submit for Beta App Review, so testers receive stable releases as well as betas. Testers, the group, and required TestFlight test information are managed once in App Store Connect.
+
+Stable iOS releases use one binary for two Apple review paths: Beta App Review for external TestFlight distribution and App Store review. [Apple says](https://developer.apple.com/help/app-store-connect/test-a-beta-version/invite-external-testers) the first submitted build requires a full TestFlight review; later builds for the same version might not. Do not assume a stable patch skips review.
 
 There is no mobile-release workflow under `.github/workflows`. The EAS GitHub app reads the workflows under `packages/app/.eas/workflows` and handles tag triggering directly.
 
@@ -695,7 +750,7 @@ npx eas build:list --platform android --limit 5 --non-interactive --json
 # Inspect a specific build.
 npx eas build:view <build-id>
 
-# Inspect the full release workflow, including submit_ios, submit_android,
+# Inspect the full release workflow, including distribute_ios, submit_android,
 # and submit_ios_for_review.
 npx eas workflow:view <workflow-run-id> --json
 
@@ -708,17 +763,17 @@ npx eas build:view <build-id> --json | jq '.logFiles[]'
 
 A build's `gitCommitHash` must match the release tag commit. `status` walks through `NEW` → `IN_QUEUE` → `IN_PROGRESS` → `FINISHED` (or `ERRORED`/`CANCELED`). The EAS workflow run's `gitCommitHash` and `trigger` must also match the release tag.
 
-Once a build is `FINISHED`, EAS still has release-critical work to do: Android must submit to the Play Store, and iOS must upload to TestFlight **and** submit the build for App Store review. The release is not done until all platforms are on their way through the stores.
+Once a build is `FINISHED`, EAS still has release-critical work to do: Android must submit to the Play Store, and iOS must distribute to the external TestFlight group with Beta App Review submission **and** submit the same build for App Store review. The release is not done until all platforms are on their way through the stores.
 
 For the `Release Mobile` EAS workflow, these jobs must pass:
 
 - `build_ios` — iOS binary built
-- `submit_ios` — iOS binary uploaded to App Store Connect/TestFlight
+- `distribute_ios` — iOS binary uploaded once, added to `Paseo Beta`, and submitted for Beta App Review
 - `submit_ios_for_review` — iOS build submitted for App Store review via Fastlane
 - `build_android` — Android store binary built
 - `submit_android` — Android binary submitted to the Play Store
 
-Do not treat `build_ios: SUCCESS` or `submit_ios: SUCCESS` as a completed iOS release. `submit_ios_for_review: FAILURE` means the iOS release is blocked even if the build is visible in TestFlight.
+Do not treat `build_ios: SUCCESS` or `distribute_ios: SUCCESS` as a completed iOS release. `submit_ios_for_review: FAILURE` means the iOS release is blocked even if the build is visible in TestFlight.
 
 To confirm the submission landed, inspect the EAS workflow with `npx eas workflow:view <workflow-run-id> --json`. App Store Connect (review state for the matching version/build) and the Play Console track are the final ground truth.
 
@@ -741,8 +796,9 @@ and Android APK assets are present along with the channel manifests
 (`latest-mac.yml` and `latest.yml` for stable; `beta-mac.yml` and `beta.yml` for
 beta).
 
-For stable releases, also confirm every required mobile build, upload, store
-submission, and review-submission job for the release commit. For betas, confirm
+For stable releases, also confirm every required mobile build, external
+TestFlight distribution, Beta App Review submission, and store submission job
+for the release commit. For betas, confirm
 the beta EAS workflow completed its TestFlight distribution and Beta App Review
 path. Delete the heartbeat only after every applicable checklist item passes,
 then report the release as shipped.
@@ -757,7 +813,7 @@ Pattern:
   "timezone": "UTC",
   "maxRuns": 120,
   "expiresIn": "24h",
-  "prompt": "Resume the vX.Y.Z release babysit for commit <sha>. Check npm tags; every GitHub Actions run for the release branch and tag; the published GitHub Release body, expected desktop/APK assets, and channel manifests; the Docker image; and the matching EAS workflow. Completion requires every applicable checklist item. For stable, require build_ios, submit_ios, submit_ios_for_review, build_android, and submit_android to succeed. For beta, require the beta TestFlight distribution and Beta App Review path. If work is pending, wait for the next heartbeat. If a failure can be retried safely for the same version, follow the failed-release procedure; otherwise report the blocker. When every applicable completion-checklist item passes, delete THIS heartbeat, report shipped, and stop.",
+  "prompt": "Resume the vX.Y.Z release babysit for commit <sha>. Check npm tags; every GitHub Actions run for the release branch and tag; the published GitHub Release body, expected desktop/APK assets, and channel manifests; the Docker image; and the matching EAS workflow. Completion requires every applicable checklist item. For stable, require build_ios, distribute_ios (Paseo Beta external distribution and Beta App Review submission), submit_ios_for_review, build_android, and submit_android to succeed. For beta, require the beta TestFlight distribution and Beta App Review path. If work is pending, wait for the next heartbeat. If a failure can be retried safely for the same version, follow the failed-release procedure; otherwise report the blocker. When every applicable completion-checklist item passes, delete THIS heartbeat, report shipped, and stop.",
 }
 ```
 
@@ -890,6 +946,14 @@ No prefix (`v`), no extra text. `Release Notes Sync` matches the `## X.Y.Z` (or 
 
 Older prerelease bodies on GitHub keep the notes they were synced with; `Release Notes Sync` only writes the release whose tag matches the top entry.
 
+## Changelog translations
+
+`CHANGELOG.zh-CN.md` holds the Chinese notes for `paseo.sh/zh-CN/changelog`. Only the website reads it; the app's **What's new** sheet, GitHub release bodies and F-Droid read `CHANGELOG.md`.
+
+- The release agent writes the Chinese entry in the changelog commit, after the English entry is approved. Every beta that rewrites the English entry rewrites the Chinese one too, and promotion renames both. `packages/website/e2e/i18n.spec.ts` fails CI on the release commit when any entry has no current translation.
+- A translated entry uses the English heading unchanged: `## X.Y.Z - YYYY-MM-DD`. The website uses it only while the version and date both match the English entry. Otherwise it shows that release whole in English under a notice. Delete Chinese entries whose English entry was renamed.
+- Keep the English sections, bullets and links one to one. Section titles: Added 新增, Improved 改进, Changed 变更, Fixed 修复, Security 安全, Breaking 破坏性变更, Plugins 插件, Notes 说明. Wording follows [website-i18n.md](website-i18n.md#chinese-style).
+
 ## Changelog ownership
 
 - **The agent running the release writes the changelog entry — beta or stable.** The release context and final wording stay with that agent.
@@ -1002,7 +1066,7 @@ Every entry covers `previous stable release → release source`: first beta, lat
 
 - [ ] The resolved release source is the intended commit (default `origin/main`) and its existing CI is green
 - [ ] Every PR in the release range has been opened, and its full description and every linked issue have been read before drafting the changelog
-- [ ] Fold this beta into the series' single `CHANGELOG.md` entry (heading `## X.Y.Z-beta.N - YYYY-MM-DD`, previous stable → release source), review it against the changelog policy, get approval, and commit it before cutting the release
+- [ ] Fold this beta into the series' single `CHANGELOG.md` entry (heading `## X.Y.Z-beta.N - YYYY-MM-DD`, previous stable → release source), review it against the changelog policy, get approval, and commit it with its [`CHANGELOG.zh-CN.md` translation](#changelog-translations) before cutting the release
 - [ ] The diff from the previous stable to the resolved release source is classified as patch or minor, with the target version and rationale approved
 - [ ] Release preparation stayed local until the approved release command pushed the complete branch and tag
 - [ ] `npm run release:beta:patch`, `npm run release:beta:minor`, or `npm run release:beta:next` completes successfully
@@ -1025,7 +1089,7 @@ Every entry covers `previous stable release → release source`: first beta, lat
 - [ ] Every PR in the release range has been opened, and its full description and every linked issue have been read before drafting the changelog
 - [ ] Ensure the approved release inputs are committed locally and the git worktree is clean before running any release command
 - [ ] Ensure local `npm run typecheck` passes on that exact commit before running any release command
-- [ ] Update `CHANGELOG.md` with user-facing release notes (features, fixes — not refactors). Promotion renames the series' `## X.Y.Z-beta.N` entry to `## X.Y.Z - YYYY-MM-DD` and re-checks it covers the full release
+- [ ] Update `CHANGELOG.md` with user-facing release notes (features, fixes — not refactors). Promotion renames the series' `## X.Y.Z-beta.N` entry to `## X.Y.Z - YYYY-MM-DD` and re-checks it covers the full release. Commit the matching [`CHANGELOG.zh-CN.md` entry](#changelog-translations) with it
 - [ ] Refresh the bundled price snapshot with `npm run usage:pricing:refresh` and include it in the release-preparation commits
 - [ ] Verify the changelog heading follows strict `## X.Y.Z - YYYY-MM-DD` format
 - [ ] Release preparation stayed local until the approved release command pushed the complete branch and tag
@@ -1041,7 +1105,7 @@ Every entry covers `previous stable release → release source`: first beta, lat
 - [ ] GitHub `Release Notes Sync` is green and the release body matches the stable changelog entry
 - [ ] EAS `Release Mobile` workflow for the same tag is green
 - [ ] EAS iOS `build_ios` completes for the same tag
-- [ ] EAS iOS `submit_ios` succeeds, uploading the build to App Store Connect/TestFlight
+- [ ] EAS iOS `distribute_ios` succeeds, uploading the binary once, distributing it to `Paseo Beta`, and submitting it for Beta App Review
 - [ ] EAS iOS `submit_ios_for_review` succeeds, putting the build into App Store review
 - [ ] EAS Android `build_android` completes for the same tag
 - [ ] EAS Android `submit_android` succeeds, putting the build on its Play Store track

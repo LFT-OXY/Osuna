@@ -1,8 +1,8 @@
 # Workers And Agent Cards
 
 Use workers when a peer agent should execute independently and report back
-through the channel event log. A worker is a registered child process (claude
-or codex) attached to a channel; the supervisor forwards inbox messages to it
+through the channel event log. A worker is a registered child process (claude,
+codex, pi or omp) attached to a channel; the supervisor forwards inbox messages to it
 and translates its output back into channel events.
 
 ## Spawn
@@ -25,11 +25,11 @@ inbox-idle until a `send --to <worker>` (or a broadcast when
 Key `spawn` flags:
 
 - `--agent <name>` — load `.atw/agents/<name>.md` (provider/model/as/system prompt defaults).
-- `--provider <claude|codex>` — overrides the agent card; validated against the adapter registry.
+- `--provider <claude|codex|pi|omp>` — overrides the agent card; validated against the adapter registry.
 - `--as <name>` — channel worker handle; defaults to the agent name.
 - `--cwd <path>` — worker working directory (also the jail root for `--file`/`--jsonl`).
 - `--model <id>` — model override.
-- `--resume <id>` — resume an existing claude session / codex thread.
+- `--resume <id>` — resume an existing claude session / codex thread / pi or omp session (pi: `--session-id`, omp: `--resume`; both ids are read with `get_state` and kept in `<worker>.session-id`).
 - `--timeout <duration>` — auto-kill after `30s` / `2m` / `1h`.
 - `--warn-before <duration>` — supervisor_warning lead time (default `5m`; `0ms` disables).
 - `--file <path>` (repeatable, glob-supported) — inject file content into the system prompt.
@@ -38,9 +38,53 @@ Key `spawn` flags:
 - `--inbox-policy <explicitOnly|broadcastAndExplicit>` — default `explicitOnly`.
 - `--idle-timeout <duration>` — OOM guard idle TTL (default `5m`; `0` disables).
 - `--max-live-workers <n>` — spawn-time live-worker budget (default `6`; `0` disables).
+- Reviewer mode: `--read-only`, `--clean`, `--no-session`, `--effort <level>`, `--standard-speed` (see below; `run` takes them too).
 
 The success event `spawned` records `pid`, `provider`, `agent`, the injected
 `files`, and the resolved `manifests` so later spectators can audit context.
+
+## Reviewer Mode
+
+Five switches on both `spawn` and `run`. With none of them the worker launches
+exactly as before (claude with full permissions; codex in `workspace-write`, or
+whatever `--sandbox` says; pi with its default tools, writable; omp with `--approval-mode yolo` and no UI, so a
+tool that would need approval fails instead of waiting). A cross-model reviewer turns on `--read-only`,
+`--clean`, `--no-session` and `--standard-speed` together.
+
+| Switch | Meaning | claude | codex | pi | omp |
+|---|---|---|---|---|---|
+| `--read-only` | may read, may not write or run commands | `--permission-mode dontAsk --tools Read,Grep,Glob` (no Bash) instead of the bypass pair | thread `sandbox: "read-only"` | `--tools read,grep,find,ls` | `--tools read,grep,glob --approval-mode always-ask`; overlay `tools.xdev: false` |
+| `--clean` | ignore the user's and project's settings, hooks, MCP, plugins, skills, project instruction files | `--safe-mode --restricted --strict-mcp-config`; file reads limited to `--cwd` | thread config: project untrusted + `project_doc_max_bytes: 0`, hooks / plugins / apps off, every MCP server from `config/read` disabled, skills off, `notify: []` | `--no-extensions --no-mcp --no-skills --no-prompt-templates --no-themes --no-context-files --no-approve` | `--no-extensions --no-skills --no-rules --no-lsp --no-title`; overlay `disabledProviders` switches off context files (`AGENTS.md`, `CLAUDE.md`), MCP and other tools' plugins |
+| `--no-session` | leave no session record; the worker cannot be resumed | `--no-session-persistence` | thread `ephemeral: true` | `--no-session` | `--no-session` |
+| `--effort <level>` | thinking effort, in the tool's own levels | `--effort`; `low` `medium` `high` `xhigh` `max` `ultracode` | `model_reasoning_effort`; `none` `minimal` `low` `medium` `high` `xhigh` `max` `ultra` `persistent` | `--thinking`; `off` `minimal` `low` `medium` `high` `xhigh` `max`, and only the ones the model has | `--thinking`; same levels as pi, only the ones the model has; never `auto` |
+| `--standard-speed` | do not use the fast tier the user set for this tool | `--settings '{"fastMode":false}'` | `service_tier: "default"` | nothing to pass (pi has no fast-tier setting) | overlay `tier.openai` / `tier.anthropic` / `tier.google: none`, `providers.fireworksTier: standard` |
+
+omp reads the "overlay" from a settings file the supervisor writes for each
+launch (`<worker>.config-overlay.yml`, passed as `--config`); no switch, no file.
+As a reviewer (`--read-only` with `--clean`) omp must not reach for another
+model: `--model` is passed together with `--smol`, `--slow` and `--plan`, and the
+overlay pins every chat role (`default` `smol` `slow` `plan` `vision` `commit`
+`tiny` `memory` `task` `advisor`, plus `judge`) to that model whatever the
+user's own roles say, and turns off `retry.modelFallback`, TTSR and compaction.
+An ordinary omp helper gets `--model` only when one was given (otherwise omp's
+own default). Messages that start with `/` are sent with a leading space, or omp
+would run them as its built-in commands.
+
+Refused before anything launches (no silent downgrade):
+
+- an effort level the tool does not have — Claude Code and pi would only warn and use their default, Codex would send it unchanged;
+- omp `--effort auto` — omp would ask its judge model to pick a level for every request;
+- a pi or omp level the chosen model lacks (both would silently use the nearest one): the handshake asks the tool `get_available_thinking_levels` and stops before any message is sent;
+- claude `--clean` without `--read-only` — restricted mode refuses the full-permission mode;
+- codex `--read-only` with `--sandbox workspace-write` / `danger-full-access`;
+- pi or omp `--resume` with `--no-session` — an unsaved session cannot be resumed;
+- omp `--read-only` with `--clean` but no `--model` — the helper roles cannot be pinned.
+
+Known limits:
+
+- claude `--read-only` alone still loads the user's own allow rules and hooks from their settings files, which can widen what the worker may do (for example read outside the cwd). Add `--clean` to drop them.
+- pi and omp `--read-only` alone keep MCP and extension tools (`--tools` does not filter them). Add `--clean` to drop them.
+- codex `--clean` cannot switch off the user-level `~/.codex/AGENTS.md`. The thread's `instructionSources` (the instruction files it actually loaded) are recorded as a `progress` event with `detail.kind: "instruction_sources"`.
 
 ## Agent Cards
 

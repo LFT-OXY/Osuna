@@ -10,7 +10,7 @@ import { GenericACPAgentClient } from "./generic-acp-agent.js";
 
 // Osuna 取指令列表不等程序报回（ADR 0003）：报回之前是 null，报回之后才是那份列表。
 describe("GenericACPAgentClient slash commands", () => {
-  test("lists commands an agent advertises after session/new once they arrive", async () => {
+  test("lists commands an agent advertises after session/new once they arrive, with argument hints", async () => {
     await withFakeACPAgent("commands-after-session-new", async (command, cwd) => {
       const client = new GenericACPAgentClient({ logger: createTestLogger(), command });
       const session = await client.createSession({ provider: "acp", cwd });
@@ -39,7 +39,8 @@ async function waitForAdvertisedCommands(session: AgentSession): Promise<void> {
   await vi.waitFor(
     async () => {
       expect(await session.listCommands?.()).toEqual([
-        { name: "review", description: "Review the diff", argumentHint: "", kind: "command" },
+        { name: "review", description: "Review the diff", argumentHint: "query", kind: "command" },
+        { name: "status", description: "Show status", argumentHint: "", kind: "command" },
       ]);
     },
     { timeout: 10_000 },
@@ -94,7 +95,10 @@ rl.on("line", (line) => {
               sessionId: "session-1",
               update: {
                 sessionUpdate: "available_commands_update",
-                availableCommands: [{ name: "review", description: "Review the diff" }],
+                availableCommands: [
+                  { name: "review", description: "Review the diff", input: { hint: "query" } },
+                  { name: "status", description: "Show status" },
+                ],
               },
             },
           },

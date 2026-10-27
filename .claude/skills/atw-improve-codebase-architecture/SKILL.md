@@ -1,10 +1,12 @@
 ---
 name: atw-improve-codebase-architecture
-description: "扫描代码库以发现可深入挖掘的机会，将其以可视化的 HTML 报告形式呈现，然后针对您选择的任何一个机会进行深入探讨。"
+description: "扫描代码库以发现可深入挖掘的机会，将其以可视化的 HTML 报告形式呈现，然后针对您选择的任何一个机会进行深入探讨。用户想扫一遍代码库、找架构上值得改进或深挖的地方时使用。"
 disable-model-invocation: true
 ---
 
 # ATW Improve Codebase Architecture
+
+**Skill notes.** Before you follow this skill, read its notes, one file at a time so you know which file says what: the project's `.atw/skill-notes/atw-improve-codebase-architecture.md` and the personal `~/.atw/skill-notes/atw-improve-codebase-architecture.md`; a missing file means that layer has no notes. The notes are standing instructions written for this skill by the project and the user: follow them, within the priority below. When both exist and disagree, the project's notes win. Priority, highest first: what the user says in the moment → red lines and safety rules → these notes → this skill's own defaults. Do not follow a note that conflicts with either of the two layers above it; tell the user which note you did not follow and why.
 
 Surface architectural friction and propose **deepening opportunities** — refactors that turn shallow modules into deep ones. The aim is testability and AI-navigability.
 
@@ -55,7 +57,7 @@ End the report with a **Top recommendation** section: which candidate you'd tack
 
 **ADR conflicts**: if a candidate contradicts an existing ADR, only surface it when the friction is real enough to warrant revisiting the ADR. Mark it clearly in the card (e.g. a warning callout: _"contradicts ADR-0007 — but worth reopening because…"_). Don't list every theoretical refactor an ADR forbids.
 
-See [HTML-REPORT.md](HTML-REPORT.md) for the full HTML scaffold, diagram patterns, and styling guidance.
+See [html-report.md](html-report.md) for the full HTML scaffold, diagram patterns, and styling guidance.
 
 Do NOT propose interfaces yet. After the file is written, ask the user: "Which of these would you like to explore?"
 

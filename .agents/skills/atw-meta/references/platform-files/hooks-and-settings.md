@@ -41,6 +41,7 @@ Whether these files exist in a project depends on which `atw init --<platform>` 
 | `inject-workflow-state.py` | Parses `[workflow-state:STATUS]` blocks in `.atw/workflow.md` and emits the body matching the current task status. Falls back to `Refer to workflow.md for current step.` when no matching block exists. |
 | `inject-subagent-context.py` | Injects PRD, JSONL context, and related spec/research into sub-agents. |
 | `inject-shell-session-context.py` | Lets shell commands inherit ATW session identity. |
+| `show-notice.py` | Claude Code only (PostToolUse, `Bash`): after `cross_model_review.py afk-notice`, `prepare` or `prepare-log`, has Claude Code show the user the `notice` the script wrote to `.atw/.runtime/hook-notice.json`, word for word, without the model in between. |
 
 Not every platform has every hook. Do not copy files from another platform just because a platform lacks a hook; first confirm whether that platform supports the corresponding event.
 

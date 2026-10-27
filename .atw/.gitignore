@@ -27,6 +27,13 @@
 # Conflict resolution temp files
 *.new
 
+# Verify skill evidence (each app's evidence/ under verify/)
+verify/*/evidence/
+
+# Verify skill evidence saved in task folders (including archived tasks)
+tasks/*/verify-evidence/
+tasks/archive/*/*/verify-evidence/
+
 # Python cache
 **/__pycache__/
 **/*.pyc

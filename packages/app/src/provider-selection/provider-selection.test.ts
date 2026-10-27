@@ -10,6 +10,7 @@ import {
   filterAndRankModelRows,
   groupProviderMenuEntries,
   matchesModelSearch,
+  resolveEffectiveComposerModeId,
   resolveSelectedModelLabel,
   resolveSnapshotModelLabel,
   resolveSubmissionReadiness,
@@ -17,6 +18,21 @@ import {
 } from "./provider-selection";
 
 describe("combined model selector data", () => {
+  it("shows a disconnected error for unfinished catalogs while keeping known models", () => {
+    const providers = buildSelectableProviderSelectorProviders(
+      [
+        snapshotEntry({ provider: "waiting", status: "loading", models: [] }),
+        snapshotEntry({ provider: "codex", status: "ready", models: [codexModel] }),
+      ],
+      false,
+    );
+    expect(providers[0].modelSelection).toEqual({
+      kind: "error",
+      message: "Host is not connected",
+    });
+    expect(providers[1].modelSelection.kind).toBe("models");
+  });
+
   const codexModel: AgentModelDefinition = {
     provider: "codex",
     id: "gpt-5.4",
@@ -369,7 +385,7 @@ describe("combined model selector data", () => {
         },
         autoSubmitConfig: null,
         workspaceDirectory: "/repo",
-        hasClient: true,
+        isConnected: true,
       }),
     ).toEqual({
       ok: false,
@@ -389,7 +405,7 @@ describe("combined model selector data", () => {
         },
         autoSubmitConfig: null,
         workspaceDirectory: "/repo",
-        hasClient: true,
+        isConnected: true,
       }),
     ).toEqual({ ok: true });
   });
@@ -428,7 +444,7 @@ describe("combined model selector data", () => {
           },
           autoSubmitConfig: null,
           workspaceDirectory: "/repo",
-          hasClient: true,
+          isConnected: true,
         }),
       ).toEqual({ ok: false, reason: "初始提示词必填" });
     } finally {
@@ -670,5 +686,58 @@ describe("models grouped by API endpoint", () => {
     expect(filterAndRankModelRows(rows, "relay b").map((row) => row.modelId)).toEqual([
       "relay-b/shared",
     ]);
+  });
+});
+
+describe("resolveEffectiveComposerModeId", () => {
+  const selection = {
+    provider: "pi",
+    modelId: "",
+    thinkingOptionId: "",
+    availableModels: [],
+  };
+
+  it("drops a remembered mode when the provider offers no modes", () => {
+    expect(
+      resolveEffectiveComposerModeId({ ...selection, modeId: "build", modeOptions: [] }, false),
+    ).toBe("");
+  });
+
+  it("submits the mode the picker shows when the remembered mode is not offered", () => {
+    expect(
+      resolveEffectiveComposerModeId(
+        {
+          ...selection,
+          modeId: "plan",
+          modeOptions: [
+            { id: "build", label: "Build" },
+            { id: "ask", label: "Ask" },
+          ],
+        },
+        false,
+      ),
+    ).toBe("build");
+  });
+
+  it("keeps a selected mode the provider offers", () => {
+    expect(
+      resolveEffectiveComposerModeId(
+        {
+          ...selection,
+          modeId: "ask",
+          modeOptions: [
+            { id: "build", label: "Build" },
+            { id: "ask", label: "Ask" },
+          ],
+        },
+        false,
+      ),
+    ).toBe("ask");
+  });
+
+  it("keeps the selected mode while the provider's modes are still loading", () => {
+    expect(
+      resolveEffectiveComposerModeId({ ...selection, modeId: "build", modeOptions: [] }, true),
+    ).toBe("build");
   });
 });

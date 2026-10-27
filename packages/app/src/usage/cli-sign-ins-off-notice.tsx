@@ -1,9 +1,9 @@
 import { useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { Button } from "@/components/ui/button";
 import { openHostPrivacySettings } from "@/navigation/settings-navigation";
-import { usageCopy } from "./copy";
 
 /**
  * 套餐用量因「读取 CLI 登录凭证」关着而空着：说明一行，下面是去主机设置「隐私」一节的按钮。
@@ -16,6 +16,7 @@ export function CliSignInsOffNotice({
   serverId: string;
   onLeave?: () => void;
 }) {
+  const { t } = useTranslation();
   const handleOpenSettings = useCallback(() => {
     onLeave?.();
     openHostPrivacySettings(serverId);
@@ -23,7 +24,7 @@ export function CliSignInsOffNotice({
   return (
     <View style={styles.notice}>
       <Text style={styles.text} testID="usage-cli-sign-ins-off">
-        {usageCopy.cliSignInsOff}
+        {t("usage.planUsage.cliSignInsOff")}
       </Text>
       <Button
         variant="outline"
@@ -31,7 +32,7 @@ export function CliSignInsOffNotice({
         onPress={handleOpenSettings}
         testID="usage-open-privacy-settings"
       >
-        {usageCopy.openPrivacySettings}
+        {t("usage.planUsage.openPrivacySettings")}
       </Button>
     </View>
   );

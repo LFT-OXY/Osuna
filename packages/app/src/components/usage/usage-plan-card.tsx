@@ -13,7 +13,6 @@ import { UsageCard } from "@/components/usage/usage-card";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { usePlanUsageHosts } from "@/plan-usage/use-hosts";
 import { UsageCard as PlanUsageReportCard } from "@/usage/card";
-import { usageCopy } from "@/usage/copy";
 import { CliSignInsOffNotice } from "@/usage/cli-sign-ins-off-notice";
 import { useUsageDisplay } from "@/usage/display";
 import { useUsageInSidebar } from "@/usage/in-sidebar";
@@ -44,9 +43,9 @@ export function UsagePlanCard({ hosts, isMultiHost }: UsagePlanCardProps) {
           loading={isBusy}
           disabled={!canRefresh}
           onPress={refresh}
-          accessibilityLabel={t("usage.planUsage.refresh")}
+          accessibilityLabel={t("providerUsage.refresh")}
         >
-          {isBusy ? t("usage.planUsage.refreshing") : t("usage.planUsage.refresh")}
+          {isBusy ? t("providerUsage.refreshing") : t("providerUsage.refresh")}
         </Button>
       </View>
     ),
@@ -55,7 +54,7 @@ export function UsagePlanCard({ hosts, isMultiHost }: UsagePlanCardProps) {
 
   return (
     <UsageCard
-      title={t("usage.planUsage.title")}
+      title={t("providerUsage.title")}
       renderHeaderRight={renderHeaderRight}
       testID="usage-plan-usage-card"
     >
@@ -85,19 +84,25 @@ function PlanUsageBody({
   view: UsageView;
   onRetry: () => void;
 }) {
+  const { t } = useTranslation();
   if (view.kind === "unavailable") {
     return <Text style={styles.message}>{view.message}</Text>;
   }
 
   if (view.kind === "loading") {
-    return <Text style={styles.message}>{usageCopy.loading}</Text>;
+    return <Text style={styles.message}>{t("providerUsage.loading")}</Text>;
   }
 
   if (view.kind === "error") {
     return (
-      <Alert size="sm" variant="error" title={usageCopy.errorTitle} description={view.message}>
+      <Alert
+        size="sm"
+        variant="error"
+        title={t("providerUsage.errorTitle")}
+        description={view.message}
+      >
         <Button variant="outline" size="sm" onPress={onRetry}>
-          {usageCopy.retry}
+          {t("providerUsage.retry")}
         </Button>
       </Alert>
     );
@@ -108,7 +113,7 @@ function PlanUsageBody({
   }
 
   if (view.reports.length === 0) {
-    return <Text style={styles.message}>{usageCopy.empty}</Text>;
+    return <Text style={styles.message}>{t("providerUsage.empty")}</Text>;
   }
 
   return <PlanUsageReports serverId={serverId} reports={view.reports} />;

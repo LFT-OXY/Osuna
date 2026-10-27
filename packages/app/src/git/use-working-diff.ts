@@ -8,6 +8,7 @@ import {
   useInlineReviewController,
   useReviewAttachmentSnapshot,
   useReviewCommentCount,
+  useReviewFeedback,
 } from "@/review";
 import { type ParsedDiffFile, useCheckoutDiffQuery } from "@/git/use-diff-query";
 import { useCheckoutStatusQuery } from "@/git/use-status-query";
@@ -24,6 +25,7 @@ interface UseWorkingDiffOptions {
   /** 只开文件树、diff 正文不可见。 */
   diffBodyHidden?: boolean;
   onFiles?: (files: ParsedDiffFile[]) => void;
+  presentation?: string;
 }
 
 export function useWorkingDiff({
@@ -35,6 +37,7 @@ export function useWorkingDiff({
   queryScope,
   diffBodyHidden = false,
   onFiles,
+  presentation,
 }: UseWorkingDiffOptions) {
   const {
     status,
@@ -49,7 +52,6 @@ export function useWorkingDiff({
     status?.error?.message ??
     (isStatusError && statusError instanceof Error ? statusError.message : null);
   const baseRef = gitStatus?.baseRef ?? undefined;
-  const hasUncommittedChanges = Boolean(gitStatus?.isDirty);
   const currentBranchName =
     gitStatus?.currentBranch && gitStatus.currentBranch !== "HEAD" ? gitStatus.currentBranch : null;
 
@@ -57,9 +59,9 @@ export function useWorkingDiff({
     serverId,
     workspaceId,
     cwd,
-    isDirty: hasUncommittedChanges,
   });
   const selectUncommitted = useCallback(() => selectComparison("uncommitted"), [selectComparison]);
+  const selectAll = useCallback(() => selectComparison("all"), [selectComparison]);
   const selectBase = useCallback(() => selectComparison("base"), [selectComparison]);
 
   const reviewDraftKey = useMemo(
@@ -96,13 +98,20 @@ export function useWorkingDiff({
     filesOnly,
     onFiles,
   });
-  const reviewActions = useInlineReviewController({ reviewDraftKey });
+  const reviewActions = useInlineReviewController({ reviewDraftKey, presentation });
   const reviewAttachment = useReviewAttachmentSnapshot({
     key: reviewDraftKey,
     diffFiles: files,
     cwd,
     mode: diffMode,
     baseRef,
+  });
+
+  const reviewFeedback = useReviewFeedback({
+    serverId,
+    workspaceId,
+    reviewDraftKey,
+    attachment: reviewAttachment,
   });
 
   return {
@@ -116,6 +125,7 @@ export function useWorkingDiff({
     diffMode,
     selectUncommitted,
     selectBase,
+    selectAll,
     files,
     diffPayloadError,
     diffTooLarge,
@@ -123,6 +133,7 @@ export function useWorkingDiff({
     reviewActions,
     reviewAttachment,
     publishReviewAttachment,
+    reviewFeedback,
   };
 }
 

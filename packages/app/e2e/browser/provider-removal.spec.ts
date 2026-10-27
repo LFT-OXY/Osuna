@@ -15,16 +15,29 @@ import {
   returnToProvidersList,
   readProviderRowIds,
 } from "../support/helpers/settings";
+import { copyPluginExample } from "../support/helpers/plugin-fixture";
 
 const CUSTOM_PROVIDER = {
   id: "junie",
   name: "Junie",
 } as const;
 
+const PLUGIN_PROVIDER = {
+  id: "direct-example",
+  name: "Direct provider example",
+  pluginId: "provider-direct-example",
+} as const;
+
 interface ProviderRemovalDaemonClient {
   connect(): Promise<void>;
   close(): Promise<void>;
-  patchDaemonConfig(config: { removeProviders?: string[] }): Promise<unknown>;
+  getDaemonConfig(): Promise<{ config: { pluginsEnabled?: boolean } }>;
+  patchDaemonConfig(config: {
+    removeProviders?: string[];
+    pluginsEnabled?: boolean;
+  }): Promise<unknown>;
+  installDirectoryPlugin(path: string): Promise<unknown>;
+  removePlugin(pluginId: string): Promise<void>;
   getProvidersSnapshot(): Promise<{
     entries: Array<{ provider: string; source?: "builtin" | "custom" }>;
   }>;
@@ -44,6 +57,11 @@ async function expectProviderSource(
       return snapshot.entries.find((entry) => entry.provider === CUSTOM_PROVIDER.id)?.source;
     })
     .toBe(source);
+}
+
+async function hasProvider(client: ProviderRemovalDaemonClient, id: string): Promise<boolean> {
+  const snapshot = await client.getProvidersSnapshot();
+  return snapshot.entries.some((entry) => entry.provider === id);
 }
 
 function visibleByTestId(page: Page, testId: string) {
@@ -112,6 +130,54 @@ test.describe("provider removal", () => {
     } finally {
       await removeCustomProvider(client).catch(() => undefined);
       await client.close().catch(() => undefined);
+    }
+  });
+
+  test("does not offer Remove for a plugin-registered provider", async ({ page }) => {
+    test.setTimeout(120_000);
+    const client = await connectDaemonClient<ProviderRemovalDaemonClient>({
+      clientIdPrefix: "provider-removal-e2e",
+    });
+
+    const plugin = await copyPluginExample("provider-direct");
+    try {
+      const previous = await client.getDaemonConfig();
+      try {
+        await client.patchDaemonConfig({ pluginsEnabled: true });
+        await client.installDirectoryPlugin(plugin.directory);
+
+        await gotoAppShell(page);
+        await openSettings(page);
+        await openSettingsHost(page, getServerId());
+        await openSettingsHostSection(page, getServerId(), "providers");
+
+        // Osuna 的 ⋯ 菜单在详情页头部：插件注册的提供方只有「诊断」，没有删除。
+        await clickProviderRow(page, PLUGIN_PROVIDER.id);
+        await expectProviderDetail(page, getServerId(), PLUGIN_PROVIDER.id);
+        await openDetailMenu(page, PLUGIN_PROVIDER.id);
+        await expect(visibleByTestId(page, `provider-remove-${PLUGIN_PROVIDER.id}`)).toHaveCount(0);
+        await page.keyboard.press("Escape");
+
+        // The provider survives a removeProviders patch pointed at it: the
+        // plugin, not config.json, owns the definition.
+        await client.patchDaemonConfig({ removeProviders: [PLUGIN_PROVIDER.id] });
+        await expect.poll(() => hasProvider(client, PLUGIN_PROVIDER.id)).toBe(true);
+        await returnToProvidersList(page);
+        await expect(
+          page.getByRole("button", {
+            name: `${PLUGIN_PROVIDER.name} provider details`,
+            exact: true,
+          }),
+        ).toBeVisible();
+      } finally {
+        await client.removePlugin(PLUGIN_PROVIDER.pluginId).catch(() => undefined);
+        await client
+          .patchDaemonConfig({ pluginsEnabled: previous.config.pluginsEnabled })
+          .catch(() => undefined);
+      }
+    } finally {
+      await client.close().catch(() => undefined);
+      await plugin.cleanup();
     }
   });
 });

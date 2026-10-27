@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 
@@ -35,14 +35,27 @@ export function writePrivateFileAtomicSync(
 ): void {
   const rename = options.rename ?? renameSync;
   ensurePrivateDirectory(path.dirname(filePath));
-  const parent = path.dirname(filePath);
-  const temporary = path.join(parent, `.${path.basename(filePath)}.${process.pid}.${randomUUID()}`);
+  const destination = resolveSymlinkedFile(filePath);
+  const temporary = path.join(
+    path.dirname(destination),
+    `.${path.basename(destination)}.${process.pid}.${randomUUID()}`,
+  );
   try {
     writeFileSync(temporary, data, { mode: PRIVATE_FILE_MODE });
-    rename(temporary, filePath);
-    ensurePrivateFile(filePath);
+    rename(temporary, destination);
+    ensurePrivateFile(destination);
   } catch (error) {
     rmSync(temporary, { force: true });
+    throw error;
+  }
+}
+
+// Renaming onto a symlink replaces the link, so write to the file it points at.
+function resolveSymlinkedFile(filePath: string): string {
+  try {
+    return realpathSync(filePath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return filePath;
     throw error;
   }
 }

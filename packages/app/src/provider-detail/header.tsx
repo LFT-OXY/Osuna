@@ -227,6 +227,8 @@ export interface ProviderDetailMenuProps {
   provider: string;
   providerLabel: string;
   providerSource: ProviderSnapshotEntry["source"];
+  // config.json 里有它的定义；插件注册的提供方也是 custom，但删配置删不掉它。
+  configOwned: boolean;
   hostSupportsRemoval: boolean;
   isRemoving: boolean;
   onDiagnose: () => void;
@@ -239,6 +241,7 @@ export function ProviderDetailMenu({
   provider,
   providerLabel,
   providerSource,
+  configOwned,
   hostSupportsRemoval,
   isRemoving,
   onDiagnose,
@@ -246,8 +249,8 @@ export function ProviderDetailMenu({
   placement,
 }: ProviderDetailMenuProps) {
   const { t } = useTranslation();
-  // 只有自定义提供方能删；主机不支持删除时不给入口。
-  const canRemove = hostSupportsRemoval && providerSource === "custom";
+  // 只有写进配置的自定义提供方能删；主机不支持删除时不给入口。
+  const canRemove = hostSupportsRemoval && providerSource === "custom" && configOwned;
   const triggerStyle = useCallback(
     ({ pressed, hovered, open }: DropdownMenuTriggerState) => {
       if (placement === "screenHeader") {

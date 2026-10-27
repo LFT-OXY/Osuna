@@ -5,6 +5,8 @@ description: "Bootstrap project-specific ATW coding specs with a platform-neutra
 
 # ATW Spec Bootstrap
 
+**Skill notes.** Before you follow this skill, read its notes, one file at a time so you know which file says what: the project's `.atw/skill-notes/atw-spec-bootstrap.md` and the personal `~/.atw/skill-notes/atw-spec-bootstrap.md`; a missing file means that layer has no notes. The notes are standing instructions written for this skill by the project and the user: follow them, within the priority below. When both exist and disagree, the project's notes win. Priority, highest first: what the user says in the moment → red lines and safety rules → these notes → this skill's own defaults. Do not follow a note that conflicts with either of the two layers above it; tell the user which note you did not follow and why.
+
 Use this skill to create or refresh `.atw/spec/` guidelines from the real codebase. One capable agent owns the full loop: analyze the repository, choose the spec boundaries, write the docs, and verify the result. The workflow does not depend on a specific host, CLI, or agent brand.
 
 ## Workflow

@@ -59,6 +59,7 @@ function mountCard(question: Record<string, unknown>, ...followUps: Record<strin
         permission={buildPermission([question, ...followUps])}
         onRespond={onRespond}
         isResponding={false}
+        responseError={null}
       />,
     ),
   );

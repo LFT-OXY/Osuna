@@ -77,7 +77,7 @@ The user sees a "current task," but ATW stores active task state per session.
 .atw/.runtime/sessions/<context-key>.json
 ```
 
-`task.py start` writes the task path into the runtime session file for the current session. `task.py current --source` shows the current task and where it came from. Different AI windows can point to different tasks without overwriting each other.
+`task.py start` and `task.py resume` write the task path into the runtime session file for the current session. To pick up an existing task — at `implement` or `accept` too — use `resume`: it writes only that session file and changes nothing in the task. `start` is for moving a task from planning into `implement` (step 1.5); it also writes `status`, and `branch` when none is set, into `task.json`. `task.py current --source` shows the current task and where it came from. Different AI windows can point to different tasks without overwriting each other.
 
 If the platform or shell environment has no stable session identity, `task.py start` may be unable to set the active task. The AI should read the error, inspect the platform hook/session environment, and not fall back to a shared global pointer.
 
@@ -104,6 +104,7 @@ Rules:
 ```bash
 python3 ./.atw/scripts/task.py create "<title>" --description "<one-line summary>" --slug <slug>
 python3 ./.atw/scripts/task.py start <task>
+python3 ./.atw/scripts/task.py resume <task>
 python3 ./.atw/scripts/task.py current --source
 python3 ./.atw/scripts/task.py add-context <task> implement <file> <reason>
 python3 ./.atw/scripts/task.py validate <task>

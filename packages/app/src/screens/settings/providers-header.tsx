@@ -73,6 +73,7 @@ export function ProviderDetailBackHeader({
     isRefreshing,
     onRefresh,
     providerSource,
+    configOwned,
     hostSupportsRemoval,
     isRemoving,
     onRemove,
@@ -99,6 +100,7 @@ export function ProviderDetailBackHeader({
           provider={provider}
           providerLabel={label}
           providerSource={providerSource}
+          configOwned={configOwned}
           hostSupportsRemoval={hostSupportsRemoval}
           isRemoving={isRemoving}
           onDiagnose={diagnose}
@@ -108,6 +110,7 @@ export function ProviderDetailBackHeader({
       </View>
     ),
     [
+      configOwned,
       diagnose,
       enabled,
       hostSupportsRemoval,

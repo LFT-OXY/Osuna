@@ -4,6 +4,7 @@ import {
   openSync,
   readFileSync,
   readSync,
+  readdirSync,
   realpathSync,
   renameSync,
   statSync,
@@ -1180,6 +1181,55 @@ function inheritSessionPointer(
 // ── Workflow State Breadcrumb ─────────────────────────────────────────
 const WF_RE =
   /\[workflow-state:([A-Za-z0-9_-]+)\]\s*\n([\s\S]*?)\n\s*\[\/workflow-state:\1\]/g;
+// Mirrors select_platform_blocks() in .atw/scripts/common/workflow_phase.py:
+// keep only the `[Platform, ...]` blocks naming this platform, or every block
+// when none does; marker lines are always dropped.
+const PLATFORM_MARKER_RE = /^\[(\/?)([A-Za-z][^[\]]*)\]\s*$/;
+function selectPlatformBlocks(body: string, platform: string): string {
+  const norm = (s: string) => s.toLowerCase().replace(/[-_ ]/g, "");
+  const names = (m: RegExpMatchArray) => (m[2] ?? "").split(",").map((n) => norm(n.trim()));
+  const lines = body.split("\n");
+  const anyMatch = lines.some((l) => {
+    const m = l.match(PLATFORM_MARKER_RE);
+    return !!m && m[1] !== "/" && names(m).includes(norm(platform));
+  });
+  const out: string[] = [];
+  let keep = true;
+  for (const line of lines) {
+    const m = line.match(PLATFORM_MARKER_RE);
+    if (m) {
+      keep = m[1] === "/" || !anyMatch || names(m).includes(norm(platform));
+      continue;
+    }
+    if (keep) out.push(line);
+  }
+  return out.join("\n");
+}
+// Mirrors DECISION_LOG_REMINDER / has_decision_log() in the shared per-turn
+// Python hook: same sentence, implement or accept only.
+const DECISION_LOG_REMINDER =
+  "This task has a decision log: keep recording it at key points with `python3 ./.atw/scripts/decision_log.py`; in this conversation, the start row (`decision_log.py start`) goes in just before the first row you log — `add` and the other writing commands write it first when it is missing, so a conversation with nothing to log writes none; read the last rows they print, and when another conversation wrote in between they write only the start row and stop: read it, then run the same command again.";
+// Mirrors DECISION_LOG_ARCHIVE_REMINDER in the shared per-turn Python hook:
+// same sentence, accept only (with a log), placed before DECISION_LOG_REMINDER.
+const DECISION_LOG_ARCHIVE_REMINDER =
+  "This task has a decision log: once accepted, after the acceptance row and before `task.py archive`, log one row for the archive (`decision_log.py add`); it goes into the archive commit with the task.";
+// Mirrors DECISION_LOG_REPORT_REMINDER in the shared per-turn Python hook:
+// same sentence, implement or accept (with a log), just before DECISION_LOG_REMINDER.
+const DECISION_LOG_REPORT_REMINDER =
+  "This task has a decision log: when the user asks how things stand or for a report (汇报一下, 现在什么情况, what's the status, report), rebuild it from the task directory in four blocks — `python3 ./.atw/scripts/decision_log.py pending --report` prints the draft; post it in plain words, keep the plain-words lines it carries with noob mode on, and fill in what it marks. This is the task's report, not `atw-what-happened`: that skill only the user starts, and it tells what changed in this chat since their last message.";
+// Mirrors DECISION_LOG_NO_TASK_REPORT_REMINDER / any_task_has_decision_log() in
+// the shared per-turn Python hook: same sentence, no current task only.
+const DECISION_LOG_NO_TASK_REPORT_REMINDER =
+  "No task is current, but some task under `.atw/tasks/` has a decision log: when the user asks how things stand or for a report (汇报一下, 现在什么情况, what's the status, report), rebuild it from that task's directory in four blocks — list the active tasks with `python3 ./.atw/scripts/task.py list` and see which of their directories hold a `decision-log.md` (if the user named the task or said enough to tell which one, take that one; if not, only one, take it; several, ask the user which), then `python3 ./.atw/scripts/decision_log.py pending --report --task-dir <dir>` prints the draft; post it in plain words, keep the plain-words lines it carries with noob mode on, and fill in what it marks. This is the task's report, not `atw-what-happened`: that skill only the user starts, and it tells what changed in this chat since their last message.";
+// 只看 .atw/tasks/ 下一层，归档里的不算
+function anyTaskHasDecisionLog(root: string): boolean {
+  const tasks = join(root, ".atw", "tasks");
+  try {
+    return readdirSync(tasks).some((name) => exists(join(tasks, name, "decision-log.md")));
+  } catch {
+    return false;
+  }
+}
 function workflowBreadcrumb(root: string, key: string | null): string {
   const wf = readText(join(root, ".atw", "workflow.md"));
   if (!wf) return "";
@@ -1191,7 +1241,9 @@ function workflowBreadcrumb(root: string, key: string | null): string {
   }
   const dir = readTaskDir(root, key);
   let header = "Status: no_task",
-    lookup = "no_task";
+    lookup = "no_task",
+    decisionLog = false,
+    accept = false;
   if (dir) {
     try {
       const d = JSON.parse(readText(join(dir, "task.json"))) as JsonObject;
@@ -1200,11 +1252,23 @@ function workflowBreadcrumb(root: string, key: string | null): string {
       if (status) {
         header = `Task: ${id} (${status})`;
         lookup = status;
+        decisionLog =
+          (status === "implement" || status === "accept") &&
+          exists(join(dir, "decision-log.md"));
+        accept = status === "accept";
       }
     } catch {}
   }
-  const body = templates[lookup] ?? "Refer to workflow.md for current step.";
-  return `<workflow-state>\n${header}\n${body}\n</workflow-state>`;
+  const body = selectPlatformBlocks(
+    templates[lookup] ?? "Refer to workflow.md for current step.",
+    "Pi",
+  );
+  const tail = decisionLog
+    ? `${accept ? `\n${DECISION_LOG_ARCHIVE_REMINDER}` : ""}\n${DECISION_LOG_REPORT_REMINDER}\n${DECISION_LOG_REMINDER}`
+    : lookup === "no_task" && anyTaskHasDecisionLog(root)
+      ? `\n${DECISION_LOG_NO_TASK_REPORT_REMINDER}`
+      : "";
+  return `<workflow-state>\n${header}\n${body}${tail}\n</workflow-state>`;
 }
 
 // ── Session Overview ───────────────────────────────────────────────────
@@ -1250,16 +1314,16 @@ function buildStartupContext(
 ): string {
   const workflow = workflowOverview(root, key);
   // get_context.py puts a <conventions> block in the overview only for a
-  // `general` project. Its workflow has its own way to pick up unfinished
-  // work; the bare `task.py start` below is one the script refuses there.
+  // `general` project: there <ready> defers to <atw-workflow>, which has its
+  // own way to pick up unfinished work. In dev mode <ready> points to the
+  // per-turn no-task breadcrumb for binding an already-existing task.
   const ready = overview.includes("\n<conventions>\n")
     ? [
         "Do what <atw-workflow> above says for the current task's status. With no current task, it also says when to create one and how to pick up unfinished work.",
       ]
     : [
         "Use the current workflow state to decide whether to create, continue, or skip an ATW task.",
-        "When CURRENT TASK is (none) but ACTIVE TASKS lists exactly one task assigned to you that is already at the implement or accept stage, this window is merely not bound to it yet: run `python3 ./.atw/scripts/task.py start <task-dir>` for that task, then continue from its stage. Do not ask whether to create a new task in that case.",
-        "If several tasks qualify, or the only candidate is still in a planning stage (discover / specify / slice), ask which task to bind instead of running start: start moves a planning-stage task straight into implement.",
+        "With no current task, if the request is about a task that already exists — the user names it, or asks to continue or accept and only one open task fits — make it this session's task first, as the no-task breadcrumb says; do not ask whether to create a new one.",
       ];
   return [
     "<session-context>\nATW compact SessionStart context. Use it to orient the session; load details on demand.\n</session-context>",
@@ -2032,6 +2096,10 @@ export default function atwExtension(pi: {
     return undefined;
   });
   pi.on?.("before_agent_start", (event, ctx) => {
+    // Same switch as the other platforms' hooks: channel sets ATW_HOOKS=0 on
+    // its helpers, which must not receive prompts written for the main AI.
+    if (process.env.ATW_HOOKS === "0" || process.env.ATW_DISABLE_HOOKS === "1")
+      return undefined;
     const k = getKey(event, ctx);
     const key = cacheKey(k, ctx);
     const cur = (event as { systemPrompt?: string }).systemPrompt ?? "";
@@ -2088,5 +2156,10 @@ export default function atwExtension(pi: {
   });
   pi.on?.("context", (event, ctx) => {
     getKey(event, ctx);
+  });
+  // Compaction can fold the persisted runtime-context message into its
+  // summary. Forget what was sent so the next turn re-sends it unchanged.
+  pi.on?.("session_compact", () => {
+    lastSentRuntimeCtx.clear();
   });
 }

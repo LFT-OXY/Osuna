@@ -144,6 +144,17 @@ describe("resolveCheckoutDiffSubscription", () => {
     });
   });
 
+  it("asks for the All changes file list alone when only the tree shows", () => {
+    expect(
+      resolveCheckoutDiffSubscription({
+        ...base,
+        mode: "all",
+        filesOnly: true,
+        filesOnlySupported: true,
+      }).compare,
+    ).toEqual({ mode: "all", baseRef: "main", ignoreWhitespace: true, filesOnly: true });
+  });
+
   it("asks for the full diff once the diff body shows", () => {
     expect(
       resolveCheckoutDiffSubscription({ ...base, filesOnly: false, filesOnlySupported: true }),

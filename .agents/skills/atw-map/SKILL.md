@@ -1,8 +1,10 @@
 ---
 name: atw-map
-description: "将一大批工作（超过一个代理会话所能处理的范围）规划为问题跟踪系统中决策工单的共享地图，并逐一解决这些工单，直到通往目标的道路畅通无阻。"
+description: "将一大批工作（超过一个代理会话所能处理的范围）规划为问题跟踪系统中决策工单的共享地图，并逐一解决这些工单，直到通往目标的道路畅通无阻。当目标太大、一个会话做不完时使用。"
 disable-model-invocation: true
 ---
+
+**Skill notes.** Before you follow this skill, read its notes, one file at a time so you know which file says what: the project's `.atw/skill-notes/atw-map.md` and the personal `~/.atw/skill-notes/atw-map.md`; a missing file means that layer has no notes. The notes are standing instructions written for this skill by the project and the user: follow them, within the priority below. When both exist and disagree, the project's notes win. Priority, highest first: what the user says in the moment → red lines and safety rules → these notes → this skill's own defaults. Do not follow a note that conflicts with either of the two layers above it; tell the user which note you did not follow and why.
 
 A loose idea has arrived — too big for one agent session, and wrapped in fog: the way from here to the **destination** isn't visible yet. Wayfinding is about finding that way, not charging at the destination. This skill charts the way as a **shared map** on the repo's issue tracker, then works its **decision tickets** — questions whose resolution is a decision, not slices of a build to execute — one at a time until the route is clear.
 

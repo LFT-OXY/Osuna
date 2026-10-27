@@ -5,9 +5,25 @@ description: "测试驱动开发。当用户希望采用“先测试后开发”
 
 # Test-Driven Development
 
+**Skill notes.** Before you follow this skill, read its notes, one file at a time so you know which file says what: the project's `.atw/skill-notes/atw-tdd.md` and the personal `~/.atw/skill-notes/atw-tdd.md`; a missing file means that layer has no notes. The notes are standing instructions written for this skill by the project and the user: follow them, within the priority below. When both exist and disagree, the project's notes win. Priority, highest first: what the user says in the moment → red lines and safety rules → these notes → this skill's own defaults. Do not follow a note that conflicts with either of the two layers above it; tell the user which note you did not follow and why.
+
 TDD is the red → green loop. This skill is the reference that makes that loop produce tests worth keeping: what a good test is, where tests go, the anti-patterns, and the rules of the loop. Every section applies on every cycle — consult them before and during the loop, not after.
 
 When exploring the codebase, read `GLOSSARY.md` (if it exists) so test names and interface vocabulary match the project's domain language, and respect ADRs in the area you're touching.
+
+## Discover the Stack First
+
+The TDD cycle is universal; the commands are not. Before writing the first test, discover how *this* repository tests, and use its commands for every RED, GREEN, and verification step:
+
+- **Language and build system** — `package.json`, `pom.xml`/`build.gradle`, `pyproject.toml`, `go.mod`, `Cargo.toml`, `Gemfile`, a `Makefile`
+- **Checked-in wrappers** — prefer `./gradlew`, `./mvnw`, `make test`, or a repo script over globally installed tools
+- **Test framework and configuration** — and how it runs a single focused test vs the full suite
+- **Existing conventions** — where tests live, how files are named, what patterns neighboring tests follow
+- **Documented commands** — README, CONTRIBUTING, and CI workflows show the commands that actually gate merges
+
+Run the repository's focused-test command during the loop and its full-suite command before completion. Never assume a default like `npm test` — a Gradle, Cargo, or pytest project has its own equivalent.
+
+The examples in [tests.md](tests.md) and [mocking.md](mocking.md) use TypeScript for illustration; the workflow is identical in any language once you've discovered the project's own tooling.
 
 ## What a good test is
 
@@ -36,3 +52,14 @@ When the shape of that interface is itself in question — how deep the module i
 - **Red before green.** Write the failing test first, then only enough code to pass it. Don't anticipate future tests or add speculative features.
 - **One slice at a time.** One seam, one test, one minimal implementation per cycle.
 - **Refactoring is not part of the loop.** It belongs to the review stage (see the `atw-code-review` skill), not the red → green implementation cycle.
+
+## Rationalizations specific to this skill
+
+Same shape as the general table in `.atw/workflow.md`; these are the excuses that only show up while writing tests.
+
+| Rationalization | Reality |
+|---|---|
+| This mock is only temporary | Temporary mocks stay; a test that mocks an internal collaborator shatters on the first refactor |
+| Writing the implementation first is faster | A test that was never seen red does not know what it is testing |
+| The test passed first time, great | A test that passes first time may be testing nothing |
+| The default test command will do | Look first at what command the repo actually uses |

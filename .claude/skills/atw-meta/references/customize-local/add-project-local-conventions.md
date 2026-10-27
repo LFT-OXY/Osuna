@@ -9,6 +9,7 @@ Often the user does not need to change ATW mechanics; they need local AI to unde
 | Rules code must follow | `.atw/spec/<layer>/` |
 | Cross-layer thinking methods | `.atw/spec/guides/` |
 | AI capability for a project-specific flow | Platform-local skill |
+| A change to how an existing ATW skill or command works | `.atw/skill-notes/<installed name>.md` (see `change-skills-or-commands.md`) |
 | One-off task material | `.atw/tasks/<task>/` |
 | Session summary | `.atw/workspace/<developer>/journal-N.md` |
 
@@ -17,7 +18,7 @@ Often the user does not need to change ATW mechanics; they need local AI to unde
 If the user wants AI to know "how this project customizes ATW," create a local skill:
 
 ```text
-.claude/skills/atw-local/
+.claude/skills/project-local/
 └── SKILL.md
 ```
 
@@ -25,11 +26,11 @@ Example:
 
 ```md
 ---
-name: atw-local
+name: project-local
 description: "Project-local ATW customizations for this repository. Use when changing this project's ATW workflow, hooks, local agents, or team-specific conventions."
 ---
 
-# ATW Local
+# Project Local
 
 ## Local Scope
 

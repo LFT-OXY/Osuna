@@ -300,7 +300,6 @@ export function CompactModelSheet({
         onClose={close}
         snapPoints={AGENT_CONTROLS_SHEET_SNAP_POINTS}
         scrollable={false}
-        sizeContentToCurrentSnapPoint={usesBottomSheet}
         contentStyle={styles.sheetBody}
         testID="agent-controls-model-sheet"
       >
@@ -349,7 +348,6 @@ export function CompactModelSheet({
           onClose={closeModelBrowser}
           snapPoints={AGENT_CONTROLS_SHEET_SNAP_POINTS}
           scrollable={false}
-          sizeContentToCurrentSnapPoint
           presentation="push"
           contentStyle={styles.sheetBody}
           testID="agent-controls-model-browser-sheet"

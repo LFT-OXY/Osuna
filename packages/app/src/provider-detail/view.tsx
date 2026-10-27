@@ -10,6 +10,7 @@ import {
 } from "@/components/provider-diagnostic-models";
 import { useProviderGlyph } from "@/components/provider-icons";
 import { useToast } from "@/contexts/toast-context";
+import { isConfigOwnedProvider } from "@/hooks/use-acp-provider-catalog";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import type { ProviderInstallGuide } from "@/provider-install-guide";
@@ -43,6 +44,9 @@ import { useProviderVersionCheck } from "./use-version-check";
 import { selectNewerVersion } from "./version-check";
 import { ProviderVersionSection, type ProviderVersionUpgrade } from "./version-section";
 import { countSelectableModels, describeProviderModelCount, resolveProviderStatus } from "./status";
+
+// 刷新失败或被推送来的新快照取消（CancelledError）都由快照查询自己的状态承担，这里不再抛出。
+function ignoreSnapshotRefreshFailure(): void {}
 
 /*
  * 运行时接线：快照、daemon 配置、主机能力。安装与升级、第三方接口的视图会拉进单测运行器
@@ -101,9 +105,11 @@ function useRefreshProvider({
   const { recheck } = useProviderVersionCheck(serverId, { checkOnMount: false });
   return useCallback(() => {
     // 快照刷新失败也照样重查。
-    void refresh([provider]).finally(() => {
-      if (checksVersions) void recheck([provider]);
-    });
+    void refresh([provider])
+      .catch(ignoreSnapshotRefreshFailure)
+      .finally(() => {
+        if (checksVersions) void recheck([provider]);
+      });
   }, [checksVersions, provider, recheck, refresh]);
 }
 
@@ -201,7 +207,7 @@ export function ProviderDetail({
           },
         },
       })
-        .then(() => refresh([provider]))
+        .then(() => refresh([provider]).catch(ignoreSnapshotRefreshFailure))
         .finally(() => {
           setDeletingModelId((current) => (current === modelId ? null : current));
         });
@@ -219,7 +225,7 @@ export function ProviderDetail({
           },
         },
       });
-      void refresh([provider]);
+      void refresh([provider]).catch(ignoreSnapshotRefreshFailure);
     },
     [additionalModels, patchConfig, provider, refresh],
   );
@@ -312,7 +318,7 @@ export function useProviderDetailHeader(
 ) {
   const { t } = useTranslation();
   const { entries, isRefreshing } = useProvidersSnapshot(serverId);
-  const { patchConfig } = useDaemonConfig(serverId);
+  const { config, patchConfig } = useDaemonConfig(serverId);
   const supportsProviderRemoval = useHostFeature(serverId, "providerRemoval");
   const removal = useProviderRemoval(serverId, provider);
   const providerEntry = useMemo(
@@ -337,6 +343,7 @@ export function useProviderDetailHeader(
     checksVersions: options.checksVersions,
   });
   const providerSource = providerEntry?.source;
+  const configOwned = isConfigOwnedProvider(config, provider);
   const isRemoving = removal.status === "removing";
 
   // 删除成功后提供方从快照里消失，设置页由地址修正回到第一个提供方或列表；弹窗经 onRemoved 关闭。
@@ -348,6 +355,7 @@ export function useProviderDetailHeader(
           title: t("settings.providers.remove.confirmTitle", { name: label }),
           message: t("settings.providers.remove.confirmMessage"),
           confirmLabel: t("settings.providers.remove.confirm"),
+          cancelLabel: t("common.actions.cancel"),
           destructive: true,
         }),
       remove: async () => {
@@ -366,6 +374,7 @@ export function useProviderDetailHeader(
     isRefreshing: isProviderRefreshing,
     onRefresh: handleRefresh,
     providerSource,
+    configOwned,
     hostSupportsRemoval: supportsProviderRemoval,
     isRemoving,
     onRemove: handleRemove,
@@ -399,6 +408,7 @@ export function ProviderDetailActions({
         provider={provider}
         providerLabel={header.label}
         providerSource={header.providerSource}
+        configOwned={header.configOwned}
         hostSupportsRemoval={header.hostSupportsRemoval}
         isRemoving={header.isRemoving}
         onDiagnose={diagnose}

@@ -1,11 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import {
-  Pressable,
-  View,
-  type PressableStateCallbackType,
-  type TextStyle,
-  type ViewStyle,
-} from "react-native";
+import { Pressable, View, type PressableStateCallbackType, type ViewStyle } from "react-native";
 import { Code, Maximize2, Workflow } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -17,7 +11,7 @@ import {
 import { ZoomableViewport } from "@/components/zoomable-viewport";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import type { Theme } from "@/styles/theme";
-import type { MarkdownFenceRendererProps } from "../types";
+import type { MarkdownFenceRendererProps } from "./types";
 import { MermaidFullscreenViewer } from "./fullscreen-viewer.web";
 import { MermaidIframeRuntime, type MermaidRenderedMessage } from "./iframe-runtime.web";
 import { useMermaidRenderModel } from "./use-render-model";
@@ -80,15 +74,6 @@ function MermaidFenceHostImpl({
     ],
     [openFullscreen, showSourcePress, t],
   );
-  const sourceView = useMemo(() => {
-    const { marginTop, marginBottom, marginVertical, ...sourceTextStyle } = textStyle;
-    const margins: ViewStyle = {
-      marginTop: marginTop ?? marginVertical,
-      marginBottom: marginBottom ?? marginVertical,
-    };
-    const text: TextStyle = sourceTextStyle;
-    return { container: margins, text };
-  }, [textStyle]);
   const diagramStyle = useMemo(
     () => [
       getDiagramBoxStyle(textStyle),
@@ -102,8 +87,6 @@ function MermaidFenceHostImpl({
     [visible],
   );
   const sourceVisible = !diagramVisible;
-  const sourceContainer = showSource ? sourceView.container : undefined;
-  const sourceTextStyle = showSource ? sourceView.text : textStyle;
   const viewportStyle = diagramVisible ? diagramStyle : measuringStyle;
   const renderSourceHeaderActions = useCallback(
     () =>
@@ -128,12 +111,12 @@ function MermaidFenceHostImpl({
   return (
     <>
       {sourceVisible ? (
-        <View style={sourceContainer}>
+        <View>
           <HighlightedCodeBlock
             code={code}
             language="mermaid"
             inheritedStyles={inheritedStyles}
-            textStyle={sourceTextStyle}
+            textStyle={textStyle}
             renderHeaderActions={renderSourceHeaderActions}
           />
         </View>

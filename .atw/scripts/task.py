@@ -85,6 +85,19 @@ from common.task_context import (
 # Command: start / finish
 # =============================================================================
 
+def _is_past_planning(task_json_path: Path) -> bool:
+    """True when task.json reads as implement or a later stage.
+
+    An unreadable or status-less task.json is not past planning: the gate
+    stays on when the stage cannot be told.
+    """
+    data, _ = read_json_checked(task_json_path)
+    if data is None:
+        return False
+    status = data.get("status")
+    return status in STATUS_VALUES[STATUS_VALUES.index("implement"):]
+
+
 def _record_start_state(
     task_json_path: Path,
     repo_root: Path,
@@ -98,8 +111,9 @@ def _record_start_state(
     only ever set by hand tends to reach archive with `branch: null`.
 
     Every stage before `implement` is a planning stage and all of them leave
-    through `start`; `implement` and later keep what they have, because `start`
-    is also how you resume a task after a checkout.
+    through `start`; `implement` and later keep what they have. Picking up a
+    task that is already there is `resume`'s job, not `start`'s — `resume`
+    writes no file, so the working tree stays clean.
 
     This used to flip `discover` only. That was equivalent back when there was
     a single `planning` stage, but the six-stage split (C1/C2) turned it into
@@ -134,7 +148,7 @@ def _record_start_state(
         applied.append(f"✓ Status: {previous_status} → implement{label}")
 
     # Only fill an empty field: an explicit `set-branch` must survive a later
-    # `start` (re-starting a task after a checkout is a normal thing to do).
+    # `start` (e.g. one run on a task already past planning).
     base_branch_conflict: str | None = None
     if not data.get("branch"):
         branch = current_branch_name(repo_root)
@@ -263,9 +277,16 @@ def cmd_start(args: argparse.Namespace) -> int:
     # sub-agent-capable platforms, so absence means no sub-agent reads them.
     # Nor is a general project: it installs no sub-agents, and a task brought
     # over from dev may still carry an empty manifest.
+    # Nor a task already past planning: the gate guards the planning →
+    # implement step, where curating is still possible. A task in implement /
+    # accept being picked up by a new session has an empty manifest as a
+    # settled fact, and stopping every rebind on it only teaches the AI to
+    # reach for --allow-empty-context (ticket 20).
+    task_json_path = full_path / FILE_TASK_JSON
     if (
         not getattr(args, "allow_empty_context", False)
         and get_project_mode(repo_root) != "general"
+        and not _is_past_planning(task_json_path)
     ):
         empty_manifests = [
             name
@@ -283,8 +304,6 @@ def cmd_start(args: argparse.Namespace) -> int:
             print(f"  Verify:  python3 .atw/scripts/task.py validate {task_input}")
             print("  Intentionally empty? Re-run start with --allow-empty-context")
             return 1
-
-    task_json_path = full_path / FILE_TASK_JSON
 
     if not resolve_context_key():
         _print_no_session_identity("start")
@@ -764,7 +783,7 @@ def main() -> int:
     p_start.add_argument(
         "--allow-empty-context",
         action="store_true",
-        help="Start even when implement.jsonl / check.jsonl have no curated entries",
+        help="Start a planning-stage task even when implement.jsonl / check.jsonl have no curated entries",
     )
 
     # resume

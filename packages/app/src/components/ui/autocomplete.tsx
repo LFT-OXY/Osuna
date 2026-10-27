@@ -23,10 +23,10 @@ import {
   AUTOCOMPLETE_FADE_HEIGHT,
   getAutocompleteFallbackIndex,
   getAutocompleteGroup,
-  getAutocompleteScrollOffset,
   type AutocompleteGroup,
   type SelectableOption,
 } from "./autocomplete-utils";
+import { getScrollOffsetToRevealItem } from "./scroll-reveal";
 
 export interface AutocompleteOption {
   id: string;
@@ -378,7 +378,7 @@ export function Autocomplete({
 
     // 高亮落在某组第一行时，把组标题一起带进视野。
     const itemTop = cache.groupTitleTops.get(selectedIndex) ?? layout.top;
-    const nextOffset = getAutocompleteScrollOffset({
+    const nextOffset = getScrollOffsetToRevealItem({
       currentOffset: scrollOffsetRef.current,
       viewportHeight: viewportHeightRef.current,
       bottomInset: AUTOCOMPLETE_FADE_HEIGHT,

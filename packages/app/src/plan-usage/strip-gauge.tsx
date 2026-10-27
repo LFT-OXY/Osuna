@@ -206,7 +206,7 @@ export function PlanUsageStripGauge({
               collapsable={false}
               style={styles.gauge}
               role="group"
-              accessibilityLabel={t("usage.planUsage.title")}
+              accessibilityLabel={t("providerUsage.title")}
               testID="composer-plan-usage"
             >
               {visibleSegments.map((segment, index) => (

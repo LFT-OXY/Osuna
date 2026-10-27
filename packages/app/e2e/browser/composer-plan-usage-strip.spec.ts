@@ -270,7 +270,7 @@ test.describe("plan usage in the composer context strip", () => {
       // 整段连着读：两行窗口挨着、顺序不变，后面直接是余额，中间没有 Weekly · Fable。
       const report = card.getByTestId("usage-report-mock:account");
       await expect(report).toContainText(
-        "Session12% · resets 3hWeekly46% · resets 4dExtra usage$3.00 / $50.00",
+        "Session12% used · resets 3hWeekly46% used · resets 4dExtra usage$3.00 / $50.00",
       );
       // 悬停卡片不接受点按，所以没有刷新按钮，窗口行也不能固定。
       await expect(report.getByRole("button")).toHaveCount(0);

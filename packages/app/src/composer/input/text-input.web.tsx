@@ -577,6 +577,11 @@ export const ComposerTextInput = forwardRef<ComposerTextInputHandle, ComposerTex
         isFocused: () => editor.view.hasFocus(),
         getText: () => docText(editor.state.doc),
         getSelection: () => readSelection(editor.state),
+        setSelection: (selection) => {
+          const tr = editor.state.tr;
+          setTextSelection(tr, selection, docText(editor.state.doc).length);
+          editor.view.dispatch(tr);
+        },
         replaceText,
         reset: () => replaceText(""),
         insertInlineBlock: (block, range) => insertInlineBlock(editor, block, range),
@@ -588,6 +593,16 @@ export const ComposerTextInput = forwardRef<ComposerTextInputHandle, ComposerTex
       [editor, replaceSegments, replaceText],
     );
 
+    // 外框的内边距（手机宽度下右侧给全屏按钮预留的那一条）也算输入框：点在那里聚焦编辑器，与 textarea 一致。
+    const focusFromFrame = useCallback(
+      (event: React.MouseEvent<HTMLDivElement>) => {
+        if (event.target !== event.currentTarget) return;
+        event.preventDefault();
+        editor.view.focus();
+      },
+      [editor],
+    );
+
     const placeholderStyle = useMemo(
       () => ({
         ...PLACEHOLDER_STYLE,
@@ -597,7 +612,7 @@ export const ComposerTextInput = forwardRef<ComposerTextInputHandle, ComposerTex
     );
 
     return (
-      <div style={ROOT_STYLE} {...toDataAttributes(dataSet)}>
+      <div style={ROOT_STYLE} onMouseDown={focusFromFrame} {...toDataAttributes(dataSet)}>
         {isEmpty && placeholder ? (
           <div aria-hidden style={placeholderStyle}>
             {placeholder}
