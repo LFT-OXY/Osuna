@@ -12,5 +12,5 @@
 - [x] PR 正文按 `docs/qa.md` 写，含：删掉的 DOM 预览与三个测试文件；因换成上游实现而改动的 Osuna 断言；按 Osuna 决定改写的上游测试；加进豁免名单的文件；中继密码的行为变化；各段冲突裁决摘要；后续工单（Pressable 迁移、远端子 Agent 进派发组）。平台矩阵中原生端标注免验收。
 - [x] CI 全绿，Nix 与 Nix Update Hash 除外；已知偶发失败只重跑失败的作业。
 - [x] 收尾（勾工单、journal）在并入之前做完。
-- [ ] 维护者看过截图与包的核对结果并发话后，PR 以 merge commit 并入（不 squash、不 rebase）。并入后手动删除 worktree。
+- [x] 维护者看过截图与包的核对结果并发话后，PR 以 merge commit 并入（不 squash、不 rebase）。并入后手动删除 worktree。
 - [ ] Windows 包与虚拟机里的安装验收由维护者自己做。

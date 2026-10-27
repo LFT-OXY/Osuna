@@ -358,7 +358,7 @@ Osuna 在 2026-10-13 把上游 `getpaseo/paseo` 合到了 v0.11.2（`759532509`�
 - [ ] `docs/release.md` 的同步点更新为 v0.13.0，补丁分支一节与开 PR 的时机已改写；`styling.md` 的 DOM 预览一节已改写；`docs/explorer-sidebar.md` 已并入会话历史与逻辑图。
 - [x] PR 正文写明：删掉的 DOM 预览与三个测试文件；因换成上游实现而改动的 Osuna 断言；按 Osuna 决定改写的上游测试；加进豁免名单的文件；中继密码的行为变化；各段冲突裁决摘要；后续工单。
 - [x] 收尾（勾工单、journal）在并入之前做完。
-- [ ] 维护者看过截图与包的核对结果并发话；PR 以 merge commit 并入。
+- [x] 维护者看过截图与包的核对结果并发话；PR 以 merge commit 并入。
 - [ ] 原生端（iOS / Android）免验收。Windows 包与虚拟机里的安装验收由维护者自己做。
 
 ## Out of Scope
