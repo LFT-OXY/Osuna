@@ -100,7 +100,9 @@ release push as the changelog and version commit.
 ### 发版
 
 先在 `CHANGELOG.md` 顶部加本次版本的条目，格式是 `## X.Y.Z - YYYY-MM-DD`——`npm version`
-的生命周期钩子会跑 F-Droid changelog 同步，查不到条目就直接中断。再把 `npm run format`、
+的生命周期钩子会跑 F-Droid changelog 同步，查不到条目就直接中断。`CHANGELOG.zh-CN.md` 是从上游
+原样收下的，只为官网代码能编译，Osuna 不往里写条目：[Changelog translations](#changelog-translations)
+与发版清单里提交中文条目的要求在 fork 下不适用。再把 `npm run format`、
 `npm run lint`、`npm run typecheck` 跑绿并提交——`version:all:*` 底下是 `npm version`，
 工作区不干净同样会中断。major 不在这条路径里：按本文「Release
 version decision」，agent 不自选 major，需要时手工改版本号再走 `npm run release:push`。
@@ -129,7 +131,7 @@ tag 并把 `publish` 设为 `false`，产物会留在 workflow artifacts 里。
 ### 从上游同步
 
 上游的新版本用 `git merge` 合进来，保留上游的提交历史，下一次从上一次的同步点接着合。
-当前已同步到上游 v0.11.2（`759532509`）。每次并入 main 后更新这一句，并在下表加一行；
+当前已同步到上游 v0.13.0（`d34d17a90`）。每次并入 main 后更新这一句，并在下表加一行；
 `git merge-base --is-ancestor <同步点> main` 应当成功。
 
 | 同步到  | 分段：上游发布点 → merge commit                                                                                                                                                                                                                                                                                           | 冲突裁决摘要                                       |
@@ -138,6 +140,7 @@ tag 并把 `publish` 设为 `false`，产物会留在 workflow artifacts 里。
 | v0.9.2  | v0.9.1 `818658520` → `2887a73f6`，v0.9.2 `c67b7158b` → `381896b91`                                                                                                                                                                                                                                                        | [PR #14](https://github.com/LFT-OXY/Osuna/pull/14) |
 | v0.10.3 | v0.10.0-beta.1 `52d345db7` → `0535af41b`，v0.10.0 `c481ecf3e` → `6cac3ad8b`，v0.10.1 `c5236c00d` → `260c79631`，v0.10.2 `919c737c1` → `a36ecb8de`，v0.10.3 `b4af508e2` → `e8738aa16`                                                                                                                                      | [PR #15](https://github.com/LFT-OXY/Osuna/pull/15) |
 | v0.11.2 | v0.11.0-beta.1 `4aa2f2817` → `9c56f066e`，v0.11.0-beta.2 `8498c7416` → `1fb78eb97`，v0.11.0-beta.3 `6166a7aca` → `64f2b95a3`，v0.11.0-beta.4 `6b00310f7` → `1d1dc7545`，v0.11.0-beta.5 `15d774d4a` → `5e5ea92c6`，v0.11.0 `22488d450` → `e57639e38`，v0.11.1 `ab10a6694` → `9ad8ac890`，v0.11.2 `759532509` → `d7800df9a` | [PR #16](https://github.com/LFT-OXY/Osuna/pull/16) |
+| v0.13.0 | v0.12.0-beta.1 `e2f4948f9` → `f65422084`，v0.12.0-beta.2 `c517d07d6` → `16d847b51`，v0.12.0-beta.3 `cc748dfe1` → `a5eb7c89a`，v0.12.0 `cafe4b01c` → `80515069f`，v0.13.0-beta.1 `3fa625701` → `f44be7529`，v0.13.0-beta.2 `30d8cb044` → `7e2a7ef83`，v0.13.0 `d34d17a90` → `c644c42f6`                                    | [PR #33](https://github.com/LFT-OXY/Osuna/pull/33) |
 
 #### 抓取与引用
 
@@ -153,20 +156,23 @@ tag 并把 `publish` 设为 `false`，产物会留在 workflow artifacts 里。
 
 上游的补丁版本有的在它的 main 上，有的不在，合之前逐个看：
 `git merge-base --is-ancestor <发布点> upstream/main`。v0.10.1 – v0.10.3 在从 v0.10.0 分出的
-`release/0.10.1`、`release/0.10.2`、`hotfix/0.10.3` 上；v0.11.1（`ab10a6694`）的发版提交在
-main 上；v0.11.2（`759532509`，3 个提交）在从 v0.11.1 分出的补丁分支上，上游只给它打了 tag。
-都照常按 SHA 合并。合过不在 main 上的补丁版本之后：
+`release/0.10.1`、`release/0.10.2`、`hotfix/0.10.3` 上；v0.11.2（`759532509`）、v0.11.3、v0.11.4 在从
+v0.11.1 分出的同一条补丁分支上，上游只给它们打了 tag；v0.13.0（`d34d17a90`）在 main 上。
+不在 main 上的补丁版本照常按 SHA 合并。合过之后：
 
-- `git merge-base main upstream/main` 给出的是分叉点 v0.11.1（`ab10a6694`），不是同步点。
+- `git merge-base main upstream/main` 给出的是分叉点，不是同步点。合 v0.13.0 之前它是 v0.11.1
+  （`ab10a6694`）；合完 v0.13.0 回到 `d34d17a90`，下一次合并没有分叉处要重解。
 - 下一次合上游主线的版本时，补丁分支与主线分叉的地方会再冲突一次。补丁分支上的修复在主线上
   有内容等价的提交，git 仍把它们当成两边各改了一遍。裁决固定：上游的部分取主线一侧，Osuna
   的改动保留。
 - 分叉处的重解都落在下一次合并的第一段。第一段合完，合并基点回到上游主线上，后面各段的基点
-  是上一段的发布点。模拟出的清单是上限：合 v0.11 时，上游自己的 v0.10.3 对 v0.11.0 模拟出
-  10 个文件，6 个在第一段报冲突，另外 4 个 git 自己合对了。
-- 截至 2026-10-13（上游 main 在 `b0f054de9`），合 v0.12 时没有要重解的文件。上游自己的 v0.11.2 对
-  上游 main 模拟合并没有冲突：v0.11.2 比 v0.11.1 多出的只有撤销 #5716 与发版提交，主线上的 #6445 删掉了
-  同一批文件。动手前用同一条命令对要合的版本重算：
+  是上一段的发布点。合 v0.13 时是 16 个文件，全在第一段：`CHANGELOG.md`、`package-lock.json`、
+  13 个 `package.json` 按[版本号与发版元数据](#版本号与发版元数据)处理，`scripts/postinstall-patches.mjs`
+  取主线一侧。
+- 主线已有等价提交的后续补丁版本不用单独合（v0.11.3、v0.11.4 随 v0.12.0-beta.1 进来）。用
+  `git cherry` 或比对 patch-id 确认每个修复在要合的发布点之前都有对应。
+- 模拟出的清单是上限：合 v0.11 时，上游自己的 v0.10.3 对 v0.11.0 模拟出 10 个文件，6 个在第一段
+  报冲突，另外 4 个 git 自己合对了。动手前对要合的版本重算：
   `git merge-tree --write-tree --name-only --no-messages <同步点> <上游发布点>`。
 
 #### 分段与并入
@@ -178,7 +184,8 @@ main 上；v0.11.2（`759532509`，3 个提交）在从 v0.11.1 分出的补丁�
   一次：[ADR 0006](adr/0006-usage-in-code-is-upstream-plan-usage.md)。
 - 每段的 merge commit 本身要通过 typecheck、lint 和该段冲突文件对应的测试。冲突之外
   的适配（文案、外观、`COMPAT` 标签）紧跟在后面单独提交，进入下一段之前做完。
-- 第一段合完就开草稿 PR，之后每段推送后看 CI。整套测试只在 CI 上跑。
+- 全部段在本机做完再开一个 PR，CI 只在开 PR 时跑一次。本机每段只跑改到的测试，整套测试只在
+  CI 上跑。往 PR 分支再推送会让整套 CI 重跑，偶发失败只重跑失败的作业。
 - 并入 main 用 merge commit。squash 和 rebase 都会丢掉上游的祖先关系，下一次合并会
   重新遇到已经解过的冲突。
 - 合并期间 main 有新提交，就把 main 合进合并分支，不对合并分支做 rebase，原因同上。
