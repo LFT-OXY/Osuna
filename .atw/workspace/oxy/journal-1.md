@@ -1498,3 +1498,46 @@ bootstrap.ts 的 4 处 claude 挪进账号服务（providerRuntimeSettings / act
 ### Status
 
 [OK] **Completed**
+
+
+## Session 47: 合并上游 v0.13.0 工单 14：打包核对、文档、PR #33 与验收检查
+<!-- atw-session: v=2 fp=806b1cc93c35c6ac -->
+
+**Date**: 2026-10-27
+**Task**: 合并上游 v0.13.0 工单 14：打包核对、文档、PR #33 与验收检查
+**Package**: app
+**Branch**: `merge-upstream-paseo-updates`
+
+### Summary
+
+本机打 macOS arm64 包并隔离打开核对（12 个内置插件加载、添加提供方有 Hoplite、套餐用量有数据）；release.md 同步点改 v0.13.0 并补表、补丁分支、开 PR 时机与两条踩过的坑；开 PR #33，三轮 CI 修掉 Explorer 标签宽度写样式表、提供方详情页 CancelledError 未处理两处应用问题与约 30 条测试对不上的问题，第三轮 22 项全绿（Windows 集成作业重跑一次）；验收检查逐条对证据勾选。
+
+### Main Changes
+
+- 官网中文更新日志用例按 Osuna 不写中文条目改断言（维护者同意）
+- workspace-desktop-tabs-row 标签宽度走 inlineUnistylesStyle；provider-detail/view 三处 refresh 补 catch
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `059a23369` | docs(merge): 工单 14：release.md 同步点改为 v0.13.0（d34d17a90）并在表里加七段一行（PR #33），补丁分支一节改写为本次情况（分叉处 16 个文件在第一段、v0.13.0 在上游 main 上），开 PR 改为全部段做完再开一个，发版一节写明 fork 不写 CHANGELOG.zh-CN 条目；design.md 的 Pressable 名单链到 Osuna 豁免块；任务目录加 PR 正文草稿（本机 macOS 包内置插件核对已填） |
+| `b9dfd932b` | chore(merge): 工单 14：本机 macOS 包打开核对——12 个内置插件都加载、「添加提供方」能搜到 Hoplite、套餐用量有数据（截图含账号不入库）；PR 正文补核对结果 |
+| `c1bde440c` | test(website): 工单 14：i18n.spec「shows the changelog in Chinese」按 Osuna 不写中文条目的决定改为断言 Osuna 版本带「尚未翻译」提示（CI 上 note 数到 13 条），维护者 2026-10-27 同意；release.md 与 PR 正文记下 |
+| `9f593ecb2` | fix(merge): 工单 14 首轮 CI 修正：Explorer 标签宽度走 inlineUnistylesStyle（拖动不再往共享样式表加规则）；Osuna 用例跟上「N% used」、按需加载翻译与 i18n mock；Windows 上 All changes 用例单独给 120 秒；上游 e2e 按 Osuna 的 Tiptap、字体选择器、模型菜单、hunk 头、主题轮转、社区入口、忽略按钮、日文入口与 Explorer 菜单改写；PR 正文与 release.md 踩过的坑记下 |
+| `a4972f6c3` | fix(merge): 工单 14 第二轮 CI 修正：提供方详情页三处快照刷新接住失败（推送来的新快照会取消进行中的刷新，CancelledError 未处理，开发版错误层挡住页面）；agent-consecutive-turns 首条消息用例同时扣住 after 追赶响应（慢机器上回复落进录帧窗口），断言不变；PR 正文记下 |
+| `ee2f77550` | chore(task): 工单 14 实现完成，任务转入验收；PR 正文填 CI 结果（第三轮 22 项全绿，Windows 集成作业重跑一次） |
+
+### Testing
+
+- [OK] 本机：改动的单元测试与 26 条浏览器用例逐个跑过；explorer-resize-performance 先红后绿；agent-consecutive-turns 降速 6 倍先红后绿
+- [OK] CI：PR #33 第三轮 22 项全绿
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 维护者看证据后以 merge commit 并入 PR #33，手动删 worktree
+- 后续：styling.md:313 两个过期路径、Pressable 迁移、远端子 Agent 进派发组、subagent-permission e2e 在第 6 段后未重跑

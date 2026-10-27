@@ -7,12 +7,12 @@
 **Impl:** done
 
 - [ ] `subagent-permission` 的 daemon e2e 通过，证明结束通知里的权限文案没丢。
-- [ ] 经两条新路径发出的 prompt 末尾仍有 Routing block，有测试（ADR 0004）。
-- [ ] 新建 Agent 经上游的新 setup 流程后仍带父工具调用标签，派发组对本机子 Agent 照常工作，有测试。
-- [ ] 结束订阅的持久化位置与 Osuna 数据目录的关系已核实，结论记在 `## Comments` 下。
-- [ ] 「远端子 Agent 进派发组」的后续工单已记在 `## Comments` 下，供 14 写进 PR 正文。
-- [ ] typecheck 和 lint 通过；改到的测试文件逐个单独跑过并通过（不跑整套）。
-- [ ] 没有 Osuna 的断言被删除或放宽；必须跟着改的断言逐条记在 `## Comments` 下，供 14 写 PR 正文用。
+- [x] 经两条新路径发出的 prompt 末尾仍有 Routing block，有测试（ADR 0004）。
+- [x] 新建 Agent 经上游的新 setup 流程后仍带父工具调用标签，派发组对本机子 Agent 照常工作，有测试。
+- [x] 结束订阅的持久化位置与 Osuna 数据目录的关系已核实，结论记在 `## Comments` 下。
+- [x] 「远端子 Agent 进派发组」的后续工单已记在 `## Comments` 下，供 14 写进 PR 正文。
+- [x] typecheck 和 lint 通过；改到的测试文件逐个单独跑过并通过（不跑整套）。
+- [x] 没有 Osuna 的断言被删除或放宽；必须跟着改的断言逐条记在 `## Comments` 下，供 14 写 PR 正文用。
 
 ## Comments
 

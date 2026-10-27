@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 46
-- **Last Active**: 2026-10-26
+- **Total Sessions**: 47
+- **Last Active**: 2026-10-27
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1500 | Active |
+| `journal-1.md` | ~1543 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -30,6 +30,7 @@
 
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 47 | 2026-10-27 | 合并上游 v0.13.0 工单 14：打包核对、文档、PR #33 与验收检查 | `059a23369`, `b9dfd932b`, `c1bde440c`, `9f593ecb2`, `a4972f6c3`, `ee2f77550` | `merge-upstream-paseo-updates` |
 | 46 | 2026-10-26 | 同步 PR #32 并收尾 magpie 缺口总任务 | `5f34ab0fc` | `main` |
 | 45 | 2026-10-26 | 多号轮换工单 13：bootstrap 不点名提供方，PR #32 合入并归档 | `e4aa0beed` | `feat/prd-9-multi-account-rotation` |
 | 44 | 2026-10-25 | 登录凭证开关与风险提示：6 张工单实现、验收、归档 | `2d24030b3`, `69a61652c`, `f4099a746`, `c2c324a3c`, `cb4715486`, `48e017fbe`, `9d320b500`, `b1ae4b4bd`, `cd3378c04`, `e260f294e`, `61f64fa2b`, `cf09ee240`, `2d122035d` | `complete-magpie-osuna-gaps-subtask-8-login-credential-switch` |
