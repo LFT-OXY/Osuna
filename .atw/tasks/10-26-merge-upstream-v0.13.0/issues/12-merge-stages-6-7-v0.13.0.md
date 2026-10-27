@@ -28,3 +28,4 @@
 ## Comments
 
 - 从工单 03 挪来：上游 #7611「元数据生成只用所选模型」（`457414231`）在第 6 段进来。合完照收逻辑（`structured-generation-providers.ts`、`git-metadata-generator.ts`），文案键 `fallbackHint` 换成 `modelHint` 后，九种语言里的 “Paseo” 改 “Osuna”（main 的 `fallbackHint` 已是），`metadata-generation-page.tsx` 不放回 paseo.sh 文档链接（feature-overlap 3.2 第 5 条）。
+- 从工单 10 挪来：上游 #7683（`21e7ccb03`）在第 6 段把结束通知搬进 `agent/finish-subscriptions/internal/notification.ts`。合完把 Osuna 的权限文案（由用户在子会话里批准、未授权别用 `respond_to_permission`，现在在 `agent-prompt.ts` 的 `setupFinishNotification`）搬进新文件，同时收下上游的 `host unreachable`、`host removed` 两种原因，`serverId` 本段已有、照留（prd「连接的主机与 Agent 间消息」）；`agent-prompt.test.ts`「finish notifications survive permission responses」若随上游删掉，挪进新文件对应的测试，断言原文不变；再跑一次 `subagent-permission.e2e`。

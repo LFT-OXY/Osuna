@@ -20,6 +20,7 @@ import { AgentManager } from "./agent-manager.js";
 import { AgentStorage } from "./agent-storage.js";
 import {
   appendRoutingBlock,
+  sendPromptToAgent,
   setupFinishNotification,
   waitForAgentRunStartWithTimeout,
 } from "./agent-prompt.js";
@@ -293,6 +294,44 @@ test("appendRoutingBlock adds the block after string text or as a trailing text 
     { type: "text", text: "review this" },
     { type: "text", text: block },
   ]);
+});
+
+test("a prompt wrapped in the sender envelope still ends with the Routing block", async () => {
+  const target: ManagedAgent = Object.create(null);
+  Reflect.set(target, "id", "target-agent");
+  Reflect.set(target, "lifecycle", "idle");
+  Reflect.set(target, "config", { title: "Target" });
+  const streamAgent = vi.fn((_agentId: string, _prompt: string, _options?: unknown) =>
+    (async function* noop() {})(),
+  );
+  const agentManager = new AgentManager({ clients: {}, logger: createTestLogger() });
+  Reflect.set(agentManager, "getAgent", (agentId: string) =>
+    agentId === "target-agent" ? target : null,
+  );
+  Reflect.set(agentManager, "tryRunOutOfBand", () => false);
+  Reflect.set(agentManager, "hasInFlightRun", () => false);
+  Reflect.set(agentManager, "streamAgent", streamAgent);
+  const agentStorage: AgentStorage = Object.create(AgentStorage.prototype);
+  Reflect.set(agentStorage, "get", async () => null);
+  const block = "<paseo-system>\nrouting\n</paseo-system>";
+  const source = { kind: "agent-message" as const, agentId: "sender-agent", title: "Sender" };
+
+  await sendPromptToAgent({
+    agentManager,
+    agentStorage,
+    agentId: "target-agent",
+    prompt: "review the diff",
+    source,
+    messageId: "message-1",
+    resolveRoutingBlock: async () => block,
+    logger: createTestLogger(),
+  });
+
+  const envelope = formatAgentMessage({ id: "message-1", source, text: "review the diff" });
+  expect(streamAgent).toHaveBeenCalledWith("target-agent", `${envelope}\n\n${block}`, {
+    clientMessageId: "message-1",
+    submittedPrompt: envelope,
+  });
 });
 
 test("finish notifications tell the parent the child's last assistant message", async () => {

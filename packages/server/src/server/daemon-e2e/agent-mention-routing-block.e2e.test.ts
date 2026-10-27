@@ -399,6 +399,8 @@ Rules:
       name: "send_agent_prompt",
       arguments: { agentId: target.id, prompt: text, background: false },
     });
+    // 上游 #7561 起 Agent 间消息先排队、安静两秒后才投递，先等它送到。
+    await expect.poll(() => scenario.prompts.length, { timeout: WAIT_MS }).toBeGreaterThan(0);
     // 上游给 Agent 间消息套了发送者信封；信封整串可解析，说明末尾没有追加 Routing block。
     expect(scenario.prompts).toHaveLength(1);
     expect(parseAgentMessage(scenario.prompts[0])).toMatchObject({

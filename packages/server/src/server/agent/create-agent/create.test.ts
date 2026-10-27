@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PARENT_TOOL_CALL_ID_LABEL } from "@getpaseo/protocol/agent-labels";
 import { expect, test, vi } from "vitest";
 
 import { createTestLogger } from "../../../test-utils/test-logger.js";
@@ -11,6 +12,7 @@ import { AgentStorage } from "../agent-storage.js";
 import type { CreatePaseoWorktreeWorkflowResult } from "../../worktree-session.js";
 import { createAgentCommand } from "./create.js";
 import type { ManagedAgent } from "../agent-manager.js";
+import { formatAgentMessage } from "../agent-messages/index.js";
 
 const logger = createTestLogger();
 
@@ -90,6 +92,50 @@ test("session create forwards clientMessageId to the initial prompt run options"
 
   expect(streamAgent).toHaveBeenCalledWith("agent-1", "hello from create", {
     clientMessageId: "msg-create-1",
+  });
+});
+
+test("session create from another agent ends the enveloped first prompt with the Routing block", async () => {
+  const snapshot = {
+    id: "agent-1",
+    provider: "codex",
+    cwd: "/tmp/paseo-create-test",
+    runtimeInfo: null,
+  } as ManagedAgent;
+  const streamAgent = vi.fn(() => (async function* noop() {})());
+  const dependencies: Parameters<typeof createAgentCommand>[0] = {
+    agentManager: {
+      createAgent: vi.fn(async () => snapshot),
+      getAgent: vi.fn(() => snapshot),
+      tryRunOutOfBand: vi.fn(() => false),
+      hasInFlightRun: vi.fn(() => false),
+      streamAgent,
+      waitForAgentRunStart: vi.fn(async () => undefined),
+    } as unknown as Parameters<typeof createAgentCommand>[0]["agentManager"],
+    agentStorage: {} as Parameters<typeof createAgentCommand>[0]["agentStorage"],
+    logger: createTestLogger(),
+    providerSnapshotManager: createProviderSnapshotManagerStub().manager,
+  };
+  const block = "<paseo-system>\nrouting\n</paseo-system>";
+  const source = { kind: "agent-message" as const, agentId: "caller-agent", title: "Caller" };
+
+  await createAgentCommand(dependencies, {
+    kind: "session",
+    config: { provider: "codex", cwd: "/tmp/paseo-create-test" },
+    workspaceId: "ws-create-test",
+    initialPrompt: "write the code",
+    source,
+    clientMessageId: "msg-create-1",
+    labels: {},
+    provisionalTitle: null,
+    firstAgentContext: { attachments: [] },
+    resolveRoutingBlock: async () => block,
+  });
+
+  const envelope = formatAgentMessage({ id: "msg-create-1", source, text: "write the code" });
+  expect(streamAgent).toHaveBeenCalledWith("agent-1", `${envelope}\n\n${block}`, {
+    clientMessageId: "msg-create-1",
+    submittedPrompt: envelope,
   });
 });
 
@@ -296,6 +342,57 @@ test("mcp create stamps the new worktree's workspaceId, not the parent's", async
     const storedChild = await storage.get(child.id);
     expect(storedChild?.workspaceId).toBe("ws-new-worktree");
     expect(child.cwd).toBe(join(workdir, "worktree", "packages", "app"));
+  } finally {
+    await removeRealAgentManagerWorkdir({ agentManager, storage, workdir });
+  }
+});
+
+test("mcp create in a new worktree labels the child with the caller's tool call id", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "create-agent-call-link-test-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const agentManager = createRealAgentManager(storage);
+  const providerSnapshotManager = createProviderSnapshotManagerStub().manager;
+
+  try {
+    const { snapshot: parent } = await createAgentCommand(
+      { agentManager, agentStorage: storage, logger, providerSnapshotManager },
+      {
+        kind: "session",
+        config: { provider: "codex", cwd: workdir },
+        workspaceId: "ws-parent",
+        labels: {},
+        provisionalTitle: null,
+        firstAgentContext: { attachments: [] },
+      },
+    );
+
+    const { snapshot: child } = await createAgentCommand(
+      {
+        agentManager,
+        agentStorage: storage,
+        logger,
+        providerSnapshotManager,
+        createPaseoWorktree: fakeWorktreeCreator({
+          repoRoot: workdir,
+          createdWorkspaceId: "ws-new-worktree",
+        }),
+      },
+      {
+        kind: "mcp",
+        provider: "codex/gpt-5.4",
+        title: "child",
+        initialPrompt: "do the thing",
+        notifyOnFinish: false,
+        callerAgentId: parent.id,
+        parentToolCallId: "call-from-parent",
+        worktree: { worktreeName: "feature", baseBranch: "main" },
+      },
+    );
+
+    const storedChild = await storage.get(child.id);
+    expect(storedChild?.workspaceId).toBe("ws-new-worktree");
+    expect(storedChild?.labels[PARENT_TOOL_CALL_ID_LABEL]).toBe("call-from-parent");
+    expect(child.labels[PARENT_TOOL_CALL_ID_LABEL]).toBe("call-from-parent");
   } finally {
     await removeRealAgentManagerWorkdir({ agentManager, storage, workdir });
   }
