@@ -64,7 +64,7 @@ function getOpenIntentTarget(openIntent: WorkspaceOpenIntent): WorkspaceTabTarge
   return { kind: "draft", draftId: openIntent.draftId };
 }
 
-// COMPAT(workspace-open-url): added in v0.12.0, remove after 2027-01-22.
+// COMPAT(workspace-open-url): added in v0.18.0, remove after 2027-01-22.
 // Bookmarks and older clients still send ?open=; internal navigation uses pending model state.
 function stripOpenSearchParamFromBrowserUrl() {
   if (!isWeb || typeof window === "undefined") {

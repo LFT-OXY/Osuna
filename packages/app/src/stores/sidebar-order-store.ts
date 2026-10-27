@@ -25,7 +25,7 @@ const StringArrayRecordSchema = z.record(z.string(), z.array(z.string()));
 const SidebarOrderPersistedStateSchema = z.strictObject({
   projectOrder: z.array(z.string()).optional(),
   pinnedWorkspaceOrder: z.array(z.string()).optional(),
-  // COMPAT(automaticWorkspaceOrder): v0.13.0; accept discarded keys until 2027-04-22 so strict parsing preserves projects/pins.
+  // COMPAT(automaticWorkspaceOrder): v0.18.0; accept discarded keys until 2027-04-22 so strict parsing preserves projects/pins.
   workspaceOrderByProject: StringArrayRecordSchema.optional(),
   projectOrderByServerId: StringArrayRecordSchema.optional(),
   workspaceOrderByServerAndProject: StringArrayRecordSchema.optional(),

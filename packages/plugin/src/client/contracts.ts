@@ -135,15 +135,15 @@ export interface PluginFilePanelParams {
   readonly lineEnd?: number;
 }
 export interface PluginWorkspacePanelProps extends PluginPanelProps<PluginWorkspacePanelParams> {
-  // COMPAT(pluginPanelFlatProps): added in v0.13.0, remove after 2027-04-23
+  // COMPAT(pluginPanelFlatProps): added in v0.18.0, remove after 2027-04-23
   /** @deprecated Use the panel registration to select the context. */
   context: "workspace";
 }
 export interface PluginAgentPanelProps extends PluginPanelProps<PluginAgentPanelParams> {
-  // COMPAT(pluginPanelFlatProps): added in v0.13.0, remove after 2027-04-23
+  // COMPAT(pluginPanelFlatProps): added in v0.18.0, remove after 2027-04-23
   /** @deprecated Use the panel registration to select the context. */
   context: "agent";
-  // COMPAT(pluginPanelFlatProps): added in v0.13.0, remove after 2027-04-23
+  // COMPAT(pluginPanelFlatProps): added in v0.18.0, remove after 2027-04-23
   /** @deprecated Read `params.agentId`. */
   agentId: string;
 }
@@ -209,13 +209,13 @@ export type PluginClientContribution = (client: PluginClientContext) => PluginCl
 
 export type PluginWorkspacePanelContribution<Text extends PluginText = string> =
   | (PluginWorkspacePanelBase<Text> & {
-      // COMPAT(pluginPanelFlatProps): added in v0.13.0, remove after 2027-04-23
+      // COMPAT(pluginPanelFlatProps): added in v0.18.0, remove after 2027-04-23
       /** @deprecated Omit context. */
       context?: "workspace";
       Component: ComponentType<PluginWorkspacePanelProps>;
     })
   | (PluginWorkspacePanelBase<Text> & {
-      // COMPAT(pluginAgentPanelAlias): added in v0.13.0, remove after 2027-04-23
+      // COMPAT(pluginAgentPanelAlias): added in v0.18.0, remove after 2027-04-23
       /** @deprecated Register with `addAgentPanel`. */
       context: "agent";
       Component: ComponentType<PluginAgentPanelProps>;

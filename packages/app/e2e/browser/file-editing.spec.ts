@@ -444,6 +444,28 @@ test.describe("CodeMirror workspace file editing", () => {
     }
   });
 
+  // Osuna：逻辑图带行号的节点文档要停在那一行；预览滚不到行，Markdown 的行号目标同样开源码视图。
+  test("opens a Markdown line target as source", async ({ page }) => {
+    const target = "spec.md:3";
+    const session = await seedAgentWithFileLink({
+      target,
+      fileName: "spec.md",
+      content: ["# Spec", "", "Review this source line", "", "More text"].join("\n"),
+    });
+
+    try {
+      await openAgentRoute(page, session);
+      await page.getByText(target, { exact: true }).click();
+
+      await expectFileTabOpen(page, "spec.md");
+      await expect(page.getByTestId("file-source-editor")).toBeVisible();
+      await expect(page.getByLabel("Line 3, column 1")).toBeVisible();
+      await expect(page.getByTestId("markdown-preview-frame")).toHaveCount(0);
+    } finally {
+      await session.cleanup();
+    }
+  });
+
   test("opens an HTML line target as source", async ({ page }) => {
     const target = "plan.html:2";
     const session = await seedAgentWithFileLink({

@@ -344,9 +344,9 @@ export function runPluginClientBundle(
       return registerPanel({ ...contribution, context: "agent" });
     },
     addWorkspacePanel(input: WorkspacePanelInput<PluginText>) {
-      // COMPAT(pluginAgentPanelAlias): added in v0.13.0, remove after 2027-04-23
+      // COMPAT(pluginAgentPanelAlias): added in v0.18.0, remove after 2027-04-23
       if (input.context === "agent") return pluginContext.addAgentPanel(input);
-      // COMPAT(pluginPanelFlatProps): added in v0.13.0, remove after 2027-04-23
+      // COMPAT(pluginPanelFlatProps): added in v0.18.0, remove after 2027-04-23
       if (input.context !== undefined && input.context !== "workspace") {
         throw new Error(`Workspace panel ${input.id} has invalid context`);
       }
