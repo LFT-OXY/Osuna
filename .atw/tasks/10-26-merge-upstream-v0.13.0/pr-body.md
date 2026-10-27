@@ -153,6 +153,38 @@ ADR 0003（取指令列表不启动进程）：七段都没有改到指令发现
 - `e2e/mobile/status-ring/native.tsx`：`useStatusRingRotation()` 补 Osuna 的 `{ enabled: true }`（工单 06）。
 - 侧栏「显示后台工作区」按 `docs/menus.md` 改成行尾 Switch（工单 13）：`sidebar-workspace-rename.spec.ts` 改按 `testID="sidebar-display-show-background"` 点行；`sidebar-project-filter.spec.ts` 加一条断言：名为「Show background」的 `switch` 未打开。
 
+### 首轮 CI 之后的修正（工单 14）
+
+首轮 CI 有 9 项失败，`main` 上 #32 全绿，都是合并带来的。逐条对日志、失败快照与 trace 定位，本机能跑的都先红后绿或单独跑过。
+
+应用代码：
+
+- `workspace-desktop-tabs-row.tsx`：Explorer 默认三个标签（多了会话历史），拖动时标签宽度逐帧变化，每个宽度往共享样式表加一条规则。宽度改走 `inlineUnistylesStyle`（`docs/unistyles.md`）。`explorer-resize-performance.spec.ts` 撤掉修复时本机挂、加上后通过。
+
+Osuna 的测试，断言一对一替换、没有放宽：
+
+- `usage-page-plan-usage.spec.ts`：`"23%"`、`"64%"`、`"61%"` → `"23% used"` 等，仍是精确匹配（上游 #7376 的写法）。
+- `composer-plan-usage-strip.spec.ts`、`context-window-session-total.spec.ts`：同上，期望文本补 `used` / `已用`。
+- `daemon-lifecycle.test.ts`、`test-daemon-connection.test.ts`：断言中文之前先 `i18n.loadLanguages("zh-CN")`（上游 #7410 按需加载翻译）。
+- `providers-section.test.tsx`：`react-i18next` 的 mock 补 `initReactI18next`（工单 03 在 `use-acp-provider-catalog.ts` 引入了 `i18n`）。
+- `server/.../checkout-diff-file-reuse.test.ts`「matches a full recomputation in All changes mode…」：Windows 上约 32 秒，单独给 120 秒超时；下一条是被它连带挂的。
+
+按 Osuna 决定改写的上游测试：
+
+- `appearance-font-family.spec.ts`：Osuna 在 Web 上用系统字体选择器代替文本框，`toHaveValue` 改为按「字段: 当前值」找按钮；分区标题字号 `12px` → `13px`（Osuna 的 `typeScale.label`）。
+- `acp-provider-catalog.spec.ts`「model selector excludes Hoplite before opt-in」：Osuna 的模型菜单只列当前提供方，改在提供方菜单（含「More agents」）里断言没有 Hoplite。
+- `changes-pane.spec.ts:276`、`composer-diff-stat.spec.ts`：Osuna 在 hunk 从第一行开始时不画 hunk 头，点新增行的位置从第 2.5 行改为第 1.5 行。
+- `offline-draft.spec.ts`、`explorer-sidebar.spec.ts`（两处）：Composer 是 Tiptap，`toHaveValue` 换成 `expectComposerDraft` / `expectComposerText`。
+- `explorer-sidebar.spec.ts` :341、:472：Osuna 的主题快捷键在 light → dark → auto 之间轮转，默认 auto 在浅色系统上按一下颜色不变；先固定成 light。
+- `open-project-scroll.spec.ts`：Osuna 只留 GitHub Star 一个社区入口，按 `Star` 找（外链只指向本仓库）。
+- `question-prompt-pagination.spec.ts:466`：Osuna 的忽略按钮是纯图标 X，「有文字 Dismiss」改为「X 图标可见」（加载中会换成转圈）。
+- `usage-modal.spec.ts:868`：Osuna 日文里入口叫「プラン使用量」，改按 testID 打开。
+- `composer-focus.spec.ts:88`：Osuna 代码块头部在代码前，三击段落的选区会包住复制按钮，Chromium 不把焦点交给选区里的元素；点复制前先清掉选区。
+- `support/helpers/explorer-plugin-menu.ts`：上游 #7424 起 Explorer 的 + 菜单也列 Agent 与终端配置，期望列表补上。
+- `support/helpers/custom-models.ts`：Osuna 提供方详情页在模型卡片前多几段，390 宽时卡片在首屏下面；断言前把搜索框纵向滚到顶部。
+
+本机没跑、交 CI 的：`acp-provider-catalog`、`custom-model-removal`（提供方页会拉起真实 CLI 做模型探测）、`explorer-sidebar` 两条（快捷键在 macOS 上不触发）、Windows 的超时。`agent-consecutive-turns.spec.ts:814` 在 CI 上两次都挂、本机连跑 3 次都过，看这一轮 CI；`file-explorer-context-actions.spec.ts:114` 在 CI 上重试后通过，是偶发。
+
 ### 加进 `paseo/no-raw-pressable` 豁免名单的 Osuna 文件
 
 上游第 4 段新加的「不许直接用 Pressable」检查照收。`.oxlintrc.json` 里单独一块，注释写明是 Osuna 合并上游 v0.12.0 时加入、待迁移。21 个，都在 `packages/app/src/` 下（`prd.md` 估计约 27，以实际报错为准）：

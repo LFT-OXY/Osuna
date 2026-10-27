@@ -284,7 +284,8 @@ describe("per-file checkout diff reuse", () => {
       { path: "gamma.ts", isNew: false, isDeleted: true },
       { path: "notes.ts", isNew: true, isDeleted: false },
     ]);
-  });
+    // Windows 上约 32 秒，超过默认的 30 秒
+  }, 120_000);
 
   it("only diffs the file that changed in All changes mode, restored base files included", async () => {
     prepareAllChangesCheckout();

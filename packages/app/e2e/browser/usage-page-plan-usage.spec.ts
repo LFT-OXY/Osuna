@@ -198,13 +198,13 @@ test.describe("plan usage on the usage page", () => {
     // The overview's own refresh control carries the same label, so both the
     // assertion and the click stay inside the plan usage card.
     const card = page.getByTestId("usage-plan-usage-card");
-    await expect(card.getByText("23%", { exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(card.getByText("23% used", { exact: true })).toBeVisible({ timeout: 10_000 });
 
     expect(forcedRefreshes()).toBe(0);
     await card.getByRole("button", { name: "Refresh", exact: true }).click();
     await expect.poll(forcedRefreshes).toBe(1);
 
-    await expect(card.getByText("64%", { exact: true })).toBeVisible();
+    await expect(card.getByText("64% used", { exact: true })).toBeVisible();
     expect(forcedRefreshes()).toBe(1);
   });
 
@@ -320,7 +320,7 @@ test.describe("plan usage on the usage page", () => {
       await test.step("picking one host leaves that host's group alone", async () => {
         await openUsageHostFilter(page);
         await page.getByTestId(`usage-host-filter-item-${secondaryDaemon.serverId}`).click();
-        await expect(card.getByText("61%", { exact: true })).toBeVisible();
+        await expect(card.getByText("61% used", { exact: true })).toBeVisible();
         await expect(card.getByText("primary@example.com", { exact: true })).toHaveCount(0);
         await expect(card.getByText("Primary box", { exact: true })).toHaveCount(0);
         // 页面仍计入两台主机，所以留下的这一组照旧报出它是哪台。

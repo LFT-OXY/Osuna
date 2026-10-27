@@ -96,7 +96,7 @@ test("the context details add the agent's session total and API endpoint to its 
     );
     await expect(card.getByText("Plan usage", { exact: true })).toBeVisible();
     await expect(
-      usageCard(card, "login-journey:account").getByText("31%", { exact: true }),
+      usageCard(card, "login-journey:account").getByText("31% used", { exact: true }),
     ).toBeVisible();
     await qaScreenshot(page, "context-window-card-history-api-endpoint");
   });
@@ -179,7 +179,7 @@ test("the context details are in Chinese when the interface is", async ({
   );
   await expect(card.getByText("套餐用量", { exact: true })).toBeVisible();
   await expect(
-    usageCard(card, "login-journey:account").getByText("31%", { exact: true }),
+    usageCard(card, "login-journey:account").getByText("已用 31%", { exact: true }),
   ).toBeVisible();
   await qaScreenshot(page, "context-window-card-history-api-endpoint-zh");
 });

@@ -13,7 +13,8 @@ async function scrollToHomeFooter(page: Page) {
 
 async function expectHomeActionsReachable(page: Page) {
   const providers = page.getByTestId("open-project-setup-providers");
-  const community = page.getByRole("button", { name: "Community", exact: true });
+  // Osuna 只留 GitHub Star 一个社区入口（外链只指向本仓库）
+  const community = page.getByRole("button", { name: "Star", exact: true });
   await expect(providers).toBeInViewport({ ratio: 1 });
   await expect(community).toBeInViewport({ ratio: 1 });
   const providerBounds = await providers.boundingBox();

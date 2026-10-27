@@ -112,6 +112,8 @@ test("focusing the feed preserves assistant text selection and code copy control
     await page.keyboard.press("ControlOrMeta+c");
     expect((await page.evaluate(() => navigator.clipboard.readText())).trim()).toBe(sentence);
 
+    // Osuna 的代码块头部在代码前面，三击段落的选区会包住复制按钮，Chromium 不把焦点交给选区里的元素。
+    await page.evaluate(() => window.getSelection()?.removeAllRanges());
     const code = feed.locator('[data-paseo-markdown-language="bash"]');
     await code.hover();
     // Osuna 的代码块头部（语言标签）也不进复制，按钮按名字找。

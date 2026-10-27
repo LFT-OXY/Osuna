@@ -1,8 +1,9 @@
+import { seedAgentProfiles } from "../support/helpers/agent-profiles";
 import {
-  closeModelPicker,
-  openModelPicker,
-  seedAgentProfiles,
-} from "../support/helpers/agent-profiles";
+  moreAgentsRow,
+  openProviderMenu,
+  providerMenuOption,
+} from "../support/helpers/provider-selector";
 import { expectComposerVisible } from "../support/helpers/composer";
 import { clickNewChat, gotoWorkspace } from "../support/helpers/launcher";
 import { seedWorkspace } from "../support/helpers/seed-client";
@@ -217,11 +218,14 @@ test("model selector excludes Hoplite before opt-in", async ({ page }, testInfo)
     await gotoWorkspace(page, workspace.workspaceId);
     await clickNewChat(page);
     await expectComposerVisible(page);
-    await openModelPicker(page);
-    await expect(page.getByTestId("model-provider-mock")).toBeVisible();
-    await expect(page.getByTestId("model-provider-hoplite")).toHaveCount(0);
+    // Osuna 的模型菜单只列当前提供方，换提供方走提供方菜单；没启用的提供方收在「More agents」里
+    await openProviderMenu(page);
+    await expect(providerMenuOption(page, "mock")).toBeVisible();
+    if ((await moreAgentsRow(page).count()) > 0) await moreAgentsRow(page).click();
+    await expect(page.getByTestId("agent-provider-option-hoplite")).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath("hoplite-model-selector-absent.png") });
-    await closeModelPicker(page);
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("combobox-desktop-container")).toHaveCount(0);
   } finally {
     await workspace.cleanup();
     await profiles.restore();

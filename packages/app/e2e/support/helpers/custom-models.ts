@@ -22,6 +22,10 @@ export async function addCustomModel(page: Page, id: string): Promise<void> {
 
 export async function removeCustomModel(page: Page, id: string): Promise<void> {
   await page.getByRole("textbox", { name: "Search models" }).fill(id);
+  // Osuna 详情页在模型卡片前多几段，窄屏时卡片在首屏下面；只纵向滚，横向溢出照样能抓到。
+  await page
+    .getByRole("textbox", { name: "Search models" })
+    .evaluate((el) => el.scrollIntoView({ block: "start", inline: "nearest" }));
   const remove = page.getByRole("button", { name: `Remove ${id}`, exact: true });
   await expect(remove).toBeInViewport({ ratio: 1 });
   await remove.click();
@@ -30,6 +34,10 @@ export async function removeCustomModel(page: Page, id: string): Promise<void> {
 
 export async function expectCustomModelRetained(page: Page, id: string): Promise<void> {
   await page.getByRole("textbox", { name: "Search models" }).fill(id);
+  // Osuna 详情页在模型卡片前多几段，窄屏时卡片在首屏下面；只纵向滚，横向溢出照样能抓到。
+  await page
+    .getByRole("textbox", { name: "Search models" })
+    .evaluate((el) => el.scrollIntoView({ block: "start", inline: "nearest" }));
   await expect(page.getByRole("button", { name: `Remove ${id}`, exact: true })).toBeInViewport({
     ratio: 1,
   });

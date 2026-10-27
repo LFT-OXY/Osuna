@@ -180,7 +180,8 @@ async function tapFirstAddedDiffLine(
   const fontSize = await surface
     .getByTestId("git-diff-canvas")
     .evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize));
-  await page.touchscreen.tap(bounds.x + 120, bounds.y + Math.round(fontSize * 1.5) * 2.5);
+  // Osuna 在 hunk 从第一行开始时不画 hunk 头，第一个新增行在第二行。
+  await page.touchscreen.tap(bounds.x + 120, bounds.y + Math.round(fontSize * 1.5) * 1.5);
 }
 
 async function openReviewDiff(page: Page, workspace: Awaited<ReturnType<typeof seedChangedAgent>>) {

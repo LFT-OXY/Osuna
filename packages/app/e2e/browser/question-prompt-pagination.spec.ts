@@ -478,7 +478,8 @@ retryTest(
     await card.getByRole("button", { name: "Dismiss" }).click();
     await expect(card.getByRole("alert")).toHaveText("Could not send your response. Try again.");
     await expect(card.getByRole("progressbar")).toHaveCount(0);
-    await expect(card.getByRole("button", { name: "Dismiss" })).toHaveText("Dismiss");
+    // Osuna 的忽略按钮是纯图标 X；图标在就说明没有换成加载中的转圈
+    await expect(card.getByRole("button", { name: "Dismiss" }).locator("svg")).toBeVisible();
     await expectQuestionDismissEnabled(page);
     await expectQuestionPrimaryActionEnabled(page, "Submit");
     await card.screenshot({ path: testInfo.outputPath("dismissal-failed.png") });

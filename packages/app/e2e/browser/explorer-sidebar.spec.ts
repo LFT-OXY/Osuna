@@ -9,6 +9,7 @@ import {
   expectTabTitleFits,
 } from "../support/helpers/launcher";
 import { seedWorkspace } from "../support/helpers/seed-client";
+import { expectComposerText } from "../support/helpers/composer";
 import {
   ensureExplorerSidebar,
   openFilesPanel,
@@ -338,9 +339,19 @@ async function cycleWorkspaceTheme(page: Parameters<typeof ensureExplorerSidebar
   await page.keyboard.press("Control+Alt+t");
 }
 
+// Osuna 的主题快捷键在 light → dark → auto 之间轮转，默认 auto 在浅色系统上按一下只到 light，
+// 颜色不变；先固定成 light，按一下就是 dark。
+async function startWithLightTheme(page: Parameters<typeof ensureExplorerSidebar>[0]) {
+  await page.addInitScript(() => {
+    if (localStorage.getItem("@paseo:app-settings")) return;
+    localStorage.setItem("@paseo:app-settings", JSON.stringify({ theme: "light" }));
+  });
+}
+
 test("retains the Explorer host through appearance changes and folding", async ({ page }) => {
   const workspace = await seedWorkspace({ repoPrefix: "explorer-lifetime-" });
   try {
+    await startWithLightTheme(page);
     await gotoWorkspace(page, workspace.workspaceId);
     const explorer = await ensureExplorerSidebar(page);
     await openFilesPanel(page);
@@ -493,6 +504,7 @@ test("retains populated Explorer chat and terminal attachments through appearanc
     }),
   );
   try {
+    await startWithLightTheme(page);
     await openAgentRoute(page, workspace);
     await ensureExplorerSidebar(page);
     await dragTabIntoExplorer(page, `agent_${workspace.agentId}`);
@@ -509,7 +521,7 @@ test("retains populated Explorer chat and terminal attachments through appearanc
     await clickSettingsBackToWorkspace(page);
     await expect(paragraph).toHaveCSS("font-size", "20px");
     expect(await composerNode!.evaluate((node) => node.isConnected)).toBe(true);
-    await expect(composer).toHaveValue("Unsubmitted Explorer draft");
+    await expectComposerText(composer, "Unsubmitted Explorer draft");
     const previousColor = await paragraph.evaluate((node) => getComputedStyle(node).color);
     await cycleWorkspaceTheme(page);
     await expect
@@ -534,7 +546,7 @@ test("retains populated Explorer chat and terminal attachments through appearanc
     expect(attaches).toHaveLength(1);
     await explorer.getByTestId(`workspace-tab-agent_${workspace.agentId}`).click();
     expect(await composerNode!.evaluate((node) => node.isConnected)).toBe(true);
-    await expect(composer).toHaveValue("Unsubmitted Explorer draft");
+    await expectComposerText(composer, "Unsubmitted Explorer draft");
     await expect(paragraph).toHaveCSS("font-size", "20px");
   } finally {
     await workspace.cleanup();

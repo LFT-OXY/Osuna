@@ -1662,8 +1662,8 @@ async function expectRenderedAddedLine(page: Page, contents: string): Promise<vo
     const fontSize = await canvas.evaluate((element) =>
       Number.parseFloat(getComputedStyle(element).fontSize),
     );
-    // Replacement: hunk header, removed line, added line.
-    await page.mouse.click(bounds.x + 120, bounds.y + Math.round(fontSize * 1.5) * 2.5, {
+    // Osuna 在 hunk 从第一行开始时不画 hunk 头：第一行是删除行，第二行是新增行。
+    await page.mouse.click(bounds.x + 120, bounds.y + Math.round(fontSize * 1.5) * 1.5, {
       button: "right",
     });
     const copyLine = page.getByRole("menuitem", { name: "Copy line", exact: true });

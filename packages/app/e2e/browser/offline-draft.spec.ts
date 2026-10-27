@@ -2,7 +2,7 @@ import { expect, test } from "../support/fixtures";
 import { expectComposerModel } from "../support/helpers/agent-profiles";
 import { installDaemonWebSocketGate } from "../support/helpers/daemon-websocket-gate";
 import { createAgentTabFromMenu } from "../support/helpers/workspace-tabs";
-import { submitMessage } from "../support/helpers/composer";
+import { expectComposerDraft, submitMessage } from "../support/helpers/composer";
 
 async function restoreHostConnection(gate: Awaited<ReturnType<typeof installDaemonWebSocketGate>>) {
   gate.holdNextServerMessage("status");
@@ -28,5 +28,5 @@ test("an offline workspace draft reports the disconnected host instead of loadin
   await expect(page.getByText("Loading...", { exact: true })).toHaveCount(0);
   await restoreHostConnection(gate);
   await expectComposerModel(page, "Ten second stream");
-  await expect(page.getByRole("textbox", { name: "Message agent..." })).toHaveValue("hello");
+  await expectComposerDraft(page, "hello");
 });

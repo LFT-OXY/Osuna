@@ -861,7 +861,8 @@ async function switchToJapanese(page: Page) {
 }
 
 async function openJapaneseUsage(page: Page) {
-  await page.getByRole("button", { name: "使用状況", exact: true }).click();
+  // Osuna 日文里这个入口叫「プラン使用量」，按 testID 打开
+  await openUsageFromIcon(page);
   await expect(page.getByTestId("usage-modal").first()).toBeVisible();
 }
 

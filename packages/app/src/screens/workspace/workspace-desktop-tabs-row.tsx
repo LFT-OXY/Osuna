@@ -98,6 +98,7 @@ import {
   useHorizontalScrollBoundary,
 } from "@/components/ui/horizontal-scroll-boundary";
 import { useSessionStore } from "@/stores/session-store";
+import { inlineUnistylesStyle } from "@/styles/unistyles-inline-style";
 
 const DROPDOWN_WIDTH = 220;
 const INLINE_ADD_BUTTON_HORIZONTAL_PADDING = SPACING[1];
@@ -827,11 +828,12 @@ function TabChip({
       isFilled && styles.tabFill(chipBackdrop),
       showCloseButton && styles.tabWithCloseSlot,
       isWeb && isDragging && ({ cursor: "grabbing" } as object),
-      {
+      // 拖动 Explorer 时标签宽度逐帧变化，走 inline 样式，不往共享样式表里加规则（docs/unistyles.md）
+      inlineUnistylesStyle({
         minWidth: resolvedTabWidth,
         width: resolvedTabWidth,
         maxWidth: resolvedTabWidth,
-      },
+      }),
     ],
     [chipBackdrop, isDragging, isFilled, resolvedTabWidth, showCloseButton],
   );
