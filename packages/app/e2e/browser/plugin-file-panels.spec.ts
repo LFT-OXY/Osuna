@@ -91,11 +91,11 @@ async function associateMarkdownWithPlugin(page: Page) {
 async function editMarkdownThroughPlugin(page: Page) {
   await page.getByRole("button", { name: "Edit Markdown through plugin", exact: true }).click();
 }
-/** Opens the tab with Paseo's Markdown panel from "Open with…" and shows its Source view. */
+/** Opens the tab with the built-in Markdown panel from "Open with…" and shows its Source view. */
 async function openBuiltinMarkdownSource(page: Page, name: string) {
   await page.getByTestId(`workspace-tab-file_${name}`).first().click({ button: "right" });
   await page.getByRole("menuitem", { name: "Open with…" }).hover();
-  await page.getByRole("menuitem", { name: "Markdown — Paseo" }).click();
+  await page.getByRole("menuitem", { name: "Markdown — Osuna" }).click();
   await page
     .getByTestId("file-preview-mode")
     .filter({ visible: true })

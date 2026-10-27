@@ -115,7 +115,7 @@ export type PluginClientRuntime = Pick<
   | "addHeaderButton"
 > & { hosts: ReturnType<typeof createPluginHosts> };
 
-// COMPAT(pluginReactNativeEntrypoint): added in v0.13.0, remove after 2027-04-20
+// COMPAT(pluginReactNativeEntrypoint): added in v0.18.0, remove after 2027-04-20
 // The 0.12 entry exposed the reveal hook as well as UI components.
 const pluginReactNativeCompatRuntime = { ...pluginUiRuntime, useRevealedText };
 

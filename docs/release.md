@@ -254,8 +254,10 @@ Osuna 原有的测试不删除、不跳过、不放宽断言。上游带来的�
 - **`COMPAT(...)` 标签**：上游新带进来的标签写的是上游的版本号，改写成合并后的首个
   Osuna 版本号，日期不动，清理兼容代码时才能按 Osuna 的版本线判断
   （[protocol-compatibility.md](protocol-compatibility.md#every-shim-is-tagged-and-dated)）。
-  用 `git diff <合并前> <merge commit> | rg '^\+.*COMPAT\('` 列出；标签名在合并前的
-  main 上不存在的才是上游新带来的，Osuna 已有的不动。v0.9.0 那次写的是 `v0.15.0`，
+  用 `git diff <合并前> <merge commit> | rg '^\+.*COMPAT\('` 列出；标签名在合并分支开出时的
+  main 上不存在的才是上游新带来的，Osuna 已有的不动。分段合并时也和那个 main 比，不和上一段的
+  分支头比：前一段改写过的名字，后一段还会带进新的出现处（v0.13.0-beta.2 的
+  `plugins/evaluate.ts`）。v0.9.0 那次写的是 `v0.15.0`，
   发版时版本号若不同，统一改掉。
 
 #### 踩过的坑
@@ -284,6 +286,9 @@ git 不报冲突、结果却不对的：
 - 上游的新用例拿会话级的 `listCommands()` 当「确保进程在」用，在 Osuna 里它不启动进程
   （[ADR 0003](adr/0003-command-list-never-spawns.md)），换成 `setModel(null)`。上游按顺序读订阅
   事件的用例会被 Osuna 在每个 init 之后发的 `commands_changed` 挤错位，让读事件的辅助函数略过它。
+- 上游的 e2e 按名字点内置文件面板，名字里带上游的应用名（“Markdown — Paseo”“Source — Paseo”）；
+  Osuna 的内置面板提供者是 Osuna，这些用例只在 CI 上挂。合完 `rg "— Paseo" packages/app/e2e`，
+  改成 Osuna 或 `markdown-file-panel-plugin.ts` 里的常量。
 - 上游的 e2e 写死上游主题的色值，差 1 也会挂。合并后 `rg toHaveCSS packages/app/e2e`，
   对照 `packages/app/src/styles/theme.ts` 重算。
 - 上游新增的设置界面里，说明文字与操作菜单按钮要对回 `settingsStyles` 和设置页已有的

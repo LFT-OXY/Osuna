@@ -234,9 +234,9 @@ test("directory examples mount the PDF frame and write Markdown through the file
     await rememberMarkdownViewAcrossReload(page, "Preview");
     await rememberMarkdownViewAcrossReload(page, "Source");
 
-    // "Open with…" switches to Paseo's Markdown panel; its Source view is the editor, with the
+    // "Open with…" switches to the built-in Markdown panel; its Source view is the editor, with the
     // cursor and vim mode in the panel's toolbar.
-    await openWithFromTabMenu(page, "notes.md", "Markdown — Paseo");
+    await openWithFromTabMenu(page, "notes.md", "Markdown — Osuna");
     await expect(page.getByRole("heading", { name: "Edited by Rich Markdown" })).toBeVisible();
     await selectFileView(page, "Source");
     const source = page.getByTestId("file-source-editor").filter({ visible: true });

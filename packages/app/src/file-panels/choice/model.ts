@@ -41,8 +41,9 @@ export interface FilePanelChoiceDeps {
 }
 
 /**
- * Osuna：带行号打开时这次打开要不要落到行上，也就是选不选 Source。逻辑图节点文档标了
- * `lineView: "preview"`，但预览在哪个平台都滚不到指定行，同样开 Source 落到那一行。
+ * Osuna：带行号打开时这次打开要不要落到行上。落到行上时开内置面板，面板见到行号切到它的
+ * Source 视图（上游 #7614 起 Source 是 Markdown / HTML 面板里的视图）。逻辑图节点文档标了
+ * `lineView: "preview"`，但预览在哪个平台都滚不到指定行，同样落到那一行。
  */
 export function filePanelLineNavigation(
   location: Pick<WorkspaceFileLocation, "lineStart" | "lineView">,

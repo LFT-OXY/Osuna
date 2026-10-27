@@ -178,17 +178,17 @@ describe("FilePanelChoiceModel", () => {
     expect(openLocation({ path: "spec.md" }).panel()).toBe(markdown);
   });
 
-  it("shows a plain line target in the source view", () => {
+  it("opens a plain line target in the built-in panel, which shows the line in Source", () => {
     expect(openLocation({ path: "spec.md", lineStart: 42 }).panel()).toBe(markdown);
   });
 
-  it("shows a Markdown line target marked for the preview, such as a node doc, in the source view", () => {
+  it("opens a Markdown line target marked for the preview, such as a node doc, in the built-in panel", () => {
     const tab = openLocation({ path: "spec/login.md", lineStart: 42, lineView: "preview" });
     expect(tab.panel()).toBe(markdown);
     expect(tab.picker()).toBeNull();
   });
 
-  it("shows an HTML line target marked for the preview in the source view", () => {
+  it("opens an HTML line target marked for the preview in the built-in panel", () => {
     expect(openLocation({ path: "plan.html", lineStart: 2, lineView: "preview" }).panel()).toBe(
       "builtin:html",
     );
