@@ -282,7 +282,12 @@ package.json  tsconfig.json
 ```
 
 12 个插件目录与仓库 `plugins/` 一一对应，都在 asar 之外，每个都有 `paseo-plugin.json`、`index.server.ts` 与 `server/`。
-<!-- 打开后核对待填 -->
+打开核对（2026-10-27，按「本地出一个 macOS 包」用独立的 `PASEO_HOME`、端口 6783 与 userData 启动，关掉中继、MCP 与语音，维护者同意读 CLI 登录）：
+
+- `daemon.log` 里 12 行 `Loaded plugin`，`pluginId` 与上面 12 个目录一一对应。
+- 设置 → Providers →「添加提供方」搜 `hoplite` 出现 Hoplite 行：`14-packaged-add-provider-search-hoplite-1200-zh.png`。
+- 侧栏套餐用量弹窗里 Claude、Cursor、Codex 都有用量数据。截图含账号信息，不进仓库。
+- 看完退出，测试 daemon 随之停止，6767 上的正式版仍在监听，临时目录已删。
 
 ### CI
 
