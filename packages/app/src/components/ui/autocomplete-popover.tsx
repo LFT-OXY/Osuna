@@ -9,14 +9,9 @@ import {
 } from "react";
 import { View, useWindowDimensions } from "react-native";
 import { Portal } from "@gorhom/portal";
-import Animated, {
-  useAnimatedReaction,
-  useAnimatedStyle,
-  useSharedValue,
-} from "react-native-reanimated";
+import Animated, { useAnimatedReaction, useAnimatedStyle } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { StyleSheet } from "react-native-unistyles";
 import {
   Autocomplete,
   type AutocompleteGroupNotices,
@@ -28,7 +23,7 @@ import {
   measureFloatingPanelPortalHost,
   useFloatingPanelPortalHostName,
 } from "@/components/ui/floating-panel-portal";
-import { useKeyboardShift } from "@/keyboard/shift";
+import { KeyboardTranslateView, useKeyboardAnchor, useKeyboardShift } from "@/keyboard/shift";
 import { SPACING } from "@/styles/theme";
 import { inlineUnistylesStyle } from "@/styles/unistyles-inline-style";
 
@@ -37,26 +32,11 @@ const PANEL_INSET = SPACING[6];
 // 面板顶边与可用空间上沿之间至少留出的距离。
 const TOP_CLEARANCE = SPACING[3];
 
-interface Rect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
 interface RelativeAnchorRect {
   x: number;
   y: number;
   width: number;
   hostHeight: number;
-}
-
-function measureElement(element: View): Promise<Rect> {
-  return new Promise((resolve) => {
-    element.measureInWindow((x, y, width, height) => {
-      resolve({ x, y, width, height });
-    });
-  });
 }
 
 interface AutocompletePopoverProps {
@@ -96,8 +76,9 @@ export function AutocompletePopover({
   const windowDimensions = useWindowDimensions();
   const safeAreaInsets = useSafeAreaInsets();
   const portalHostName = useFloatingPanelPortalHostName();
-  const { shift, isMoving } = useKeyboardShift();
-  const measuredShift = useSharedValue(0);
+  const { isMoving } = useKeyboardShift();
+  const anchor = useKeyboardAnchor();
+  const { measureAtRest } = anchor;
   const measurementGeneration = useRef(0);
   // 高亮就位后才显示，免得首帧没有高亮行；全是置灰行时没有可高亮的行，直接显示。
   const hasSelectableOption = hasSelectableAutocompleteOption(options);
@@ -109,20 +90,21 @@ export function AutocompletePopover({
     if (!anchorElement) return;
     const generation = measurementGeneration.current;
     void Promise.all([
-      measureElement(anchorElement),
+      measureAtRest(anchorElement),
       measureFloatingPanelPortalHost(portalHostName),
     ]).then(([anchorRect, hostRect]) => {
-      if (generation !== measurementGeneration.current || !hostRect) return undefined;
+      if (generation !== measurementGeneration.current || !anchorRect || !hostRect) {
+        return undefined;
+      }
       setRelativeAnchorRect({
         x: anchorRect.x - hostRect.x,
         y: anchorRect.y - hostRect.y,
         width: anchorRect.width,
         hostHeight: hostRect.height,
       });
-      measuredShift.value = shift.value;
       return undefined;
     });
-  }, [anchorRef, canMeasure, measuredShift, portalHostName, shift]);
+  }, [anchorRef, canMeasure, measureAtRest, portalHostName]);
 
   useEffect(() => {
     measurementGeneration.current += 1;
@@ -150,36 +132,36 @@ export function AutocompletePopover({
     [isMoving, remeasure],
   );
 
+  // Lay out at the anchor's resting position; the KeyboardTranslateView below lifts
+  // it with the anchor. Height changes only at keyboard boundaries.
   const baseStyle = useMemo(() => {
     if (!relativeAnchorRect) return null;
     return inlineUnistylesStyle({
       position: "absolute" as const,
       left: relativeAnchorRect.x + PANEL_INSET,
       width: Math.max(0, relativeAnchorRect.width - PANEL_INSET * 2),
+      // 底边正好落在 Composer 顶边上：Portal 画在 Composer 之上，再往下伸会盖住它的顶边描边。
+      bottom: relativeAnchorRect.hostHeight - relativeAnchorRect.y,
     });
   }, [relativeAnchorRect]);
 
   const anchorY = relativeAnchorRect?.y ?? 0;
-  // 底边正好落在 Composer 顶边上：Portal 画在 Composer 之上，再往下伸会盖住它的顶边描边。
-  const baseBottom = relativeAnchorRect ? relativeAnchorRect.hostHeight - relativeAnchorRect.y : 0;
-  const keyboardLayoutStyle = useAnimatedStyle(() => {
-    const shiftDelta = shift.value - measuredShift.value;
-    return {
-      bottom: baseBottom + shiftDelta,
-      maxHeight: Math.max(0, anchorY - shiftDelta - safeAreaInsets.top - TOP_CLEARANCE),
-    };
-  }, [anchorY, baseBottom, safeAreaInsets.top]);
+  const reservedLift = anchor.reservedLift;
+  const heightStyle = useAnimatedStyle(
+    () => ({
+      maxHeight: Math.max(0, anchorY - reservedLift.value - safeAreaInsets.top - TOP_CLEARANCE),
+    }),
+    [anchorY, reservedLift, safeAreaInsets.top],
+  );
 
   if (!visible || !relativeAnchorRect || !baseStyle) return null;
   if (hasSelectableOption && selectedIndex < 0) return null;
 
+  // The translate view is the popover's own frame, so it lifts only the popover.
   return (
     <Portal hostName={portalHostName}>
-      <View style={styles.overlay} pointerEvents="box-none">
-        <Animated.View
-          testID="composer-autocomplete-popover"
-          style={[baseStyle, keyboardLayoutStyle]}
-        >
+      <KeyboardTranslateView {...anchor.translation} style={baseStyle}>
+        <Animated.View testID="composer-autocomplete-popover" style={heightStyle}>
           <Autocomplete
             options={options}
             selectedIndex={selectedIndex}
@@ -194,17 +176,7 @@ export function AutocompletePopover({
             renderOptionIcon={renderOptionIcon}
           />
         </Animated.View>
-      </View>
+      </KeyboardTranslateView>
     </Portal>
   );
 }
-
-const styles = StyleSheet.create(() => ({
-  overlay: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-  },
-}));

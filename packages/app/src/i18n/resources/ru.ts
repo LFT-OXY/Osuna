@@ -695,6 +695,9 @@ export const ru: TranslationResources = {
       paste: "Paste",
       copy: "Copy",
       scrollToBottom: "Bottom",
+      fileUploaded: "Файл загружен",
+      pasteFileFailed: "Не удалось вставить файл: {{reason}}",
+      uploadingFile: "Загрузка файла…",
     },
     sheet: {
       openAsTab: "Открыть во вкладке",
@@ -1265,6 +1268,12 @@ export const ru: TranslationResources = {
       showBackground: "Показать фоновые пространства",
       trigger: "Настройки отображения",
       heading: "Отображение",
+      sort: {
+        label: "Сортировка",
+        created: "Дата создания",
+        lastPrompt: "Последний запрос",
+        updateHost: "Обновите хосты для сортировки рабочих пространств",
+      },
       grouping: {
         label: "Группировка",
         project: "Проект",
@@ -2224,7 +2233,6 @@ export const ru: TranslationResources = {
         alwaysUseExtension: "Всегда использовать для .{{extension}}",
         alwaysUseFilename: "Всегда использовать для {{filename}}",
         option: "{{title}} — {{owner}}",
-        actions: "Действия с файлом",
         builtin: {
           owner: "Osuna",
           markdown: "Markdown",
@@ -2243,6 +2251,8 @@ export const ru: TranslationResources = {
       notFound: "Файл не найден",
       failedToLoadPreview: "Не удалось загрузить предварительный просмотр файла.",
       editor: {
+        preview: "Предпросмотр",
+        source: "Исходный текст",
         fileSize: "Размер файла {{size}}",
         lines: "Строк: {{count}}",
         editorStatus: "Состояние редактора: {{status}}",
@@ -3789,7 +3799,8 @@ export const ru: TranslationResources = {
       automaticHint: "Osuna выбирает быструю доступную модель",
       preferredHint: "Выберите модель, которую использует Osuna",
       model: "Модель",
-      fallbackHint: "Если она недоступна, Osuna использует другую доступную модель",
+      modelHint:
+        "Используется только эта модель. Если она не сработает, Osuna не будет пробовать другую модель",
       saveError: "Не удалось обновить настройки генерации метаданных",
     },
     general: {
@@ -3867,11 +3878,6 @@ export const ru: TranslationResources = {
     },
     diagnostics: {
       title: "Диагностика",
-      legacyTerminalRenderer: {
-        label: "Использовать прежний рендерер терминала",
-        description: "Использовать прежний WebView-терминал после повторного открытия",
-        accessibilityLabel: "Использовать прежний рендерер терминала",
-      },
       testAudio: "Проверка звука",
       playTest: "Воспроизвести тестовый звук",
       playing: "Воспроизведение...",

@@ -49,6 +49,7 @@ export interface SeedDaemonClient {
   fetchWorkspaces(options?: { filter?: { projectId?: string } }): Promise<{
     entries: SeedWorkspaceDescriptor[];
   }>;
+  setWorkspaceTitle(workspaceId: string, title: string | null): Promise<{ title: string | null }>;
   setWorkspacePinned(workspaceId: string, pinned: boolean): Promise<{ pinnedAt: string | null }>;
   clearWorkspaceAttention(workspaceId: string): Promise<void>;
   setWorkspaceLabel(input: {
@@ -153,6 +154,7 @@ export interface SeedDaemonClient {
     predicate: (snapshot: SeedAgentUpsert) => boolean,
     timeout?: number,
   ): Promise<SeedAgentUpsert>;
+  cancelAgent(agentId: string): Promise<void>;
   sendAgentMessage(agentId: string, text: string): Promise<void>;
   respondToPermission(
     agentId: string,

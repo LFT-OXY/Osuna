@@ -688,6 +688,9 @@ export const zhCN: TranslationResources = {
       paste: "粘贴",
       copy: "复制",
       scrollToBottom: "底部",
+      fileUploaded: "文件已上传",
+      pasteFileFailed: "无法粘贴文件：{{reason}}",
+      uploadingFile: "正在上传文件…",
     },
     sheet: {
       openAsTab: "作为标签页打开",
@@ -1239,6 +1242,12 @@ export const zhCN: TranslationResources = {
       showBackground: "显示后台工作区",
       trigger: "显示偏好",
       heading: "显示",
+      sort: {
+        label: "排序",
+        created: "创建时间",
+        lastPrompt: "最近提示词",
+        updateHost: "请更新主机以排序工作区",
+      },
       grouping: {
         label: "分组",
         project: "项目",
@@ -2183,7 +2192,6 @@ export const zhCN: TranslationResources = {
         alwaysUseExtension: "始终用于 .{{extension}}",
         alwaysUseFilename: "始终用于 {{filename}}",
         option: "{{title}} — {{owner}}",
-        actions: "文件操作",
         builtin: {
           owner: "Osuna",
           markdown: "Markdown",
@@ -2202,6 +2210,8 @@ export const zhCN: TranslationResources = {
       notFound: "找不到文件",
       failedToLoadPreview: "加载文件预览失败",
       editor: {
+        preview: "预览",
+        source: "源代码",
         fileSize: "文件大小 {{size}}",
         lines: "{{count}} 行",
         editorStatus: "编辑器状态 {{status}}",
@@ -3721,7 +3731,7 @@ export const zhCN: TranslationResources = {
       automaticHint: "Osuna 会选择一个可用的快速模型",
       preferredHint: "选择 Osuna 使用的模型",
       model: "模型",
-      fallbackHint: "如果不可用，Osuna 会改用其他可用模型",
+      modelHint: "只使用此模型。如果失败，Osuna 不会尝试其他模型",
       saveError: "无法更新元数据生成设置",
     },
     general: {
@@ -3794,11 +3804,6 @@ export const zhCN: TranslationResources = {
     },
     diagnostics: {
       title: "诊断",
-      legacyTerminalRenderer: {
-        label: "使用旧版终端渲染器",
-        description: "重新打开终端后使用之前的 WebView 终端",
-        accessibilityLabel: "使用旧版终端渲染器",
-      },
       testAudio: "测试音频",
       playTest: "播放测试",
       playing: "正在播放...",

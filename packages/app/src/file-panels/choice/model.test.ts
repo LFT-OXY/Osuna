@@ -8,6 +8,11 @@ const rich: FilePanelCandidate = {
   builtin: false,
   files: { extensions: ["md", "markdown"] },
 };
+const richTypeScript: FilePanelCandidate = {
+  id: "plugin:ts/outline",
+  builtin: false,
+  files: { extensions: ["ts"] },
+};
 const markdown = "builtin:markdown";
 const source = sourceFilePanel.id;
 
@@ -22,7 +27,6 @@ function openTab(
       if (panelId === null) delete associations[selectorKey];
       else associations[selectorKey] = panelId;
     },
-    linePanelId: source,
   });
   let targetKey = `/repo:${options.path ?? "notes.md"}`;
   let presentable = options.presentable ?? true;
@@ -70,11 +74,7 @@ describe("FilePanelChoiceModel", () => {
       selectedPanelId: markdown,
       remember: false,
     });
-    expect(tab.picker()?.candidates.map((candidate) => candidate.id)).toEqual([
-      markdown,
-      rich.id,
-      source,
-    ]);
+    expect(tab.picker()?.candidates.map((candidate) => candidate.id)).toEqual([markdown, rich.id]);
     tab.model.dismissPicker();
     expect(tab.picker()).toBeNull();
     expect(tab.panel()).toBe(markdown);
@@ -84,17 +84,13 @@ describe("FilePanelChoiceModel", () => {
     expect(openTab(associations).picker()).not.toBeNull();
   });
 
-  it("never asks between built-in panels, and switches between them", () => {
+  it("opens a file a built-in claims with that built-in alone and nothing to choose", () => {
     const tab = openTab({}, [...filePanelCatalog([])]);
     expect(tab.panel()).toBe(markdown);
     expect(tab.picker()).toBeNull();
-    expect(tab.model.getSnapshot().openWith?.candidates.map((candidate) => candidate.id)).toEqual([
-      markdown,
-      source,
-    ]);
+    expect(tab.model.getSnapshot().openWith).toBeNull();
     tab.model.openWith(source);
-    expect(tab.panel()).toBe(source);
-    expect(tab.picker()).toBeNull();
+    expect(tab.panel()).toBe(markdown);
   });
 
   it("opens a file only Source claims with Source and nothing to choose", () => {
@@ -133,7 +129,7 @@ describe("FilePanelChoiceModel", () => {
 
   it("does not ask with an association or while the tab is in the background", () => {
     expect(openTab({ "ext:md": rich.id }).picker()).toBeNull();
-    expect(openTab({ "ext:md": source }).panel()).toBe(source);
+    expect(openTab({ "ext:md": source }).panel()).toBe(markdown);
 
     const background = openTab({}, undefined, { presentable: false });
     expect(background.picker()).toBeNull();
@@ -141,26 +137,35 @@ describe("FilePanelChoiceModel", () => {
     expect(background.picker()).not.toBeNull();
   });
 
-  it("opens Source for a line target without asking, and again on each new one", () => {
-    const tab = openTab({}, undefined, { lineNavigation: 1 });
-    expect(tab.panel()).toBe(source);
+  it("opens the built-in panel for a line target without asking, and again on each new one", () => {
+    const tab = openTab({ "ext:md": rich.id }, undefined, { lineNavigation: 1 });
+    expect(tab.panel()).toBe(markdown);
     expect(tab.picker()).toBeNull();
 
     tab.model.openWith(rich.id);
     expect(tab.panel()).toBe(rich.id);
     expect(tab.navigateToLine(1)).toBe(rich.id);
-    expect(tab.navigateToLine(2)).toBe(source);
+    expect(tab.navigateToLine(2)).toBe(markdown);
   });
 
-  it("opens Source for the same line target in a retargeted tab", () => {
+  it("opens Source for a line target in a file only Source and a plugin claim", () => {
+    const tab = openTab({ "ext:ts": richTypeScript.id }, [...filePanelCatalog([richTypeScript])], {
+      path: "index.ts",
+    });
+    expect(tab.panel()).toBe(richTypeScript.id);
+    expect(tab.navigateToLine(1)).toBe(source);
+  });
+
+  it("opens the built-in panel for the same line target in a retargeted tab", () => {
     const tab = openTab({}, undefined, { lineNavigation: 1 });
-    tab.model.openWith(markdown);
-    expect(tab.retarget("other.md")).toBe(source);
+    tab.model.openWith(rich.id);
+    expect(tab.retarget("other.md")).toBe(markdown);
   });
 
-  // Osuna 的逻辑图节点文档带行号（lineView: "preview"），也要落到那一行：预览滚不到行，一律开 Source。
+  // Osuna 的逻辑图节点文档带行号（lineView: "preview"），也要落到那一行：预览滚不到行，一律开源码视图。
   // 原在 components/file-pane-render-mode.test.ts，随上游删掉那个模块挪到这里；位置先经文件标签的
-  // filePanelLineNavigation 换成这次打开的行导航，再交给选择模型。
+  // filePanelLineNavigation 换成这次打开的行导航，再交给选择模型。上游 #7614 起源码是内置
+  // Markdown / HTML 面板里的视图，面板见到行号切到 Source（file-editing.spec.ts 的行号用例）。
   const openLocation = (
     location: Parameters<typeof filePanelLineNavigation>[0] & { path: string },
   ) =>
@@ -174,18 +179,18 @@ describe("FilePanelChoiceModel", () => {
   });
 
   it("shows a plain line target in the source view", () => {
-    expect(openLocation({ path: "spec.md", lineStart: 42 }).panel()).toBe(source);
+    expect(openLocation({ path: "spec.md", lineStart: 42 }).panel()).toBe(markdown);
   });
 
   it("shows a Markdown line target marked for the preview, such as a node doc, in the source view", () => {
     const tab = openLocation({ path: "spec/login.md", lineStart: 42, lineView: "preview" });
-    expect(tab.panel()).toBe(source);
+    expect(tab.panel()).toBe(markdown);
     expect(tab.picker()).toBeNull();
   });
 
   it("shows an HTML line target marked for the preview in the source view", () => {
     expect(openLocation({ path: "plan.html", lineStart: 2, lineView: "preview" }).panel()).toBe(
-      source,
+      "builtin:html",
     );
   });
 

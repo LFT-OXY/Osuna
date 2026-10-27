@@ -688,6 +688,9 @@ export const ar: TranslationResources = {
       paste: "Paste",
       copy: "Copy",
       scrollToBottom: "Bottom",
+      fileUploaded: "تم رفع الملف",
+      pasteFileFailed: "تعذر لصق الملف: {{reason}}",
+      uploadingFile: "جارٍ رفع الملف…",
     },
     sheet: {
       openAsTab: "فتح كعلامة تبويب",
@@ -1248,6 +1251,12 @@ export const ar: TranslationResources = {
       showBackground: "إظهار مساحات العمل في الخلفية",
       trigger: "تفضيلات العرض",
       heading: "العرض",
+      sort: {
+        label: "الترتيب",
+        created: "تاريخ الإنشاء",
+        lastPrompt: "آخر طلب",
+        updateHost: "حدّث المضيفين لترتيب مساحات العمل",
+      },
       grouping: {
         label: "التجميع",
         project: "المشروع",
@@ -2192,7 +2201,6 @@ export const ar: TranslationResources = {
         alwaysUseExtension: "استخدام دائمًا لـ .{{extension}}",
         alwaysUseFilename: "استخدام دائمًا لـ {{filename}}",
         option: "{{title}} — {{owner}}",
-        actions: "إجراءات الملف",
         builtin: {
           owner: "Osuna",
           markdown: "Markdown",
@@ -2211,6 +2219,8 @@ export const ar: TranslationResources = {
       notFound: "الملف غير موجود",
       failedToLoadPreview: "فشل تحميل معاينة الملف",
       editor: {
+        preview: "معاينة",
+        source: "المصدر",
         fileSize: "حجم الملف {{size}}",
         lines: "{{count}} سطر",
         editorStatus: "حالة المحرر {{status}}",
@@ -3754,7 +3764,7 @@ export const ar: TranslationResources = {
       automaticHint: "يختار Osuna نموذجًا سريعًا متاحًا",
       preferredHint: "اختر النموذج الذي يستخدمه Osuna",
       model: "النموذج",
-      fallbackHint: "إذا لم يكن متاحًا، يستخدم Osuna نموذجًا آخر متاحًا",
+      modelHint: "يُستخدم هذا النموذج فقط. إذا فشل، لا يجرّب Osuna نموذجًا آخر",
       saveError: "تعذر تحديث إنشاء البيانات الوصفية",
     },
     general: {
@@ -3829,11 +3839,6 @@ export const ar: TranslationResources = {
     },
     diagnostics: {
       title: "التشخيص",
-      legacyTerminalRenderer: {
-        label: "استخدام عارض الطرفية السابق",
-        description: "استخدام طرفية WebView السابقة بعد إعادة فتح الطرفية",
-        accessibilityLabel: "استخدام عارض الطرفية السابق",
-      },
       testAudio: "اختبار الصوت",
       playTest: "لعب الاختبار",
       playing: "جارٍ اللعب...",

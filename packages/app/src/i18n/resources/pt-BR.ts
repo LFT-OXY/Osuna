@@ -695,6 +695,9 @@ export const ptBR: TranslationResources = {
       paste: "Paste",
       copy: "Copy",
       scrollToBottom: "Bottom",
+      fileUploaded: "Arquivo enviado",
+      pasteFileFailed: "Falha ao colar o arquivo: {{reason}}",
+      uploadingFile: "Enviando arquivo…",
     },
     sheet: {
       openAsTab: "Abrir como aba",
@@ -1276,6 +1279,12 @@ export const ptBR: TranslationResources = {
       showBackground: "Mostrar espaços em segundo plano",
       trigger: "Preferências de exibição",
       heading: "Exibição",
+      sort: {
+        label: "Ordenação",
+        created: "Criação",
+        lastPrompt: "Último prompt",
+        updateHost: "Atualize os hosts para ordenar os espaços de trabalho",
+      },
       grouping: {
         label: "Agrupamento",
         project: "Projeto",
@@ -2228,7 +2237,6 @@ export const ptBR: TranslationResources = {
         alwaysUseExtension: "Sempre usar para .{{extension}}",
         alwaysUseFilename: "Sempre usar para {{filename}}",
         option: "{{title}} — {{owner}}",
-        actions: "Ações do arquivo",
         builtin: {
           owner: "Osuna",
           markdown: "Markdown",
@@ -2247,6 +2255,8 @@ export const ptBR: TranslationResources = {
       notFound: "Arquivo não encontrado",
       failedToLoadPreview: "Falha ao carregar prévia do arquivo",
       editor: {
+        preview: "Prévia",
+        source: "Fonte",
         fileSize: "Tamanho {{size}}",
         lines: "{{count}} linhas",
         editorStatus: "Status do editor: {{status}}",
@@ -3792,7 +3802,7 @@ export const ptBR: TranslationResources = {
       automaticHint: "O Osuna escolhe um modelo rápido disponível",
       preferredHint: "Escolha o modelo que o Osuna usa",
       model: "Modelo",
-      fallbackHint: "Se ele não estiver disponível, o Osuna usa outro modelo disponível",
+      modelHint: "Somente este modelo é usado. Se ele falhar, o Osuna não tenta outro modelo",
       saveError: "Não foi possível atualizar a geração de metadados",
     },
     general: {
@@ -3869,11 +3879,6 @@ export const ptBR: TranslationResources = {
     },
     diagnostics: {
       title: "Diagnósticos",
-      legacyTerminalRenderer: {
-        label: "Usar renderizador de terminal anterior",
-        description: "Usa o terminal WebView anterior após reabrir um terminal",
-        accessibilityLabel: "Usar renderizador de terminal anterior",
-      },
       testAudio: "Testar áudio",
       playTest: "Reproduzir teste",
       playing: "Reproduzindo...",

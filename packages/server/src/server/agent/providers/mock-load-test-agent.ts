@@ -19,6 +19,7 @@ import type {
   AgentRuntimeInfo,
   AgentSession,
   AgentSessionConfig,
+  AgentSlashCommand,
   AgentStreamEvent,
   AgentTimelineItem,
   FetchCatalogOptions,
@@ -37,7 +38,13 @@ import { providerSubagentPermissionMetadata } from "@getpaseo/protocol/provider-
 
 export const MOCK_LOAD_TEST_PROVIDER_ID = "mock";
 export const MOCK_LOAD_TEST_DEFAULT_MODEL_ID = "five-minute-stream";
-export const MOCK_LOAD_TEST_HANDLED_COMMAND = "/mock handled-command";
+const MOCK_LOAD_TEST_COMMAND: AgentSlashCommand = {
+  name: "mock",
+  description: "Reply without starting a turn",
+  argumentHint: "handled-command",
+  kind: "command",
+};
+export const MOCK_LOAD_TEST_HANDLED_COMMAND = `/${MOCK_LOAD_TEST_COMMAND.name} ${MOCK_LOAD_TEST_COMMAND.argumentHint}`;
 const MOCK_LOAD_TEST_MODE_ID = "load-test";
 const MOCK_LOAD_TEST_DURATION_MS = 5 * 60 * 1000;
 const MOCK_LOAD_TEST_INTERVAL_MS = 40;
@@ -1045,6 +1052,10 @@ export class MockLoadTestAgentSession implements AgentSession {
     userMessageTimer.unref?.();
     if (userMessageDelayMs === 0) scheduleTurn();
     return { turnId };
+  }
+
+  async listCommands(): Promise<AgentSlashCommand[]> {
+    return [MOCK_LOAD_TEST_COMMAND];
   }
 
   tryHandleOutOfBand(

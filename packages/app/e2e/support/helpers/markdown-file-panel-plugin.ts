@@ -12,7 +12,6 @@ export const MARKDOWN_PANEL_ID = `plugin:${MARKDOWN_PANEL_PLUGIN_ID}/rich-markdo
 // 内置面板的提供者名按 Osuna 的显示身份写（panels.file.filePanels.builtin.owner，ADR 0002）。
 export const BUILTIN_MARKDOWN_OPTION = "Markdown — Osuna";
 export const PLUGIN_MARKDOWN_OPTION = `Rich Markdown — ${MARKDOWN_PANEL_PLUGIN_ID}`;
-export const SOURCE_OPTION = "Source — Osuna";
 
 const SOURCE = `import React from "react";
 import { Text, View } from "react-native";
