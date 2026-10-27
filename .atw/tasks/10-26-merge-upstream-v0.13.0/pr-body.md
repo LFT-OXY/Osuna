@@ -183,7 +183,13 @@ Osuna 的测试，断言一对一替换、没有放宽：
 - `support/helpers/explorer-plugin-menu.ts`：上游 #7424 起 Explorer 的 + 菜单也列 Agent 与终端配置，期望列表补上。
 - `support/helpers/custom-models.ts`：Osuna 提供方详情页在模型卡片前多几段，390 宽时卡片在首屏下面；断言前把搜索框纵向滚到顶部。
 
-本机没跑、交 CI 的：`acp-provider-catalog`、`custom-model-removal`（提供方页会拉起真实 CLI 做模型探测）、`explorer-sidebar` 两条（快捷键在 macOS 上不触发）、Windows 的超时。`agent-consecutive-turns.spec.ts:814` 在 CI 上两次都挂、本机连跑 3 次都过，看这一轮 CI；`file-explorer-context-actions.spec.ts:114` 在 CI 上重试后通过，是偶发。
+本机没跑、交 CI 的：`acp-provider-catalog`、`custom-model-removal`（提供方页会拉起真实 CLI 做模型探测）、`explorer-sidebar` 两条（快捷键在 macOS 上不触发）、Windows 的超时。
+
+第二轮 CI 之后：
+
+- `provider-detail/view.tsx`（Osuna 文件）：三处 `void refresh([provider])` 没接住失败。推送来的新快照会取消进行中的刷新（`push-router.ts` 的 `cancelQueries`，合并前就有），`CancelledError` 成了未处理的拒绝，开发版弹出错误层挡住页面，`custom-model-removal` 点不到删除按钮。三处补 `.catch`，失败由快照查询自己的状态承担。
+- `agent-consecutive-turns.spec.ts:814`：用例只扣住第一个时间线响应，放行后客户端按设计再发一次 `after` 追赶请求，慢机器上带回的回复落进录帧窗口、列表跟到底部。改为同时扣住追赶响应，录帧结束后再放行；断言不变。本机 CPU 降速 6 倍改前 3/3 挂、改后 3/3 过。
+- 偶发、重跑：app-tests 里 `logic-map/panel-surface.browser.test.tsx` 的 Reanimated「Failed to obtain animation index」未处理错误（8268 条全过，本机连跑 3 次干净）；server-tests (ubuntu) 的终端 OSC 等待超时；cli-tests 的 `EADDRINUSE`；`context-window-session-total.spec.ts:110` 等待超时。四项第一轮都通过。`file-explorer-context-actions.spec.ts:114` 第一轮重试后通过。
 
 ### 加进 `paseo/no-raw-pressable` 豁免名单的 Osuna 文件
 

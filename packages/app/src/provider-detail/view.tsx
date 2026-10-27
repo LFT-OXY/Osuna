@@ -45,6 +45,9 @@ import { selectNewerVersion } from "./version-check";
 import { ProviderVersionSection, type ProviderVersionUpgrade } from "./version-section";
 import { countSelectableModels, describeProviderModelCount, resolveProviderStatus } from "./status";
 
+// 刷新失败或被推送来的新快照取消（CancelledError）都由快照查询自己的状态承担，这里不再抛出。
+function ignoreSnapshotRefreshFailure(): void {}
+
 /*
  * 运行时接线：快照、daemon 配置、主机能力。安装与升级、第三方接口的视图会拉进单测运行器
  * 无法解析的模块，所以只在这里导入；调用方从这里导入。
@@ -102,9 +105,11 @@ function useRefreshProvider({
   const { recheck } = useProviderVersionCheck(serverId, { checkOnMount: false });
   return useCallback(() => {
     // 快照刷新失败也照样重查。
-    void refresh([provider]).finally(() => {
-      if (checksVersions) void recheck([provider]);
-    });
+    void refresh([provider])
+      .catch(ignoreSnapshotRefreshFailure)
+      .finally(() => {
+        if (checksVersions) void recheck([provider]);
+      });
   }, [checksVersions, provider, recheck, refresh]);
 }
 
@@ -202,7 +207,7 @@ export function ProviderDetail({
           },
         },
       })
-        .then(() => refresh([provider]))
+        .then(() => refresh([provider]).catch(ignoreSnapshotRefreshFailure))
         .finally(() => {
           setDeletingModelId((current) => (current === modelId ? null : current));
         });
@@ -220,7 +225,7 @@ export function ProviderDetail({
           },
         },
       });
-      void refresh([provider]);
+      void refresh([provider]).catch(ignoreSnapshotRefreshFailure);
     },
     [additionalModels, patchConfig, provider, refresh],
   );

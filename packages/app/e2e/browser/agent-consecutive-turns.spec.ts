@@ -844,10 +844,16 @@ test("keeps the first prompt of a new agent in place through authoritative hydra
     await expect(submittedRow).toBeVisible();
     await gate.waitForHeldServerMessage("fetch_agent_timeline_response");
     gate.truncateHeldTimelineAfterLast("user_message");
+    // 截断后的 tail 会触发一次 after 追赶，带回 mock 已流出的回复；扣住它，录帧只看水合本身。
+    // 慢机器上它会落进录帧窗口，列表跟到底部把附件滚走（CI 上必现，本机降速 6 倍可复现）。
+    gate.holdNextServerMessage("fetch_agent_timeline_response");
     gate.releaseHeldServerMessage("fetch_agent_timeline_response");
     await expect(submittedRow.getByTestId("rewind-menu-trigger")).toBeVisible();
     await recordPaintsFor(page, 80);
-    expectAtomicFirstPromptTransition(await stopTurnFrameRecording(page));
+    const frames = await stopTurnFrameRecording(page);
+    await gate.waitForHeldServerMessage("fetch_agent_timeline_response");
+    gate.releaseHeldServerMessage("fetch_agent_timeline_response");
+    expectAtomicFirstPromptTransition(frames);
   } finally {
     await workspace.cleanup();
   }
