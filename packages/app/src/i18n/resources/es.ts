@@ -1291,6 +1291,7 @@ export const es: TranslationResources = {
       sort: {
         label: "Orden",
         created: "Creación",
+        manual: "Manual",
         lastPrompt: "Último prompt",
         updateHost: "Actualiza los hosts para ordenar los espacios de trabajo",
       },

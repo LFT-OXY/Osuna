@@ -118,13 +118,17 @@ export function useWorkspaceStructure(
     (state) => selectProjectOrder(state),
     workspaceEqualityFns.deep,
   );
+  const workspaceOrderByProject = useSidebarOrderStore((state) =>
+    workspaceSort === "manual" ? state.workspaceOrderByProject : undefined,
+  );
   return useMemo(
     () =>
       composeWorkspaceStructure({
         projects,
         projectOrder,
+        workspaceOrderByProject,
       }),
-    [projectOrder, projects],
+    [projectOrder, projects, workspaceOrderByProject],
   );
 }
 

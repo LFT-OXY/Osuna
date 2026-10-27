@@ -1284,6 +1284,7 @@ export const fr: TranslationResources = {
       sort: {
         label: "Tri",
         created: "Création",
+        manual: "Manuel",
         lastPrompt: "Dernier prompt",
         updateHost: "Mettez les hôtes à jour pour trier les espaces de travail",
       },
